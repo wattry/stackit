@@ -25,8 +25,10 @@ Check for project conventions:
 
 ### Creating a New Branch
 1. Stage changes: `git add <files>` or use `--all` flag
-2. Create branch: `stackit create [name] -m "commit message"`
-3. If no name provided, generate one from the commit message
+2. Generate commit message following project conventions
+3. Create branch (name is optional, auto-generated from message):
+   - Preferred: `echo "commit message" | stackit create`
+   - With name: `echo "commit message" | stackit create branch-name`
 
 ### Submitting PRs
 1. Check stack state: `stackit log`
@@ -39,15 +41,14 @@ Check for project conventions:
 2. If branches were deleted, run `stackit restack`
 
 ### Fixing Issues
-1. Run `stackit doctor` to diagnose problems
-2. For rebase conflicts: resolve files, then `stackit continue`
-3. To abort: `stackit abort`
-4. To undo: `stackit undo`
+1. For rebase conflicts: resolve files, then `stackit continue`
+2. To abort: `stackit abort`
+3. To undo: `stackit undo`
 
 ### Fixing Compilation Errors After Absorb
 After `stackit absorb`, compilation errors may occur when absorbed changes depend on files/changes that didn't get cleanly absorbed:
 
-1. Identify build/test commands (justfile, Makefile, package.json, CONTRIBUTING.md)
+1. Check README.md and CONTRIBUTING.md for build/test commands
 2. For each branch in stack (bottom to top):
    - Run build/test commands
    - If failures: analyze errors for missing dependencies
@@ -59,16 +60,17 @@ After `stackit absorb`, compilation errors may occur when absorbed changes depen
 ## Auto-Generation Guidelines
 
 ### Branch Names
-When user doesn't provide a name, generate from:
-- Commit message (kebab-case, max 50 chars)
+Branch names are optional - stackit auto-generates from commit message:
+- Only provide if user explicitly requests a specific name
+- Auto-generated format: kebab-case from commit message
 - Example: "Add user authentication" -> "add-user-authentication"
 
 ### Commit Messages
 When generating commit messages:
-- Check for CONTRIBUTING.md in repo root for project-specific guidelines
+- Check README.md and CONTRIBUTING.md for project-specific guidelines
 - Follow documented commit message conventions if available
 - Default to conventional commit format: type(scope): description
-- Accept messages via stdin/pipe: `echo "message" | stackit create branch-name`
+- **Always use pipe format**: `echo "message" | stackit create`
 
 ### PR Descriptions
 When generating PR descriptions:

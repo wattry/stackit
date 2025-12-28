@@ -13,24 +13,17 @@ Diagnose and automatically fix common stack problems.
 
 ## Instructions
 
-1. Run `stackit doctor` to check overall health
+1. Run `stackit log` to identify structural issues and branch relationships
 
-2. Run `stackit log` to identify structural issues and branch relationships
-
-3. Check for and fix these common issues:
+2. Check for and fix these common issues:
 
    **Compilation errors after absorb (priority fix):**
    - Common after `stackit absorb` when absorbed changes depend on files/changes that didn't get cleanly absorbed
-   - Check for project build/test/lint commands:
-     - Look for justfile (`just build`, `just test`, `just check`)
-     - Look for Makefile (`make build`, `make test`)
-     - Look for package.json (`npm run build`, `npm test`)
-     - Check CONTRIBUTING.md for build instructions
-     - If unclear, ask user for build/test/lint commands
+   - Check README.md and CONTRIBUTING.md for build/test/lint commands
    - For each branch in stack (bottom to top):
      - Checkout the branch: `git checkout <branch>`
-     - Run build command (e.g., `just build`)
-     - Run test command (e.g., `just test`)
+     - Run project's build command
+     - Run project's test command
      - If failures occur:
        - Analyze error messages for missing files/functions/types
        - Check upstack branches for those changes: `git diff <branch>..<child-branch>`
@@ -58,7 +51,7 @@ Diagnose and automatically fix common stack problems.
    **Uncommitted changes blocking operation:**
    - Suggest stashing or committing
 
-4. After fixes, verify the entire stack builds:
+3. After fixes, verify the entire stack builds:
    - Run `stackit foreach "<build-command>"` to build all branches
    - Show updated stack state with `stackit log`
 

@@ -1,12 +1,12 @@
 ---
 description: Create a new stacked branch with intelligent naming
 allowed-tools: Bash(stackit:*), Bash(git:*), Read
-argument-hint: [branch-name] [-m "commit message"]
+argument-hint: [optional-branch-name]
 ---
 
 # Stack Create
 
-Create a new stacked branch on top of the current branch.
+Create a new stacked branch on top of the current branch. Branch name is optional - stackit will generate one from the commit message.
 
 ## Context
 - Current branch: !`git branch --show-current`
@@ -21,22 +21,19 @@ $ARGUMENTS
 1. Check if there are staged changes with `git diff --cached --stat`
 2. If no staged changes, ask user what to stage or use `--all` flag
 
-3. **If branch name provided in arguments**: use it directly
-   **If no branch name provided**: generate one:
-   - Analyze staged files to understand the change
-   - Create kebab-case name (max 50 chars)
-   - Examples: "add-user-auth", "fix-login-bug", "refactor-api-client"
+3. **Generate commit message**:
+   - Check for CONTRIBUTING.md or README.md for commit message guidelines
+   - Follow project's commit format conventions if documented
+   - Otherwise use conventional commit format: type(scope): description
+   - Examples: "feat(auth): add user authentication", "fix(api): handle timeout errors"
 
-4. **For commit message**:
-   - **If provided via -m flag**: use it directly
-   - **If can be piped**: Accept from stdin (e.g., `echo "message" | stackit create branch-name`)
-   - **If generating**:
-     - Check for CONTRIBUTING.md in repo root for commit message guidelines
-     - Follow project's commit format conventions if documented
-     - Otherwise use conventional commit format: type(scope): description
-     - Examples: "feat(auth): add user authentication", "fix(api): handle timeout errors"
+4. **Branch name** (optional):
+   - If user provided branch name in arguments: use it
+   - Otherwise: stackit will auto-generate from commit message
 
-5. Run: `stackit create <name> -m "<message>"` or `echo "<message>" | stackit create <name>`
+5. **Run command using pipe** (preferred):
+   - With branch name: `echo "commit message" | stackit create branch-name`
+   - Auto-generate name: `echo "commit message" | stackit create`
 
 6. Show new stack state with `stackit log`
 
