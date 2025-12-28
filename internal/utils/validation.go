@@ -7,19 +7,12 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/tui"
 )
 
 // IsInteractive checks if we're in an interactive terminal
 func IsInteractive() bool {
-	if os.Getenv("STACKIT_NON_INTERACTIVE") != "" || os.Getenv("STACKIT_TEST_NO_INTERACTIVE") != "" {
-		return false
-	}
-
-	fileInfo, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+	return tui.IsTTY()
 }
 
 // ValidateOnBranch ensures the user is on a branch

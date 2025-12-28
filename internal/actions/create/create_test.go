@@ -31,7 +31,7 @@ func TestCreateAction_Stdin(t *testing.T) {
 			_ = w.Close()
 		}()
 
-		// Scenario already sets STACKIT_NON_INTERACTIVE=true
+		// Scenario already calls tui.SetInteractive(false)
 
 		opts := Options{}
 		err = Action(s.Context, opts)

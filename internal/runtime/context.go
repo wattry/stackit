@@ -22,54 +22,102 @@ type Context struct {
 	Splog        *tui.Splog
 	RepoRoot     string
 	GitHubClient github.Client
+
+	// Global settings from flags
+	Interactive bool
+	Verify      bool
+	Debug       bool
+	Quiet       bool
+}
+
+// GlobalOptions holds settings from global flags
+type GlobalOptions struct {
+	Interactive bool
+	Verify      bool
+	Debug       bool
+	Quiet       bool
+}
+
+// GetDefaultGlobalOptions returns default options
+func GetDefaultGlobalOptions() GlobalOptions {
+	return GlobalOptions{
+		Interactive: true,
+		Verify:      true,
+		Debug:       os.Getenv("DEBUG") != "",
+		Quiet:       false,
+	}
 }
 
 // NewContext creates a new context with the given engine
 func NewContext(eng engine.Engine) *Context {
+	return NewContextWithOptions(eng, GetDefaultGlobalOptions())
+}
+
+// NewContextWithOptions creates a new context with the given engine and options
+func NewContextWithOptions(eng engine.Engine, opts GlobalOptions) *Context {
 	var splog *tui.Splog
 	var err error
+
+	// Update global TUI interactivity
+	tui.SetInteractive(opts.Interactive)
 
 	// Skip file logging when STACKIT_NO_LOGGING is set (e.g., during tests or CI)
 	if os.Getenv("STACKIT_NO_LOGGING") != "" {
 		splog = tui.NewSplog() // Console-only logging
 	} else {
 		logPath := tui.GetLogFilePath()
-		splog, err = tui.NewSplogWithConfig(logPath, "")
+		splog, err = tui.NewSplogWithFlags(logPath, opts.Debug, opts.Quiet)
 		if err != nil {
 			// If file logging fails, fall back to console-only
-			splog, _ = tui.NewSplogWithConfig("", "")
+			splog, _ = tui.NewSplogWithFlags("", opts.Debug, opts.Quiet)
 		}
 	}
 
 	return &Context{
-		Context: context.Background(),
-		Engine:  eng,
-		Splog:   splog,
+		Context:     context.Background(),
+		Engine:      eng,
+		Splog:       splog,
+		Interactive: opts.Interactive,
+		Verify:      opts.Verify,
+		Debug:       opts.Debug,
+		Quiet:       opts.Quiet,
 	}
 }
 
 // NewContextWithRepoRoot creates a new context with the given engine and repo root
 func NewContextWithRepoRoot(eng engine.Engine, repoRoot string) *Context {
+	return NewContextWithRepoRootAndOptions(eng, repoRoot, GetDefaultGlobalOptions())
+}
+
+// NewContextWithRepoRootAndOptions creates a new context with the given engine, repo root and options
+func NewContextWithRepoRootAndOptions(eng engine.Engine, repoRoot string, opts GlobalOptions) *Context {
 	var splog *tui.Splog
 	var err error
+
+	// Update global TUI interactivity
+	tui.SetInteractive(opts.Interactive)
 
 	// Skip file logging when STACKIT_NO_LOGGING is set (e.g., during tests or CI)
 	if os.Getenv("STACKIT_NO_LOGGING") != "" {
 		splog = tui.NewSplog() // Console-only logging
 	} else {
 		logPath := tui.GetLogFilePath()
-		splog, err = tui.NewSplogWithConfig(logPath, "")
+		splog, err = tui.NewSplogWithFlags(logPath, opts.Debug, opts.Quiet)
 		if err != nil {
 			// If file logging fails, fall back to console-only
-			splog, _ = tui.NewSplogWithConfig("", "")
+			splog, _ = tui.NewSplogWithFlags("", opts.Debug, opts.Quiet)
 		}
 	}
 
 	return &Context{
-		Context:  context.Background(),
-		Engine:   eng,
-		Splog:    splog,
-		RepoRoot: repoRoot,
+		Context:     context.Background(),
+		Engine:      eng,
+		Splog:       splog,
+		RepoRoot:    repoRoot,
+		Interactive: opts.Interactive,
+		Verify:      opts.Verify,
+		Debug:       opts.Debug,
+		Quiet:       opts.Quiet,
 	}
 }
 
@@ -84,10 +132,10 @@ var DemoGitHubClientFactory func() github.Client
 // NewContextAuto creates a context automatically based on the environment.
 // In demo mode, it creates a demo engine. Otherwise, it creates a real engine
 // using the provided repoRoot.
-func NewContextAuto(ctx context.Context, repoRoot string) (*Context, error) {
+func NewContextAuto(ctx context.Context, repoRoot string, opts GlobalOptions) (*Context, error) {
 	if utils.IsDemoMode() && DemoEngineFactory != nil {
 		eng := DemoEngineFactory()
-		runtimeCtx := NewContext(eng)
+		runtimeCtx := NewContextWithOptions(eng, opts)
 		runtimeCtx.Context = ctx
 		if DemoGitHubClientFactory != nil {
 			runtimeCtx.GitHubClient = DemoGitHubClientFactory()
@@ -113,7 +161,7 @@ func NewContextAuto(ctx context.Context, repoRoot string) (*Context, error) {
 		return nil, err
 	}
 
-	runtimeCtx := NewContextWithRepoRoot(eng, repoRoot)
+	runtimeCtx := NewContextWithRepoRootAndOptions(eng, repoRoot, opts)
 	runtimeCtx.Context = ctx
 
 	// Try to create real GitHub client (may fail if no token)
@@ -127,10 +175,10 @@ func NewContextAuto(ctx context.Context, repoRoot string) (*Context, error) {
 
 // GetContext returns the appropriate context (demo or real) based on the environment.
 // This handles git initialization and config checks for real mode.
-func GetContext(ctx context.Context) (*Context, error) {
+func GetContext(ctx context.Context, opts GlobalOptions) (*Context, error) {
 	// Check for demo mode first
 	if utils.IsDemoMode() {
-		return NewContextAuto(ctx, "")
+		return NewContextAuto(ctx, "", opts)
 	}
 
 	// Initialize git repository
@@ -153,5 +201,5 @@ func GetContext(ctx context.Context) (*Context, error) {
 		return nil, fmt.Errorf("stackit not initialized. Run 'stackit init' first")
 	}
 
-	return NewContextAuto(ctx, repoRoot)
+	return NewContextAuto(ctx, repoRoot, opts)
 }

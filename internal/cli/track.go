@@ -25,29 +25,25 @@ This command can also be used to fix corrupted stackit metadata.`,
 		ValidArgsFunction: common.CompleteBranches,
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Get branch name from args or use current branch
-			branchName := ""
-			if len(args) > 0 {
-				branchName = args[0]
-			} else {
-				currentBranch := ctx.Engine.CurrentBranch()
-				if currentBranch == nil {
-					return errors.ErrNotOnBranch
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Get branch name from args or use current branch
+				branchName := ""
+				if len(args) > 0 {
+					branchName = args[0]
+				} else {
+					currentBranch := ctx.Engine.CurrentBranch()
+					if currentBranch == nil {
+						return errors.ErrNotOnBranch
+					}
+					branchName = currentBranch.GetName()
 				}
-				branchName = currentBranch.GetName()
-			}
 
-			// Execute track action
-			return actions.TrackAction(ctx, actions.TrackOptions{
-				BranchName: branchName,
-				Force:      force,
-				Parent:     parent,
+				// Execute track action
+				return actions.TrackAction(ctx, actions.TrackOptions{
+					BranchName: branchName,
+					Force:      force,
+					Parent:     parent,
+				})
 			})
 		},
 	}

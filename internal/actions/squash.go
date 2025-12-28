@@ -38,8 +38,9 @@ func SquashAction(ctx *runtime.Context, opts SquashOptions) error {
 
 	// Squash current branch
 	if err := eng.SquashCurrentBranch(context, engine.SquashOptions{
-		Message: opts.Message,
-		NoEdit:  opts.NoEdit,
+		Message:  opts.Message,
+		NoEdit:   opts.NoEdit,
+		NoVerify: !ctx.Verify,
 	}); err != nil {
 		return fmt.Errorf("failed to squash branch: %w", err)
 	}

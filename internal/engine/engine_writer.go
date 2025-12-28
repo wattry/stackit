@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // PushBranch pushes a branch to the remote
-func (e *engineImpl) PushBranch(ctx context.Context, branchName string, remote string, force bool, forceWithLease bool) error {
-	return e.git.PushBranch(ctx, branchName, remote, force, forceWithLease)
+func (e *engineImpl) PushBranch(ctx context.Context, branchName string, remote string, opts git.PushOptions) error {
+	return e.git.PushBranch(ctx, branchName, remote, opts)
 }
 
 // TrackBranch tracks a branch with a parent branch
@@ -348,8 +350,12 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 }
 
 // Commit creates a new commit
-func (e *engineImpl) Commit(_ context.Context, message string, verbose int) error {
-	return e.git.Commit(message, verbose)
+func (e *engineImpl) Commit(_ context.Context, message string, verbose int, noVerify bool) error {
+	return e.git.CommitWithOptions(git.CommitOptions{
+		Message:  message,
+		Verbose:  verbose,
+		NoVerify: noVerify,
+	})
 }
 
 // StageAll stages all changes

@@ -99,7 +99,7 @@ type BranchWriter interface {
 	CreateAndCheckoutBranch(ctx context.Context, branch Branch) error
 
 	// Git write operations
-	Commit(ctx context.Context, message string, verbose int) error
+	Commit(ctx context.Context, message string, verbose int, noVerify bool) error
 	StageAll(ctx context.Context) error
 	StashPush(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error

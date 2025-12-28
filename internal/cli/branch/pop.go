@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
 	"stackit.dev/stackit/internal/runtime"
 )
@@ -21,14 +22,10 @@ your uncommitted changes. The working tree will remain unchanged after
 the branch is deleted.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Run pop action
-			return actions.PopAction(ctx, actions.PopOptions{})
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Run pop action
+				return actions.PopAction(ctx, actions.PopOptions{})
+			})
 		},
 	}
 

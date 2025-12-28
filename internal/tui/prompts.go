@@ -14,12 +14,12 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
-// ErrInteractiveDisabled is returned when interactive prompts are disabled via STACKIT_TEST_NO_INTERACTIVE
-var ErrInteractiveDisabled = fmt.Errorf("interactive prompts are disabled (STACKIT_TEST_NO_INTERACTIVE is set)")
+// ErrInteractiveDisabled is returned when interactive prompts are disabled
+var ErrInteractiveDisabled = fmt.Errorf("interactive prompts are disabled")
 
-// checkInteractiveAllowed returns an error if interactive mode is disabled for testing
+// checkInteractiveAllowed returns an error if interactive mode is disabled
 func checkInteractiveAllowed() error {
-	if os.Getenv("STACKIT_TEST_NO_INTERACTIVE") != "" {
+	if !interactiveMode {
 		return ErrInteractiveDisabled
 	}
 	return nil

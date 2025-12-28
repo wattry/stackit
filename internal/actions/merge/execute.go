@@ -10,6 +10,7 @@ import (
 
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -540,7 +541,10 @@ func executeStep(ctx context.Context, step PlanStep, eng mergeExecuteEngine, spl
 		case engine.RestackDone:
 			// Success - now push the rebased branch and update PR base
 			// Force push is required since we rebased
-			if err := eng.PushBranch(ctx, step.BranchName, eng.GetRemote(), true, false); err != nil {
+			if err := eng.PushBranch(ctx, step.BranchName, eng.GetRemote(), git.PushOptions{
+				Force:    true,
+				NoVerify: true, // Internal restack usually shouldn't run hooks
+			}); err != nil {
 				return fmt.Errorf("failed to push rebased branch %s: %w", step.BranchName, err)
 			}
 			splog.Debug("Pushed rebased branch %s to remote", step.BranchName)
@@ -569,7 +573,10 @@ func executeStep(ctx context.Context, step PlanStep, eng mergeExecuteEngine, spl
 		case engine.RestackUnneeded:
 			// Already up to date, but still need to ensure PR base is correct
 			// Push in case local is ahead of remote
-			if err := eng.PushBranch(ctx, step.BranchName, eng.GetRemote(), true, false); err != nil {
+			if err := eng.PushBranch(ctx, step.BranchName, eng.GetRemote(), git.PushOptions{
+				Force:    true,
+				NoVerify: true,
+			}); err != nil {
 				splog.Debug("Failed to push branch %s (may already be up to date): %v", step.BranchName, err)
 			}
 			// Update PR base to the actual parent (not always trunk)

@@ -27,43 +27,43 @@ install-tools:
 test:
 	@echo "Running tests..."
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 STACKIT_NO_LOGGING=1 gotestsum --format pkgname-and-test-fails -- ./...; \
+		STACKIT_NO_LOGGING=1 gotestsum --format pkgname-and-test-fails -- ./...; \
 	else \
-		STACKIT_TEST_NO_INTERACTIVE=1 STACKIT_NO_LOGGING=1 go test ./...; \
+		STACKIT_NO_LOGGING=1 go test ./...; \
 	fi
 
 # Run all tests without caching (for CI or debugging flaky tests)
 test-fresh:
 	@echo "Running tests (no cache)..."
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 STACKIT_NO_LOGGING=1 gotestsum --format pkgname-and-test-fails -- ./... -count=1; \
+		STACKIT_NO_LOGGING=1 gotestsum --format pkgname-and-test-fails -- ./... -count=1; \
 	else \
-		STACKIT_TEST_NO_INTERACTIVE=1 STACKIT_NO_LOGGING=1 go test ./... -count=1; \
+		STACKIT_NO_LOGGING=1 go test ./... -count=1; \
 	fi
 
 # Run tests with verbose output
 test-verbose:
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 gotestsum --format standard-verbose -- ./...; \
+		gotestsum --format standard-verbose -- ./...; \
 	else \
-		STACKIT_TEST_NO_INTERACTIVE=1 go test -v ./...; \
+		go test -v ./...; \
 	fi
 
 # Run tests with coverage
 test-coverage:
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 gotestsum --format pkgname-and-test-fails -- -coverprofile=coverage.out ./...; \
+		gotestsum --format pkgname-and-test-fails -- -coverprofile=coverage.out ./...; \
 	else \
-		STACKIT_TEST_NO_INTERACTIVE=1 go test -coverprofile=coverage.out ./...; \
+		go test -coverprofile=coverage.out ./...; \
 	fi
 	go tool cover -html=coverage.out -o coverage.html
 
 # Run tests with race detection
 test-race:
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 gotestsum --format pkgname-and-test-fails -- -race ./...; \
+		gotestsum --format pkgname-and-test-fails -- -race ./...; \
 	else \
-		STACKIT_TEST_NO_INTERACTIVE=1 go test -race ./...; \
+		go test -race ./...; \
 	fi
 
 # Run tests for a specific package
@@ -74,15 +74,15 @@ test-pkg pkg:
 		exit 1; \
 	fi
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 gotestsum --format standard-verbose -- {{pkg}}; \
+		gotestsum --format standard-verbose -- {{pkg}}; \
 	else \
-		STACKIT_TEST_NO_INTERACTIVE=1 go test -v {{pkg}}; \
+		go test -v {{pkg}}; \
 	fi
 
 # Run tests in watch mode (requires gotestsum)
 test-watch:
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		STACKIT_TEST_NO_INTERACTIVE=1 gotestsum --watch --format pkgname-and-test-fails -- ./...; \
+		gotestsum --watch --format pkgname-and-test-fails -- ./...; \
 	else \
 		echo "gotestsum not installed. Install with: go install gotest.tools/gotestsum@latest"; \
 		exit 1; \

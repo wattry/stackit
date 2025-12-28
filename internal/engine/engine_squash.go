@@ -69,9 +69,10 @@ func (e *engineImpl) SquashCurrentBranch(ctx context.Context, opts SquashOptions
 	// This is correct: we reset to the oldest commit, then amend it to include all subsequent changes
 	// Only pass noEdit and message, let git handle editor by default
 	commitOpts := git.CommitOptions{
-		Amend:   true,
-		Message: opts.Message,
-		NoEdit:  opts.NoEdit,
+		Amend:    true,
+		Message:  opts.Message,
+		NoEdit:   opts.NoEdit,
+		NoVerify: opts.NoVerify,
 		// Don't set Edit - git will open editor by default if no message and no noEdit
 	}
 

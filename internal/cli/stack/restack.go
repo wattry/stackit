@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/runtime"
 )
@@ -27,48 +28,44 @@ func NewRestackCmd() *cobra.Command {
 If conflicts are encountered, you will be prompted to resolve them via an interactive Git rebase.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Validation: only one scope flag at a time
-			scopeFlags := 0
-			if downstack {
-				scopeFlags++
-			}
-			if only {
-				scopeFlags++
-			}
-			if upstack {
-				scopeFlags++
-			}
-			if scopeFlags > 1 {
-				return fmt.Errorf("only one of --downstack, --only, or --upstack can be specified")
-			}
-
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Determine target branch
-			targetBranch := branch
-			if targetBranch == "" {
-				currentBranch := ctx.Engine.CurrentBranch()
-				if currentBranch == nil {
-					return fmt.Errorf("not on a branch and --branch not specified")
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Validation: only one scope flag at a time
+				scopeFlags := 0
+				if downstack {
+					scopeFlags++
 				}
-				targetBranch = currentBranch.GetName()
-			}
+				if only {
+					scopeFlags++
+				}
+				if upstack {
+					scopeFlags++
+				}
+				if scopeFlags > 1 {
+					return fmt.Errorf("only one of --downstack, --only, or --upstack can be specified")
+				}
 
-			// Determine scope based on flags
-			rng := engine.StackRange{
-				RecursiveParents:  !only && !upstack,   // Default or downstack
-				IncludeCurrent:    true,                // Always include current
-				RecursiveChildren: !only && !downstack, // Default or upstack
-			}
+				// Determine target branch
+				targetBranch := branch
+				if targetBranch == "" {
+					currentBranch := ctx.Engine.CurrentBranch()
+					if currentBranch == nil {
+						return fmt.Errorf("not on a branch and --branch not specified")
+					}
+					targetBranch = currentBranch.GetName()
+				}
 
-			// Run restack action
-			return actions.RestackAction(ctx, actions.RestackOptions{
-				BranchName: targetBranch,
-				Scope:      rng,
+				// Determine scope based on flags
+				rng := engine.StackRange{
+					RecursiveParents:  !only && !upstack,   // Default or downstack
+					IncludeCurrent:    true,                // Always include current
+					RecursiveChildren: !only && !downstack, // Default or upstack
+				}
+
+				// Run restack action
+				return actions.RestackAction(ctx, actions.RestackOptions{
+					BranchName: targetBranch,
+					Scope:      rng,
+				})
 			})
 		},
 	}

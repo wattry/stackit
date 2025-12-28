@@ -138,7 +138,21 @@ func Action(ctx *runtime.Context, opts Options) error {
 		return nil
 	}
 
-	// TODO: Add interactive confirmation prompt if opts.Confirm is set
+	// Handle interactive confirmation
+	if opts.Confirm && ctx.Interactive {
+		ui.Pause()
+		confirmed, err := tui.PromptConfirm("Proceed with submit?", true)
+		ui.Resume()
+		if err != nil {
+			return fmt.Errorf("confirmation canceled: %w", err)
+		}
+		if !confirmed {
+			splog.Info("Submit canceled")
+			return nil
+		}
+	} else if opts.Confirm && !ctx.Interactive {
+		return fmt.Errorf("cannot use --confirm in non-interactive mode")
+	}
 
 	// Build progress items
 	progressItems := make([]submit.Item, len(submissionInfos))
@@ -172,7 +186,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 
 			ui.UpdateSubmitItem(info.BranchName, "submitting", "", nil)
 
-			if err := pushBranchIfNeeded(context, info, opts, remote, eng); err != nil {
+			if err := pushBranchIfNeeded(ctx, info, opts, remote, eng); err != nil {
 				ui.UpdateSubmitItem(info.BranchName, "error", "", err)
 				errMu.Lock()
 				if submitErr == nil {
@@ -373,14 +387,18 @@ func getGitHubClient(ctx *runtime.Context) (github.Client, error) {
 }
 
 // pushBranchIfNeeded pushes a branch to remote if needed
-func pushBranchIfNeeded(ctx context.Context, submissionInfo Info, opts Options, remote string, eng engine.SyncManager) error {
+func pushBranchIfNeeded(ctx *runtime.Context, submissionInfo Info, opts Options, remote string, eng engine.SyncManager) error {
 	// Skip if dry run
 	if opts.DryRun {
 		return nil
 	}
 
 	forceWithLease := !opts.Force
-	if err := eng.PushBranch(ctx, submissionInfo.BranchName, remote, opts.Force, forceWithLease); err != nil {
+	if err := eng.PushBranch(ctx.Context, submissionInfo.BranchName, remote, git.PushOptions{
+		Force:          opts.Force,
+		ForceWithLease: forceWithLease,
+		NoVerify:       !ctx.Verify,
+	}); err != nil {
 		if errors.Is(err, git.ErrStaleRemoteInfo) {
 			return fmt.Errorf("force-with-lease push of %s failed due to external changes to the remote branch. If you are collaborating on this stack, try 'stackit sync' to pull in changes. Alternatively, use the --force option to bypass the stale info warning", submissionInfo.BranchName)
 		}

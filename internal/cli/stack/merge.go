@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/merge"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/runtime"
@@ -38,68 +39,65 @@ If --scope is specified, all branches with that scope will be merged.
 If no flags or arguments are provided, an interactive wizard will guide you through the merge process.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Handle 'stackit merge this'
-			if len(args) > 0 && args[0] == "this" {
-				return runInteractiveMergeWizard(ctx, dryRun, force, "")
-			}
-
-			// Determine if we should run in interactive mode
-			// Interactive if no flags are provided (except dry-run and scope which are always allowed)
-			interactive := strategy == "" && !yes && !force && scope == "" && len(args) == 0
-
-			// Parse strategy
-			var mergeStrategy merge.Strategy
-			if strategy != "" {
-				switch strings.ToLower(strategy) {
-				case "bottom-up", "bottomup":
-					mergeStrategy = merge.StrategyBottomUp
-				case "top-down", "topdown":
-					mergeStrategy = merge.StrategyTopDown
-				case "consolidate":
-					mergeStrategy = merge.StrategyConsolidate
-				default:
-					return fmt.Errorf("invalid strategy: %s (must be 'bottom-up', 'top-down', or 'consolidate')", strategy)
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Handle 'stackit merge this'
+				if len(args) > 0 && args[0] == "this" {
+					return runInteractiveMergeWizard(ctx, dryRun, force, "")
 				}
-			}
 
-			// Run interactive wizard if needed
-			if interactive {
-				return runMergeTypeSelector(ctx, dryRun, force)
-			}
+				// Determine if we should run in interactive mode
+				// Interactive if no flags are provided (except dry-run and scope which are always allowed)
+				// Respect global interactive flag
+				interactive := ctx.Interactive && strategy == "" && !yes && !force && scope == "" && len(args) == 0
 
-			// Get config values
-			cfg, _ := config.LoadConfig(ctx.RepoRoot)
-			undoStackDepth := cfg.UndoStackDepth()
+				// Parse strategy
+				var mergeStrategy merge.Strategy
+				if strategy != "" {
+					switch strings.ToLower(strategy) {
+					case "bottom-up", "bottomup":
+						mergeStrategy = merge.StrategyBottomUp
+					case "top-down", "topdown":
+						mergeStrategy = merge.StrategyTopDown
+					case "consolidate":
+						mergeStrategy = merge.StrategyConsolidate
+					default:
+						return fmt.Errorf("invalid strategy: %s (must be 'bottom-up', 'top-down', or 'consolidate')", strategy)
+					}
+				}
 
-			// Create plan if scope is specified
-			var plan *merge.Plan
-			if scope != "" {
-				p, _, err := merge.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Splog, ctx.GitHubClient, merge.CreatePlanOptions{
-					Strategy: mergeStrategy,
-					Force:    force,
-					Scope:    scope,
+				// Run interactive wizard if needed
+				if interactive {
+					return runMergeTypeSelector(ctx, dryRun, force)
+				}
+
+				// Get config values
+				cfg, _ := config.LoadConfig(ctx.RepoRoot)
+				undoStackDepth := cfg.UndoStackDepth()
+
+				// Create plan if scope is specified
+				var plan *merge.Plan
+				if scope != "" {
+					p, _, err := merge.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Splog, ctx.GitHubClient, merge.CreatePlanOptions{
+						Strategy: mergeStrategy,
+						Force:    force,
+						Scope:    scope,
+					})
+					if err != nil {
+						return err
+					}
+					plan = p
+				}
+
+				// Run merge action
+				return merge.Action(ctx, merge.Options{
+					DryRun:         dryRun,
+					Confirm:        !yes && ctx.Interactive, // If --yes or --no-interactive is set, don't confirm
+					Strategy:       mergeStrategy,
+					Force:          force,
+					UseWorktree:    worktree,
+					Plan:           plan,
+					UndoStackDepth: undoStackDepth,
 				})
-				if err != nil {
-					return err
-				}
-				plan = p
-			}
-
-			// Run merge action
-			return merge.Action(ctx, merge.Options{
-				DryRun:         dryRun,
-				Confirm:        !yes, // If --yes is set, don't confirm
-				Strategy:       mergeStrategy,
-				Force:          force,
-				UseWorktree:    worktree,
-				Plan:           plan,
-				UndoStackDepth: undoStackDepth,
 			})
 		},
 	}

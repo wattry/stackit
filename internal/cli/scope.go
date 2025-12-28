@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
 
@@ -27,28 +28,24 @@ Use 'none' or 'clear' as the scope name to explicitly break the inheritance chai
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get context
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				var scope string
+				if len(args) > 0 {
+					scope = args[0]
+				}
 
-			var scope string
-			if len(args) > 0 {
-				scope = args[0]
-			}
+				if scope == "" && !unset && !show {
+					show = true // Default to show if no args/flags
+				}
 
-			if scope == "" && !unset && !show {
-				show = true // Default to show if no args/flags
-			}
+				opts := actions.ScopeOptions{
+					Scope: scope,
+					Unset: unset,
+					Show:  show,
+				}
 
-			opts := actions.ScopeOptions{
-				Scope: scope,
-				Unset: unset,
-				Show:  show,
-			}
-
-			return actions.ScopeAction(ctx, opts)
+				return actions.ScopeAction(ctx, opts)
+			})
 		},
 	}
 

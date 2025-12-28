@@ -261,7 +261,7 @@ type Runner interface {
 
 	// Git Operations
 	PullBranch(ctx context.Context, remote, branchName string) (PullResult, error)
-	PushBranch(ctx context.Context, branchName, remote string, force, forceWithLease bool) error
+	PushBranch(ctx context.Context, branchName, remote string, opts PushOptions) error
 	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error)
 	RebaseContinue(ctx context.Context) (RebaseResult, error)
 	CherryPick(ctx context.Context, commitSHA, onto string) (string, error)
@@ -270,7 +270,7 @@ type Runner interface {
 	HardReset(ctx context.Context, revision string) error
 	SoftReset(ctx context.Context, revision string) error
 	CommitWithOptions(opts CommitOptions) error
-	Commit(message string, verbose int) error
+	Commit(message string, verbose int, noVerify bool) error
 	StageAll(ctx context.Context) error
 	HasStagedChanges(ctx context.Context) (bool, error)
 	HasUnstagedChanges(ctx context.Context) (bool, error)
@@ -456,8 +456,8 @@ func (r *realRunner) PullBranch(ctx context.Context, remote, branchName string) 
 	return PullBranch(ctx, remote, branchName)
 }
 
-func (r *realRunner) PushBranch(ctx context.Context, branchName, remote string, force, forceWithLease bool) error {
-	return PushBranch(ctx, branchName, remote, force, forceWithLease)
+func (r *realRunner) PushBranch(ctx context.Context, branchName, remote string, opts PushOptions) error {
+	return PushBranch(ctx, branchName, remote, opts)
 }
 
 func (r *realRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error) {
@@ -492,8 +492,12 @@ func (r *realRunner) CommitWithOptions(opts CommitOptions) error {
 	return CommitWithOptions(opts)
 }
 
-func (r *realRunner) Commit(message string, verbose int) error {
-	return Commit(message, verbose)
+func (r *realRunner) Commit(message string, verbose int, noVerify bool) error {
+	return CommitWithOptions(CommitOptions{
+		Message:  message,
+		Verbose:  verbose,
+		NoVerify: noVerify,
+	})
 }
 
 func (r *realRunner) StageAll(ctx context.Context) error {

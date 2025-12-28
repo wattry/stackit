@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/absorb"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
 
@@ -29,18 +30,14 @@ If there is no clear commit to absorb a hunk into, it will not be absorbed.
 Prompts for confirmation before amending the commits, and restacks the branches upstack of the current branch.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Run absorb action
-			return absorb.Action(ctx, absorb.Options{
-				All:    all,
-				DryRun: dryRun,
-				Force:  force,
-				Patch:  patch,
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Run absorb action
+				return absorb.Action(ctx, absorb.Options{
+					All:    all,
+					DryRun: dryRun,
+					Force:  force,
+					Patch:  patch,
+				})
 			})
 		},
 	}

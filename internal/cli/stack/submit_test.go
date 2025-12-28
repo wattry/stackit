@@ -54,9 +54,8 @@ func TestSubmitCommand(t *testing.T) {
 		require.Equal(t, "branch2", currentBranch)
 
 		// Run submit command with --dry-run, --no-edit, and --draft to avoid interactive prompts
-		cmd = exec.Command(binaryPath, "submit", "--dry-run", "--no-edit", "--draft")
+		cmd = exec.Command(binaryPath, "submit", "--dry-run", "--no-edit", "--draft", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 
 		// Should succeed
@@ -120,9 +119,8 @@ func TestSubmitCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Run submit command with --stack, --dry-run, --no-edit, and --draft to avoid interactive prompts
-		cmd = exec.Command(binaryPath, "submit", "--stack", "--dry-run", "--no-edit", "--draft")
+		cmd = exec.Command(binaryPath, "submit", "--stack", "--dry-run", "--no-edit", "--draft", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 
 		// Should succeed
@@ -171,9 +169,8 @@ func TestSubmitCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Run ss command (alias for submit --stack) with --dry-run, --no-edit, and --draft
-		cmd = exec.Command(binaryPath, "ss", "--dry-run", "--no-edit", "--draft")
+		cmd = exec.Command(binaryPath, "ss", "--dry-run", "--no-edit", "--draft", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 
 		// Should succeed

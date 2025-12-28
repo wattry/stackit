@@ -73,9 +73,8 @@ func TestSplitCommand(t *testing.T) {
 		require.Contains(t, string(output), "file3_test.txt")
 
 		// Run split --by-file to extract file1 and file2 (comma-separated for StringSlice flag)
-		cmd = exec.Command(binaryPath, "split", "--by-file", "file1_test.txt,file2_test.txt")
+		cmd = exec.Command(binaryPath, "split", "--by-file", "file1_test.txt,file2_test.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err = cmd.CombinedOutput()
 		require.NoError(t, err, "split command failed: %s", string(output))
 
@@ -156,9 +155,8 @@ func TestSplitCommand(t *testing.T) {
 		})
 
 		// Run split --by-file with single file
-		cmd := exec.Command(binaryPath, "split", "--by-file", "file1_test.txt")
+		cmd := exec.Command(binaryPath, "split", "--by-file", "file1_test.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, "split command failed: %s", string(output))
 
@@ -236,9 +234,8 @@ func TestSplitCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Run split --by-file on branch1
-		cmd := exec.Command(binaryPath, "split", "--by-file", "file1_test.txt")
+		cmd := exec.Command(binaryPath, "split", "--by-file", "file1_test.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, "split command failed: %s", string(output))
 
@@ -276,9 +273,8 @@ func TestSplitCommand(t *testing.T) {
 		})
 
 		// Try to run split in detached HEAD state
-		cmd := exec.Command(binaryPath, "split", "--by-file", "somefile.txt")
+		cmd := exec.Command(binaryPath, "split", "--by-file", "somefile.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 		require.Error(t, err, "split should fail when not on a branch")
 		require.Contains(t, string(output), "not on a branch", "error message should mention not on a branch")
@@ -315,9 +311,8 @@ func TestSplitCommand(t *testing.T) {
 		})
 
 		// Try to run split with uncommitted changes
-		cmd := exec.Command(binaryPath, "split", "--by-file", "test1_test.txt")
+		cmd := exec.Command(binaryPath, "split", "--by-file", "test1_test.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 		require.Error(t, err, "split should fail with uncommitted changes")
 		require.Contains(t, string(output), "uncommitted tracked changes", "error message should mention uncommitted changes")
@@ -348,9 +343,8 @@ func TestSplitCommand(t *testing.T) {
 		})
 
 		// Try to split with non-existent file
-		cmd := exec.Command(binaryPath, "split", "--by-file", "nonexistent.txt")
+		cmd := exec.Command(binaryPath, "split", "--by-file", "nonexistent.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 		// Git checkout will fail if file doesn't exist, which is expected
 		require.Error(t, err, "split should fail with non-existent file")

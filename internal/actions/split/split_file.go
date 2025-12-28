@@ -73,7 +73,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 
 	// Commit
 	commitMessage := fmt.Sprintf("Extract %s from %s", strings.Join(pathspecs, ", "), branchToSplit.GetName())
-	if err := eng.Commit(ctx, commitMessage, 0); err != nil {
+	if err := eng.Commit(ctx, commitMessage, 0, true); err != nil {
 		_ = eng.DeleteBranch(ctx, newBranch)
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
@@ -97,7 +97,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 
 	// Commit the removal
 	commitMessage = fmt.Sprintf("Remove %s (moved to %s)", strings.Join(pathspecs, ", "), newBranchName)
-	if err := eng.Commit(ctx, commitMessage, 0); err != nil {
+	if err := eng.Commit(ctx, commitMessage, 0, true); err != nil {
 		return nil, fmt.Errorf("failed to commit removal: %w", err)
 	}
 

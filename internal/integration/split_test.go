@@ -205,9 +205,8 @@ func TestSplitWorkflow(t *testing.T) {
 		// Attempt to run split --by-commit
 		// This will fail because it requires interactive input for commit selection
 		// But we can verify that the flag is accepted and the command starts
-		cmd := exec.Command(binaryPath, "split", "--by-commit")
+		cmd := exec.Command(binaryPath, "split", "--by-commit", "--no-interactive")
 		cmd.Dir = sh.Dir()
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 
 		// The command should fail due to interactive prompts, but we can verify
@@ -231,9 +230,8 @@ func TestSplitWorkflow(t *testing.T) {
 
 		// Attempt to run split --by-commit on a branch with minimal commits
 		// The logic should detect this and potentially default to hunk mode or show appropriate message
-		cmd := exec.Command(binaryPath, "split", "--by-commit")
+		cmd := exec.Command(binaryPath, "split", "--by-commit", "--no-interactive")
 		cmd.Dir = sh.Dir()
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 
 		// Should either fail due to lack of commits to split or require interaction

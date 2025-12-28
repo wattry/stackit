@@ -29,22 +29,19 @@ If no branch is specified, displays information about the current branch.`,
 		ValidArgsFunction: common.CompleteBranches,
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				branchName := ""
+				if len(args) > 0 {
+					branchName = args[0]
+				}
 
-			branchName := ""
-			if len(args) > 0 {
-				branchName = args[0]
-			}
-
-			return actions.InfoAction(ctx, actions.InfoOptions{
-				BranchName: branchName,
-				Body:       body,
-				Diff:       diff,
-				Patch:      patch,
-				Stat:       stat,
+				return actions.InfoAction(ctx, actions.InfoOptions{
+					BranchName: branchName,
+					Body:       body,
+					Diff:       diff,
+					Patch:      patch,
+					Stat:       stat,
+				})
 			})
 		},
 	}

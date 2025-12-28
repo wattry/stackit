@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/fold"
+	"stackit.dev/stackit/internal/cli/common"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
 	"stackit.dev/stackit/internal/runtime"
 )
@@ -33,16 +34,12 @@ If you fold a branch with an open pull request, you will need to manually
 close the pull request.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Run fold action
-			return fold.Action(ctx, fold.Options{
-				Keep:       keep,
-				AllowTrunk: allowTrunk,
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Run fold action
+				return fold.Action(ctx, fold.Options{
+					Keep:       keep,
+					AllowTrunk: allowTrunk,
+				})
 			})
 		},
 	}

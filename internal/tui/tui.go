@@ -215,8 +215,20 @@ func (m SubmitTUIModel) View() string {
 	return b.String()
 }
 
+var (
+	interactiveMode = true
+)
+
+// SetInteractive sets whether the TUI should be interactive
+func SetInteractive(interactive bool) {
+	interactiveMode = interactive
+}
+
 // IsTTY returns true if we can use a TTY for interactive TUI
 func IsTTY() bool {
+	if !interactiveMode {
+		return false
+	}
 	// First check if stdin/stdout are terminals
 	if !((isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())) &&
 		(isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()))) {

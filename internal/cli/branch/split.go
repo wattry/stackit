@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/split"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
 
@@ -33,34 +34,30 @@ split without options will prompt for a splitting strategy.`,
 		// Disable default help flag to allow -h for --by-hunk
 		DisableFlagParsing: false,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Determine split style - check all flag variants
-			var style split.Style
-			switch {
-			case byCommit || cmd.Flags().Changed("commit"):
-				style = split.StyleCommit
-			case byHunk || cmd.Flags().Changed("hunk"):
-				style = split.StyleHunk
-			case byFileInteractive || len(byFile) > 0 || cmd.Flags().Changed("file"):
-				// -F triggers interactive file selection
-				// --by-file with pathspecs uses those files directly
-				if cmd.Flags().Changed("file") {
-					filePaths, _ := cmd.Flags().GetStringSlice("file")
-					byFile = filePaths
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Determine split style - check all flag variants
+				var style split.Style
+				switch {
+				case byCommit || cmd.Flags().Changed("commit"):
+					style = split.StyleCommit
+				case byHunk || cmd.Flags().Changed("hunk"):
+					style = split.StyleHunk
+				case byFileInteractive || len(byFile) > 0 || cmd.Flags().Changed("file"):
+					// -F triggers interactive file selection
+					// --by-file with pathspecs uses those files directly
+					if cmd.Flags().Changed("file") {
+						filePaths, _ := cmd.Flags().GetStringSlice("file")
+						byFile = filePaths
+					}
+					style = split.StyleFile
 				}
-				style = split.StyleFile
-			}
-			// If style is empty, SplitAction will prompt
+				// If style is empty, SplitAction will prompt
 
-			// Run split action
-			return split.Action(ctx, split.Options{
-				Style:     style,
-				Pathspecs: byFile,
+				// Run split action
+				return split.Action(ctx, split.Options{
+					Style:     style,
+					Pathspecs: byFile,
+				})
 			})
 		},
 	}

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/runtime"
 )
@@ -32,30 +33,27 @@ Examples:
 		Args:         cobra.MinimumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				opts := actions.ForeachOptions{
+					Command:  args[0],
+					Args:     args[1:],
+					FailFast: !noFailFast,
+				}
 
-			opts := actions.ForeachOptions{
-				Command:  args[0],
-				Args:     args[1:],
-				FailFast: !noFailFast,
-			}
+				// Define the traversal range
+				opts.Scope = engine.StackRange{IncludeCurrent: true}
+				switch {
+				case stack:
+					opts.Scope.RecursiveParents = true
+					opts.Scope.RecursiveChildren = true
+				case downstack:
+					opts.Scope.RecursiveParents = true
+				case upstack:
+					opts.Scope.RecursiveChildren = true
+				}
 
-			// Define the traversal range
-			opts.Scope = engine.StackRange{IncludeCurrent: true}
-			switch {
-			case stack:
-				opts.Scope.RecursiveParents = true
-				opts.Scope.RecursiveChildren = true
-			case downstack:
-				opts.Scope.RecursiveParents = true
-			case upstack:
-				opts.Scope.RecursiveChildren = true
-			}
-
-			return actions.ForeachAction(ctx, opts)
+				return actions.ForeachAction(ctx, opts)
+			})
 		},
 	}
 

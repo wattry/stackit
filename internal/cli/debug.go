@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
 
@@ -30,15 +31,11 @@ Output is formatted as pretty-printed JSON for easy reading and parsing.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Run debug action
-			return actions.DebugAction(ctx, actions.DebugOptions{
-				Limit: limit,
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Run debug action
+				return actions.DebugAction(ctx, actions.DebugOptions{
+					Limit: limit,
+				})
 			})
 		},
 	}

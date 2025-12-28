@@ -70,7 +70,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 			return err
 		}
 		hasStaged = true
-	} else if !hasStaged && utils.IsInteractive() {
+	} else if !hasStaged && ctx.Interactive {
 		hasUnstaged, err := eng.HasUnstagedChanges(ctx.Context)
 		if err != nil {
 			return fmt.Errorf("failed to check unstaged changes: %w", err)
@@ -125,7 +125,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 
 	// Commit if there are staged changes
 	if hasStaged {
-		if err := eng.Commit(ctx.Context, commitMessage, opts.Verbose); err != nil {
+		if err := eng.Commit(ctx.Context, commitMessage, opts.Verbose, !ctx.Verify); err != nil {
 			// Clean up branch on commit failure
 			_ = eng.DeleteBranch(ctx.Context, branch)
 			return fmt.Errorf("failed to commit: %w", err)
