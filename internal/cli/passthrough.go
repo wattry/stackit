@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+
+	"github.com/spf13/cobra"
 )
 
 var gitCommandAllowlist = []string{
@@ -94,4 +96,52 @@ func joinArgs(args []string) string {
 		result += arg
 	}
 	return result
+}
+
+func newAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "add [args...]",
+		Short:              "git add passthrough",
+		Long:               "arguments [args] (optional) git add arguments",
+		DisableFlagParsing: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
+}
+
+func newCherryPickCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "cherry-pick [args...]",
+		Short:              "git cherry-pick passthrough",
+		Long:               "arguments [args] (optional) git cherry-pick arguments",
+		DisableFlagParsing: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
+}
+
+func newRebaseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "rebase [args...]",
+		Short:              "git rebase passthrough",
+		Long:               "arguments [args] (optional) git rebase arguments",
+		DisableFlagParsing: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
+}
+
+func newResetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "reset [args...]",
+		Short:              "git reset passthrough",
+		Long:               "arguments [args] (optional) git reset arguments",
+		DisableFlagParsing: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
 }
