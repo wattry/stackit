@@ -130,7 +130,6 @@ type Splog struct {
 }
 
 // NewSplog creates a new splog instance with console-only logging
-// Debug messages are enabled when the DEBUG environment variable is set
 func NewSplog() *Splog {
 	splog, _ := NewSplogWithConfig("", "")
 	return splog
@@ -138,14 +137,18 @@ func NewSplog() *Splog {
 
 // NewSplogWithConfig creates a new splog instance with optional file logging
 func NewSplogWithConfig(logFilePath string, _ string) (*Splog, error) {
+	return NewSplogWithFlags(logFilePath, os.Getenv("DEBUG") != "", false)
+}
+
+// NewSplogWithFlags creates a new splog instance with the given flags
+func NewSplogWithFlags(logFilePath string, debugMode, quiet bool) (*Splog, error) {
 	writer := os.Stdout
-	debugMode := os.Getenv("DEBUG") != ""
 	splog := &Splog{
 		writer: writer,
-		quiet:  false,
+		quiet:  quiet,
 	}
 
-	// Create console handler (existing behavior)
+	// Create console handler
 	consoleHandler := &simpleHandler{
 		writer:    writer,
 		debugMode: debugMode,

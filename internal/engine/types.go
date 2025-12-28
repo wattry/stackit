@@ -456,6 +456,7 @@ type PRSubmissionStatus struct {
 
 // SquashOptions contains options for squashing commits
 type SquashOptions struct {
-	Message string
-	NoEdit  bool
+	Message  string
+	NoEdit   bool
+	NoVerify bool
 }

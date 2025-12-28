@@ -14,14 +14,16 @@ type CommitOptions struct {
 	Edit        bool
 	Verbose     int
 	ResetAuthor bool
+	NoVerify    bool
 }
 
 // Commit creates a commit with the given message
 // If verbose > 0, shows unified diff in commit message template
-func Commit(message string, verbose int) error {
+func Commit(message string, verbose int, noVerify bool) error {
 	return CommitWithOptions(CommitOptions{
-		Message: message,
-		Verbose: verbose,
+		Message:  message,
+		Verbose:  verbose,
+		NoVerify: noVerify,
 	})
 }
 
@@ -31,6 +33,10 @@ func CommitWithOptions(opts CommitOptions) error {
 
 	if opts.Amend {
 		args = append(args, "--amend")
+	}
+
+	if opts.NoVerify {
+		args = append(args, "--no-verify")
 	}
 
 	if opts.ResetAuthor {

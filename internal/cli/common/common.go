@@ -8,9 +8,25 @@ import (
 	"stackit.dev/stackit/internal/runtime"
 )
 
+// GetGlobalOptions returns runtime.GlobalOptions populated from a cobra.Command's flags
+func GetGlobalOptions(cmd *cobra.Command) runtime.GlobalOptions {
+	interactive, _ := cmd.Flags().GetBool("interactive")
+	verify, _ := cmd.Flags().GetBool("verify")
+	debug, _ := cmd.Flags().GetBool("debug")
+	quiet, _ := cmd.Flags().GetBool("quiet")
+
+	return runtime.GlobalOptions{
+		Interactive: interactive,
+		Verify:      verify,
+		Debug:       debug,
+		Quiet:       quiet,
+	}
+}
+
 // Run is a helper that provides a runtime context to a command's execution function
 func Run(cmd *cobra.Command, fn func(ctx *runtime.Context) error) error {
-	ctx, err := runtime.GetContext(cmd.Context())
+	opts := GetGlobalOptions(cmd)
+	ctx, err := runtime.GetContext(cmd.Context(), opts)
 	if err != nil {
 		return err
 	}

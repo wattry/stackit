@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
 
@@ -25,22 +26,18 @@ This command combines all commits in the current branch into a single commit. Af
 all upstack branches (children) are automatically restacked.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Determine noEdit flag: noEdit = argv['no-edit'] || !argv.edit
+				// If --no-edit is set, noEdit = true
+				// If --edit is false, noEdit = true
+				// Otherwise (edit is true, the default), noEdit = false (will edit)
+				noEditFlag := noEdit || !edit
 
-			// Determine noEdit flag: noEdit = argv['no-edit'] || !argv.edit
-			// If --no-edit is set, noEdit = true
-			// If --edit is false, noEdit = true
-			// Otherwise (edit is true, the default), noEdit = false (will edit)
-			noEditFlag := noEdit || !edit
-
-			// Run squash action
-			return actions.SquashAction(ctx, actions.SquashOptions{
-				Message: message,
-				NoEdit:  noEditFlag,
+				// Run squash action
+				return actions.SquashAction(ctx, actions.SquashOptions{
+					Message: message,
+					NoEdit:  noEditFlag,
+				})
 			})
 		},
 	}

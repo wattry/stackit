@@ -147,7 +147,7 @@ func (d *demoGitRunner) PullBranch(_ context.Context, _, _ string) (git.PullResu
 	return git.PullDone, nil
 }
 
-func (d *demoGitRunner) PushBranch(_ context.Context, _, _ string, _, _ bool) error {
+func (d *demoGitRunner) PushBranch(_ context.Context, _, _ string, _ git.PushOptions) error {
 	return nil
 }
 
@@ -199,7 +199,7 @@ func (d *demoGitRunner) CommitWithOptions(_ git.CommitOptions) error {
 	return nil
 }
 
-func (d *demoGitRunner) Commit(_ string, _ int) error {
+func (d *demoGitRunner) Commit(_ string, _ int, _ bool) error {
 	return nil
 }
 

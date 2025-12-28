@@ -3,6 +3,9 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/cli/agent"
@@ -13,6 +16,16 @@ import (
 
 // NewRootCmd creates the root cobra command
 func NewRootCmd(version, commit, date string) *cobra.Command {
+	var (
+		cwd           string
+		debug         bool
+		interactive   bool
+		noInteractive bool
+		verify        bool
+		noVerify      bool
+		quiet         bool
+	)
+
 	rootCmd := &cobra.Command{
 		Use:     "stackit",
 		Short:   "Stackit is a command line tool that makes working with stacked changes fast & intuitive",
@@ -24,7 +37,44 @@ https://github.com/jonnii/stackit
 Version: ` + version + `
 Commit:  ` + commit + `
 		Date:    ` + date,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			if cwd != "" {
+				if err := os.Chdir(cwd); err != nil {
+					return fmt.Errorf("failed to change directory: %w", err)
+				}
+			}
+
+			if noInteractive {
+				interactive = false
+			}
+			if noVerify {
+				verify = false
+			}
+			if quiet {
+				// quiet implies no-interactive
+				interactive = false
+			}
+
+			// Sync the boolean values back to the flags so common.GetGlobalOptions works
+			if !interactive {
+				_ = cmd.Flags().Set("interactive", "false")
+			}
+			if !verify {
+				_ = cmd.Flags().Set("verify", "false")
+			}
+
+			return nil
+		},
 	}
+
+	pf := rootCmd.PersistentFlags()
+	pf.StringVar(&cwd, "cwd", "", "Working directory in which to perform operations.")
+	pf.BoolVar(&debug, "debug", false, "Write debug output to the terminal.")
+	pf.BoolVar(&interactive, "interactive", true, "Enable interactive features like prompts, pagers, and editors.")
+	pf.BoolVar(&noInteractive, "no-interactive", false, "Disable interactive features.")
+	pf.BoolVar(&verify, "verify", true, "Enable git hooks.")
+	pf.BoolVar(&noVerify, "no-verify", false, "Disable git hooks.")
+	pf.BoolVarP(&quiet, "quiet", "q", false, "Minimize output to the terminal. Implies --no-interactive.")
 
 	rootCmd.AddCommand(newAbortCmd())
 	rootCmd.AddCommand(newAddCmd())

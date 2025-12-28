@@ -6,17 +6,28 @@ import (
 	"strings"
 )
 
+// PushOptions contains options for pushing a branch
+type PushOptions struct {
+	Force          bool
+	ForceWithLease bool
+	NoVerify       bool
+}
+
 // PushBranch pushes a branch to remote with optional force
 // If forceWithLease is true, uses --force-with-lease (safer)
 // If force is true, uses --force (overwrites remote)
 // If both are false, does a normal push
-func PushBranch(ctx context.Context, branchName string, remote string, force bool, forceWithLease bool) error {
+func PushBranch(ctx context.Context, branchName string, remote string, opts PushOptions) error {
 	args := []string{"push", "-u", remote}
 
-	if force {
+	if opts.Force {
 		args = append(args, "--force")
-	} else if forceWithLease {
+	} else if opts.ForceWithLease {
 		args = append(args, "--force-with-lease")
+	}
+
+	if opts.NoVerify {
+		args = append(args, "--no-verify")
 	}
 
 	args = append(args, branchName)

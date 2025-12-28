@@ -1,7 +1,6 @@
 package stack_test
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -540,9 +539,8 @@ func TestMoveCommand(t *testing.T) {
 		})
 
 		// Disable interactive mode
-		cmd := exec.Command(binaryPath, "move")
+		cmd := exec.Command(binaryPath, "move", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(os.Environ(), "STACKIT_TEST_NO_INTERACTIVE=1")
 		output, err := cmd.CombinedOutput()
 		// Should fail because interactive selection is disabled or onto not specified
 		require.Error(t, err, "move should fail in non-interactive mode")

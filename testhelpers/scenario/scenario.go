@@ -15,6 +15,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 )
 
@@ -29,12 +30,12 @@ type Scenario struct {
 }
 
 // NewScenario creates a new Scenario with an optional setup function.
-// NOTE: This function is NOT safe for parallel tests as it uses t.Setenv and NewScene.
+// NOTE: This function is NOT safe for parallel tests as it uses NewScene.
 func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 	t.Helper()
 
-	// Force non-interactive mode for tests
-	t.Setenv("STACKIT_NON_INTERACTIVE", "true")
+	// Force non-interactive mode for tests in the current process
+	tui.SetInteractive(false)
 
 	scene := testhelpers.NewScene(t, setup)
 	cfg, _ := config.LoadConfig(scene.Dir)
@@ -256,11 +257,13 @@ func (s *Scenario) RunCli(args ...string) *Scenario {
 	if s.BinaryPath == "" {
 		s.T.Fatal("BinaryPath not set. Call WithBinaryPath first.")
 	}
-	cmd := exec.Command(s.BinaryPath, args...)
+	// Add --no-interactive to all CLI commands in tests
+	fullArgs := append([]string{"--no-interactive"}, args...)
+	cmd := exec.Command(s.BinaryPath, fullArgs...)
 	cmd.Dir = s.Scene.Dir
-	cmd.Env = append(os.Environ(), "STACKIT_NON_INTERACTIVE=true")
+	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
-	require.NoError(s.T, err, "CLI command failed: stackit %v\nOutput: %s", args, string(output))
+	require.NoError(s.T, err, "CLI command failed: stackit %v\nOutput: %s", fullArgs, string(output))
 	if s.Engine != nil {
 		return s.Rebuild()
 	}
@@ -272,9 +275,11 @@ func (s *Scenario) RunCliAndGetOutput(args ...string) (string, error) {
 	if s.BinaryPath == "" {
 		return "", fmt.Errorf("BinaryPath not set")
 	}
-	cmd := exec.Command(s.BinaryPath, args...)
+	// Add --no-interactive to all CLI commands in tests
+	fullArgs := append([]string{"--no-interactive"}, args...)
+	cmd := exec.Command(s.BinaryPath, fullArgs...)
 	cmd.Dir = s.Scene.Dir
-	cmd.Env = append(os.Environ(), "STACKIT_NON_INTERACTIVE=true")
+	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if s.Engine != nil {
 		s.Rebuild()
@@ -288,11 +293,13 @@ func (s *Scenario) RunExpectError(args ...string) *Scenario {
 	if s.BinaryPath == "" {
 		s.T.Fatal("BinaryPath not set")
 	}
-	cmd := exec.Command(s.BinaryPath, args...)
+	// Add --no-interactive to all CLI commands in tests
+	fullArgs := append([]string{"--no-interactive"}, args...)
+	cmd := exec.Command(s.BinaryPath, fullArgs...)
 	cmd.Dir = s.Scene.Dir
-	cmd.Env = append(os.Environ(), "STACKIT_NON_INTERACTIVE=true")
+	cmd.Env = os.Environ()
 	_, err := cmd.CombinedOutput()
-	require.Error(s.T, err, "expected CLI command to fail: stackit %v", args)
+	require.Error(s.T, err, "expected CLI command to fail: stackit %v", fullArgs)
 	if s.Engine != nil {
 		return s.Rebuild()
 	}

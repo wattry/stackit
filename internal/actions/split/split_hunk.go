@@ -125,7 +125,10 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 		}
 
 		// Create commit
-		if err := git.Commit(commitMessage, 0); err != nil {
+		if err := git.CommitWithOptions(git.CommitOptions{
+			Message:  commitMessage,
+			NoVerify: true, // Split hunk commits are internal, hooks usually shouldn't run
+		}); err != nil {
 			// If user cancels, restore branch
 			_ = eng.ForceCheckoutBranch(ctx, branchToSplit)
 			return nil, fmt.Errorf("failed to create commit: %w", err)

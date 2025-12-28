@@ -1,7 +1,6 @@
 package undo
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,11 +9,6 @@ import (
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
-
-func init() {
-	// Disable interactive prompts in tests
-	os.Setenv("STACKIT_TEST_NO_INTERACTIVE", "1")
-}
 
 func TestUndoAction(t *testing.T) {
 	t.Run("returns error when no snapshots exist", func(t *testing.T) {

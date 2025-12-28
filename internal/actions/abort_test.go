@@ -13,11 +13,6 @@ import (
 	"stackit.dev/stackit/testhelpers/scenario"
 )
 
-func init() {
-	// Disable interactive prompts in tests
-	os.Setenv("STACKIT_TEST_NO_INTERACTIVE", "1")
-}
-
 func TestAbortAction(t *testing.T) {
 	t.Run("reports when no operation is in progress", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)

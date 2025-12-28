@@ -32,21 +32,18 @@ close the pull request.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: common.CompleteBranches,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				branchName := ""
+				if len(args) > 0 {
+					branchName = args[0]
+				}
 
-			branchName := ""
-			if len(args) > 0 {
-				branchName = args[0]
-			}
-
-			return delete.Action(ctx, delete.Options{
-				BranchName: branchName,
-				Downstack:  downstack,
-				Force:      force,
-				Upstack:    upstack,
+				return delete.Action(ctx, delete.Options{
+					BranchName: branchName,
+					Downstack:  downstack,
+					Force:      force,
+					Upstack:    upstack,
+				})
 			})
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
 
@@ -39,34 +40,30 @@ Examples:
   stackit modify --interactive-rebase     # Interactive rebase on branch commits`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Get context (demo or real)
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Determine noEdit flag:
+				// - If --no-edit is explicitly set, use it
+				// - If message is provided, don't open editor (noEdit = true)
+				// - If --edit is set, open editor (noEdit = false)
+				// - Default: open editor when amending without message (noEdit = false)
+				noEditFlag := noEdit
+				if message != "" && !edit {
+					noEditFlag = true
+				}
 
-			// Determine noEdit flag:
-			// - If --no-edit is explicitly set, use it
-			// - If message is provided, don't open editor (noEdit = true)
-			// - If --edit is set, open editor (noEdit = false)
-			// - Default: open editor when amending without message (noEdit = false)
-			noEditFlag := noEdit
-			if message != "" && !edit {
-				noEditFlag = true
-			}
-
-			// Run modify action
-			return actions.ModifyAction(ctx, actions.ModifyOptions{
-				All:               all,
-				Update:            update,
-				Patch:             patch,
-				CreateCommit:      commit,
-				Message:           message,
-				Edit:              edit,
-				NoEdit:            noEditFlag,
-				ResetAuthor:       resetAuthor,
-				Verbose:           verbose,
-				InteractiveRebase: interactiveRebase,
+				// Run modify action
+				return actions.ModifyAction(ctx, actions.ModifyOptions{
+					All:               all,
+					Update:            update,
+					Patch:             patch,
+					CreateCommit:      commit,
+					Message:           message,
+					Edit:              edit,
+					NoEdit:            noEditFlag,
+					ResetAuthor:       resetAuthor,
+					Verbose:           verbose,
+					InteractiveRebase: interactiveRebase,
+				})
 			})
 		},
 	}

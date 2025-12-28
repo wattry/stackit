@@ -162,7 +162,10 @@ func (c *ConsolidateMergeExecutor) createConsolidationBranch(ctx context.Context
 		}
 	}
 
-	if err := c.engine.PushBranch(ctx, branchName, c.engine.GetRemote(), false, false); err != nil {
+	if err := c.engine.PushBranch(ctx, branchName, c.engine.GetRemote(), git.PushOptions{
+		Force:    false,
+		NoVerify: true,
+	}); err != nil {
 		return "", fmt.Errorf("failed to push consolidation branch %s: %w", branchName, err)
 	}
 

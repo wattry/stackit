@@ -406,9 +406,8 @@ func TestCreateCommand(t *testing.T) {
 		// Note: In non-interactive mode, all children are moved
 		err = scene.Repo.CreateChange("inserted content", "inserted", false)
 		require.NoError(t, err)
-		cmd = exec.Command(binaryPath, "create", "inserted", "--insert", "-m", "Insert branch")
+		cmd = exec.Command(binaryPath, "create", "inserted", "--insert", "-m", "Insert branch", "--no-interactive")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(cmd.Environ(), "STACKIT_NON_INTERACTIVE=1")
 		output, err = cmd.CombinedOutput()
 		require.NoError(t, err, "create with --insert failed: %s", string(output))
 

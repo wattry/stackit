@@ -164,6 +164,20 @@ This merges all approved PRs in your stack, bottom-up, and cleans up the merged 
 | `stackit debug` | Dump debugging information about recent commands and stack state |
 | `stackit continue` / `abort` | Continue or abort an interrupted operation (like a rebase) |
 
+### Global Flags
+
+These flags are available on all `stackit` commands:
+
+| Flag | Description |
+|:---|:---|
+| `--cwd <path>` | Working directory in which to perform operations. |
+| `--debug` | Write debug output to the terminal. |
+| `--interactive` | Enable interactive features like prompts, pagers, and editors. (Default: true) |
+| `--no-interactive` | Disable all interactive features. |
+| `--verify` | Enable git hooks (pre-commit, etc.). (Default: true) |
+| `--no-verify` | Disable git hooks. |
+| `--quiet`, `-q` | Minimize output to the terminal. Implies `--no-interactive`. |
+
 ---
 
 ## Common Workflows
@@ -184,6 +198,14 @@ To keep your stack up-to-date with `main`:
 stackit sync
 ```
 This pulls the latest changes from `main`, deletes branches that have already been merged, and restacks your remaining branches on top of the new `main`.
+
+### Automation & CI
+Stackit is designed to be easily scriptable. Use global flags to control behavior in non-interactive environments:
+
+```bash
+# Run stackit on a specific repository from a script
+stackit sync --cwd /path/to/repo --no-interactive --no-verify
+```
 
 ---
 

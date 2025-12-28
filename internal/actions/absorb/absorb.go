@@ -189,7 +189,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	printAbsorbPlan(flatHunksByCommit, unabsorbedHunks, eng, splog)
 
 	// Prompt for confirmation if not --force
-	if !opts.Force {
+	if !opts.Force && ctx.Interactive {
 		confirmed, err := tui.PromptConfirm("Apply these changes to the commits?", false)
 		if err != nil {
 			return fmt.Errorf("confirmation canceled: %w", err)
@@ -198,6 +198,10 @@ func Action(ctx *runtime.Context, opts Options) error {
 			splog.Info("Absorb canceled")
 			return nil
 		}
+	} else if !opts.Force && !ctx.Interactive {
+		// Non-interactive without force: default to no
+		splog.Info("Non-interactive mode: skipping absorb (use --force to override)")
+		return nil
 	}
 
 	// Stash all changes (staged and unstaged) before starting to rewrite commits

@@ -22,28 +22,24 @@ If the branch has children, they will also be untracked.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: common.CompleteBranches,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get context
-			ctx, err := runtime.GetContext(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			// Get branch name from args or use current branch
-			branchName := ""
-			if len(args) > 0 {
-				branchName = args[0]
-			} else {
-				currentBranch := ctx.Engine.CurrentBranch()
-				if currentBranch == nil {
-					return errors.ErrNotOnBranch
+			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Get branch name from args or use current branch
+				branchName := ""
+				if len(args) > 0 {
+					branchName = args[0]
+				} else {
+					currentBranch := ctx.Engine.CurrentBranch()
+					if currentBranch == nil {
+						return errors.ErrNotOnBranch
+					}
+					branchName = currentBranch.GetName()
 				}
-				branchName = currentBranch.GetName()
-			}
 
-			// Execute untrack action
-			return actions.UntrackAction(ctx, actions.UntrackOptions{
-				BranchName: branchName,
-				Force:      force,
+				// Execute untrack action
+				return actions.UntrackAction(ctx, actions.UntrackOptions{
+					BranchName: branchName,
+					Force:      force,
+				})
 			})
 		},
 	}

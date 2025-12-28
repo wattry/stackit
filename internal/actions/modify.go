@@ -106,6 +106,7 @@ func ModifyAction(ctx *runtime.Context, opts ModifyOptions) error {
 		Edit:        opts.Edit,
 		Verbose:     opts.Verbose,
 		ResetAuthor: opts.ResetAuthor,
+		NoVerify:    !ctx.Verify,
 	}
 
 	if err := git.CommitWithOptions(commitOpts); err != nil {
