@@ -99,6 +99,13 @@ type DeletionStatus struct {
 	Reason       string // Reason why it's safe (or not) to delete
 }
 
+// PendingChange represents a changed file in the working directory
+type PendingChange struct {
+	Path   string
+	Status string // "A", "M", "D", "??", etc.
+	Staged bool
+}
+
 // Branch represents a branch in the stack
 type Branch struct {
 	name   string

@@ -135,6 +135,24 @@ func NewSplog() *Splog {
 	return splog
 }
 
+// NewSplogToWriter creates a new splog instance that writes to the given writer.
+// This is useful for testing.
+func NewSplogToWriter(w io.Writer) *Splog {
+	splog := &Splog{
+		writer: nil, // Not used when writing to custom writer
+		quiet:  false,
+	}
+
+	consoleHandler := &simpleHandler{
+		writer:    w,
+		debugMode: false,
+		quiet:     &splog.quiet,
+	}
+
+	splog.logger = slog.New(consoleHandler)
+	return splog
+}
+
 // NewSplogWithConfig creates a new splog instance with optional file logging
 func NewSplogWithConfig(logFilePath string, _ string) (*Splog, error) {
 	return NewSplogWithFlags(logFilePath, os.Getenv("DEBUG") != "", false)

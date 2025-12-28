@@ -74,6 +74,9 @@ type BranchReader interface {
 	ListWorktrees(ctx context.Context) ([]string, error)
 	GetWorkingDir() string
 
+	// Status information
+	GetPendingChanges(ctx context.Context) ([]PendingChange, error)
+
 	// Git read operations
 	RunGitCommandWithContext(ctx context.Context, args ...string) (string, error)
 	RunGitCommandRawWithContext(ctx context.Context, args ...string) (string, error)

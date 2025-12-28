@@ -4,6 +4,7 @@ package testhelpers
 
 import (
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -126,4 +127,22 @@ func ExpectCommitsString(t *testing.T, repo *GitRepo, expected string) {
 
 	actual := strings.Join(messages[:expectedCount], ", ")
 	require.Equal(t, expected, actual, "Commits do not match")
+}
+
+// NormalizeOutput removes variable parts of output and extra whitespace for comparison.
+// It removes warning sections and empty lines to make test output comparisons more stable.
+func NormalizeOutput(output string) string {
+	warningPattern := regexp.MustCompile(`⚠️.*\n`)
+	normalized := warningPattern.ReplaceAllString(output, "")
+
+	lines := strings.Split(normalized, "\n")
+	var filtered []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			filtered = append(filtered, line)
+		}
+	}
+
+	return strings.Join(filtered, "\n")
 }
