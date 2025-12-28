@@ -12,6 +12,7 @@ import (
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -89,34 +90,25 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 		splog.Debug("Failed to populate remote SHAs: %v", err)
 	}
 
-	// Build tree structure data for display
-	parentMap := make(map[string]string)
-	childrenMap := make(map[string][]string)
+	// Build tree structure for display
+	branchObjs := make([]engine.Branch, len(branches))
 	fixedMap := make(map[string]bool)
 	scopeMap := make(map[string]string)
 
-	for _, branchName := range branches {
+	for i, branchName := range branches {
 		branch := eng.GetBranch(branchName)
-		parentName := branch.GetParentPrecondition()
-		parentMap[branchName] = parentName
+		branchObjs[i] = branch
 		fixedMap[branchName] = branch.IsBranchUpToDate()
 		scopeMap[branchName] = branch.GetScope().String()
-
-		// Build children map (inverse of parent map)
-		if parentName != "" {
-			childrenMap[parentName] = append(childrenMap[parentName], branchName)
-		}
 	}
+
+	stackTree := tree.NewStackTree(branchObjs, currentBranchName, eng.Trunk().GetName())
 
 	// Display the stack
 	handler.OnEvent(StackDisplayEvent{
-		Branches:      branches,
-		CurrentBranch: currentBranchName,
-		TrunkBranch:   eng.Trunk().GetName(),
-		ParentMap:     parentMap,
-		ChildrenMap:   childrenMap,
-		FixedMap:      fixedMap,
-		ScopeMap:      scopeMap,
+		Stack:    stackTree,
+		FixedMap: fixedMap,
+		ScopeMap: scopeMap,
 	})
 
 	// Restack if requested

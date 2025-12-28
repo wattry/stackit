@@ -106,9 +106,9 @@ fmt:
 # Run linter (requires golangci-lint)
 lint:
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
+		golangci-lint run --allow-parallel-runners; \
 	elif [ -f "$(go env GOPATH)/bin/golangci-lint" ]; then \
-		"$(go env GOPATH)/bin/golangci-lint" run; \
+		"$(go env GOPATH)/bin/golangci-lint" run --allow-parallel-runners; \
 	else \
 		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 	fi
@@ -116,9 +116,9 @@ lint:
 # Run linter and fix issues (if supported by the linter)
 lint-fix:
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --fix; \
+		golangci-lint run --allow-parallel-runners --fix; \
 	elif [ -f "$(go env GOPATH)/bin/golangci-lint" ]; then \
-		"$(go env GOPATH)/bin/golangci-lint" run --fix; \
+		"$(go env GOPATH)/bin/golangci-lint" run --allow-parallel-runners --fix; \
 	else \
 		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 	fi
