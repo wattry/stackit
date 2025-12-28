@@ -57,10 +57,6 @@ func NewSubmitUI(splog *Splog) SubmitUI {
 	return NewSimpleSubmitUI(splog)
 }
 
-// ============================================================================
-// SimpleSubmitUI - Non-bubbletea implementation for non-TTY environments
-// ============================================================================
-
 // SimpleSubmitUI implements SubmitUI with line-by-line output
 type SimpleSubmitUI struct {
 	splog     *Splog
@@ -212,10 +208,6 @@ func (u *SimpleSubmitUI) Complete() {
 		u.splog.Info("Completed: %d, Failed: %d", u.completed, u.failed)
 	}
 }
-
-// ============================================================================
-// TTYSubmitUI - Bubbletea implementation for TTY environments
-// ============================================================================
 
 // TTYSubmitUI implements SubmitUI with bubbletea for animated progress
 type TTYSubmitUI struct {

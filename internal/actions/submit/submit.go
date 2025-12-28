@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"sync"
 
 	"stackit.dev/stackit/internal/actions"
@@ -13,9 +12,6 @@ import (
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/runtime"
-	"stackit.dev/stackit/internal/tui"
-	"stackit.dev/stackit/internal/tui/components/submit"
-	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -61,15 +57,11 @@ type Info struct {
 	Metadata   *PRMetadata
 }
 
-// Action performs the submit operation
-func Action(ctx *runtime.Context, opts Options) error {
+// Action performs the submit operation with an event handler for progress feedback.
+func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
-	context := ctx.Context // Use context from runtime context
-
-	// Create UI early - all output goes through this
-	ui := tui.NewSubmitUI(splog)
-	defer ui.Complete()
+	goCtx := ctx.Context
 
 	// Validate flags
 	if opts.Draft && opts.Publish {
@@ -82,91 +74,113 @@ func Action(ctx *runtime.Context, opts Options) error {
 		return err
 	}
 	if len(branches) == 0 {
-		splog.Info("No branches to submit.")
+		handler.OnEvent(CompletionEvent{Success: true, Message: "No branches to submit"})
 		return nil
 	}
 
 	currentBranch := eng.CurrentBranch()
+	currentBranchName := ""
+	if currentBranch != nil {
+		currentBranchName = currentBranch.GetName()
+	}
 
 	// Populate remote SHAs early for accurate display
 	if err := eng.PopulateRemoteShas(); err != nil {
 		splog.Debug("Failed to populate remote SHAs: %v", err)
 	}
 
-	// Display the stack tree with PR annotations
-	renderer := getStackTreeRenderer(branches, opts, eng)
-	ui.ShowStack(renderer, eng.Trunk().GetName())
+	// Build tree structure data for display
+	parentMap := make(map[string]string)
+	childrenMap := make(map[string][]string)
+	fixedMap := make(map[string]bool)
+	scopeMap := make(map[string]string)
+
+	for _, branchName := range branches {
+		branch := eng.GetBranch(branchName)
+		parentName := branch.GetParentPrecondition()
+		parentMap[branchName] = parentName
+		fixedMap[branchName] = branch.IsBranchUpToDate()
+		scopeMap[branchName] = branch.GetScope().String()
+
+		// Build children map (inverse of parent map)
+		if parentName != "" {
+			childrenMap[parentName] = append(childrenMap[parentName], branchName)
+		}
+	}
+
+	// Display the stack
+	handler.OnEvent(StackDisplayEvent{
+		Branches:      branches,
+		CurrentBranch: currentBranchName,
+		TrunkBranch:   eng.Trunk().GetName(),
+		ParentMap:     parentMap,
+		ChildrenMap:   childrenMap,
+		FixedMap:      fixedMap,
+		ScopeMap:      scopeMap,
+	})
 
 	// Restack if requested
 	if opts.Restack {
-		ui.ShowRestackStart()
-		ui.Pause()
+		handler.OnEvent(RestackEvent{Started: true})
 		// Convert []string to []engine.Branch for RestackBranches
 		branchObjects := make([]engine.Branch, len(branches))
 		for i, branchName := range branches {
 			branchObjects[i] = eng.GetBranch(branchName)
 		}
-		if err := actions.RestackBranches(context, branchObjects, eng, splog, ctx.RepoRoot); err != nil {
-			ui.Resume()
+		if err := actions.RestackBranches(goCtx, branchObjects, eng, splog, ctx.RepoRoot); err != nil {
 			return fmt.Errorf("failed to restack branches: %w", err)
 		}
-		ui.Resume()
-		ui.ShowRestackComplete()
+		handler.OnEvent(RestackEvent{Completed: true})
 	}
 
 	// Validate and prepare branches
-	ui.ShowPreparing()
+	handler.OnEvent(PreparingEvent{})
 
-	if err := ValidateBranchesToSubmit(context, branches, eng, ctx); err != nil {
+	if err := ValidateBranchesToSubmit(goCtx, branches, eng, ctx); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
 	// Prepare branches for submit (show planning phase with current indicator)
-	submissionInfos, err := prepareBranchesForSubmit(branches, opts, eng, ctx, currentBranch.GetName(), ui)
+	submissionInfos, err := prepareBranchesForSubmit(branches, opts, eng, ctx, currentBranchName, handler)
 	if err != nil {
 		return fmt.Errorf("failed to prepare branches: %w", err)
 	}
 
 	// Check if we should abort
 	if opts.DryRun {
-		ui.ShowDryRunComplete()
+		handler.OnEvent(CompletionEvent{Success: true, Message: "Dry run complete"})
 		return nil
 	}
 
 	if len(submissionInfos) == 0 {
-		ui.ShowNoChanges()
+		handler.OnEvent(CompletionEvent{Success: true, Message: "All PRs up to date"})
 		return nil
 	}
 
 	// Handle interactive confirmation
-	if opts.Confirm && ctx.Interactive {
-		ui.Pause()
-		confirmed, err := tui.PromptConfirm("Proceed with submit?", true)
-		ui.Resume()
+	if opts.Confirm {
+		confirmed, err := handler.Confirm("Proceed with submit?", true)
 		if err != nil {
 			return fmt.Errorf("confirmation canceled: %w", err)
 		}
 		if !confirmed {
-			splog.Info("Submit canceled")
+			handler.OnEvent(CompletionEvent{Success: false, Message: "Submit canceled"})
 			return nil
 		}
-	} else if opts.Confirm && !ctx.Interactive {
-		return fmt.Errorf("cannot use --confirm in non-interactive mode")
 	}
 
-	// Build progress items
-	progressItems := make([]submit.Item, len(submissionInfos))
+	// Build branch info for submission start event
+	branchInfos := make([]BranchInfo, len(submissionInfos))
 	for i, info := range submissionInfos {
-		progressItems[i] = submit.Item{
-			BranchName: info.BranchName,
-			Action:     info.Action,
-			PRNumber:   info.PRNumber,
-			Status:     "pending",
+		branchInfos[i] = BranchInfo{
+			Name:     info.BranchName,
+			Action:   info.Action,
+			PRNumber: info.PRNumber,
 		}
 	}
 
 	// Start submission phase
-	ui.StartSubmitting(progressItems)
+	handler.OnEvent(SubmissionStartEvent{Branches: branchInfos})
 
 	githubClient, err := getGitHubClient(ctx)
 	if err != nil {
@@ -184,10 +198,17 @@ func Action(ctx *runtime.Context, opts Options) error {
 		go func(info Info) {
 			defer wg.Done()
 
-			ui.UpdateSubmitItem(info.BranchName, "submitting", "", nil)
+			handler.OnEvent(BranchProgressEvent{
+				BranchName: info.BranchName,
+				Status:     StatusSubmitting,
+			})
 
 			if err := pushBranchIfNeeded(ctx, info, opts, remote, eng); err != nil {
-				ui.UpdateSubmitItem(info.BranchName, "error", "", err)
+				handler.OnEvent(BranchProgressEvent{
+					BranchName: info.BranchName,
+					Status:     StatusError,
+					Error:      err,
+				})
 				errMu.Lock()
 				if submitErr == nil {
 					submitErr = err
@@ -203,13 +224,17 @@ func Action(ctx *runtime.Context, opts Options) error {
 			)
 			var err error
 			if info.Action == actionCreate {
-				prURL, err = createPullRequestQuiet(context, info, eng, githubClient, repoOwner, repoName)
+				prURL, err = createPullRequestQuiet(goCtx, info, eng, githubClient, repoOwner, repoName)
 			} else {
-				prURL, err = updatePullRequestQuiet(context, info, opts, eng, githubClient, repoOwner, repoName)
+				prURL, err = updatePullRequestQuiet(goCtx, info, opts, eng, githubClient, repoOwner, repoName)
 			}
 
 			if err != nil {
-				ui.UpdateSubmitItem(info.BranchName, "error", "", err)
+				handler.OnEvent(BranchProgressEvent{
+					BranchName: info.BranchName,
+					Status:     StatusError,
+					Error:      err,
+				})
 				errMu.Lock()
 				if submitErr == nil {
 					submitErr = err
@@ -218,7 +243,11 @@ func Action(ctx *runtime.Context, opts Options) error {
 				return
 			}
 
-			ui.UpdateSubmitItem(info.BranchName, "done", prURL, nil)
+			handler.OnEvent(BranchProgressEvent{
+				BranchName: info.BranchName,
+				Status:     StatusDone,
+				URL:        prURL,
+			})
 
 			// Open in browser if requested
 			if opts.View && prURL != "" {
@@ -231,19 +260,21 @@ func Action(ctx *runtime.Context, opts Options) error {
 	wg.Wait()
 
 	if submitErr != nil {
+		handler.OnEvent(CompletionEvent{Success: false, Message: "Submit failed"})
 		return submitErr
 	}
 
 	// Update PR body footers silently
 	if opts.SubmitFooter {
-		actions.UpdateStackPRMetadata(context, branches, eng, githubClient, repoOwner, repoName)
+		actions.UpdateStackPRMetadata(goCtx, branches, eng, githubClient, repoOwner, repoName)
 	}
 
+	handler.OnEvent(CompletionEvent{Success: true, Message: "Submit complete"})
 	return nil
 }
 
-// prepareBranchesForSubmit prepares submission info for each branch, outputting via UI
-func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine, runtimeCtx *runtime.Context, currentBranch string, ui tui.SubmitUI) ([]Info, error) {
+// prepareBranchesForSubmit prepares submission info for each branch, emitting events via handler
+func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine, runtimeCtx *runtime.Context, currentBranch string, handler Handler) ([]Info, error) {
 	submissionInfos := make([]Info, 0, len(branches))
 
 	for _, branchName := range branches {
@@ -261,7 +292,13 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 
 		// Check if we should skip
 		if opts.UpdateOnly && action == "create" {
-			ui.ShowBranchPlan(branchName, action, isCurrent, true, "skipped, no existing PR")
+			handler.OnEvent(BranchPlanEvent{
+				BranchName: branchName,
+				Action:     action,
+				IsCurrent:  isCurrent,
+				Skipped:    true,
+				SkipReason: "skipped, no existing PR",
+			})
 			continue
 		}
 
@@ -280,7 +317,13 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 			needsUpdate = needsUpdate || opts.Edit || opts.Always || draftStatusNeedsChange
 
 			if !needsUpdate && !opts.Draft && !opts.Publish {
-				ui.ShowBranchPlan(branchName, action, isCurrent, true, status.Reason)
+				handler.OnEvent(BranchPlanEvent{
+					BranchName: branchName,
+					Action:     action,
+					IsCurrent:  isCurrent,
+					Skipped:    true,
+					SkipReason: status.Reason,
+				})
 				continue
 			}
 		}
@@ -299,9 +342,7 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 			ReviewersPrompt:   opts.Reviewers == "" && opts.Edit,
 		}
 
-		ui.Pause()
 		metadata, err := PreparePRMetadata(branchName, metadataOpts, eng, runtimeCtx)
-		ui.Resume()
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare metadata for %s: %w", branchName, err)
 		}
@@ -324,7 +365,12 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 			Metadata:   metadata,
 		}
 
-		ui.ShowBranchPlan(branchName, action, isCurrent, false, "")
+		handler.OnEvent(BranchPlanEvent{
+			BranchName: branchName,
+			Action:     action,
+			IsCurrent:  isCurrent,
+			Skipped:    false,
+		})
 
 		submissionInfos = append(submissionInfos, submissionInfo)
 	}
@@ -518,48 +564,4 @@ func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Optio
 	))
 
 	return prURL, nil
-}
-
-// getStackTreeRenderer returns the stack tree renderer with PR annotations
-func getStackTreeRenderer(branches []string, opts Options, eng engine.Engine) *tree.StackTreeRenderer {
-	// Create the tree renderer
-	renderer := tui.NewStackTreeRenderer(eng)
-
-	// Build annotations for each branch
-	annotations := make(map[string]tree.BranchAnnotation)
-	branchSet := make(map[string]bool)
-	for _, b := range branches {
-		branchSet[b] = true
-	}
-
-	for _, branch := range eng.AllBranches() {
-		branchName := branch.GetName()
-		prInfo, _ := eng.GetPrInfo(branch)
-		if prInfo == nil && !branchSet[branchName] {
-			continue
-		}
-
-		annotation := tree.BranchAnnotation{
-			NeedsRestack: !eng.GetBranch(branchName).IsBranchUpToDate(),
-		}
-
-		const actionUpdate = "update"
-		const actionCreate = "create"
-
-		if prInfo != nil && prInfo.Number() != nil {
-			annotation.PRNumber = prInfo.Number()
-			if branchSet[branchName] {
-				annotation.PRAction = actionUpdate
-			}
-			annotation.IsDraft = prInfo.IsDraft()
-		} else if branchSet[branchName] {
-			annotation.PRAction = actionCreate
-			annotation.IsDraft = opts.Draft
-		}
-
-		annotations[branchName] = annotation
-	}
-	renderer.SetAnnotations(annotations)
-
-	return renderer
 }

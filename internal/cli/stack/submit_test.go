@@ -2,7 +2,6 @@ package stack_test
 
 import (
 	"os/exec"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,7 +11,6 @@ import (
 
 func TestSubmitCommand(t *testing.T) {
 	t.Parallel()
-	// Build the stackit binary first
 	binaryPath := testhelpers.GetSharedBinaryPath()
 	if binaryPath == "" {
 		if err := testhelpers.GetBinaryError(); err != nil {
@@ -21,134 +19,118 @@ func TestSubmitCommand(t *testing.T) {
 		t.Fatal("stackit binary not built")
 	}
 
-	t.Run("submit includes current branch in list", func(t *testing.T) {
+	t.Run("dry-run output format", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, nil)
 
-		// Create initial commit
 		err := scene.Repo.CreateChangeAndCommit("initial", "init")
 		require.NoError(t, err)
 
-		// Initialize stackit
 		cmd := exec.Command(binaryPath, "init")
 		cmd.Dir = scene.Dir
-		initOutput, err := cmd.CombinedOutput()
-		require.NoError(t, err, "init failed: %s", string(initOutput))
-
-		// Create a stack: main -> branch1 -> branch2 (current)
-		// Use stackit create which automatically tracks the parent relationship
-		cmd = exec.Command(binaryPath, "create", "branch1")
-		cmd.Dir = scene.Dir
-		createOutput, err := cmd.CombinedOutput()
-		require.NoError(t, err, "create branch1 failed: %s", string(createOutput))
-
-		// Create branch2 from branch1 (which is now current)
-		cmd = exec.Command(binaryPath, "create", "branch2")
-		cmd.Dir = scene.Dir
-		createOutput2, err := cmd.CombinedOutput()
-		require.NoError(t, err, "create branch2 failed: %s", string(createOutput2))
-
-		// Verify we're on branch2
-		currentBranch, err := scene.Repo.CurrentBranchName()
+		_, err = cmd.CombinedOutput()
 		require.NoError(t, err)
-		require.Equal(t, "branch2", currentBranch)
 
-		// Run submit command with --dry-run, --no-edit, and --draft to avoid interactive prompts
+		cmd = exec.Command(binaryPath, "create", "branch-a")
+		cmd.Dir = scene.Dir
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
+
+		cmd = exec.Command(binaryPath, "create", "branch-b")
+		cmd.Dir = scene.Dir
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
+
+		cmd = exec.Command(binaryPath, "create", "branch-c")
+		cmd.Dir = scene.Dir
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
+
+		err = scene.Repo.CheckoutBranch("branch-b")
+		require.NoError(t, err)
+
 		cmd = exec.Command(binaryPath, "submit", "--dry-run", "--no-edit", "--draft", "--no-interactive")
 		cmd.Dir = scene.Dir
 		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, "submit failed: %s", string(output))
 
-		// Should succeed
-		require.NoError(t, err, "submit command failed: %s", string(output))
+		normalized := testhelpers.NormalizeOutput(string(output))
 
-		outputStr := string(output)
+		expected := testhelpers.NormalizeOutput(`
+Stack to submit:
+  branch-a
+● branch-b
 
-		// Verify all branches are in the output
-		require.Contains(t, outputStr, "branch1", "should include parent branch")
-		require.Contains(t, outputStr, "branch2", "should include current branch")
+  ▸ branch-a → create
+  ▸ branch-b (current) → create
+`)
 
-		// Verify the current branch (branch2) appears in the list
-		// The output should show branch2 being prepared for submit
-		lines := strings.Split(outputStr, "\n")
-		foundBranch2 := false
-		for _, line := range lines {
-			// Check for new format: "▸ branch2 (current) → create" or old format with "Create/Update/No-op"
-			if strings.Contains(line, "branch2") && (strings.Contains(line, "create") || strings.Contains(line, "update") || strings.Contains(line, "no changes") || strings.Contains(line, "Create") || strings.Contains(line, "Update") || strings.Contains(line, "No-op")) {
-				foundBranch2 = true
-				break
-			}
-		}
-		require.True(t, foundBranch2, "current branch (branch2) should appear in submit list. Output: %s", outputStr)
+		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
 
 	t.Run("submit with --stack includes descendants", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, nil)
 
-		// Create initial commit
 		err := scene.Repo.CreateChangeAndCommit("initial", "init")
 		require.NoError(t, err)
 
-		// Initialize stackit
 		cmd := exec.Command(binaryPath, "init")
 		cmd.Dir = scene.Dir
-		initOutput, err := cmd.CombinedOutput()
-		require.NoError(t, err, "init failed: %s", string(initOutput))
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
 
-		// Create a stack: main -> branch1 -> branch2 (current) -> branch3
-		// Use stackit create which automatically tracks the parent relationship
 		cmd = exec.Command(binaryPath, "create", "branch1")
 		cmd.Dir = scene.Dir
-		createOutput1, err := cmd.CombinedOutput()
-		require.NoError(t, err, "create branch1 failed: %s", string(createOutput1))
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
 
-		// Create branch2
 		cmd = exec.Command(binaryPath, "create", "branch2")
 		cmd.Dir = scene.Dir
-		createOutput2, err := cmd.CombinedOutput()
-		require.NoError(t, err, "create branch2 failed: %s", string(createOutput2))
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
 
-		// Create branch3 (descendant of branch2)
 		cmd = exec.Command(binaryPath, "create", "branch3")
 		cmd.Dir = scene.Dir
-		createOutput3, err := cmd.CombinedOutput()
-		require.NoError(t, err, "create branch3 failed: %s", string(createOutput3))
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
 
-		// Go back to branch2
 		err = scene.Repo.CheckoutBranch("branch2")
 		require.NoError(t, err)
 
-		// Run submit command with --stack, --dry-run, --no-edit, and --draft to avoid interactive prompts
 		cmd = exec.Command(binaryPath, "submit", "--stack", "--dry-run", "--no-edit", "--draft", "--no-interactive")
 		cmd.Dir = scene.Dir
 		output, err := cmd.CombinedOutput()
-
-		// Should succeed
 		require.NoError(t, err, "submit command failed: %s", string(output))
 
-		outputStr := string(output)
+		normalized := testhelpers.NormalizeOutput(string(output))
 
-		// Verify all branches are in the output (ancestors, current, and descendants)
-		require.Contains(t, outputStr, "branch1", "should include parent branch")
-		require.Contains(t, outputStr, "branch2", "should include current branch")
-		require.Contains(t, outputStr, "branch3", "should include descendant branch with --stack")
+		expected := testhelpers.NormalizeOutput(`
+Stack to submit:
+  branch1
+● branch2
+  branch3
+
+  ▸ branch1 → create
+  ▸ branch2 (current) → create
+  ▸ branch3 → create
+`)
+
+		require.Equal(t, expected, normalized, "output should include all branches in stack")
 	})
 
 	t.Run("ss alias works like submit --stack", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, nil)
 
-		// Create initial commit
 		err := scene.Repo.CreateChangeAndCommit("initial", "init")
 		require.NoError(t, err)
 
-		// Initialize stackit
 		cmd := exec.Command(binaryPath, "init")
 		cmd.Dir = scene.Dir
-		initOutput, err := cmd.CombinedOutput()
-		require.NoError(t, err, "init failed: %s", string(initOutput))
+		_, err = cmd.CombinedOutput()
+		require.NoError(t, err)
 
-		// Create a stack: main -> branch1 -> branch2 (current) -> branch3
 		cmd = exec.Command(binaryPath, "create", "branch1")
 		cmd.Dir = scene.Dir
 		_, err = cmd.CombinedOutput()
@@ -164,23 +146,27 @@ func TestSubmitCommand(t *testing.T) {
 		_, err = cmd.CombinedOutput()
 		require.NoError(t, err)
 
-		// Go back to branch2
 		err = scene.Repo.CheckoutBranch("branch2")
 		require.NoError(t, err)
 
-		// Run ss command (alias for submit --stack) with --dry-run, --no-edit, and --draft
 		cmd = exec.Command(binaryPath, "ss", "--dry-run", "--no-edit", "--draft", "--no-interactive")
 		cmd.Dir = scene.Dir
 		output, err := cmd.CombinedOutput()
-
-		// Should succeed
 		require.NoError(t, err, "ss alias failed: %s", string(output))
 
-		outputStr := string(output)
+		normalized := testhelpers.NormalizeOutput(string(output))
 
-		// Verify all branches are in the output (ancestors, current, and descendants)
-		require.Contains(t, outputStr, "branch1", "should include parent branch")
-		require.Contains(t, outputStr, "branch2", "should include current branch")
-		require.Contains(t, outputStr, "branch3", "should include descendant branch with ss")
+		expected := testhelpers.NormalizeOutput(`
+Stack to submit:
+  branch1
+● branch2
+  branch3
+
+  ▸ branch1 → create
+  ▸ branch2 (current) → create
+  ▸ branch3 → create
+`)
+
+		require.Equal(t, expected, normalized, "ss alias should behave like submit --stack")
 	})
 }

@@ -2,6 +2,12 @@
 package stack
 
 import (
+	"fmt"
+	"io"
+	"os"
+	"sync"
+
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/submit"
@@ -9,6 +15,10 @@ import (
 	"stackit.dev/stackit/internal/config"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
 	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/tui"
+	submitComponent "stackit.dev/stackit/internal/tui/components/submit"
+	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 type submitFlags struct {
@@ -105,7 +115,9 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 			SubmitFooter:         submitFooter,
 		}
 
-		return submit.Action(ctx, opts)
+		// Create the appropriate handler based on TTY availability
+		handler := NewSubmitHandler(ctx.Splog)
+		return submit.Action(ctx, opts, handler)
 	})
 }
 
@@ -149,4 +161,350 @@ func NewSsCmd() *cobra.Command {
 	addSubmitFlags(cmd, f)
 
 	return cmd
+}
+
+// NewSubmitHandler creates the appropriate handler based on TTY availability
+func NewSubmitHandler(splog *tui.Splog) submit.Handler {
+	if tui.IsTTY() {
+		return NewInteractiveSubmitHandler(splog)
+	}
+	return NewSimpleSubmitHandler(splog)
+}
+
+// SimpleSubmitHandler implements submit.Handler with line-by-line output
+type SimpleSubmitHandler struct {
+	splog   *tui.Splog
+	out     io.Writer
+	items   map[string]*branchItem
+	mu      sync.Mutex
+	started bool
+}
+
+type branchItem struct {
+	name   string
+	action string
+}
+
+// NewSimpleSubmitHandler creates a new simple submit handler
+func NewSimpleSubmitHandler(splog *tui.Splog) *SimpleSubmitHandler {
+	return &SimpleSubmitHandler{
+		splog: splog,
+		out:   os.Stdout,
+		items: make(map[string]*branchItem),
+	}
+}
+
+// OnEvent handles events from the submit action
+func (h *SimpleSubmitHandler) OnEvent(e submit.Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	switch ev := e.(type) {
+	case submit.StackDisplayEvent:
+		h.splog.Info("Stack to submit:")
+		for _, branch := range ev.Branches {
+			marker := "  "
+			if branch == ev.CurrentBranch {
+				marker = "● "
+			}
+			scope := ev.ScopeMap[branch]
+			if scope != "" {
+				h.splog.Info("%s%s [%s]", marker, branch, scope)
+			} else {
+				h.splog.Info("%s%s", marker, branch)
+			}
+		}
+		h.splog.Newline()
+
+	case submit.RestackEvent:
+		if ev.Started {
+			h.splog.Info("Restacking branches before submitting...")
+		}
+		// No output for completion
+
+	case submit.PreparingEvent:
+		// Skip - we'll show progress during actual submission
+
+	case submit.BranchPlanEvent:
+		displayName := ev.BranchName
+		if ev.IsCurrent {
+			displayName = ev.BranchName + " (current)"
+		}
+		if ev.Skipped {
+			h.splog.Info("  ▸ %s %s", style.ColorDim(displayName), style.ColorDim("— "+ev.SkipReason))
+		} else {
+			h.splog.Info("  ▸ %s → %s", displayName, ev.Action)
+		}
+
+	case submit.SubmissionStartEvent:
+		h.started = true
+		for _, branch := range ev.Branches {
+			h.items[branch.Name] = &branchItem{
+				name:   branch.Name,
+				action: branch.Action,
+			}
+		}
+		h.splog.Newline()
+		h.splog.Info("Submitting...")
+
+	case submit.BranchProgressEvent:
+		item := h.items[ev.BranchName]
+		if item == nil {
+			return
+		}
+
+		switch ev.Status {
+		case submit.StatusSubmitting:
+			action := "Creating"
+			if item.action == "update" {
+				action = "Updating"
+			}
+			h.splog.Info("  ⋯ %s %s...", ev.BranchName, action)
+
+		case submit.StatusDone:
+			actionDone := "created"
+			if item.action == "update" {
+				actionDone = "updated"
+			}
+			h.splog.Info("  ✓ %s %s → %s", ev.BranchName, actionDone, ev.URL)
+
+		case submit.StatusError:
+			h.splog.Info("  ✗ %s failed: %v", ev.BranchName, ev.Error)
+		}
+
+	case submit.CompletionEvent:
+		if !ev.Success && ev.Message != "" {
+			h.splog.Info("%s", ev.Message)
+		}
+	}
+}
+
+// Confirm prompts for confirmation - in non-TTY mode, uses default
+func (h *SimpleSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+	// Non-interactive, use default
+	return defaultYes, nil
+}
+
+// InteractiveSubmitHandler implements submit.Handler with bubbletea for animated progress
+type InteractiveSubmitHandler struct {
+	splog         *tui.Splog
+	program       *tea.Program
+	model         *submitComponent.Model
+	inSubmitPhase bool
+	mu            sync.Mutex
+	branches      []string
+	trunkBranch   string
+	currentBranch string
+	parentMap     map[string]string
+	childrenMap   map[string][]string
+	fixedMap      map[string]bool
+}
+
+// NewInteractiveSubmitHandler creates a new interactive submit handler
+func NewInteractiveSubmitHandler(splog *tui.Splog) *InteractiveSubmitHandler {
+	return &InteractiveSubmitHandler{splog: splog}
+}
+
+// findRootBranch finds the root branch of the stack (the one whose parent is trunk)
+func (h *InteractiveSubmitHandler) findRootBranch() string {
+	if len(h.branches) == 0 {
+		return ""
+	}
+
+	// If we're on the trunk branch, show everything from trunk down
+	if h.currentBranch == h.trunkBranch {
+		return h.trunkBranch
+	}
+
+	// The root is the branch whose parent is trunk
+	for _, branch := range h.branches {
+		parent := h.parentMap[branch]
+		if parent == h.trunkBranch {
+			return branch
+		}
+	}
+	// Fallback to first branch
+	return h.branches[0]
+}
+
+func (h *InteractiveSubmitHandler) ensureProgramStarted() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.program != nil {
+		return
+	}
+
+	// Initialize model if needed
+	if h.model == nil {
+		h.model = submitComponent.NewModel(nil)
+	}
+
+	// Quiet the splog so it doesn't interfere with the TUI
+	h.splog.SetQuiet(true)
+
+	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+
+	// Run program in background
+	go func() {
+		if _, err := h.program.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error running submit TUI: %v\n", err)
+		}
+	}()
+}
+
+// OnEvent handles events from the submit action
+func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
+	switch ev := e.(type) {
+	case submit.StackDisplayEvent:
+		h.branches = ev.Branches
+		h.trunkBranch = ev.TrunkBranch
+		h.currentBranch = ev.CurrentBranch
+		h.parentMap = ev.ParentMap
+		h.childrenMap = ev.ChildrenMap
+		h.fixedMap = ev.FixedMap
+
+		// Build a tree renderer from the event data
+		renderer := tree.NewStackTreeRenderer(
+			ev.CurrentBranch,
+			ev.TrunkBranch,
+			func(branchName string) []string {
+				return h.childrenMap[branchName]
+			},
+			func(branchName string) string {
+				return h.parentMap[branchName]
+			},
+			func(branchName string) bool {
+				return branchName == h.trunkBranch
+			},
+			func(branchName string) bool {
+				// Trunk is always "fixed" (never needs restack)
+				if branchName == h.trunkBranch {
+					return true
+				}
+				return h.fixedMap[branchName]
+			},
+		)
+
+		// Set scopes and other annotations
+		for _, branchName := range ev.Branches {
+			scope := ev.ScopeMap[branchName]
+			renderer.SetAnnotation(branchName, tree.BranchAnnotation{
+				Scope:         scope,
+				ExplicitScope: scope,
+			})
+		}
+
+		// Create model with tree renderer
+		h.model = submitComponent.NewModel(nil)
+		h.model.Renderer = renderer
+		h.model.RootBranch = h.findRootBranch()
+
+		h.ensureProgramStarted()
+
+	case submit.RestackEvent:
+		h.ensureProgramStarted()
+		if ev.Started {
+			h.program.Send(submitComponent.GlobalMessageMsg("Restacking branches..."))
+		} else if ev.Completed {
+			h.program.Send(submitComponent.GlobalMessageMsg(""))
+		}
+
+	case submit.PreparingEvent:
+		h.ensureProgramStarted()
+		h.program.Send(submitComponent.GlobalMessageMsg("Preparing branches..."))
+
+	case submit.BranchPlanEvent:
+		h.ensureProgramStarted()
+		h.program.Send(submitComponent.PlanUpdateMsg{
+			BranchName: ev.BranchName,
+			Action:     ev.Action,
+			IsCurrent:  ev.IsCurrent,
+			Skip:       ev.Skipped,
+			SkipReason: ev.SkipReason,
+		})
+
+	case submit.SubmissionStartEvent:
+		h.inSubmitPhase = true
+		h.ensureProgramStarted()
+
+		// Update items in the model
+		for _, branch := range ev.Branches {
+			item := submitComponent.Item{
+				BranchName: branch.Name,
+				Action:     branch.Action,
+				PRNumber:   branch.PRNumber,
+				Status:     "pending",
+			}
+			found := false
+			for i, existing := range h.model.Items {
+				if existing.BranchName == branch.Name {
+					h.model.Items[i] = item
+					found = true
+					break
+				}
+			}
+			if !found {
+				h.model.Items = append(h.model.Items, item)
+			}
+		}
+
+		h.program.Send(submitComponent.GlobalMessageMsg("Submitting..."))
+
+	case submit.BranchProgressEvent:
+		if !h.inSubmitPhase || h.program == nil {
+			return
+		}
+
+		status := string(ev.Status)
+		h.program.Send(submitComponent.ProgressUpdateMsg{
+			BranchName: ev.BranchName,
+			Status:     status,
+			URL:        ev.URL,
+			Err:        ev.Error,
+		})
+
+	case submit.CompletionEvent:
+		if h.program == nil {
+			return
+		}
+
+		if ev.Message != "" && ev.Message != "Submit complete" {
+			h.program.Send(submitComponent.GlobalMessageMsg(ev.Message))
+		} else {
+			h.program.Send(submitComponent.GlobalMessageMsg(""))
+		}
+		h.program.Send(submitComponent.ProgressCompleteMsg{})
+		h.complete()
+	}
+}
+
+// Confirm prompts for user confirmation
+func (h *InteractiveSubmitHandler) Confirm(message string, defaultYes bool) (bool, error) {
+	// Pause TUI for prompt
+	if h.program != nil {
+		_ = h.program.ReleaseTerminal()
+		h.splog.SetQuiet(false)
+	}
+
+	confirmed, err := tui.PromptConfirm(message, defaultYes)
+
+	// Resume TUI
+	if h.program != nil {
+		h.splog.SetQuiet(true)
+		_ = h.program.RestoreTerminal()
+	}
+
+	return confirmed, err
+}
+
+// complete finalizes the display
+func (h *InteractiveSubmitHandler) complete() {
+	if h.program == nil {
+		return
+	}
+
+	h.program.Wait()
+	h.program = nil
+	h.splog.SetQuiet(false)
 }

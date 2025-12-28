@@ -48,6 +48,7 @@ type RenderOptions struct {
 	OmitCurrentBranch bool
 	NoStyleBranchName bool
 	HideStats         bool
+	SelectedBranch    string
 }
 
 // StackTreeRenderer renders branch trees with annotations
@@ -105,6 +106,7 @@ func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) [
 		noStyleBranchName: opts.NoStyleBranchName,
 		hideStats:         opts.HideStats,
 		overallIndent:     &overallIndent,
+		selectedBranch:    opts.SelectedBranch,
 	}
 
 	outputDeep := [][]string{
@@ -146,6 +148,7 @@ type treeRenderArgs struct {
 	hideStats         bool
 	skipBranchingLine bool
 	overallIndent     *int
+	selectedBranch    string
 }
 
 func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []string {
@@ -200,6 +203,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []stri
 			noStyleBranchName: args.noStyleBranchName,
 			hideStats:         args.hideStats,
 			overallIndent:     args.overallIndent,
+			selectedBranch:    args.selectedBranch,
 		})
 
 		result = append(result, childLines...)
@@ -267,6 +271,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []st
 			parentScopes:      args.parentScopes,
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
+			selectedBranch:    args.selectedBranch,
 		})
 		result = append(result, branchLines...)
 	}
@@ -410,6 +415,7 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, inde
 
 func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	isCurrent := args.branchName == r.currentBranch
+	isSelected := args.branchName == args.selectedBranch
 	annotation := r.Annotations[args.branchName]
 	isTrunk := r.isTrunk(args.branchName)
 	isMerged := annotation.PRState == PRStateMerged
@@ -419,6 +425,14 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	// Get branch info with colors
 	branchName := args.branchName
 	coloredBranchName := style.ColorBranchName(branchName, isCurrent)
+
+	if isSelected {
+		coloredBranchName = lipgloss.NewStyle().
+			Background(lipgloss.Color("236")).
+			Foreground(lipgloss.Color("15")).
+			Bold(true).
+			Render(" " + branchName + " ")
+	}
 
 	// Add annotation
 	coloredBranchName += r.FormatAnnotationColored(annotation)

@@ -11,6 +11,14 @@ import (
 	"stackit.dev/stackit/testhelpers/scenario"
 )
 
+// noopHandler is a test handler that ignores all events
+type noopHandler struct{}
+
+func (h *noopHandler) OnEvent(_ submit.Event) {}
+func (h *noopHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+	return defaultYes, nil
+}
+
 func TestActionWithMockedGitHub(t *testing.T) {
 	t.Run("creates PR for branch", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
@@ -36,7 +44,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		}
 
 		// With mocked client, push is skipped, so this should succeed
-		err = submit.Action(s.Context, opts)
+		err = submit.Action(s.Context, opts, &noopHandler{})
 		require.NoError(t, err, "Submit should succeed with mocked GitHub client")
 
 		// Verify that PR was created in the mock
@@ -89,7 +97,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		}
 
 		// With mocked client, push is skipped, so this should succeed
-		err = submit.Action(s.Context, opts)
+		err = submit.Action(s.Context, opts, &noopHandler{})
 		require.NoError(t, err, "Submit should succeed with mocked GitHub client")
 
 		// Verify that PR was updated in the mock
@@ -128,7 +136,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 			Draft:  true,
 		}
 
-		err = submit.Action(s.Context, opts)
+		err = submit.Action(s.Context, opts, &noopHandler{})
 		require.NoError(t, err)
 
 		// Should have created 3 PRs: P, C1, and C2
@@ -210,7 +218,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		}
 
 		s.Checkout("B")
-		err = submit.Action(s.Context, opts)
+		err = submit.Action(s.Context, opts, &noopHandler{})
 		require.NoError(t, err, "Submit should succeed even when base update is skipped due to no commits")
 
 		// Verify that the PR was updated (other fields should be updated)

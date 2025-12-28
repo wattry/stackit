@@ -41,6 +41,48 @@ func (e *engineImpl) CurrentBranch() *Branch {
 	return &branch
 }
 
+// GetPendingChanges returns the status of pending changes in the working directory
+func (e *engineImpl) GetPendingChanges(ctx context.Context) ([]PendingChange, error) {
+	output, err := e.git.RunGitCommandWithContext(ctx, "status", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+
+	var changes []PendingChange
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		if len(line) < 4 {
+			continue
+		}
+		// Porcelain format: XY path
+		// X is staged status, Y is unstaged status
+		x := line[0]
+		y := line[1]
+		path := strings.TrimSpace(line[3:])
+
+		if x != ' ' && x != '?' {
+			changes = append(changes, PendingChange{
+				Path:   path,
+				Status: string(x),
+				Staged: true,
+			})
+		}
+		if y != ' ' {
+			status := string(y)
+			if x == '?' && y == '?' {
+				status = "??"
+			}
+			changes = append(changes, PendingChange{
+				Path:   path,
+				Status: status,
+				Staged: false,
+			})
+		}
+	}
+
+	return changes, nil
+}
+
 // Trunk returns the trunk branch
 func (e *engineImpl) Trunk() Branch {
 	e.mu.RLock()
