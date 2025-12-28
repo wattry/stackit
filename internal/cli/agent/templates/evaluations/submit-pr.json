@@ -1,0 +1,33 @@
+{
+  "name": "Submit stack with quality PR descriptions",
+  "skills": ["stackit"],
+  "query": "Submit all branches in my stack as PRs",
+  "setup_commands": [
+    "# Assume a stack already exists with 2-3 branches",
+    "# Each branch has commits with conventional commit messages"
+  ],
+  "expected_behavior": [
+    "Runs 'stackit log' to see which branches will be submitted",
+    "For each branch without PR, gathers commit info using 'git log'",
+    "Checks for .github/pull_request_template.md or CONTRIBUTING.md",
+    "Generates PR title from first commit (may remove conventional prefix for cleaner title)",
+    "Generates meaningful PR body with:",
+    "  - Summary section with bullet points",
+    "  - Specific test plan (not just placeholders)",
+    "  - Any additional sections from project template",
+    "Validates PR metadata quality:",
+    "  - Title is clear and descriptive",
+    "  - Body has real content (not 'TODO' or 'TBD')",
+    "  - Test plan has specific steps",
+    "Optionally runs validate_pr.sh script for validation",
+    "Only proceeds when validation passes",
+    "Uses 'stackit submit --stack' to submit all branches",
+    "Reports created/updated PR URLs"
+  ],
+  "anti_patterns": [
+    "Creates PRs with placeholder content ('TODO', 'TBD', etc.)",
+    "Empty or generic test plans",
+    "Skips validation of PR quality",
+    "Submits without checking for project templates"
+  ]
+}

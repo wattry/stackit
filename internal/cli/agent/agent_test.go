@@ -22,6 +22,9 @@ func TestAgentInit_Local(t *testing.T) {
 	_, err = git.RunGitCommand("init")
 	require.NoError(t, err, "should initialize git repo")
 
+	// Set version for testing
+	TemplateVersion = "1.0.0"
+
 	// Run agent init --local
 	err = runAgentInit(true, false)
 	require.NoError(t, err, "agent init should succeed")
@@ -117,6 +120,9 @@ func TestAgentInit_VersionCheck(t *testing.T) {
 
 	_, err = git.RunGitCommand("init")
 	require.NoError(t, err, "should initialize git repo")
+
+	// Set version for testing
+	TemplateVersion = "1.0.0"
 
 	// First installation
 	err = runAgentInit(true, false)

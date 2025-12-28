@@ -1,0 +1,31 @@
+{
+  "name": "Create branch with auto-generated name",
+  "skills": ["stackit"],
+  "query": "I made changes to auth.go that add user authentication. Create a new branch in my stack.",
+  "setup_commands": [
+    "git init",
+    "git config user.email 'test@example.com'",
+    "git config user.name 'Test User'",
+    "echo 'package main' > main.go",
+    "git add main.go",
+    "git commit -m 'initial commit'",
+    "echo 'package auth' > auth.go",
+    "git add auth.go"
+  ],
+  "expected_behavior": [
+    "Runs 'stackit log' to check current state",
+    "Checks README.md or CONTRIBUTING.md for commit message guidelines",
+    "Generates a conventional commit message with type prefix (e.g., 'feat:', 'fix:')",
+    "Validates message has clear description and follows format",
+    "Uses pipe format: echo 'message' | stackit create",
+    "Does NOT specify branch name (lets stackit auto-generate)",
+    "Runs 'stackit log' after creation to show new state",
+    "Does NOT use 'git commit' or 'git checkout' directly"
+  ],
+  "anti_patterns": [
+    "Uses 'git commit' instead of stackit",
+    "Manually specifies branch name when not requested",
+    "Skips validation of commit message quality",
+    "Uses 'stackit create -m' flag instead of pipe format"
+  ]
+}

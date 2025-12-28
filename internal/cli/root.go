@@ -28,7 +28,7 @@ Commit:  ` + commit + `
 
 	rootCmd.AddCommand(newAbortCmd())
 	rootCmd.AddCommand(branch.NewAbsorbCmd())
-	rootCmd.AddCommand(agent.NewAgentCmd())
+	rootCmd.AddCommand(agent.NewAgentCmd(version))
 	rootCmd.AddCommand(navigation.NewBottomCmd())
 	rootCmd.AddCommand(navigation.NewCheckoutCmd())
 	rootCmd.AddCommand(navigation.NewChildrenCmd())

@@ -1,0 +1,38 @@
+{
+  "name": "Resolve conflicts during restack",
+  "skills": ["stackit"],
+  "query": "I ran 'stackit restack' and got conflicts in auth.go. Help me resolve them.",
+  "setup_commands": [
+    "# Assume rebase is in progress with conflicts"
+  ],
+  "expected_behavior": [
+    "Checks 'git status' to confirm rebase in progress",
+    "References conflict-resolution workflow: workflows/conflict-resolution.md",
+    "Presents conflict resolution checklist:",
+    "  - [ ] Step 1: Identify conflict type and scope",
+    "  - [ ] Step 2: Locate conflict markers",
+    "  - [ ] Step 3: Understand both changes",
+    "  - [ ] Step 4: Resolve conflicts",
+    "  - [ ] Step 5: Verify resolution",
+    "  - [ ] Step 6: Continue operation",
+    "Lists conflicted files using 'git diff --name-only --diff-filter=U'",
+    "Explains conflict markers: <<<<<<< HEAD vs >>>>>>> branch",
+    "Shows both versions to understand changes",
+    "Guides through resolution strategies:",
+    "  - Accept current (--ours)",
+    "  - Accept incoming (--theirs)",
+    "  - Manual merge (combine both)",
+    "After resolution, verifies with build/test",
+    "Stages resolved files: 'git add <files>'",
+    "Continues operation: 'stackit continue'",
+    "Does NOT skip verification step",
+    "Only proceeds when build passes"
+  ],
+  "anti_patterns": [
+    "Resolves conflicts without understanding both sides",
+    "Skips build verification after resolution",
+    "Uses 'git rebase --continue' instead of 'stackit continue'",
+    "Doesn't check that resolution is correct before continuing",
+    "Suggests aborting without attempting resolution first"
+  ]
+}

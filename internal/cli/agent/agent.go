@@ -14,7 +14,10 @@ import (
 )
 
 // NewAgentCmd creates the agent command
-func NewAgentCmd() *cobra.Command {
+func NewAgentCmd(version string) *cobra.Command {
+	// Set the template version to match the app version
+	TemplateVersion = version
+
 	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "Manage agent integration files for Cursor and Claude Code",
@@ -110,9 +113,94 @@ func runAgentInit(local, force bool) error {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
 
+		// Replace version placeholder with actual version
+		contentStr := string(content)
+		contentStr = strings.ReplaceAll(contentStr, "{{VERSION}}", TemplateVersion)
+
 		filePath := filepath.Join(skillDir, filename)
+		if err := os.WriteFile(filePath, []byte(contentStr), 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
+
+	// Create subdirectories for commands, workflows, and scripts
+	commandRefDir := filepath.Join(skillDir, "commands")
+	if err := os.MkdirAll(commandRefDir, 0750); err != nil {
+		return fmt.Errorf("failed to create commands directory: %w", err)
+	}
+
+	workflowsDir := filepath.Join(skillDir, "workflows")
+	if err := os.MkdirAll(workflowsDir, 0750); err != nil {
+		return fmt.Errorf("failed to create workflows directory: %w", err)
+	}
+
+	scriptsDir := filepath.Join(skillDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0750); err != nil {
+		return fmt.Errorf("failed to create scripts directory: %w", err)
+	}
+
+	// Write command reference files
+	commandRefFiles := []string{
+		"navigation.md",
+		"branch.md",
+		"stack.md",
+		"recovery.md",
+	}
+
+	for _, filename := range commandRefFiles {
+		templatePath := "templates/skill/commands/" + filename
+		content, err := skillTemplates.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
+		}
+
+		filePath := filepath.Join(commandRefDir, filename)
 		if err := os.WriteFile(filePath, content, 0600); err != nil {
 			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
+
+	// Write workflow files
+	workflowFiles := []string{
+		"fix-absorb.md",
+		"conflict-resolution.md",
+	}
+
+	for _, filename := range workflowFiles {
+		templatePath := "templates/skill/workflows/" + filename
+		content, err := skillTemplates.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
+		}
+
+		filePath := filepath.Join(workflowsDir, filename)
+		if err := os.WriteFile(filePath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
+
+	// Write script files
+	scriptFiles := []string{
+		"analyze_stack.sh",
+		"validate_pr.sh",
+	}
+
+	for _, filename := range scriptFiles {
+		templatePath := "templates/skill/scripts/" + filename
+		content, err := skillTemplates.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
+		}
+
+		filePath := filepath.Join(scriptsDir, filename)
+		if err := os.WriteFile(filePath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+
+		// Make scripts executable (0700 = owner can read, write, execute)
+		// #nosec G302 - Scripts need to be executable
+		if err := os.Chmod(filePath, 0700); err != nil {
+			return fmt.Errorf("failed to make %s executable: %w", filename, err)
 		}
 	}
 
@@ -127,6 +215,7 @@ func runAgentInit(local, force bool) error {
 		"stack-status.md",
 		"stack-create.md",
 		"stack-submit.md",
+		"stack-absorb.md",
 		"stack-fix.md",
 		"stack-sync.md",
 		"stack-restack.md",
@@ -172,9 +261,12 @@ func runAgentInit(local, force bool) error {
 	fmt.Println("Claude Code integration:")
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/SKILL.md\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/reference.md\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/skills/stackit/commands/ (4 reference files)\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/skills/stackit/workflows/ (2 workflow guides)\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/skills/stackit/scripts/ (2 utility scripts)\n", getDisplayPath(baseDir, local))
 	fmt.Println()
 	fmt.Println("Slash commands:")
-	fmt.Printf("✓ Created %s/.claude/commands/stack-*.md (6 commands)\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/commands/stack-*.md (7 commands)\n", getDisplayPath(baseDir, local))
 	fmt.Println()
 	fmt.Println("Cursor integration:")
 	fmt.Printf("✓ Created %s/.cursor/rules/stackit.md\n", getDisplayPath(baseDir, local))
@@ -184,6 +276,7 @@ func runAgentInit(local, force bool) error {
 	fmt.Println("  /stack-status  - View stack state and health")
 	fmt.Println("  /stack-create  - Create branch with auto-naming")
 	fmt.Println("  /stack-submit  - Submit PRs with generated descriptions")
+	fmt.Println("  /stack-absorb  - Intelligently absorb changes into commits")
 	fmt.Println("  /stack-fix     - Diagnose and fix stack issues")
 	fmt.Println("  /stack-sync    - Sync with trunk and cleanup")
 	fmt.Println("  /stack-restack - Rebase all branches in stack")
