@@ -1,8 +1,8 @@
 ---
 name: stackit
-description: Manage stacked Git branches with Stackit. Use this skill when creating branches, submitting PRs, navigating stacks, or troubleshooting stack issues.
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Grep, Glob
-version: 1.0.0
+description: Manage stacked Git branches with Stackit. Use when creating/managing stacked branches, submitting PRs for branch stacks, navigating branch trees, rebasing stacks, syncing with main/trunk, troubleshooting stack issues, absorbing changes, resolving rebase conflicts, or any workflow involving dependent Git branches. Keywords stackit, stacked changes, stacked PRs, branch stack, restack, absorb, git stack.
+allowed-tools: Bash(stackit:*), Bash(git:*), Bash(~/.claude/skills/stackit/scripts/*:*), Read, Grep, Glob
+version: {{VERSION}}
 ---
 
 # Stackit - Stacked Branch Management
@@ -11,80 +11,172 @@ You are an expert at using Stackit to manage stacked Git branches. Stackit helps
 
 ## Before Any Operation
 
-Always run `stackit log` first to understand:
+**Always run `stackit log` first** to understand:
 - Current branch position in the stack
 - Parent/child relationships
 - Which branches need attention
 
-Check for project conventions:
+**Check for project conventions:**
 - Read CONTRIBUTING.md if present for project-specific guidelines
 - Follow documented commit message formats, PR templates, and workflows
 - Respect any branching or testing requirements specified
 
+## Quick Health Check
+
+Run the stack analyzer to check health and get actionable suggestions:
+```bash
+bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
+```
+
 ## Core Workflows
 
 ### Creating a New Branch
-1. Stage changes: `git add <files>` or use `--all` flag
-2. Generate commit message following project conventions
-3. Create branch (name is optional, auto-generated from message):
-   - Preferred: `echo "commit message" | stackit create`
-   - With name: `echo "commit message" | stackit create branch-name`
+
+1. **Stage changes:** `git add <files>` or use `--all` flag
+2. **Generate commit message** following project conventions (see examples below)
+3. **Create branch** (name optional, auto-generated from message):
+   ```bash
+   # Preferred: pipe format
+   echo "commit message" | stackit create
+
+   # With explicit name
+   echo "commit message" | stackit create branch-name
+   ```
 
 ### Submitting PRs
+
 1. Check stack state: `stackit log`
-2. Submit current + ancestors: `stackit submit`
-3. Submit entire stack: `stackit submit --stack`
-4. For drafts: `stackit submit --draft`
+2. Submit options:
+   - Current + ancestors: `stackit submit`
+   - Entire stack: `stackit submit --stack`
+   - As drafts: `stackit submit --draft`
 
 ### Syncing with Main
-1. Run `stackit sync` to pull trunk and cleanup merged branches
-2. If branches were deleted, run `stackit restack`
+
+1. Sync with trunk and cleanup: `stackit sync`
+2. If branches were deleted: `stackit restack`
 
 ### Fixing Issues
-1. For rebase conflicts: resolve files, then `stackit continue`
-2. To abort: `stackit abort`
-3. To undo: `stackit undo`
 
-### Fixing Compilation Errors After Absorb
-After `stackit absorb`, compilation errors may occur when absorbed changes depend on files/changes that didn't get cleanly absorbed:
+- **Rebase conflicts:** Resolve files, then `stackit continue`
+- **Abort operation:** `stackit abort`
+- **Undo last command:** `stackit undo`
+- **Stack health issues:** See [workflows/fix-absorb.md](workflows/fix-absorb.md) or run `/stack-fix`
 
-1. Check README.md and CONTRIBUTING.md for build/test commands
-2. For each branch in stack (bottom to top):
-   - Run build/test commands
-   - If failures: analyze errors for missing dependencies
-   - Check upstack branches for needed changes: `git diff <branch>..<child>`
-   - Apply missing changes (cherry-pick or manual copy)
-   - Verify fix by re-running build/test
-3. Use `stackit foreach "<command>"` to verify entire stack builds
+## Commit Message Examples
+
+Generate commit messages following these patterns:
+
+**Example 1: Feature addition**
+```
+feat(auth): implement JWT-based authentication
+
+Add login endpoint and token validation middleware.
+Supports refresh tokens and role-based access.
+```
+
+**Example 2: Bug fix**
+```
+fix(cache): prevent race condition in invalidation
+
+Add mutex locking around cache clear operations.
+Fixes issue where concurrent requests could see stale data.
+```
+
+**Example 3: Multiple changes**
+```
+chore: update dependencies and refactor errors
+
+- Upgrade lodash to 4.17.21
+- Standardize error response format
+- Add error codes for API responses
+```
+
+**Format:**
+- Type(scope): brief description
+- Blank line
+- Detailed explanation of "why"
+- Common types: feat, fix, docs, style, refactor, perf, test, chore
+
+## Command Reference
+
+For detailed command information, see:
+- **Navigation:** [commands/navigation.md](commands/navigation.md) - log, checkout, up, down, trunk
+- **Branch operations:** [commands/branch.md](commands/branch.md) - create, modify, absorb, delete
+- **Stack operations:** [commands/stack.md](commands/stack.md) - restack, submit, sync, foreach
+- **Recovery & utilities:** [commands/recovery.md](commands/recovery.md) - undo, continue, abort, doctor
+
+Quick reference: [reference.md](reference.md)
+
+## Detailed Workflows
+
+For complex operations requiring multiple steps:
+- **Fixing compilation errors after absorb:** [workflows/fix-absorb.md](workflows/fix-absorb.md)
+- **Resolving conflicts during rebase:** [workflows/conflict-resolution.md](workflows/conflict-resolution.md)
 
 ## Auto-Generation Guidelines
 
 ### Branch Names
-Branch names are optional - stackit auto-generates from commit message:
+Branch names are **optional** - stackit auto-generates from commit message:
 - Only provide if user explicitly requests a specific name
 - Auto-generated format: kebab-case from commit message
-- Example: "Add user authentication" -> "add-user-authentication"
+- Example: "Add user authentication" → "add-user-authentication"
 
 ### Commit Messages
 When generating commit messages:
-- Check README.md and CONTRIBUTING.md for project-specific guidelines
-- Follow documented commit message conventions if available
-- Default to conventional commit format: type(scope): description
-- **Always use pipe format**: `echo "message" | stackit create`
+1. Check README.md and CONTRIBUTING.md for project guidelines
+2. Follow documented conventions if available
+3. Default to conventional commit format: `type(scope): description`
+4. **Always use pipe format:** `echo "message" | stackit create`
+
+**Validation loop:**
+- Generate message
+- Verify: Has type prefix? Clear description? Follows project format?
+- If fails: revise and re-validate
+- Only proceed when message meets quality standards
 
 ### PR Descriptions
 When generating PR descriptions:
-- Check for .github/pull_request_template.md or CONTRIBUTING.md for PR format
-- Follow project-specific PR templates if available
-- Default format:
-  - Title: First commit message line
-  - Body: Bullet points from all commits in branch
-  - Include "## Test Plan" section with testing steps
-  - Add any required sections from project templates
+1. Check for .github/pull_request_template.md or CONTRIBUTING.md
+2. Follow project-specific templates if available
+3. Default format:
+   ```markdown
+   ## Summary
+   - Bullet point summary of changes
+
+   ## Test Plan
+   - [ ] Specific testing steps
+   - [ ] Verification procedures
+
+   [Additional sections per project templates]
+   ```
+
+**Validation before submission:**
+- Title is clear and descriptive?
+- Body has meaningful content (not placeholders)?
+- Test plan is specific?
+- Use `bash ~/.claude/skills/stackit/scripts/validate_pr.sh "title" "body"` to validate
 
 ## Important Rules
 
 1. **Never use raw git for branch operations** - always use stackit commands
 2. **Check state before destructive operations** - run `stackit log` first
-3. **Handle conflicts gracefully** - guide user through resolution
-4. **Keep PRs small and focused** - suggest splitting if too large
+3. **Always validate after absorb** - absorb can cause compilation errors, see fix-absorb workflow
+4. **Handle conflicts gracefully** - guide user through resolution, see conflict-resolution workflow
+5. **Keep PRs small and focused** - suggest splitting if too large
+6. **Use validation loops** - for commit messages, PR descriptions, and post-absorb builds
+
+## Version {{VERSION}} Changes
+
+New features:
+- Progressive disclosure with organized reference files
+- Workflow checklists for complex operations (fix-absorb, conflict resolution)
+- Utility scripts for stack analysis and PR validation
+- Enhanced slash commands with validation loops
+- New /stack-absorb command
+- Expanded commit message examples
+- Better error recovery patterns
+
+Migration:
+- Re-run `stackit agent init --force` to update files
+- No breaking changes to existing workflows

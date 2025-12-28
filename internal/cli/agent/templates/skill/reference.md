@@ -1,5 +1,23 @@
 # Stackit Command Reference
 
+Quick reference for all stackit commands. For detailed documentation, see:
+- **Navigation details:** [commands/navigation.md](commands/navigation.md)
+- **Branch operation details:** [commands/branch.md](commands/branch.md)
+- **Stack operation details:** [commands/stack.md](commands/stack.md)
+- **Recovery details:** [commands/recovery.md](commands/recovery.md)
+
+## Utility Scripts
+
+Run these helper scripts for analysis and validation:
+
+```bash
+# Analyze stack health and get suggestions
+bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
+
+# Validate PR metadata before submission
+bash ~/.claude/skills/stackit/scripts/validate_pr.sh "PR Title" "PR Body"
+```
+
 ## Navigation Commands
 
 | Command | Description |
@@ -104,16 +122,17 @@ stackit sync --restack
 
 ## Troubleshooting
 
-### "Branch needs restack"
-Run `stackit restack` to rebase branches onto their parents.
+For detailed troubleshooting workflows, see:
+- **Fixing absorb errors:** [workflows/fix-absorb.md](workflows/fix-absorb.md)
+- **Conflict resolution:** [workflows/conflict-resolution.md](workflows/conflict-resolution.md)
+- **Recovery commands:** [commands/recovery.md](commands/recovery.md)
 
-### "Rebase conflict"
-1. Resolve conflicts in the files
-2. `git add <resolved-files>`
-3. `stackit continue`
+### Quick Fixes
 
-### "Orphaned branch"
-Parent was merged. Run `stackit sync` to reparent.
-
-### "PR base mismatch"
-Run `stackit submit` to update PR base branches.
+| Issue | Solution |
+|-------|----------|
+| "Branch needs restack" | `stackit restack` |
+| "Rebase conflict" | Resolve conflicts, `git add <files>`, `stackit continue` |
+| "Orphaned branch" | `stackit sync` to reparent |
+| "PR base mismatch" | `stackit submit` to update PRs |
+| Build breaks after absorb | See [workflows/fix-absorb.md](workflows/fix-absorb.md) |

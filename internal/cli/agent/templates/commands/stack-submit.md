@@ -36,12 +36,20 @@ $ARGUMENTS
      <add any additional sections required by project templates>
      ```
 
-4. Run submit command:
+4. **Validate PR metadata quality**:
+   - Title is clear and descriptive (not placeholder)?
+   - Body has meaningful description (not just TODOs)?
+   - Test plan is specific (not empty placeholders)?
+   - If validation fails: revise and re-validate
+   - Optional: Use `bash ~/.claude/skills/stackit/scripts/validate_pr.sh "title" "body"` for automated validation
+   - Only proceed when PR meets quality standards
+
+5. Run submit command:
    - Current branch only: `stackit submit`
    - Entire stack: `stackit submit --stack`
    - As drafts: `stackit submit --draft`
 
-5. Report created/updated PR URLs
+6. Report created/updated PR URLs
 
 ## Error Handling
 - If branch needs restack: run `stackit restack` first

@@ -1,0 +1,45 @@
+{
+  "name": "Generate quality commit messages",
+  "skills": ["stackit"],
+  "query": "Create a commit for the changes I made to add email validation to the authentication system",
+  "setup_commands": [
+    "# Assume changes are staged in auth/validator.go"
+  ],
+  "expected_behavior": [
+    "Checks README.md and CONTRIBUTING.md for commit message conventions",
+    "Follows project-specific format if documented",
+    "Otherwise uses conventional commit format",
+    "Generates message with:",
+    "  - Type prefix (feat, fix, refactor, etc.)",
+    "  - Optional scope in parentheses",
+    "  - Clear, concise description",
+    "  - Blank line",
+    "  - Detailed explanation of 'why' (not just 'what')",
+    "Validates message quality:",
+    "  - Has appropriate type prefix?",
+    "  - Description is clear and specific?",
+    "  - Follows project conventions?",
+    "If validation fails, revises and re-validates",
+    "Uses pipe format: echo 'message' | stackit create",
+    "Example output:",
+    "  feat(auth): add email validation to user registration",
+    "  ",
+    "  Implement RFC 5322 compliant email validation.",
+    "  Prevents invalid email addresses from being registered.",
+    "Only proceeds when message meets quality standards"
+  ],
+  "quality_indicators": [
+    "Type prefix present and appropriate",
+    "Description is specific (not generic like 'update code')",
+    "Explains 'why' not just 'what'",
+    "Follows conventional commit format",
+    "No placeholder text or TODO markers"
+  ],
+  "anti_patterns": [
+    "Generic messages like 'update file' or 'fix bug'",
+    "Missing type prefix",
+    "No explanation of why change was made",
+    "Skips validation loop",
+    "Uses 'git commit' directly instead of stackit"
+  ]
+}

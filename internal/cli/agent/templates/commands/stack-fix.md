@@ -13,29 +13,39 @@ Diagnose and automatically fix common stack problems.
 
 ## Instructions
 
-1. Run `stackit log` to identify structural issues and branch relationships
+1. **Analyze stack health first**:
+   ```bash
+   bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
+   ```
+   This identifies issues and suggests fixes
 
-2. Check for and fix these common issues:
+2. Review `stackit log` for structural issues and branch relationships
 
-   **Compilation errors after absorb (priority fix):**
+3. Check for and fix these common issues in priority order:
+
+   **Compilation errors after absorb (PRIORITY FIX):**
    - Common after `stackit absorb` when absorbed changes depend on files/changes that didn't get cleanly absorbed
-   - Check README.md and CONTRIBUTING.md for build/test/lint commands
-   - For each branch in stack (bottom to top):
-     - Checkout the branch: `git checkout <branch>`
-     - Run project's build command
-     - Run project's test command
-     - If failures occur:
-       - Analyze error messages for missing files/functions/types
-       - Check upstack branches for those changes: `git diff <branch>..<child-branch>`
-       - If needed changes found in upstack branches:
-         - Cherry-pick or apply specific changes: `git cherry-pick <commit>`
-         - Or manually copy needed files/changes
-       - Re-run build/test to verify fix
-   - Continue until all branches build/test successfully
+   - **Use detailed workflow:** See [../skills/stackit/workflows/fix-absorb.md](../skills/stackit/workflows/fix-absorb.md)
+   - **Workflow checklist pattern:**
+     ```
+     Absorb Fix Progress:
+     - [ ] Step 1: Identify build/test commands
+     - [ ] Step 2: Build and test each branch
+     - [ ] Step 3: Identify failed branches
+     - [ ] Step 4: Find missing dependencies
+     - [ ] Step 5: Apply fixes
+     - [ ] Step 6: Verify entire stack
+     ```
+   - **Validation loop:** For each branch:
+     - Run build/test
+     - If fails → find dependency → apply fix → re-run build/test
+     - If passes → mark complete → next branch
+   - **Only complete when entire stack builds successfully**
 
    **Rebase in progress:**
    - Check `git status` for "rebase in progress"
-   - If conflicts: help user resolve, then `stackit continue`
+   - If conflicts: See [../skills/stackit/workflows/conflict-resolution.md](../skills/stackit/workflows/conflict-resolution.md)
+   - Guide through resolution, then `stackit continue`
    - If user wants to abort: `stackit abort`
 
    **Branches need restack:**
@@ -51,8 +61,13 @@ Diagnose and automatically fix common stack problems.
    **Uncommitted changes blocking operation:**
    - Suggest stashing or committing
 
-3. After fixes, verify the entire stack builds:
-   - Run `stackit foreach "<build-command>"` to build all branches
+4. **Final verification with validation loop**:
+   - Run build on entire stack: `stackit foreach "<build-command>"`
+   - If ANY branch fails:
+     - Return to step 3
+     - Fix the failing branch
+     - Re-run verification
+   - Only consider fix complete when ALL branches build successfully
    - Show updated stack state with `stackit log`
 
 ## Error Handling
