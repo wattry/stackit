@@ -27,10 +27,12 @@ Commit:  ` + commit + `
 	}
 
 	rootCmd.AddCommand(newAbortCmd())
+	rootCmd.AddCommand(newAddCmd())
 	rootCmd.AddCommand(branch.NewAbsorbCmd())
 	rootCmd.AddCommand(agent.NewAgentCmd(version))
 	rootCmd.AddCommand(navigation.NewBottomCmd())
 	rootCmd.AddCommand(navigation.NewCheckoutCmd())
+	rootCmd.AddCommand(newCherryPickCmd())
 	rootCmd.AddCommand(navigation.NewChildrenCmd())
 	rootCmd.AddCommand(newContinueCmd())
 	rootCmd.AddCommand(branch.NewCreateCmd())
@@ -48,8 +50,10 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(stack.NewMoveCmd())
 	rootCmd.AddCommand(navigation.NewParentCmd())
 	rootCmd.AddCommand(branch.NewPopCmd())
+	rootCmd.AddCommand(newRebaseCmd())
 	rootCmd.AddCommand(branch.NewRenameCmd())
 	rootCmd.AddCommand(stack.NewReorderCmd())
+	rootCmd.AddCommand(newResetCmd())
 	rootCmd.AddCommand(stack.NewRestackCmd())
 	rootCmd.AddCommand(branch.NewSplitCmd())
 	rootCmd.AddCommand(branch.NewSquashCmd())
