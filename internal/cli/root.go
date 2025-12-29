@@ -92,6 +92,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(navigation.NewDownCmd())
 	rootCmd.AddCommand(branch.NewFoldCmd())
 	rootCmd.AddCommand(stack.NewForeachCmd())
+	rootCmd.AddCommand(branch.NewGetCmd())
 	rootCmd.AddCommand(newInfoCmd())
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(branch.NewLockCmd())
