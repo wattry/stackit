@@ -3,7 +3,7 @@ package stack
 import (
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/foreach"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/runtime"
@@ -37,7 +37,7 @@ Examples:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *runtime.Context) error {
-				opts := actions.ForeachOptions{
+				opts := foreach.Options{
 					Command:  args[0],
 					Args:     args[1:],
 					FailFast: !noFailFast,
@@ -46,18 +46,31 @@ Examples:
 				}
 
 				// Define the traversal range
-				opts.Scope = engine.StackRange{IncludeCurrent: true}
-				switch {
-				case stack:
-					opts.Scope.RecursiveParents = true
-					opts.Scope.RecursiveChildren = true
-				case downstack:
-					opts.Scope.RecursiveParents = true
-				case upstack:
-					opts.Scope.RecursiveChildren = true
+				// If parallel mode is enabled and no explicit scope flags are set, default to --stack
+				explicitScopeSet := cmd.Flags().Changed("stack") || cmd.Flags().Changed("downstack") || cmd.Flags().Changed("upstack")
+				if parallel && !explicitScopeSet {
+					// Parallel mode defaults to entire stack
+					opts.Scope = engine.StackRange{
+						IncludeCurrent:    true,
+						RecursiveParents:  true,
+						RecursiveChildren: true,
+					}
+				} else {
+					opts.Scope = engine.StackRange{IncludeCurrent: true}
+					switch {
+					case stack:
+						opts.Scope.RecursiveParents = true
+						opts.Scope.RecursiveChildren = true
+					case downstack:
+						opts.Scope.RecursiveParents = true
+					case upstack:
+						opts.Scope.RecursiveChildren = true
+					}
 				}
 
-				return actions.ForeachAction(ctx, opts)
+				// Create the appropriate handler based on TTY availability
+				handler := NewForeachHandler(ctx.Splog)
+				return foreach.Action(ctx, opts, handler)
 			})
 		},
 	}

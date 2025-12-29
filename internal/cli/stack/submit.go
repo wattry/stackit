@@ -202,9 +202,9 @@ func (h *SimpleSubmitHandler) OnEvent(e submit.Event) {
 	switch ev := e.(type) {
 	case submit.StackDisplayEvent:
 		h.splog.Info("Stack to submit:")
-		for _, branch := range ev.Branches {
+		for _, branch := range ev.Stack.Branches {
 			marker := "  "
-			if branch == ev.CurrentBranch {
+			if branch == ev.Stack.CurrentBranch {
 				marker = "● "
 			}
 			scope := ev.ScopeMap[branch]
@@ -292,11 +292,7 @@ type InteractiveSubmitHandler struct {
 	model         *submitComponent.Model
 	inSubmitPhase bool
 	mu            sync.Mutex
-	branches      []string
-	trunkBranch   string
-	currentBranch string
-	parentMap     map[string]string
-	childrenMap   map[string][]string
+	stack         *tree.StackTree
 	fixedMap      map[string]bool
 }
 
@@ -307,24 +303,24 @@ func NewInteractiveSubmitHandler(splog *tui.Splog) *InteractiveSubmitHandler {
 
 // findRootBranch finds the root branch of the stack (the one whose parent is trunk)
 func (h *InteractiveSubmitHandler) findRootBranch() string {
-	if len(h.branches) == 0 {
+	if h.stack == nil || len(h.stack.Branches) == 0 {
 		return ""
 	}
 
 	// If we're on the trunk branch, show everything from trunk down
-	if h.currentBranch == h.trunkBranch {
-		return h.trunkBranch
+	if h.stack.CurrentBranch == h.stack.TrunkBranch {
+		return h.stack.TrunkBranch
 	}
 
 	// The root is the branch whose parent is trunk
-	for _, branch := range h.branches {
-		parent := h.parentMap[branch]
-		if parent == h.trunkBranch {
+	for _, branch := range h.stack.Branches {
+		parent := h.stack.ParentMap[branch]
+		if parent == h.stack.TrunkBranch {
 			return branch
 		}
 	}
 	// Fallback to first branch
-	return h.branches[0]
+	return h.stack.Branches[0]
 }
 
 func (h *InteractiveSubmitHandler) ensureProgramStarted() {
@@ -357,37 +353,20 @@ func (h *InteractiveSubmitHandler) ensureProgramStarted() {
 func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 	switch ev := e.(type) {
 	case submit.StackDisplayEvent:
-		h.branches = ev.Branches
-		h.trunkBranch = ev.TrunkBranch
-		h.currentBranch = ev.CurrentBranch
-		h.parentMap = ev.ParentMap
-		h.childrenMap = ev.ChildrenMap
+		h.stack = ev.Stack
 		h.fixedMap = ev.FixedMap
 
-		// Build a tree renderer from the event data
-		renderer := tree.NewStackTreeRenderer(
-			ev.CurrentBranch,
-			ev.TrunkBranch,
-			func(branchName string) []string {
-				return h.childrenMap[branchName]
-			},
-			func(branchName string) string {
-				return h.parentMap[branchName]
-			},
-			func(branchName string) bool {
-				return branchName == h.trunkBranch
-			},
-			func(branchName string) bool {
-				// Trunk is always "fixed" (never needs restack)
-				if branchName == h.trunkBranch {
-					return true
-				}
-				return h.fixedMap[branchName]
-			},
-		)
+		// Build a tree renderer from the stack with custom fixed logic
+		renderer := ev.Stack.ToRendererWithFixed(func(branchName string) bool {
+			// Trunk is always "fixed" (never needs restack)
+			if branchName == h.stack.TrunkBranch {
+				return true
+			}
+			return h.fixedMap[branchName]
+		})
 
 		// Set scopes and other annotations
-		for _, branchName := range ev.Branches {
+		for _, branchName := range ev.Stack.Branches {
 			scope := ev.ScopeMap[branchName]
 			renderer.SetAnnotation(branchName, tree.BranchAnnotation{
 				Scope:         scope,

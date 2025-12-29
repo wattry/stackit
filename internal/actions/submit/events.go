@@ -1,6 +1,8 @@
 // Package submit provides functionality for submitting stacked branches as pull requests.
 package submit
 
+import "stackit.dev/stackit/internal/tui/components/tree"
+
 // Event represents a feedback event from the submit action.
 // Implementations should use type switches to handle specific event types.
 type Event interface {
@@ -10,15 +12,9 @@ type Event interface {
 // StackDisplayEvent indicates the initial stack visualization phase.
 // Handlers can use this to display the branches that will be processed.
 type StackDisplayEvent struct {
-	Branches      []string // branches to submit, in order
-	CurrentBranch string   // which branch we're on
-	TrunkBranch   string   // trunk/main branch name
-
-	// Tree structure data for rendering
-	ParentMap   map[string]string   // branch -> parent
-	ChildrenMap map[string][]string // branch -> children
-	FixedMap    map[string]bool     // branch -> is fixed (doesn't need restack)
-	ScopeMap    map[string]string   // branch -> scope
+	Stack    *tree.StackTree   // tree structure for rendering the stack
+	FixedMap map[string]bool   // branch -> is fixed (doesn't need restack)
+	ScopeMap map[string]string // branch -> scope
 }
 
 func (StackDisplayEvent) submitEvent() {}
