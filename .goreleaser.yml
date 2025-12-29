@@ -57,7 +57,7 @@ brews:
   - repository:
       owner: getstackit
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/getstackit/stackit"
     description: "Command-line tool for managing stacked changes in Git"

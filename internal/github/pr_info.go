@@ -127,7 +127,11 @@ func createGitHubClient(ctx context.Context, hostname, token string) (*github.Cl
 func getGitHubToken() (string, error) {
 	// Try environment variable first
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		return token, nil
+		// Trim whitespace to handle cases where secrets might have leading/trailing spaces
+		token = strings.TrimSpace(token)
+		if token != "" {
+			return token, nil
+		}
 	}
 
 	// Try gh CLI
