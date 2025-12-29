@@ -1,6 +1,6 @@
 # Stackit Agent Rules
 
-This repository uses [stackit](https://github.com/jonnii/stackit) for managing stacked branches.
+This repository uses [stackit](https://github.com/getstackit/stackit) for managing stacked branches.
 
 ## Overview
 
@@ -52,4 +52,4 @@ Stackit is a CLI tool for managing stacked changes in Git repositories. When wor
 - PRs are automatically created/updated with proper base branches
 - The stack structure is preserved when submitting multiple PRs
 
-For more information, see: https://github.com/jonnii/stackit
+For more information, see: https://github.com/getstackit/stackit

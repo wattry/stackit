@@ -8,14 +8,14 @@ export default function Footer() {
         <Text className="text-center text-mist-600 dark:text-mist-400">
           Built with ❤️ by the Stackit community •{' '}
           <a
-            href="https://github.com/jonnii/stackit"
+            href="https://github.com/getstackit/stackit"
             className="text-mist-600 hover:text-mist-700 dark:text-mist-400 dark:hover:text-mist-300"
           >
             GitHub
           </a>{' '}
           •{' '}
           <a
-            href="https://github.com/jonnii/stackit/blob/main/LICENSE"
+            href="https://github.com/getstackit/stackit/blob/main/LICENSE"
             className="text-mist-600 hover:text-mist-700 dark:text-mist-400 dark:hover:text-mist-300"
           >
             License

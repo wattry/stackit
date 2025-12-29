@@ -32,7 +32,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 		Version: version,
 		Long: `Stackit is a command line tool that makes working with stacked changes fast & intuitive.
 
-https://github.com/jonnii/stackit
+https://github.com/getstackit/stackit
 
 Version: ` + version + `
 Commit:  ` + commit + `

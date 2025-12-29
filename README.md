@@ -1,6 +1,6 @@
 # Stackit
 
-[![Tests](https://github.com/jonnii/stackit/actions/workflows/test.yml/badge.svg)](https://github.com/jonnii/stackit/actions/workflows/test.yml)
+[![Tests](https://github.com/getstackit/stackit/actions/workflows/test.yml/badge.svg)](https://github.com/getstackit/stackit/actions/workflows/test.yml)
 
 **Stackit** is a command-line tool that makes working with stacked changes fast and intuitive.
 
@@ -51,7 +51,7 @@ Stackit manages the complexity of this workflow—automatically handling rebases
 ### Homebrew (macOS and Linux)
 
 ```bash
-brew install jonnii/tap/stackit
+brew install getstackit/tap/stackit
 ```
 
 After installation, you can use either `stackit` or `st` (short alias).
@@ -268,7 +268,7 @@ MIT
 Requires Go 1.25+:
 
 ```bash
-git clone https://github.com/jonnii/stackit
+git clone https://github.com/getstackit/stackit
 cd stackit
 go build -o stackit ./cmd/stackit
 # Move to your PATH

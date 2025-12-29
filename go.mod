@@ -15,10 +15,7 @@ require (
 	golang.org/x/oauth2 v0.34.0
 )
 
-require (
-	github.com/charmbracelet/harmonica v0.2.0 // indirect
-	github.com/sahilm/fuzzy v0.1.1 // indirect
-)
+require github.com/sahilm/fuzzy v0.1.1 // indirect
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -44,7 +41,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect

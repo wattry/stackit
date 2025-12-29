@@ -17,7 +17,7 @@ echo
 # Check if stackit is installed
 if ! command -v stackit &> /dev/null; then
     echo -e "${RED}❌ stackit not found${NC}"
-    echo "→ Install from: https://github.com/jonnii/stackit"
+    echo "→ Install from: https://github.com/getstackit/stackit"
     exit 1
 fi
 

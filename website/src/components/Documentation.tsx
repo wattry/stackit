@@ -55,7 +55,7 @@ export default function Documentation() {
           <Text>
             Found a bug or have a feature request?{' '}
             <a
-              href="https://github.com/jonnii/stackit/issues"
+              href="https://github.com/getstackit/stackit/issues"
               className="text-mist-600 hover:text-mist-700 dark:text-mist-400 dark:hover:text-mist-300"
             >
               Open an issue on GitHub

@@ -32,7 +32,7 @@ export default function Header() {
         </NavbarLogo>
       }
       actions={
-        <PlainButtonLink href="https://github.com/jonnii/stackit" target="_blank" rel="noopener noreferrer">
+        <PlainButtonLink href="https://github.com/getstackit/stackit" target="_blank" rel="noopener noreferrer">
           <GitHubIcon />
           View on GitHub
         </PlainButtonLink>

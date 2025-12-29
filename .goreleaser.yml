@@ -55,11 +55,11 @@ changelog:
 
 brews:
   - repository:
-      owner: jonnii
+      owner: getstackit
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/jonnii/stackit"
+    homepage: "https://github.com/getstackit/stackit"
     description: "Command-line tool for managing stacked changes in Git"
     license: "MIT"
     test: |

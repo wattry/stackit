@@ -19,7 +19,7 @@ export default function Installation() {
             </div>
             <Text className="mb-4">Clone the repository and build using Go or Just:</Text>
             <pre className="rounded border border-mist-200 bg-mist-50 p-4 text-sm dark:border-mist-800 dark:bg-mist-900"><code>{`# Using Go
-git clone https://github.com/jonnii/stackit.git
+git clone https://github.com/getstackit/stackit.git
 cd stackit
 go build -o stackit ./cmd/stackit
 
@@ -43,7 +43,7 @@ just build`}</code></pre>
             </div>
             <Text className="mb-4">Download pre-built binaries from GitHub releases:</Text>
             <pre className="rounded border border-mist-200 bg-mist-50 p-4 text-sm dark:border-mist-800 dark:bg-mist-900"><code>{`# Download for your platform
-curl -L https://github.com/jonnii/stackit/releases/latest/download/stackit-[platform] -o stackit
+curl -L https://github.com/getstackit/stackit/releases/latest/download/stackit-[platform] -o stackit
 chmod +x stackit`}</code></pre>
           </div>
         </div>
