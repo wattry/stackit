@@ -95,9 +95,12 @@ func RestackBranches(ctx context.Context, branches []engine.Branch, eng Restacke
 			// This should not happen since conflicts are handled at the batch level
 			return fmt.Errorf("unexpected conflict in batch result for branch %s", branchName)
 		case engine.RestackUnneeded:
-			if branch.IsTrunk() {
+			switch {
+			case branch.IsLocked():
+				splog.Info("Did not restack branch %s because it is locked.", style.ColorBranchName(branchName, branchName == currentBranchName))
+			case branch.IsTrunk():
 				splog.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
-			} else {
+			default:
 				parent := branch.GetParent()
 				parentName := ""
 				if parent == nil {

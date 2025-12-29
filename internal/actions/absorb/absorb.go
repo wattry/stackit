@@ -154,6 +154,13 @@ func Action(ctx *runtime.Context, opts Options) error {
 		hunksByBranch[branchName][target.CommitSHA] = append(hunksByBranch[branchName][target.CommitSHA], target.Hunk)
 	}
 
+	// Check if any target branches are locked
+	for branchName := range hunksByBranch {
+		if eng.GetBranch(branchName).IsLocked() {
+			return fmt.Errorf("cannot absorb into locked branch %s", style.ColorBranchName(branchName, branchName == currentBranch.GetName()))
+		}
+	}
+
 	if len(hunksByBranch) == 0 {
 		if len(unabsorbedHunks) > 0 {
 			splog.Warn("The following hunks could not be absorbed (they commute with all commits):")

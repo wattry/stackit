@@ -30,6 +30,11 @@ func RenameAction(ctx *runtime.Context, opts RenameOptions) error {
 		return fmt.Errorf("cannot rename trunk branch %s", currentBranch)
 	}
 
+	branch := eng.GetBranch(currentBranch)
+	if branch.IsLocked() {
+		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", style.ColorBranchName(currentBranch, true))
+	}
+
 	newName := opts.NewName
 	if newName == "" {
 		if !utils.IsInteractive() {
@@ -62,7 +67,6 @@ func RenameAction(ctx *runtime.Context, opts RenameOptions) error {
 		}
 	}
 
-	branch := eng.GetBranch(currentBranch)
 	prInfo, _ := branch.GetPrInfo()
 
 	if prInfo != nil && prInfo.Number() != nil {
