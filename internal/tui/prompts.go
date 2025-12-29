@@ -471,7 +471,7 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 	// Add annotations for all branches
 	annotations := make(map[string]tree.BranchAnnotation)
 	for _, branch := range branches {
-		scopeStr := eng.GetScopeInternal(branch.GetName())
+		scopeStr := eng.GetScope(branch)
 		if !scopeStr.IsEmpty() {
 			annotations[branch.GetName()] = tree.BranchAnnotation{
 				Scope: scopeStr.String(),
@@ -525,7 +525,7 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 		coloredBranchName += renderer.FormatAnnotationColored(annotation)
 
 		// Add restack indicator if needed
-		if !eng.IsBranchUpToDateInternal(branch.GetName()) {
+		if !eng.IsUpToDate(branch) {
 			coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
 		}
 

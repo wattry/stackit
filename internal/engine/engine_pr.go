@@ -133,7 +133,7 @@ func (e *engineImpl) prTitleNeedsUpdate(branch Branch, prInfo *PrInfo) bool {
 		return false
 	}
 
-	scope := e.GetScopeInternal(branch.GetName())
+	scope := e.GetScope(branch)
 	updatedTitle := prInfo.Title()
 
 	if !scope.IsEmpty() {

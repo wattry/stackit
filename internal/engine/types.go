@@ -133,22 +133,22 @@ func (b Branch) Equal(other Branch) bool {
 
 // IsTrunk checks if this branch is the trunk
 func (b Branch) IsTrunk() bool {
-	return b.Reader.IsTrunkInternal(b.name)
+	return b.Reader.IsTrunk(b)
 }
 
 // IsTracked checks if this branch is tracked (has metadata)
 func (b Branch) IsTracked() bool {
-	return b.Reader.IsBranchTrackedInternal(b.name)
+	return b.Reader.IsTracked(b)
 }
 
 // GetScope returns the scope for this branch, inheriting from parent if not set
 func (b Branch) GetScope() Scope {
-	return b.Reader.GetScopeInternal(b.name)
+	return b.Reader.GetScope(b)
 }
 
 // GetChildren returns the children branches
 func (b Branch) GetChildren() []Branch {
-	return b.Reader.GetChildrenInternal(b.name)
+	return b.Reader.GetChildren(b)
 }
 
 // GetParentPrecondition returns the parent branch name, or trunk if no parent
@@ -164,42 +164,42 @@ func (b Branch) GetParentPrecondition() string {
 // IsBranchUpToDate checks if this branch is up to date with its parent
 // A branch is up to date if its parent revision matches the stored parent revision
 func (b Branch) IsBranchUpToDate() bool {
-	return b.Reader.IsBranchUpToDateInternal(b.name)
+	return b.Reader.IsUpToDate(b)
 }
 
 // GetRelativeStack returns the stack relative to this branch
 func (b Branch) GetRelativeStack(scope StackRange) []Branch {
-	return b.Reader.GetRelativeStackInternal(b.name, scope)
+	return b.Reader.GetRelativeStack(b, scope)
 }
 
 // GetCommitDate returns the commit date for this branch
 func (b Branch) GetCommitDate() (time.Time, error) {
-	return b.Reader.GetCommitDateInternal(b.name)
+	return b.Reader.GetCommitDate(b)
 }
 
 // GetCommitAuthor returns the commit author for this branch
 func (b Branch) GetCommitAuthor() (string, error) {
-	return b.Reader.GetCommitAuthorInternal(b.name)
+	return b.Reader.GetCommitAuthor(b)
 }
 
 // GetRevision returns the SHA of this branch
 func (b Branch) GetRevision() (string, error) {
-	return b.Reader.GetRevisionInternal(b.name)
+	return b.Reader.GetRevision(b)
 }
 
 // GetCommitCount returns the number of commits for this branch
 func (b Branch) GetCommitCount() (int, error) {
-	return b.Reader.GetCommitCountInternal(b.name)
+	return b.Reader.GetCommitCount(b)
 }
 
 // GetDiffStats returns the number of lines added and deleted for this branch
 func (b Branch) GetDiffStats() (added int, deleted int, err error) {
-	return b.Reader.GetDiffStatsInternal(b.name)
+	return b.Reader.GetDiffStats(b)
 }
 
 // GetAllCommits returns commits for this branch in various formats
 func (b Branch) GetAllCommits(format CommitFormat) ([]string, error) {
-	return b.Reader.GetAllCommitsInternal(b.name, format)
+	return b.Reader.GetAllCommits(b, format)
 }
 
 // PrInfo represents PR information for a branch

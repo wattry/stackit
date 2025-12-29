@@ -20,7 +20,7 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	var tree strings.Builder
 
 	// Add scope if present
-	scope := eng.GetScopeInternal(branch)
+	scope := eng.GetScope(eng.GetBranch(branch))
 	if !scope.IsEmpty() {
 		tree.WriteString(fmt.Sprintf("**Scope**: %s\n\n", scope.String()))
 	}

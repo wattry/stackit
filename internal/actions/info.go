@@ -36,7 +36,7 @@ func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
 	branch := eng.GetBranch(branchName)
 
 	if !branch.IsTracked() && !branch.IsTrunk() {
-		_, err := eng.GetRevisionInternal(branchName)
+		_, err := eng.GetRevision(branch)
 		if err != nil {
 			return fmt.Errorf("branch %s does not exist", branchName)
 		}

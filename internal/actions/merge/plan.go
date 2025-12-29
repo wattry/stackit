@@ -135,7 +135,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 		// Collect all branches with the specified scope
 		scopeBranches := []engine.Branch{}
 		for _, b := range eng.AllBranches() {
-			if !b.IsTrunk() && eng.GetScopeInternal(b.GetName()).String() == opts.Scope {
+			if !b.IsTrunk() && eng.GetScope(b).String() == opts.Scope {
 				scopeBranches = append(scopeBranches, b)
 			}
 		}
@@ -296,7 +296,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 	if opts.Scope != "" {
 		// In scope mode, find all tracked branches with the scope that are not being merged
 		for _, branch := range eng.AllBranches() {
-			if branch.IsTracked() && eng.GetScopeInternal(branch.GetName()).String() == opts.Scope {
+			if branch.IsTracked() && eng.GetScope(branch).String() == opts.Scope {
 				// Check if this branch is not already being merged
 				isBeingMerged := false
 				for _, merged := range allBranches {

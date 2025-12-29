@@ -35,9 +35,9 @@ func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
 			}
 			return parent.GetName()
 		},
-		func(branchName string) bool { return eng.IsTrunkInternal(branchName) },
+		func(branchName string) bool { return eng.IsTrunk(eng.GetBranch(branchName)) },
 		func(branchName string) bool {
-			return eng.IsBranchUpToDateInternal(branchName)
+			return eng.IsUpToDate(eng.GetBranch(branchName))
 		},
 	)
 }
