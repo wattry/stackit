@@ -136,11 +136,14 @@ This merges all approved PRs in your stack, bottom-up, and cleans up the merged 
 | `stackit delete` | Delete the current branch and its metadata |
 | `stackit rename [name]` | Rename the current branch and update metadata |
 | `stackit scope [name]` | Manage logical scope (Jira ticket, Linear ID) for current branch |
+| `stackit lock [branch]` | Lock a branch and its downstack (prevent local changes) |
+| `stackit unlock [branch]` | Unlock a branch and its upstack (allow local changes) |
 
 ### Stack Operations
 | Command | Description |
 |:---|:---|
 | `stackit restack` | Rebase all branches in the stack to ensure proper ancestry |
+| `stackit get [branch|PR]` | Sync a stack or specific PR from remote |
 | `stackit foreach` | Run a shell command on each branch in the stack (default: upstack) |
 | `stackit submit` | Push branches and create/update GitHub PRs (alias: `ss` for `--stack`) |
 | `stackit sync` | Pull trunk, delete merged branches, and restack |
@@ -198,6 +201,14 @@ To keep your stack up-to-date with `main`:
 stackit sync
 ```
 This pulls the latest changes from `main`, deletes branches that have already been merged, and restacks your remaining branches on top of the new `main`.
+
+### Collaborating on Stacks
+To work on a stack created by someone else or on another machine:
+```bash
+# Sync an entire stack by providing a PR number or branch name
+stackit get 123
+```
+By default, `get` locks the fetched branches (marking them as **frozen**) to prevent accidental local modifications while you build on top of them. Use `stackit unlock` if you need to modify them.
 
 ### Automation & CI
 Stackit is designed to be easily scriptable. Use global flags to control behavior in non-interactive environments:
