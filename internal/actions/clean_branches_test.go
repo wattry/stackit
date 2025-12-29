@@ -42,7 +42,7 @@ func TestCleanBranches(t *testing.T) {
 
 		// branch2 should have new parent (main)
 		branchparent2 := s.Engine.GetBranch("branch2")
-		parent2 := s.Engine.GetParent(branchparent2)
+		parent2 := branchparent2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "main", parent2.GetName())
 		require.Contains(t, result.BranchesWithNewParents, "branch2")
@@ -77,11 +77,11 @@ func TestCleanBranches(t *testing.T) {
 
 		// Both children should have new parent
 		branchparent2 := s.Engine.GetBranch("branch2")
-		parent2 := s.Engine.GetParent(branchparent2)
+		parent2 := branchparent2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "main", parent2.GetName())
 		branchparent3 := s.Engine.GetBranch("branch3")
-		parent3 := s.Engine.GetParent(branchparent3)
+		parent3 := branchparent3.GetParent()
 		require.NotNil(t, parent3)
 		require.Equal(t, "main", parent3.GetName())
 		require.Contains(t, result.BranchesWithNewParents, "branch2")

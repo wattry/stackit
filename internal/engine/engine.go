@@ -12,9 +12,7 @@ import (
 // PRManager provides operations for managing pull request information
 // Thread-safe: All methods are safe for concurrent use
 type PRManager interface {
-	GetPrInfo(branch Branch) (*PrInfo, error)
 	UpsertPrInfo(branch Branch, prInfo *PrInfo) error
-	GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, error)
 }
 
 // SyncManager provides operations for syncing and restacking branches

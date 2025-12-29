@@ -26,7 +26,7 @@ func UntrackAction(ctx *runtime.Context, opts UntrackOptions) error {
 	}
 
 	// Find descendants
-	descendants := eng.GetRelativeStackUpstack(branch)
+	descendants := branch.GetRelativeStackUpstack()
 
 	// If there are descendants and not forced, prompt for confirmation
 	if len(descendants) > 0 && !opts.Force {

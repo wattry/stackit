@@ -30,6 +30,11 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 	return prInfo, nil
 }
 
+// getPrInfo is an internal method for Branch type
+func (e *engineImpl) getPrInfo(branch Branch) (*PrInfo, error) {
+	return e.GetPrInfo(branch)
+}
+
 // UpsertPrInfo updates or creates PR information for a branch
 func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	e.mu.Lock()
@@ -123,6 +128,11 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 		PRNumber:    prInfo.Number(),
 		PRInfo:      prInfo,
 	}, nil
+}
+
+// getPRSubmissionStatus is an internal method for Branch type
+func (e *engineImpl) getPRSubmissionStatus(branch Branch) (PRSubmissionStatus, error) {
+	return e.GetPRSubmissionStatus(branch)
 }
 
 var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)

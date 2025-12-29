@@ -88,7 +88,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 
 	// Get all commits downstack from current branch
 	// We need commits from all branches downstack, not just current branch
-	downstackBranches := eng.GetRelativeStackDownstack(*currentBranch)
+	downstackBranches := currentBranch.GetRelativeStackDownstack()
 	// Include current branch
 	downstackBranches = append([]engine.Branch{*currentBranch}, downstackBranches...)
 
@@ -257,7 +257,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	// Restack all branches above the oldest modified branch
 	if oldestModifiedBranch != "" {
 		branch := eng.GetBranch(oldestModifiedBranch)
-		upstackBranches := eng.GetRelativeStackUpstack(branch)
+		upstackBranches := branch.GetRelativeStackUpstack()
 
 		if len(upstackBranches) > 0 {
 			if err := actions.RestackBranches(ctx.Context, upstackBranches, eng, splog, ctx.RepoRoot); err != nil {

@@ -107,6 +107,11 @@ func (e *engineImpl) GetParent(branch Branch) *Branch {
 	return nil
 }
 
+// getParent is an internal method for Branch type
+func (e *engineImpl) getParent(branch Branch) *Branch {
+	return e.GetParent(branch) // Delegate to existing implementation for now
+}
+
 // GetChildren returns the children branches
 func (e *engineImpl) GetChildren(branch Branch) []Branch {
 	branchName := branch.GetName()
@@ -240,6 +245,11 @@ func (e *engineImpl) GetExplicitScope(branch Branch) Scope {
 		return Empty()
 	}
 	return NewScope(scopeStr)
+}
+
+// getExplicitScope is an internal method for Branch type
+func (e *engineImpl) getExplicitScope(branch Branch) Scope {
+	return e.GetExplicitScope(branch)
 }
 
 // GetExplicitScopeInternal is deprecated - use GetExplicitScope instead
@@ -651,6 +661,11 @@ func (e *engineImpl) GetRelativeStackUpstack(branch Branch) []Branch {
 	return e.getRelativeStackUpstackInternal(branch.GetName())
 }
 
+// getRelativeStackUpstack is an internal method for Branch type
+func (e *engineImpl) getRelativeStackUpstack(branch Branch) []Branch {
+	return e.GetRelativeStackUpstack(branch)
+}
+
 // GetRelativeStackDownstack returns all branches in the downstack (ancestors)
 func (e *engineImpl) GetRelativeStackDownstack(branch Branch) []Branch {
 	rng := StackRange{
@@ -661,6 +676,11 @@ func (e *engineImpl) GetRelativeStackDownstack(branch Branch) []Branch {
 	return e.GetRelativeStack(branch, rng)
 }
 
+// getRelativeStackDownstack is an internal method for Branch type
+func (e *engineImpl) getRelativeStackDownstack(branch Branch) []Branch {
+	return e.GetRelativeStackDownstack(branch)
+}
+
 // GetFullStack returns the entire stack containing the branch
 func (e *engineImpl) GetFullStack(branch Branch) []Branch {
 	rng := StackRange{
@@ -669,6 +689,11 @@ func (e *engineImpl) GetFullStack(branch Branch) []Branch {
 		RecursiveChildren: true,
 	}
 	return e.GetRelativeStack(branch, rng)
+}
+
+// getFullStack is an internal method for Branch type
+func (e *engineImpl) getFullStack(branch Branch) []Branch {
+	return e.GetFullStack(branch)
 }
 
 // SortBranchesTopologically sorts branches so parents come before children.

@@ -63,7 +63,7 @@ func RenameAction(ctx *runtime.Context, opts RenameOptions) error {
 	}
 
 	branch := eng.GetBranch(currentBranch)
-	prInfo, _ := eng.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 
 	if prInfo != nil && prInfo.Number() != nil {
 		if !opts.Force {

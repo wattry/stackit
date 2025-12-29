@@ -21,11 +21,11 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify initial state
 		branchparent2Initial := s.Engine.GetBranch("branch2")
-		parent2Initial := s.Engine.GetParent(branchparent2Initial)
+		parent2Initial := branchparent2Initial.GetParent()
 		require.NotNil(t, parent2Initial)
 		require.Equal(t, "branch1", parent2Initial.GetName())
 		branchparent3Initial := s.Engine.GetBranch("branch3")
-		parent3Initial := s.Engine.GetParent(branchparent3Initial)
+		parent3Initial := branchparent3Initial.GetParent()
 		require.NotNil(t, parent3Initial)
 		require.Equal(t, "branch2", parent3Initial.GetName())
 
@@ -38,7 +38,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify new parent relationship
 		branchparent2After := s.Engine.GetBranch("branch2")
-		parent2After := s.Engine.GetParent(branchparent2After)
+		parent2After := branchparent2After.GetParent()
 		require.NotNil(t, parent2After)
 		require.Equal(t, "main", parent2After.GetName())
 		mainBranch := s.Engine.GetBranch("main")
@@ -58,7 +58,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify branch3 still has branch2 as parent (descendant relationship preserved)
 		branchparent3After := s.Engine.GetBranch("branch3")
-		parent3After := s.Engine.GetParent(branchparent3After)
+		parent3After := branchparent3After.GetParent()
 		require.NotNil(t, parent3After)
 		require.Equal(t, "branch2", parent3After.GetName())
 	})
@@ -80,7 +80,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify new parent relationship
 		branchparentA := s.Engine.GetBranch("branchA")
-		parentA := s.Engine.GetParent(branchparentA)
+		parentA := branchparentA.GetParent()
 		require.NotNil(t, parentA)
 		require.Equal(t, "branchB", parentA.GetName())
 		branchBObj := s.Engine.GetBranch("branchB")
@@ -100,7 +100,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify branchA2 still has branchA as parent (descendant relationship preserved)
 		branchparentA2 := s.Engine.GetBranch("branchA2")
-		parentA2 := s.Engine.GetParent(branchparentA2)
+		parentA2 := branchparentA2.GetParent()
 		require.NotNil(t, parentA2)
 		require.Equal(t, "branchA", parentA2.GetName())
 	})
@@ -123,7 +123,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify new parent relationship
 		branchparentA2 := s.Engine.GetBranch("branchA2")
-		parentA2 := s.Engine.GetParent(branchparentA2)
+		parentA2 := branchparentA2.GetParent()
 		require.NotNil(t, parentA2)
 		require.Equal(t, "branchB1", parentA2.GetName())
 		branchB1Obj := s.Engine.GetBranch("branchB1")
@@ -161,7 +161,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify branch2 was moved
 		branchparent2 := s.Engine.GetBranch("branch2")
-		parent2 := s.Engine.GetParent(branchparent2)
+		parent2 := branchparent2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "main", parent2.GetName())
 	})
@@ -272,7 +272,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Verify new parent relationship
 		branchparent1 := s.Engine.GetBranch("branch1")
-		parent1 := s.Engine.GetParent(branchparent1)
+		parent1 := branchparent1.GetParent()
 		require.NotNil(t, parent1)
 		require.Equal(t, "untracked", parent1.GetName())
 	})

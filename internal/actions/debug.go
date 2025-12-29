@@ -129,7 +129,7 @@ func DebugAction(ctx *runtime.Context, opts DebugOptions) error {
 			branchInfo.SHA = sha
 		}
 
-		parent := eng.GetParent(branchObj)
+		parent := branchObj.GetParent()
 		if parent != nil {
 			branchInfo.Parent = parent.GetName()
 		}
@@ -149,7 +149,7 @@ func DebugAction(ctx *runtime.Context, opts DebugOptions) error {
 			}
 
 			branch := eng.GetBranch(branchName)
-			prInfo, err := eng.GetPrInfo(branch)
+			prInfo, err := branch.GetPrInfo()
 			if err == nil && prInfo != nil {
 				branchInfo.PRInfo = prInfo
 			}

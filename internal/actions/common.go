@@ -80,7 +80,7 @@ func RestackBranches(ctx context.Context, branches []engine.Branch, eng Restacke
 
 		switch result.Result {
 		case engine.RestackDone:
-			parent := eng.GetParent(branch)
+			parent := branch.GetParent()
 			parentName := ""
 			if parent == nil {
 				parentName = eng.Trunk().GetName()
@@ -98,7 +98,7 @@ func RestackBranches(ctx context.Context, branches []engine.Branch, eng Restacke
 			if branch.IsTrunk() {
 				splog.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
 			} else {
-				parent := eng.GetParent(branch)
+				parent := branch.GetParent()
 				parentName := ""
 				if parent == nil {
 					parentName = eng.Trunk().GetName()

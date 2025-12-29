@@ -14,12 +14,8 @@ type StackNavigator interface {
 	CurrentBranch() *Branch
 	Trunk() Branch
 	GetBranch(branchName string) Branch
-	GetParent(branch Branch) *Branch
 	GetChildren(branch Branch) []Branch
-	GetFullStack(branch Branch) []Branch
 	GetRelativeStack(branch Branch, rng StackRange) []Branch
-	GetRelativeStackUpstack(branch Branch) []Branch
-	GetRelativeStackDownstack(branch Branch) []Branch
 	BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, int]
 	SortBranchesTopologically(branches []Branch) []Branch
 	FindBranchForCommit(commitSHA string) (string, error)
@@ -34,7 +30,6 @@ type BranchStatus interface {
 	IsBranchEmpty(ctx context.Context, branchName string) (bool, error)
 	GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error)
 	GetScope(branch Branch) Scope
-	GetExplicitScope(branch Branch) Scope
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string
 	GetBranchRemoteDifference(branchName string) (string, error)
