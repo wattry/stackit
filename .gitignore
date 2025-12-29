@@ -25,8 +25,5 @@ Thumbs.db
 stackit
 st
 
-# Website server binary
-website/server
-website/tmp/
 .gocache/
 st-tui

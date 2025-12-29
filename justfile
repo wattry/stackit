@@ -13,8 +13,6 @@ deps:
 	@echo "📦 Downloading main dependencies..."
 	go mod download
 	go mod tidy
-	@echo "📦 Downloading website dependencies..."
-	cd website && npm install
 
 # Install development tools (gotestsum, golangci-lint, goimports)
 install-tools:
@@ -164,49 +162,3 @@ init:
 	fi
 	./stackit init
 
-# Build the website for production
-website-build:
-	cd website && npm run build
-
-# Run the website production server
-website-run: website-build
-	cd website && npx serve@latest out
-
-# Run the website in development mode with hot reload
-website-dev:
-	cd website && npm run dev
-
-# Clean website build artifacts
-website-clean:
-	cd website && rm -rf .next out node_modules/.cache
-
-# Test website build (lint and type check)
-website-test:
-	cd website && npm run build
-
-# Lint website code
-website-lint:
-	cd website && npm run lint
-
-# Format website code
-website-format:
-	cd website && npm run lint -- --fix
-
-# Install website dependencies
-website-install:
-	cd website && npm install
-
-# Export website static files for deployment
-website-export: website-build
-	@echo "Static files exported to website/out directory"# Show website help
-website-help:
-	@echo "Website commands:"
-	@echo "  website-build     - Build the website for production"
-	@echo "  website-run       - Build and run the production server"
-	@echo "  website-dev       - Run development server with hot reload"
-	@echo "  website-clean     - Remove build artifacts"
-	@echo "  website-test      - Test the build (lint and type check)"
-	@echo "  website-lint      - Lint code"
-	@echo "  website-format    - Format code"
-	@echo "  website-install   - Install dependencies"
-	@echo "  website-export    - Export static files for deployment"
