@@ -29,15 +29,15 @@ func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
 		},
 		func(branchName string) string {
 			branch := eng.GetBranch(branchName)
-			parent := eng.GetParent(branch)
+			parent := branch.GetParent()
 			if parent == nil {
 				return ""
 			}
 			return parent.GetName()
 		},
-		func(branchName string) bool { return eng.IsTrunkInternal(branchName) },
+		func(branchName string) bool { return eng.IsTrunk(eng.GetBranch(branchName)) },
 		func(branchName string) bool {
-			return eng.IsBranchUpToDateInternal(branchName)
+			return eng.IsUpToDate(eng.GetBranch(branchName))
 		},
 	)
 }

@@ -39,7 +39,7 @@ func ContinueAction(ctx *runtime.Context, opts ContinueOptions) error {
 		if currentBranch == nil {
 			return fmt.Errorf("not on a branch")
 		}
-		parent := eng.GetParent(*currentBranch)
+		parent := currentBranch.GetParent()
 		parentName := ""
 		if parent == nil {
 			parentName = eng.Trunk().GetName()

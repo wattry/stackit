@@ -30,6 +30,11 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 	return prInfo, nil
 }
 
+// getPrInfo is an internal method for Branch type
+func (e *engineImpl) getPrInfo(branch Branch) (*PrInfo, error) {
+	return e.GetPrInfo(branch)
+}
+
 // UpsertPrInfo updates or creates PR information for a branch
 func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	e.mu.Lock()
@@ -125,6 +130,11 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	}, nil
 }
 
+// getPRSubmissionStatus is an internal method for Branch type
+func (e *engineImpl) getPRSubmissionStatus(branch Branch) (PRSubmissionStatus, error) {
+	return e.GetPRSubmissionStatus(branch)
+}
+
 var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
 
 // prTitleNeedsUpdate checks if the PR title needs to be updated due to scope changes
@@ -133,7 +143,7 @@ func (e *engineImpl) prTitleNeedsUpdate(branch Branch, prInfo *PrInfo) bool {
 		return false
 	}
 
-	scope := e.GetScopeInternal(branch.GetName())
+	scope := e.GetScope(branch)
 	updatedTitle := prInfo.Title()
 
 	if !scope.IsEmpty() {

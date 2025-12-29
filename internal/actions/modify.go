@@ -121,7 +121,7 @@ func ModifyAction(ctx *runtime.Context, opts ModifyOptions) error {
 	}
 
 	// Restack upstack branches
-	upstackBranches := eng.GetRelativeStackUpstack(currentBranchObj)
+	upstackBranches := currentBranchObj.GetRelativeStackUpstack()
 
 	if len(upstackBranches) > 0 {
 		splog.Info("Restacking %d upstack branch(es)...", len(upstackBranches))
@@ -142,7 +142,7 @@ func interactiveRebaseAction(ctx *runtime.Context, _ ModifyOptions) error {
 	currentBranch := eng.CurrentBranch()
 
 	// Get the parent branch to determine rebase base
-	parent := eng.GetParent(*currentBranch)
+	parent := currentBranch.GetParent()
 	parentName := ""
 	if parent == nil {
 		parentName = eng.Trunk().GetName()
@@ -167,7 +167,7 @@ func interactiveRebaseAction(ctx *runtime.Context, _ ModifyOptions) error {
 	splog.Info("Interactive rebase completed.")
 
 	// Restack upstack branches
-	upstackBranches := eng.GetRelativeStackUpstack(*currentBranch)
+	upstackBranches := currentBranch.GetRelativeStackUpstack()
 
 	if len(upstackBranches) > 0 {
 		splog.Info("Restacking %d upstack branch(es)...", len(upstackBranches))

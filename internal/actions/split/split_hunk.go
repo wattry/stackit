@@ -49,7 +49,7 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 	// Show instructions
 	splog.Info("Splitting %s into multiple single-commit branches.", style.ColorBranchName(branchToSplit.GetName(), true))
 	branch := eng.GetBranch(branchToSplit.GetName())
-	prInfo, _ := eng.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 	if prInfo != nil && prInfo.Number() != nil {
 		splog.Info("If any of the new branches keeps the name %s, it will be linked to PR #%d.",
 			style.ColorBranchName(branchToSplit.GetName(), true), *prInfo.Number())

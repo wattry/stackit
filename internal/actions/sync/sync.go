@@ -54,7 +54,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	// Add branches with new parents to restack list
 	for _, branchName := range cleanResult.BranchesWithNewParents {
 		branch := eng.GetBranch(branchName)
-		upstack := eng.GetRelativeStackUpstack(branch)
+		upstack := branch.GetRelativeStackUpstack()
 		for _, b := range upstack {
 			branchesToRestack = append(branchesToRestack, b.GetName())
 		}

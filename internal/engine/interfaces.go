@@ -8,121 +8,155 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-// BranchReader defines the interface that Branch needs from its reader
-// This is implemented by types in the engine package
-type BranchReader interface {
-	// State queries
-	AllBranches() []Branch              // Returns all branches
-	CurrentBranch() *Branch             // Returns current branch (nil if not on a branch)
-	Trunk() Branch                      // Returns the trunk branch
-	GetBranch(branchName string) Branch // Returns a Branch wrapper
-	GetParent(branch Branch) *Branch    // Returns nil if no parent
+// StackNavigator handles stack relationship queries
+type StackNavigator interface {
+	AllBranches() []Branch
+	CurrentBranch() *Branch
+	Trunk() Branch
+	GetBranch(branchName string) Branch
+	GetChildren(branch Branch) []Branch
 	GetRelativeStack(branch Branch, rng StackRange) []Branch
-
-	// Stack queries
-	GetRelativeStackUpstack(branch Branch) []Branch
-	GetRelativeStackDownstack(branch Branch) []Branch
-	GetFullStack(branch Branch) []Branch
+	BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, int]
 	SortBranchesTopologically(branches []Branch) []Branch
+	FindBranchForCommit(commitSHA string) (string, error)
+}
+
+// BranchStatus provides branch state information
+type BranchStatus interface {
+	IsTrunk(branch Branch) bool
+	IsTracked(branch Branch) bool
+	IsUpToDate(branch Branch) bool
 	IsMergedIntoTrunk(ctx context.Context, branchName string) (bool, error)
 	IsBranchEmpty(ctx context.Context, branchName string) (bool, error)
-
-	// Internal methods used by Branch type (exported so implementations outside this package can provide them)
-	IsTrunkInternal(branchName string) bool
-	IsBranchTrackedInternal(branchName string) bool
-	IsBranchUpToDateInternal(branchName string) bool                                // Internal method for Branch type
-	GetScopeInternal(branchName string) Scope                                       // Internal method for Branch type
-	GetExplicitScopeInternal(branchName string) Scope                               // Internal method for Branch type
-	GetChildrenInternal(branchName string) []Branch                                 // Internal method for Branch type
-	GetCommitDateInternal(branchName string) (time.Time, error)                     // Internal method for Branch type
-	GetCommitAuthorInternal(branchName string) (string, error)                      // Internal method for Branch type
-	GetRevisionInternal(branchName string) (string, error)                          // Internal method for Branch type
-	GetCommitCountInternal(branchName string) (int, error)                          // Internal method for Branch type
-	GetDiffStatsInternal(branchName string) (added int, deleted int, err error)     // Internal method for Branch type
-	GetAllCommitsInternal(branchName string, format CommitFormat) ([]string, error) // Internal method for Branch type
-	GetRelativeStackInternal(branchName string, rng StackRange) []Branch            // Internal method for Branch type
-
-	// Commit information
-	FindBranchForCommit(commitSHA string) (string, error)
-
-	// Traversal
-	BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, int]
-
-	// Status queries
 	GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error)
+	GetScope(branch Branch) Scope
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
-	ListMetadataRefs() (map[string]string, error)
-	BatchReadMetadataRefs(branchNames []string) (map[string]*Meta, map[string]error)
-	ReadMetadataRef(branchName string) (*Meta, error)
 	GetRemote() string
 	GetBranchRemoteDifference(branchName string) (string, error)
+}
 
-	// Low-level Git state queries
-	HasStagedChanges(ctx context.Context) (bool, error)
-	HasUnstagedChanges(ctx context.Context) (bool, error)
-	GetMergeBase(rev1, rev2 string) (string, error)
-	GetChangedFiles(ctx context.Context, base, head string) ([]string, error)
-	ParseStagedHunks(ctx context.Context) ([]git.Hunk, error)
-	ShowDiff(ctx context.Context, left, right string, stat bool) (string, error)
-	ShowCommits(ctx context.Context, base, head string, patch, stat bool) (string, error)
-	GetUnmergedFiles(ctx context.Context) ([]string, error)
+// BranchInfo provides commit and diff metadata
+type BranchInfo interface {
+	GetCommitDate(branch Branch) (time.Time, error)
+	GetCommitAuthor(branch Branch) (string, error)
+	GetRevision(branch Branch) (string, error)
+	GetCommitCount(branch Branch) (int, error)
+	GetDiffStats(branch Branch) (added int, deleted int, err error)
+	GetAllCommits(branch Branch, format CommitFormat) ([]string, error)
 	GetParentCommitSHA(commitSHA string) (string, error)
 	GetCommitSHA(branchName string, offset int) (string, error)
-	IsAncestor(ancestor, descendant string) (bool, error)
+}
 
-	// Worktree operations
+// MetadataStore handles ref-based metadata operations
+type MetadataStore interface {
+	ListMetadataRefs() (map[string]string, error)
+	ReadMetadataRef(branchName string) (*Meta, error)
+	BatchReadMetadataRefs(branchNames []string) (map[string]*Meta, map[string]error)
+	WriteMetadataRef(branch Branch, meta *Meta) error
+	DeleteMetadataRef(branch Branch) error
+	RenameMetadataRef(oldBranch, newBranch Branch) error
+}
+
+// GitDiffer handles diff and merge operations
+type GitDiffer interface {
+	GetMergeBase(rev1, rev2 string) (string, error)
+	GetChangedFiles(ctx context.Context, base, head string) ([]string, error)
+	ShowDiff(ctx context.Context, left, right string, stat bool) (string, error)
+	ShowCommits(ctx context.Context, base, head string, patch, stat bool) (string, error)
+	IsAncestor(ancestor, descendant string) (bool, error)
+}
+
+// WorkingTree handles worktree and staging area operations
+type WorkingTree interface {
+	HasStagedChanges(ctx context.Context) (bool, error)
+	HasUnstagedChanges(ctx context.Context) (bool, error)
+	GetPendingChanges(ctx context.Context) ([]PendingChange, error)
+	GetUnmergedFiles(ctx context.Context) ([]string, error)
+	ParseStagedHunks(ctx context.Context) ([]git.Hunk, error)
 	ListWorktrees(ctx context.Context) ([]string, error)
 	GetWorkingDir() string
+}
 
-	// Status information
-	GetPendingChanges(ctx context.Context) ([]PendingChange, error)
-
-	// Git read operations
+// GitRunner provides low-level git command execution
+type GitRunner interface {
 	RunGitCommandWithContext(ctx context.Context, args ...string) (string, error)
 	RunGitCommandRawWithContext(ctx context.Context, args ...string) (string, error)
 }
 
-// BranchWriter provides write operations for branch management
-type BranchWriter interface {
-	// Branch tracking
+// BranchReader is a composite interface for backward compatibility
+// Prefer using the smaller, focused interfaces above for new code
+type BranchReader interface {
+	StackNavigator
+	BranchStatus
+	BranchInfo
+	MetadataStore
+	GitDiffer
+	WorkingTree
+	GitRunner
+}
+
+// BranchTracking handles branch tracking operations
+type BranchTracking interface {
 	TrackBranch(ctx context.Context, branchName string, parentBranchName string) error
 	UntrackBranch(branchName string) error
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
+}
+
+// BranchMutations handles branch lifecycle operations
+type BranchMutations interface {
 	RenameBranch(ctx context.Context, oldBranch, newBranch Branch) error
 	DeleteBranch(ctx context.Context, branch Branch) error
 	DeleteBranches(ctx context.Context, branches []Branch) ([]string, error)
-	DeleteMetadataRef(branch Branch) error
-	RenameMetadataRef(oldBranch, newBranch Branch) error
-	WriteMetadataRef(branch Branch, meta *Meta) error
-
-	// Checkout operations
 	CheckoutBranch(ctx context.Context, branch Branch) error
 	CreateAndCheckoutBranch(ctx context.Context, branch Branch) error
+}
 
-	// Git write operations
+// CommitOperations handles staging and committing
+type CommitOperations interface {
 	Commit(ctx context.Context, message string, verbose int, noVerify bool) error
 	StageAll(ctx context.Context) error
 	StashPush(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
+}
 
-	// Worktree operations
+// WorktreeOperations handles worktree management
+type WorktreeOperations interface {
 	AddWorktree(ctx context.Context, path string, branch string, detach bool) error
 	RemoveWorktree(ctx context.Context, path string) error
 	SetWorkingDir(dir string)
+}
 
-	// Git low-level write operations
+// GitCommandRunner provides low-level git command execution
+type GitCommandRunner interface {
 	RunGitCommand(args ...string) (string, error)
 	RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error)
+}
 
-	// Initialization operations
+// Initializer handles repository initialization operations
+type Initializer interface {
 	Reset(newTrunkName string) error
 	Rebuild(newTrunkName string) error
 }
 
-// AbsorbManager defines the interface for the absorb operation.
-type AbsorbManager interface {
+// BranchWriter is a composite interface for backward compatibility
+// Prefer using the smaller, focused interfaces above for new code
+type BranchWriter interface {
+	BranchTracking
+	BranchMutations
+	MetadataStore
+	CommitOperations
+	WorktreeOperations
+	GitCommandRunner
+	Initializer
+}
+
+// Absorber applies staged hunks to appropriate commits
+type Absorber interface {
 	ApplyHunksToBranch(ctx context.Context, branch Branch, hunksByCommit map[string][]git.Hunk) error
 	FindTargetCommitForHunk(hunk git.Hunk, commitSHAs []string) (string, int, error)
 }
+
+// AbsorbManager is deprecated. Use Absorber instead.
+type AbsorbManager = Absorber

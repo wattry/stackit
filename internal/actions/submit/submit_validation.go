@@ -131,7 +131,7 @@ func validateNoMergedOrClosedBranches(branches []string, eng engine.Engine, runt
 	mergedOrClosedBranches := []string{}
 	for _, branchName := range branches {
 		branch := eng.GetBranch(branchName)
-		prInfo, err := eng.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil {
 			continue
 		}

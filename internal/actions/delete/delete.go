@@ -49,12 +49,12 @@ func Action(ctx *runtime.Context, opts Options) error {
 	toDelete := []engine.Branch{branch}
 
 	if opts.Upstack {
-		upstack := eng.GetRelativeStackUpstack(branch)
+		upstack := branch.GetRelativeStackUpstack()
 		toDelete = append(toDelete, upstack...)
 	}
 
 	if opts.Downstack {
-		downstack := eng.GetRelativeStackDownstack(branch)
+		downstack := branch.GetRelativeStackDownstack()
 		toDelete = append(downstack, toDelete...)
 	}
 

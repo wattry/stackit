@@ -93,7 +93,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 func (c *ConsolidateMergeExecutor) preValidateStack(ctx context.Context, force bool) error {
 	for _, branchInfo := range c.plan.BranchesToMerge {
 		branch := c.engine.GetBranch(branchInfo.BranchName)
-		prInfo, err := c.engine.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil || prInfo == nil || prInfo.Number() == nil {
 			return fmt.Errorf("PR not found for branch %s", branchInfo.BranchName)
 		}
@@ -280,7 +280,7 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs(ctx context.Context) {
 
 	for _, branchInfo := range c.plan.BranchesToMerge {
 		branch := c.engine.GetBranch(branchInfo.BranchName)
-		prInfo, err := c.engine.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil || prInfo == nil || prInfo.Number() == nil {
 			continue
 		}
@@ -331,7 +331,8 @@ func (c *ConsolidateMergeExecutor) restackRemainingBranches(ctx context.Context)
 func (c *ConsolidateMergeExecutor) getStackScope() string {
 	// Get scope from the first branch in the stack
 	if len(c.plan.BranchesToMerge) > 0 {
-		scope := c.engine.GetScopeInternal(c.plan.BranchesToMerge[0].BranchName)
+		branch := c.engine.GetBranch(c.plan.BranchesToMerge[0].BranchName)
+		scope := c.engine.GetScope(branch)
 		if !scope.IsEmpty() {
 			return scope.String()
 		}
@@ -341,7 +342,7 @@ func (c *ConsolidateMergeExecutor) getStackScope() string {
 
 func (c *ConsolidateMergeExecutor) getBranchTitle(branchInfo BranchMergeInfo) string {
 	branch := c.engine.GetBranch(branchInfo.BranchName)
-	prInfo, _ := c.engine.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 	if prInfo != nil {
 		return prInfo.Title()
 	}
@@ -366,7 +367,7 @@ func (c *ConsolidateMergeExecutor) buildConsolidationPRBody() string {
 
 	for i, branchInfo := range c.plan.BranchesToMerge {
 		branch := c.engine.GetBranch(branchInfo.BranchName)
-		prInfo, _ := c.engine.GetPrInfo(branch)
+		prInfo, _ := branch.GetPrInfo()
 		if prInfo != nil && prInfo.Number() != nil {
 			body.WriteString(fmt.Sprintf("%d. **PR #%d**: %s\n", i+1, *prInfo.Number(), prInfo.Title()))
 		} else {
@@ -400,10 +401,10 @@ func (c *ConsolidateMergeExecutor) buildStackTree() string {
 	for _, branchInfo := range c.plan.BranchesToMerge {
 		branch := c.engine.GetBranch(branchInfo.BranchName)
 		depth := 0
-		parent := c.engine.GetParent(branch)
+		parent := branch.GetParent()
 		for parent != nil && !parent.IsTrunk() {
 			depth++
-			parent = c.engine.GetParent(*parent)
+			parent = parent.GetParent()
 		}
 
 		indent := strings.Repeat("  ", depth+1)

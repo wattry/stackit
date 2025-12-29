@@ -82,11 +82,11 @@ func TestCreateAction_Insert(t *testing.T) {
 		// 4. Verify metadata relationships
 		eng := s.Context.Engine
 		branchparentInserted := eng.GetBranch("inserted")
-		parentInserted := eng.GetParent(branchparentInserted)
+		parentInserted := branchparentInserted.GetParent()
 		require.NotNil(t, parentInserted)
 		require.Equal(t, "main", parentInserted.GetName())
 		branchparentChild1 := eng.GetBranch("child1")
-		parentChild1 := eng.GetParent(branchparentChild1)
+		parentChild1 := branchparentChild1.GetParent()
 		require.NotNil(t, parentChild1)
 		require.Equal(t, "inserted", parentChild1.GetName())
 
@@ -132,11 +132,11 @@ func TestCreateAction_Insert(t *testing.T) {
 		// 4. Verify relationships
 		eng := s.Context.Engine
 		branchparentInserted := eng.GetBranch("inserted")
-		parentInserted := eng.GetParent(branchparentInserted)
+		parentInserted := branchparentInserted.GetParent()
 		require.NotNil(t, parentInserted)
 		require.Equal(t, "child1", parentInserted.GetName())
 		branchparentChild2 := eng.GetBranch("child2")
-		parentChild2 := eng.GetParent(branchparentChild2)
+		parentChild2 := branchparentChild2.GetParent()
 		require.NotNil(t, parentChild2)
 		require.Equal(t, "inserted", parentChild2.GetName())
 
@@ -182,15 +182,15 @@ func TestCreateAction_Insert(t *testing.T) {
 		// 4. Verify relationships
 		eng := s.Context.Engine
 		branchparentInserted := eng.GetBranch("inserted")
-		parentInserted := eng.GetParent(branchparentInserted)
+		parentInserted := branchparentInserted.GetParent()
 		require.NotNil(t, parentInserted)
 		require.Equal(t, "main", parentInserted.GetName())
 		branchparentChild1 := eng.GetBranch("child1")
-		parentChild1 := eng.GetParent(branchparentChild1)
+		parentChild1 := branchparentChild1.GetParent()
 		require.NotNil(t, parentChild1)
 		require.Equal(t, "inserted", parentChild1.GetName())
 		branchparentChild2 := eng.GetBranch("child2")
-		parentChild2 := eng.GetParent(branchparentChild2)
+		parentChild2 := branchparentChild2.GetParent()
 		require.NotNil(t, parentChild2)
 		require.Equal(t, "inserted", parentChild2.GetName())
 
@@ -240,15 +240,15 @@ func TestCreateAction_Insert(t *testing.T) {
 		// 4. Verify relationships
 		eng := s.Context.Engine
 		branchparentInserted := eng.GetBranch("inserted")
-		parentInserted := eng.GetParent(branchparentInserted)
+		parentInserted := branchparentInserted.GetParent()
 		require.NotNil(t, parentInserted)
 		require.Equal(t, "main", parentInserted.GetName())
 		branchparentChild1 := eng.GetBranch("child1")
-		parentChild1 := eng.GetParent(branchparentChild1)
+		parentChild1 := branchparentChild1.GetParent()
 		require.NotNil(t, parentChild1)
 		require.Equal(t, "inserted", parentChild1.GetName(), "child1 should have been moved to inserted")
 		branchparentChild2 := eng.GetBranch("child2")
-		parentChild2 := eng.GetParent(branchparentChild2)
+		parentChild2 := branchparentChild2.GetParent()
 		require.NotNil(t, parentChild2)
 		require.Equal(t, "main", parentChild2.GetName(), "child2 should have remained a child of main")
 

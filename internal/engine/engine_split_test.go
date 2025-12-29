@@ -67,17 +67,17 @@ func TestApplySplitToCommits(t *testing.T) {
 
 		// Verify parent relationships using public API
 		branch1 := eng.GetBranch("branch1")
-		parent1 := eng.GetParent(branch1)
+		parent1 := branch1.GetParent()
 		require.NotNil(t, parent1)
 		require.Equal(t, "main", parent1.GetName())
 
 		branch2 := eng.GetBranch("branch2")
-		parent2 := eng.GetParent(branch2)
+		parent2 := branch2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "branch1", parent2.GetName())
 
 		feature := eng.GetBranch("feature")
-		parentFeature := eng.GetParent(feature)
+		parentFeature := feature.GetParent()
 		require.NotNil(t, parentFeature)
 		require.Equal(t, "branch2", parentFeature.GetName())
 

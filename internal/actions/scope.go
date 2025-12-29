@@ -33,8 +33,9 @@ func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
 		if isOnTrunk {
 			return fmt.Errorf("not on a branch")
 		}
-		explicitScope := eng.GetExplicitScopeInternal(currentBranch)
-		resolvedScope := eng.GetScopeInternal(currentBranch)
+		currentBranchObj := eng.GetBranch(currentBranch)
+		explicitScope := currentBranchObj.GetExplicitScope()
+		resolvedScope := eng.GetScope(currentBranchObj)
 
 		switch {
 		case !explicitScope.IsEmpty():
@@ -74,7 +75,8 @@ func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
 	}
 
 	// Update the current branch's scope
-	oldScope := eng.GetScopeInternal(currentBranch)
+	currentBranchObj := eng.GetBranch(currentBranch)
+	oldScope := eng.GetScope(currentBranchObj)
 	newScope := engine.NewScope(opts.Scope)
 	if err := eng.SetScope(eng.GetBranch(currentBranch), newScope); err != nil {
 		return fmt.Errorf("failed to set scope: %w", err)

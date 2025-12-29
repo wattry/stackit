@@ -163,7 +163,7 @@ func findTrunkForBranch(eng engine.Engine, branchName string, repoRoot string) s
 		}
 
 		// Get parent
-		parent := eng.GetParent(currentBranch)
+		parent := currentBranch.GetParent()
 		if parent == nil {
 			break
 		}

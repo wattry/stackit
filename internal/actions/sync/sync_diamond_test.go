@@ -144,7 +144,7 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 
 		// Get the current parent of branch-c
 		branchC := s.Engine.GetBranch("branch-c")
-		parentC := s.Engine.GetParent(branchC)
+		parentC := branchC.GetParent()
 
 		// CRITICAL: The bug would cause branch-c to be reparented to main!
 		// If this assertion fails, the bug exists.
@@ -360,7 +360,7 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		// VERIFICATION: branch-b should now be parented to main because it has its
 		// own commits, so the move to an ancestor on GitHub is treated as intentional.
 		branchB := s.Engine.GetBranch("branch-b")
-		parent := s.Engine.GetParent(branchB)
+		parent := branchB.GetParent()
 		require.NotNil(t, parent)
 		require.Equal(t, "main", parent.GetName(), "branch-b should be reparented to main because it has its own commits")
 	})

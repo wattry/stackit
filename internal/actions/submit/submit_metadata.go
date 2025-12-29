@@ -114,7 +114,7 @@ func GetReviewersWithPrompt(reviewersFlag string, _ *runtime.Context) ([]string,
 // PreparePRMetadata prepares PR metadata for a branch
 func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engine, ctx *runtime.Context) (*PRMetadata, error) {
 	branch := eng.GetBranch(branchName)
-	prInfo, _ := eng.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 
 	metadata := &PRMetadata{
 		Title:   getStringValue(prInfo, "Title"),
@@ -125,7 +125,7 @@ func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engin
 	shouldEditTitle := opts.EditTitle || (opts.Edit && !opts.NoEditTitle)
 	shouldEditBody := opts.EditDescription || (opts.Edit && !opts.NoEditDescription)
 
-	scope := eng.GetScopeInternal(branchName)
+	scope := eng.GetScope(branch)
 
 	if shouldEditTitle || (prInfo == nil || prInfo.Title() == "") {
 		title, err := GetPRTitle(branchName, shouldEditTitle, metadata.Title, scope.String(), eng)

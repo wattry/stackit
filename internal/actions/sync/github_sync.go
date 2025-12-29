@@ -58,7 +58,7 @@ func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string) error {
 			*branchesToRestack = append(*branchesToRestack, branchName)
 			// Also add descendants
 			branch := eng.GetBranch(branchName)
-			upstack := eng.GetRelativeStackUpstack(branch)
+			upstack := branch.GetRelativeStackUpstack()
 			for _, b := range upstack {
 				*branchesToRestack = append(*branchesToRestack, b.GetName())
 			}
@@ -94,12 +94,12 @@ func ParentsFromGitHubBase(ctx *runtime.Context) (*ParentsResult, error) {
 			continue
 		}
 
-		prInfo, err := eng.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil || prInfo == nil || prInfo.Base() == "" {
 			continue
 		}
 
-		currentParent := eng.GetParent(branch)
+		currentParent := branch.GetParent()
 		currentParentName := ""
 		if currentParent == nil {
 			currentParentName = eng.Trunk().GetName()

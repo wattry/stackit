@@ -237,7 +237,7 @@ func findFirstAffectedBranch(eng engine.Engine, originalOrder, newOrder []string
 		}
 
 		branchObj := eng.GetBranch(branch)
-		currentParent := eng.GetParent(branchObj)
+		currentParent := branchObj.GetParent()
 		currentParentName := ""
 		if currentParent == nil {
 			currentParentName = trunk

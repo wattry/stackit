@@ -101,7 +101,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	if opts.Scope != "" {
 		scopeToUse = opts.Scope
 	} else {
-		parentScope := eng.GetScopeInternal(currentBranch)
+		parentScope := eng.GetScope(eng.GetBranch(currentBranch))
 		scopeToUse = parentScope.String()
 	}
 	branch, err := determineBranch(ctx, &opts, commitMessage, scopeToUse)

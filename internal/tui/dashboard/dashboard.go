@@ -138,7 +138,7 @@ func (m *model) refresh() tea.Cmd {
 			currentName,
 			trunk,
 			func(name string) []string {
-				children := m.engine.GetChildrenInternal(name)
+				children := m.engine.GetChildren(m.engine.GetBranch(name))
 				names := make([]string, len(children))
 				for i, c := range children {
 					names[i] = c.GetName()
@@ -146,17 +146,18 @@ func (m *model) refresh() tea.Cmd {
 				return names
 			},
 			func(name string) string {
-				parent := m.engine.GetParent(m.engine.GetBranch(name))
+				branch := m.engine.GetBranch(name)
+				parent := branch.GetParent()
 				if parent == nil {
 					return ""
 				}
 				return parent.GetName()
 			},
 			func(name string) bool {
-				return m.engine.IsTrunkInternal(name)
+				return m.engine.IsTrunk(m.engine.GetBranch(name))
 			},
 			func(name string) bool {
-				return m.engine.IsBranchUpToDateInternal(name)
+				return m.engine.IsUpToDate(m.engine.GetBranch(name))
 			},
 		)
 
@@ -166,23 +167,23 @@ func (m *model) refresh() tea.Cmd {
 			ann := tree.BranchAnnotation{}
 
 			// PR Info
-			if pr, _ := m.engine.GetPrInfo(b); pr != nil {
+			if pr, _ := b.GetPrInfo(); pr != nil {
 				ann.PRNumber = pr.Number()
 				ann.PRState = pr.State()
 				ann.IsDraft = pr.IsDraft()
 			}
 
 			// Stats
-			added, deleted, _ := m.engine.GetDiffStatsInternal(b.GetName())
+			added, deleted, _ := m.engine.GetDiffStats(b)
 			ann.LinesAdded = added
 			ann.LinesDeleted = deleted
 
-			count, _ := m.engine.GetCommitCountInternal(b.GetName())
+			count, _ := m.engine.GetCommitCount(b)
 			ann.CommitCount = count
 
 			// Scope
-			ann.Scope = m.engine.GetScopeInternal(b.GetName()).String()
-			ann.ExplicitScope = m.engine.GetExplicitScopeInternal(b.GetName()).String()
+			ann.Scope = m.engine.GetScope(b).String()
+			ann.ExplicitScope = b.GetExplicitScope().String()
 
 			renderer.SetAnnotation(b.GetName(), ann)
 		}
@@ -191,7 +192,7 @@ func (m *model) refresh() tea.Cmd {
 		branches := []string{trunk}
 		var collect func(string)
 		collect = func(name string) {
-			children := m.engine.GetChildrenInternal(name)
+			children := m.engine.GetChildren(m.engine.GetBranch(name))
 			for _, child := range children {
 				branches = append(branches, child.GetName())
 				collect(child.GetName())
@@ -766,10 +767,10 @@ func (m *model) renderDetails() string {
 	sb.WriteString(labelStyle.Render("Commits:") + " " + valueStyle.Render(fmt.Sprintf("%d", ann.CommitCount)) + "\n")
 	sb.WriteString(labelStyle.Render("Changes:") + " " + style.ColorCyan(fmt.Sprintf("+%d", ann.LinesAdded)) + " " + style.ColorRed(fmt.Sprintf("-%d", ann.LinesDeleted)) + "\n")
 
-	scope := m.engine.GetScopeInternal(m.selectedBranch)
+	scope := m.engine.GetScope(b)
 	sb.WriteString(labelStyle.Render("Scope:") + " " + style.ColorScope(scope.String()) + "\n")
 
-	parent := m.engine.GetParent(b)
+	parent := b.GetParent()
 	if parent != nil {
 		sb.WriteString(labelStyle.Render("Parent:") + " " + valueStyle.Render(parent.GetName()) + "\n")
 	}
@@ -809,10 +810,11 @@ func (m *model) renderDetails() string {
 }
 
 func (m *model) getStatusString(branchName string) string {
-	if m.engine.IsTrunkInternal(branchName) {
+	branch := m.engine.GetBranch(branchName)
+	if m.engine.IsTrunk(branch) {
 		return style.ColorDim("Trunk")
 	}
-	if !m.engine.IsBranchUpToDateInternal(branchName) {
+	if !m.engine.IsUpToDate(branch) {
 		return style.ColorNeedsRestack("Needs Restack")
 	}
 	return style.ColorCyan("Up to date")

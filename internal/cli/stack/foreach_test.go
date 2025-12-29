@@ -209,4 +209,58 @@ func TestForeachCommand(t *testing.T) {
 		require.NotContains(t, string(output), "Running on branch main")
 		require.Contains(t, string(output), "Running on branch branch1")
 	})
+
+	t.Run("foreach --parallel", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			// branch1 -> branch2 -> branch3
+			for _, b := range []string{"branch1", "branch2", "branch3"} {
+				cmd := exec.Command(binaryPath, "create", b, "-m", b+" change")
+				cmd.Dir = s.Dir
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+			}
+			return s.Repo.CheckoutBranch("branch1")
+		})
+
+		// --parallel should run on all 3 branches
+		cmd := exec.Command(binaryPath, "foreach", "--parallel", "echo", "hi")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "foreach --parallel command failed: %s", string(output))
+		require.Contains(t, string(output), "Branch: branch1")
+		require.Contains(t, string(output), "Branch: branch2")
+		require.Contains(t, string(output), "Branch: branch3")
+		require.Contains(t, string(output), "hi")
+	})
+
+	t.Run("foreach --parallel --jobs", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			for _, b := range []string{"branch1", "branch2"} {
+				cmd := exec.Command(binaryPath, "create", b, "-m", b+" change")
+				cmd.Dir = s.Dir
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+			}
+			return s.Repo.CheckoutBranch("branch1")
+		})
+
+		cmd := exec.Command(binaryPath, "foreach", "--parallel", "--jobs", "1", "echo", "hi")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "foreach --parallel --jobs command failed: %s", string(output))
+		require.Contains(t, string(output), "Branch: branch1")
+		require.Contains(t, string(output), "Branch: branch2")
+	})
 }
