@@ -99,6 +99,18 @@ func (c *GitHubClient) GetPullRequestByBranch(_ context.Context, _, _, branchNam
 	return nil, nil
 }
 
+// GetPullRequest returns a simulated PR by number
+func (c *GitHubClient) GetPullRequest(_ context.Context, _, _ string, prNumber int) (*github.PullRequestInfo, error) {
+	simulateDelay(delayShort)
+
+	for _, pr := range c.prs {
+		if pr.Number == prNumber {
+			return pr, nil
+		}
+	}
+	return nil, fmt.Errorf("PR #%d not found", prNumber)
+}
+
 // MergePullRequest simulates merging a pull request
 func (c *GitHubClient) MergePullRequest(_ context.Context, branchName string) error {
 	simulateDelay(delayMedium)

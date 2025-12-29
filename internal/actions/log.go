@@ -50,6 +50,7 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 			annotation := tree.BranchAnnotation{
 				Scope:         ctx.Engine.GetScope(branchObj).String(),
 				ExplicitScope: branchObj.GetExplicitScope().String(),
+				IsLocked:      branchObj.IsLocked(),
 			}
 
 			// Local stats (always fast enough)

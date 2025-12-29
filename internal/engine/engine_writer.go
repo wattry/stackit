@@ -108,6 +108,10 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		return fmt.Errorf("cannot delete trunk branch")
 	}
 
+	if e.IsLocked(branch) {
+		return fmt.Errorf("cannot delete locked branch %s", branchName)
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -305,6 +309,37 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 		delete(e.scopeMap, branchName)
 	} else {
 		e.scopeMap[branchName] = scope.String()
+	}
+
+	return nil
+}
+
+// SetLocked updates a branch's locked status
+func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	branchName := branch.GetName()
+
+	// Read existing metadata
+	meta, err := e.readMetadataRef(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata: %w", err)
+	}
+
+	// Update locked status
+	meta.Locked = locked
+
+	// Write metadata
+	if err := e.writeMetadataRef(branchName, meta); err != nil {
+		return fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	// Update in-memory map
+	if locked {
+		e.lockedMap[branchName] = true
+	} else {
+		delete(e.lockedMap, branchName)
 	}
 
 	return nil

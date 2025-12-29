@@ -26,6 +26,10 @@ func SquashAction(ctx *runtime.Context, opts SquashOptions) error {
 		return fmt.Errorf("not on a branch")
 	}
 
+	if currentBranch.IsLocked() {
+		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", style.ColorBranchName(currentBranch.GetName(), true))
+	}
+
 	// Take snapshot before modifying the repository
 	snapshotOpts := NewSnapshot("squash",
 		WithFlagValue("-m", opts.Message),

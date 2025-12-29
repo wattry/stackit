@@ -45,6 +45,10 @@ func ModifyAction(ctx *runtime.Context, opts ModifyOptions) error {
 		return fmt.Errorf("cannot modify trunk branch %s", currentBranch)
 	}
 
+	if currentBranchObj.IsLocked() {
+		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", style.ColorBranchName(currentBranch, true))
+	}
+
 	// Handle interactive rebase separately
 	if opts.InteractiveRebase {
 		return interactiveRebaseAction(ctx, opts)

@@ -86,7 +86,9 @@ func (s *TestShell) Dir() string {
 func (s *TestShell) Run(args string) *TestShell {
 	s.t.Helper()
 	parts := splitArgs(args)
-	cmd := exec.Command(s.binaryPath, parts...)
+	// Always run with --no-interactive in tests
+	fullArgs := append([]string{"--no-interactive"}, parts...)
+	cmd := exec.Command(s.binaryPath, fullArgs...)
 	cmd.Dir = s.scene.Dir
 	output, err := cmd.CombinedOutput()
 	s.lastOutput = string(output)
@@ -98,7 +100,9 @@ func (s *TestShell) Run(args string) *TestShell {
 func (s *TestShell) RunExpectError(args string) *TestShell {
 	s.t.Helper()
 	parts := splitArgs(args)
-	cmd := exec.Command(s.binaryPath, parts...)
+	// Always run with --no-interactive in tests
+	fullArgs := append([]string{"--no-interactive"}, parts...)
+	cmd := exec.Command(s.binaryPath, fullArgs...)
 	cmd.Dir = s.scene.Dir
 	output, err := cmd.CombinedOutput()
 	s.lastOutput = string(output)

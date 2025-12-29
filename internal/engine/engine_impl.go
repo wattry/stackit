@@ -16,6 +16,7 @@ type engineImpl struct {
 	parentMap         map[string]string   // branch -> parent
 	childrenMap       map[string][]string // branch -> children
 	scopeMap          map[string]string   // branch -> scope
+	lockedMap         map[string]bool     // branch -> locked
 	remoteShas        map[string]string   // branch -> remote SHA (populated by PopulateRemoteShas)
 	maxUndoStackDepth int
 	git               git.Runner
@@ -52,6 +53,7 @@ func NewEngine(opts Options) (Engine, error) {
 		parentMap:         make(map[string]string),
 		childrenMap:       make(map[string][]string),
 		scopeMap:          make(map[string]string),
+		lockedMap:         make(map[string]bool),
 		remoteShas:        make(map[string]string),
 		maxUndoStackDepth: maxDepth,
 		git:               g,

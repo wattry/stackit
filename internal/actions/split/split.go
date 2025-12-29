@@ -48,6 +48,10 @@ func Action(ctx *runtime.Context, opts Options) error {
 		return fmt.Errorf("not on a branch")
 	}
 
+	if currentBranch.IsLocked() {
+		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", currentBranch.GetName())
+	}
+
 	// Check for uncommitted tracked changes
 	hasUnstaged, err := git.HasUnstagedChanges(context)
 	if err != nil {

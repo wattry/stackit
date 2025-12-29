@@ -54,6 +54,10 @@ func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
 
 	coloredBranchName := style.ColorBranchName(branchName, isCurrent)
 
+	if branch.IsLocked() {
+		coloredBranchName += " " + style.ColorDim("(frozen)")
+	}
+
 	if !isTrunk && !branch.IsBranchUpToDate() {
 		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
 	}

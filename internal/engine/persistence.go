@@ -6,6 +6,7 @@ type Meta struct {
 	ParentBranchRevision *string            `json:"parentBranchRevision,omitempty"`
 	PrInfo               *PrInfoPersistence `json:"prInfo,omitempty"`
 	Scope                *string            `json:"scope,omitempty"`
+	Locked               bool               `json:"locked,omitempty"`
 }
 
 // PrInfoPersistence represents PR information for persistence

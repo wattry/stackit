@@ -29,6 +29,7 @@ type BranchAnnotation struct {
 	PRAction      string // "create", "update", "skip", ""
 	CheckStatus   string // "PASSING", "FAILING", "PENDING", "NONE", ""
 	IsDraft       bool
+	IsLocked      bool
 	NeedsRestack  bool
 	CustomLabel   string // Additional text to display after branch name
 	Scope         string
@@ -525,6 +526,10 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 		parts = append(parts, "(Draft)")
 	}
 
+	if annotation.IsLocked {
+		parts = append(parts, "(frozen)")
+	}
+
 	if annotation.CustomLabel != "" {
 		parts = append(parts, annotation.CustomLabel)
 	}
@@ -585,6 +590,10 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 
 	if annotation.IsDraft {
 		parts = append(parts, style.ColorDim("(Draft)"))
+	}
+
+	if annotation.IsLocked {
+		parts = append(parts, style.ColorDim("(frozen)"))
 	}
 
 	if annotation.PRState == PRStateMerged {
