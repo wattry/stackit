@@ -48,8 +48,8 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 			defer wg.Done()
 			branchObj := ctx.Engine.GetBranch(bName)
 			annotation := tree.BranchAnnotation{
-				Scope:         ctx.Engine.GetScopeInternal(bName).String(),
-				ExplicitScope: ctx.Engine.GetExplicitScopeInternal(bName).String(),
+				Scope:         ctx.Engine.GetScope(branchObj).String(),
+				ExplicitScope: ctx.Engine.GetExplicitScope(branchObj).String(),
 			}
 
 			// Local stats (always fast enough)

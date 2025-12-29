@@ -216,7 +216,7 @@ func (e *engineImpl) getRelativeStackUpstackInternal(branchName string) []Branch
 			result = append(result, NewBranch(branch, e))
 		}
 
-		children := e.GetChildrenInternal(branch)
+		children := e.GetChildren(NewBranch(branch, e))
 		for _, child := range children {
 			collectDescendants(child.GetName())
 		}

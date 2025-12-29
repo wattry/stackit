@@ -125,7 +125,7 @@ func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engin
 	shouldEditTitle := opts.EditTitle || (opts.Edit && !opts.NoEditTitle)
 	shouldEditBody := opts.EditDescription || (opts.Edit && !opts.NoEditDescription)
 
-	scope := eng.GetScopeInternal(branchName)
+	scope := eng.GetScope(branch)
 
 	if shouldEditTitle || (prInfo == nil || prInfo.Title() == "") {
 		title, err := GetPRTitle(branchName, shouldEditTitle, metadata.Title, scope.String(), eng)

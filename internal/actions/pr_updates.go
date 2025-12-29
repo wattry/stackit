@@ -26,7 +26,7 @@ func UpdateStackPRMetadata(ctx context.Context, branches []string, eng engine.En
 				return
 			}
 
-			scope := eng.GetScopeInternal(name)
+			scope := eng.GetScope(branch)
 			updatedTitle := prInfo.Title()
 			if !scope.IsEmpty() {
 				if scopeRegex.MatchString(updatedTitle) {

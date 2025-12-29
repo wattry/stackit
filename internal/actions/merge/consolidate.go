@@ -331,7 +331,8 @@ func (c *ConsolidateMergeExecutor) restackRemainingBranches(ctx context.Context)
 func (c *ConsolidateMergeExecutor) getStackScope() string {
 	// Get scope from the first branch in the stack
 	if len(c.plan.BranchesToMerge) > 0 {
-		scope := c.engine.GetScopeInternal(c.plan.BranchesToMerge[0].BranchName)
+		branch := c.engine.GetBranch(c.plan.BranchesToMerge[0].BranchName)
+		scope := c.engine.GetScope(branch)
 		if !scope.IsEmpty() {
 			return scope.String()
 		}

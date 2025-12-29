@@ -107,8 +107,9 @@ func (e *engineImpl) GetParent(branch Branch) *Branch {
 	return nil
 }
 
-// GetChildrenInternal returns the children branches (internal method for Branch type)
-func (e *engineImpl) GetChildrenInternal(branchName string) []Branch {
+// GetChildren returns the children branches
+func (e *engineImpl) GetChildren(branch Branch) []Branch {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -120,6 +121,11 @@ func (e *engineImpl) GetChildrenInternal(branchName string) []Branch {
 		return branches
 	}
 	return []Branch{}
+}
+
+// GetChildrenInternal is deprecated - use GetChildren instead
+func (e *engineImpl) GetChildrenInternal(branchName string) []Branch {
+	return e.GetChildren(NewBranch(branchName, e))
 }
 
 // GetRelativeStack returns the stack relative to a branch
@@ -162,63 +168,41 @@ func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
 	return result
 }
 
-// GetRelativeStackInternal returns the stack relative to a branch (internal method used by Branch type)
-// Returns branches in order: ancestors (if RecursiveParents), current (if IncludeCurrent), descendants (if RecursiveChildren)
+// GetRelativeStackInternal is deprecated - GetRelativeStack already handles both Branch and internal calls
 func (e *engineImpl) GetRelativeStackInternal(branchName string, rng StackRange) []Branch {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	result := []Branch{}
-
-	// Add ancestors if RecursiveParents is true (excluding trunk)
-	if rng.RecursiveParents {
-		current := branchName
-		ancestors := []Branch{}
-		for {
-			if current == e.trunk {
-				break
-			}
-			parent, ok := e.parentMap[current]
-			if !ok || parent == e.trunk {
-				break
-			}
-			ancestors = append([]Branch{NewBranch(parent, e)}, ancestors...)
-			current = parent
-		}
-		result = append(result, ancestors...)
-	}
-
-	// Add current branch if IncludeCurrent is true
-	if rng.IncludeCurrent {
-		result = append(result, NewBranch(branchName, e))
-	}
-
-	// Add descendants if RecursiveChildren is true
-	if rng.RecursiveChildren {
-		descendants := e.getRelativeStackUpstackInternal(branchName)
-		result = append(result, descendants...)
-	}
-
-	return result
+	return e.GetRelativeStack(NewBranch(branchName, e), rng)
 }
 
-// IsTrunkInternal checks if a branch is the trunk (internal method used by Branch type)
-func (e *engineImpl) IsTrunkInternal(branchName string) bool {
+// IsTrunk checks if a branch is the trunk
+func (e *engineImpl) IsTrunk(branch Branch) bool {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return branchName == e.trunk
 }
 
-// IsBranchTrackedInternal checks if a branch is tracked (has metadata) (internal method used by Branch type)
-func (e *engineImpl) IsBranchTrackedInternal(branchName string) bool {
+// IsTrunkInternal is deprecated - use IsTrunk instead
+func (e *engineImpl) IsTrunkInternal(branchName string) bool {
+	return e.IsTrunk(NewBranch(branchName, e))
+}
+
+// IsTracked checks if a branch is tracked (has metadata)
+func (e *engineImpl) IsTracked(branch Branch) bool {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	_, ok := e.parentMap[branchName]
 	return ok
 }
 
-// GetScopeInternal returns the scope for a branch, inheriting from parent if not set (internal method used by Branch type)
-func (e *engineImpl) GetScopeInternal(branchName string) Scope {
+// IsBranchTrackedInternal is deprecated - use IsTracked instead
+func (e *engineImpl) IsBranchTrackedInternal(branchName string) bool {
+	return e.IsTracked(NewBranch(branchName, e))
+}
+
+// GetScope returns the scope for a branch, inheriting from parent if not set
+func (e *engineImpl) GetScope(branch Branch) Scope {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -240,8 +224,14 @@ func (e *engineImpl) GetScopeInternal(branchName string) Scope {
 	return Empty()
 }
 
-// GetExplicitScopeInternal returns the explicit scope set for a branch (no inheritance)
-func (e *engineImpl) GetExplicitScopeInternal(branchName string) Scope {
+// GetScopeInternal is deprecated - use GetScope instead
+func (e *engineImpl) GetScopeInternal(branchName string) Scope {
+	return e.GetScope(NewBranch(branchName, e))
+}
+
+// GetExplicitScope returns the explicit scope set for a branch (no inheritance)
+func (e *engineImpl) GetExplicitScope(branch Branch) Scope {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -252,10 +242,16 @@ func (e *engineImpl) GetExplicitScopeInternal(branchName string) Scope {
 	return NewScope(scopeStr)
 }
 
-// IsBranchUpToDateInternal checks if a branch is up to date with its parent
+// GetExplicitScopeInternal is deprecated - use GetExplicitScope instead
+func (e *engineImpl) GetExplicitScopeInternal(branchName string) Scope {
+	return e.GetExplicitScope(NewBranch(branchName, e))
+}
+
+// IsUpToDate checks if a branch is up to date with its parent
 // A branch is up to date if its parent revision matches the stored parent revision
-func (e *engineImpl) IsBranchUpToDateInternal(branchName string) bool {
-	if e.IsTrunkInternal(branchName) {
+func (e *engineImpl) IsUpToDate(branch Branch) bool {
+	branchName := branch.GetName()
+	if e.IsTrunk(branch) {
 		return true
 	}
 
@@ -287,23 +283,47 @@ func (e *engineImpl) IsBranchUpToDateInternal(branchName string) bool {
 	return *meta.ParentBranchRevision == parentRev
 }
 
-// GetCommitDateInternal returns the commit date for a branch
-func (e *engineImpl) GetCommitDateInternal(branchName string) (time.Time, error) {
+// IsBranchUpToDateInternal is deprecated - use IsUpToDate instead
+func (e *engineImpl) IsBranchUpToDateInternal(branchName string) bool {
+	return e.IsUpToDate(NewBranch(branchName, e))
+}
+
+// GetCommitDate returns the commit date for a branch
+func (e *engineImpl) GetCommitDate(branch Branch) (time.Time, error) {
+	branchName := branch.GetName()
 	return e.git.GetCommitDate(branchName)
 }
 
-// GetCommitAuthorInternal returns the commit author for a branch
-func (e *engineImpl) GetCommitAuthorInternal(branchName string) (string, error) {
+// GetCommitDateInternal is deprecated - use GetCommitDate instead
+func (e *engineImpl) GetCommitDateInternal(branchName string) (time.Time, error) {
+	return e.GetCommitDate(NewBranch(branchName, e))
+}
+
+// GetCommitAuthor returns the commit author for a branch
+func (e *engineImpl) GetCommitAuthor(branch Branch) (string, error) {
+	branchName := branch.GetName()
 	return e.git.GetCommitAuthor(branchName)
 }
 
-// GetRevisionInternal returns the SHA of a branch
-func (e *engineImpl) GetRevisionInternal(branchName string) (string, error) {
+// GetCommitAuthorInternal is deprecated - use GetCommitAuthor instead
+func (e *engineImpl) GetCommitAuthorInternal(branchName string) (string, error) {
+	return e.GetCommitAuthor(NewBranch(branchName, e))
+}
+
+// GetRevision returns the SHA of a branch
+func (e *engineImpl) GetRevision(branch Branch) (string, error) {
+	branchName := branch.GetName()
 	return e.git.GetRevision(branchName)
 }
 
-// GetCommitCountInternal returns the number of commits for a branch
-func (e *engineImpl) GetCommitCountInternal(branchName string) (int, error) {
+// GetRevisionInternal is deprecated - use GetRevision instead
+func (e *engineImpl) GetRevisionInternal(branchName string) (string, error) {
+	return e.GetRevision(NewBranch(branchName, e))
+}
+
+// GetCommitCount returns the number of commits for a branch
+func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	trunk := e.trunk
 	parent, ok := e.parentMap[branchName]
@@ -339,15 +359,21 @@ func (e *engineImpl) GetCommitCountInternal(branchName string) (int, error) {
 
 	// For real git, we'd use a git helper. I'll use git.GetCommitRange count.
 
-	commits, err := e.GetAllCommitsInternal(branchName, CommitFormatSHA)
+	commits, err := e.GetAllCommits(branch, CommitFormatSHA)
 	if err != nil {
 		return 0, err
 	}
 	return len(commits), nil
 }
 
-// GetDiffStatsInternal returns diff stats for a branch
-func (e *engineImpl) GetDiffStatsInternal(branchName string) (int, int, error) {
+// GetCommitCountInternal is deprecated - use GetCommitCount instead
+func (e *engineImpl) GetCommitCountInternal(branchName string) (int, error) {
+	return e.GetCommitCount(NewBranch(branchName, e))
+}
+
+// GetDiffStats returns diff stats for a branch
+func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	trunk := e.trunk
 	parent, ok := e.parentMap[branchName]
@@ -403,6 +429,11 @@ func (e *engineImpl) GetDiffStatsInternal(branchName string) (int, int, error) {
 	}
 
 	return added, deleted, nil
+}
+
+// GetDiffStatsInternal is deprecated - use GetDiffStats instead
+func (e *engineImpl) GetDiffStatsInternal(branchName string) (int, int, error) {
+	return e.GetDiffStats(NewBranch(branchName, e))
 }
 
 // BranchMatchesRemote checks if a branch matches its remote
@@ -547,8 +578,9 @@ func (e *engineImpl) FindBranchForCommit(commitSHA string) (string, error) {
 	return "", nil
 }
 
-// GetAllCommitsInternal returns commits for a branch in various formats
-func (e *engineImpl) GetAllCommitsInternal(branchName string, format CommitFormat) ([]string, error) {
+// GetAllCommits returns commits for a branch in various formats
+func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string, error) {
+	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -565,7 +597,7 @@ func (e *engineImpl) GetAllCommitsInternal(branchName string, format CommitForma
 	}
 
 	// Get branch revision
-	branchRevision, err := e.GetRevisionInternal(branchName)
+	branchRevision, err := e.git.GetRevision(branchName)
 	if err != nil {
 		return nil, err
 	}
@@ -606,6 +638,11 @@ func (e *engineImpl) GetAllCommitsInternal(branchName string, format CommitForma
 	return result, nil
 }
 
+// GetAllCommitsInternal is deprecated - use GetAllCommits instead
+func (e *engineImpl) GetAllCommitsInternal(branchName string, format CommitFormat) ([]string, error) {
+	return e.GetAllCommits(NewBranch(branchName, e), format)
+}
+
 // GetRelativeStackUpstack returns all branches in the upstack (descendants)
 func (e *engineImpl) GetRelativeStackUpstack(branch Branch) []Branch {
 	e.mu.RLock()
@@ -621,7 +658,7 @@ func (e *engineImpl) GetRelativeStackDownstack(branch Branch) []Branch {
 		IncludeCurrent:    false,
 		RecursiveChildren: false,
 	}
-	return e.GetRelativeStackInternal(branch.GetName(), rng)
+	return e.GetRelativeStack(branch, rng)
 }
 
 // GetFullStack returns the entire stack containing the branch
@@ -631,7 +668,7 @@ func (e *engineImpl) GetFullStack(branch Branch) []Branch {
 		IncludeCurrent:    true,
 		RecursiveChildren: true,
 	}
-	return e.GetRelativeStackInternal(branch.GetName(), rng)
+	return e.GetRelativeStack(branch, rng)
 }
 
 // SortBranchesTopologically sorts branches so parents come before children.
@@ -658,7 +695,7 @@ func (e *engineImpl) SortBranchesTopologically(branches []Branch) []Branch {
 			depths[branchName] = 0
 			return 0
 		}
-		if parent == "" || e.IsTrunkInternal(parent) {
+		if parent == "" || e.IsTrunk(NewBranch(parent, e)) {
 			depths[branchName] = 1
 			return 1
 		}
@@ -742,7 +779,7 @@ func (e *engineImpl) BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, in
 				return false // iterator wants to stop
 			}
 
-			children := e.GetChildrenInternal(branch)
+			children := e.GetChildren(NewBranch(branch, e))
 			for _, child := range children {
 				if !visit(child.GetName(), depth+1) {
 					return false
