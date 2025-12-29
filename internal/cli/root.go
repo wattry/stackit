@@ -94,6 +94,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(stack.NewForeachCmd())
 	rootCmd.AddCommand(newInfoCmd())
 	rootCmd.AddCommand(newInitCmd())
+	rootCmd.AddCommand(branch.NewLockCmd())
 	rootCmd.AddCommand(navigation.NewLogCmd())
 	rootCmd.AddCommand(stack.NewMergeCmd())
 	rootCmd.AddCommand(branch.NewModifyCmd())
@@ -117,6 +118,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(navigation.NewTrunkCmd())
 	rootCmd.AddCommand(newUndoCmd())
 	rootCmd.AddCommand(navigation.NewUpCmd())
+	rootCmd.AddCommand(branch.NewUnlockCmd())
 	rootCmd.AddCommand(newConfigCmd())
 
 	rootCmd.AddCommand(stack.NewSsCmd())

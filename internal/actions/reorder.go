@@ -52,6 +52,9 @@ func ReorderAction(ctx *runtime.Context) error {
 	branches := []string{}
 	for _, branch := range stack {
 		if !branch.IsTrunk() && branch.IsTracked() {
+			if branch.IsLocked() {
+				return fmt.Errorf("cannot reorder stack: branch %s is locked", branch.GetName())
+			}
 			branches = append(branches, branch.GetName())
 		}
 	}

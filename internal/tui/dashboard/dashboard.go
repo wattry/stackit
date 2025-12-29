@@ -181,6 +181,9 @@ func (m *model) refresh() tea.Cmd {
 			count, _ := m.engine.GetCommitCount(b)
 			ann.CommitCount = count
 
+			// Locked status
+			ann.IsLocked = b.IsLocked()
+
 			// Scope
 			ann.Scope = m.engine.GetScope(b).String()
 			ann.ExplicitScope = b.GetExplicitScope().String()
@@ -813,6 +816,9 @@ func (m *model) getStatusString(branchName string) string {
 	branch := m.engine.GetBranch(branchName)
 	if m.engine.IsTrunk(branch) {
 		return style.ColorDim("Trunk")
+	}
+	if branch.IsLocked() {
+		return style.ColorDim("Frozen")
 	}
 	if !m.engine.IsUpToDate(branch) {
 		return style.ColorNeedsRestack("Needs Restack")

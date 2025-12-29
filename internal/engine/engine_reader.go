@@ -234,6 +234,13 @@ func (e *engineImpl) GetScopeInternal(branchName string) Scope {
 	return e.GetScope(NewBranch(branchName, e))
 }
 
+// IsLocked checks if a branch is locked
+func (e *engineImpl) IsLocked(branch Branch) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.lockedMap[branch.GetName()]
+}
+
 // GetExplicitScope returns the explicit scope set for a branch (no inheritance)
 func (e *engineImpl) GetExplicitScope(branch Branch) Scope {
 	branchName := branch.GetName()

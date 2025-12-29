@@ -30,6 +30,7 @@ type BranchStatus interface {
 	IsBranchEmpty(ctx context.Context, branchName string) (bool, error)
 	GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error)
 	GetScope(branch Branch) Scope
+	IsLocked(branch Branch) bool
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string
 	GetBranchRemoteDifference(branchName string) (string, error)
@@ -102,6 +103,7 @@ type BranchTracking interface {
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
+	SetLocked(branch Branch, locked bool) error
 }
 
 // BranchMutations handles branch lifecycle operations

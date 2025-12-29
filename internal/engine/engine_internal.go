@@ -31,6 +31,7 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	e.parentMap = make(map[string]string)
 	e.childrenMap = make(map[string][]string)
 	e.scopeMap = make(map[string]string)
+	e.lockedMap = make(map[string]bool)
 
 	// Load metadata for each branch in parallel
 	allMeta, _ := e.batchReadMetadataRefs(branches)
@@ -44,6 +45,9 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 		}
 		if meta.Scope != nil {
 			e.scopeMap[name] = *meta.Scope
+		}
+		if meta.Locked {
+			e.lockedMap[name] = true
 		}
 	}
 
@@ -75,6 +79,7 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 			}
 		}
 		delete(e.scopeMap, branchName)
+		delete(e.lockedMap, branchName)
 	}
 
 	// Get the old parent before updating
@@ -92,6 +97,13 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 		e.scopeMap[branchName] = *meta.Scope
 	} else {
 		delete(e.scopeMap, branchName)
+	}
+
+	// Update locked map
+	if meta.Locked {
+		e.lockedMap[branchName] = true
+	} else {
+		delete(e.lockedMap, branchName)
 	}
 
 	// Update children map - remove from old parent, add to new parent

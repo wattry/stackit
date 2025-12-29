@@ -472,11 +472,13 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 	annotations := make(map[string]tree.BranchAnnotation)
 	for _, branch := range branches {
 		scopeStr := eng.GetScope(branch)
-		if !scopeStr.IsEmpty() {
-			annotations[branch.GetName()] = tree.BranchAnnotation{
-				Scope: scopeStr.String(),
-			}
+		ann := tree.BranchAnnotation{
+			IsLocked: branch.IsLocked(),
 		}
+		if !scopeStr.IsEmpty() {
+			ann.Scope = scopeStr.String()
+		}
+		annotations[branch.GetName()] = ann
 	}
 	renderer.SetAnnotations(annotations)
 

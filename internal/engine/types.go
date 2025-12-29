@@ -232,6 +232,11 @@ func (b Branch) GetExplicitScope() Scope {
 	return b.reader.getExplicitScope(b)
 }
 
+// IsLocked checks if the branch is locked for modifications
+func (b Branch) IsLocked() bool {
+	return b.reader.IsLocked(b)
+}
+
 // GetPRSubmissionStatus returns the PR submission status for this branch
 func (b Branch) GetPRSubmissionStatus() (PRSubmissionStatus, error) {
 	return b.reader.getPRSubmissionStatus(b)

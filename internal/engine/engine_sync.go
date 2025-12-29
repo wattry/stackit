@@ -116,6 +116,10 @@ func (e *engineImpl) restackBranch(
 		}
 	}
 
+	if e.IsLocked(branch) {
+		return RestackBranchResult{Result: RestackUnneeded}, nil
+	}
+
 	// Track reparenting info
 	var reparented bool
 	var oldParent string
