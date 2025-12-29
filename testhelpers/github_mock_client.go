@@ -93,6 +93,16 @@ func (c *MockGitHubClient) GetPullRequestByBranch(ctx context.Context, owner, re
 	return toPullRequestInfo(prs[0]), nil
 }
 
+// GetPullRequest gets a pull request by number
+func (c *MockGitHubClient) GetPullRequest(ctx context.Context, owner, repo string, prNumber int) (*githubpkg.PullRequestInfo, error) {
+	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	return toPullRequestInfo(pr), nil
+}
+
 // MergePullRequest merges a pull request
 func (c *MockGitHubClient) MergePullRequest(_ context.Context, _ string) error {
 	// In tests, just return nil

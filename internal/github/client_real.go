@@ -170,6 +170,16 @@ func (c *RealGitHubClient) GetPullRequestByBranch(ctx context.Context, owner, re
 	return ToPullRequestInfo(prs[0]), nil
 }
 
+// GetPullRequest gets a pull request by number
+func (c *RealGitHubClient) GetPullRequest(ctx context.Context, owner, repo string, prNumber int) (*PullRequestInfo, error) {
+	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request %d: %w", prNumber, err)
+	}
+
+	return ToPullRequestInfo(pr), nil
+}
+
 // MergePullRequest merges a pull request
 func (c *RealGitHubClient) MergePullRequest(ctx context.Context, branchName string) error {
 	return MergePullRequest(ctx, c.client, c.owner, c.repo, branchName)

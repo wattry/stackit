@@ -50,6 +50,9 @@ type Client interface {
 	// GetPullRequestByBranch gets a pull request for a branch
 	GetPullRequestByBranch(ctx context.Context, owner, repo, branchName string) (*PullRequestInfo, error)
 
+	// GetPullRequest gets a pull request by number
+	GetPullRequest(ctx context.Context, owner, repo string, prNumber int) (*PullRequestInfo, error)
+
 	// MergePullRequest merges a pull request
 	MergePullRequest(ctx context.Context, branchName string) error
 
