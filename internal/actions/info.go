@@ -68,7 +68,7 @@ func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
 	var prInfo *engine.PrInfo
 	if !isTrunk {
 		branch := eng.GetBranch(branchName)
-		prInfo, _ = eng.GetPrInfo(branch)
+		prInfo, _ = branch.GetPrInfo()
 		if prInfo != nil && prInfo.Number() != nil {
 			prTitleLine := getPRTitleLine(prInfo)
 			if prTitleLine != "" {
@@ -82,7 +82,7 @@ func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
 	}
 
 	branchObj := eng.GetBranch(branchName)
-	parentBranch := eng.GetParent(branchObj)
+	parentBranch := branchObj.GetParent()
 	if parentBranch != nil {
 		outputLines = append(outputLines, "")
 		outputLines = append(outputLines, fmt.Sprintf("%s: %s", style.ColorCyan("Parent"), parentBranch.GetName()))

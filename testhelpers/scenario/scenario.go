@@ -221,7 +221,7 @@ func (s *Scenario) ExpectStackStructure(expected map[string]string) *Scenario {
 	s.T.Helper()
 	for branch, expectedParent := range expected {
 		branchObj := s.Engine.GetBranch(branch)
-		actualParent := s.Engine.GetParent(branchObj)
+		actualParent := branchObj.GetParent()
 		if actualParent == nil {
 			s.T.Errorf("Parent of %s is nil, expected %s", branch, expectedParent)
 			continue

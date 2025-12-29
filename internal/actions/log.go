@@ -49,7 +49,7 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 			branchObj := ctx.Engine.GetBranch(bName)
 			annotation := tree.BranchAnnotation{
 				Scope:         ctx.Engine.GetScope(branchObj).String(),
-				ExplicitScope: ctx.Engine.GetExplicitScope(branchObj).String(),
+				ExplicitScope: branchObj.GetExplicitScope().String(),
 			}
 
 			// Local stats (always fast enough)
@@ -66,7 +66,7 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 			// PR info (local metadata)
 			if !branchObj.IsTrunk() {
 				branch := ctx.Engine.GetBranch(bName)
-				prInfo, _ := ctx.Engine.GetPrInfo(branch)
+				prInfo, _ := branch.GetPrInfo()
 				if prInfo != nil {
 					annotation.PRNumber = prInfo.Number()
 					annotation.PRState = prInfo.State()

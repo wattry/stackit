@@ -34,7 +34,7 @@ func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
 			return fmt.Errorf("not on a branch")
 		}
 		currentBranchObj := eng.GetBranch(currentBranch)
-		explicitScope := eng.GetExplicitScope(currentBranchObj)
+		explicitScope := currentBranchObj.GetExplicitScope()
 		resolvedScope := eng.GetScope(currentBranchObj)
 
 		switch {

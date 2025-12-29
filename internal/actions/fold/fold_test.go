@@ -62,7 +62,7 @@ func TestFoldAction(t *testing.T) {
 
 		// Verify branch3's parent is now branch1
 		branchparent := s.Engine.GetBranch("branch3")
-		parent := s.Engine.GetParent(branchparent)
+		parent := branchparent.GetParent()
 		require.NotNil(t, parent)
 		require.Equal(t, "branch1", parent.GetName())
 
@@ -98,7 +98,7 @@ func TestFoldAction(t *testing.T) {
 
 		// Verify branch2's parent is now main
 		branchparent := s.Engine.GetBranch("branch2")
-		parent := s.Engine.GetParent(branchparent)
+		parent := branchparent.GetParent()
 		require.NotNil(t, parent)
 		require.Equal(t, "main", parent.GetName())
 
@@ -131,13 +131,13 @@ func TestFoldAction(t *testing.T) {
 
 		// Verify branch3's parent is now branch2
 		branchparent := s.Engine.GetBranch("branch3")
-		parent := s.Engine.GetParent(branchparent)
+		parent := branchparent.GetParent()
 		require.NotNil(t, parent)
 		require.Equal(t, "branch2", parent.GetName())
 
 		// Verify branch2's parent is now main
 		branchparent2 := s.Engine.GetBranch("branch2")
-		parent2 := s.Engine.GetParent(branchparent2)
+		parent2 := branchparent2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "main", parent2.GetName())
 	})
@@ -238,7 +238,7 @@ func TestFoldAction(t *testing.T) {
 
 		// Verify branch3's parent is now branch1
 		branchparent3 := s.Engine.GetBranch("branch3")
-		parent3 := s.Engine.GetParent(branchparent3)
+		parent3 := branchparent3.GetParent()
 		require.NotNil(t, parent3)
 		require.Equal(t, "branch1", parent3.GetName())
 

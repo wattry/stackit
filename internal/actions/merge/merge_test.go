@@ -106,7 +106,7 @@ func TestAction(t *testing.T) {
 
 		// Verify branch is tracked and has PR info
 		require.True(t, branch1.IsTracked())
-		prInfo, err = s.Engine.GetPrInfo(branch1)
+		prInfo, err = branch1.GetPrInfo()
 		require.NoError(t, err)
 		require.NotNil(t, prInfo)
 

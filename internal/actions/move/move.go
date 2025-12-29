@@ -117,7 +117,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 
 	// Get current parent for logging
 	// sourceBranch already declared above
-	oldParent := eng.GetParent(sourceBranch)
+	oldParent := sourceBranch.GetParent()
 	oldParentName := ""
 	if oldParent == nil {
 		oldParentName = eng.Trunk().GetName()

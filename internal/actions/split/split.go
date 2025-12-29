@@ -61,7 +61,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	currentBranchObj := eng.GetBranch(currentBranch.GetName())
 	if !currentBranchObj.IsTracked() {
 		// Auto-track the branch
-		parent := eng.GetParent(*currentBranch)
+		parent := currentBranch.GetParent()
 		parentName := ""
 		if parent == nil {
 			// Try to find parent from git

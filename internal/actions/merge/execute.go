@@ -406,7 +406,7 @@ func validateStepPreconditions(ctx context.Context, step PlanStep, eng mergeExec
 	case StepMergePR:
 		// Validate PR still exists and is open
 		branch := eng.GetBranch(step.BranchName)
-		prInfo, err := eng.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil {
 			return fmt.Errorf("failed to get PR info: %w", err)
 		}
@@ -443,7 +443,7 @@ func validateStepPreconditions(ctx context.Context, step PlanStep, eng mergeExec
 	case StepUpdatePRBase:
 		// Validate PR exists
 		branch := eng.GetBranch(step.BranchName)
-		prInfo, err := eng.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil {
 			return fmt.Errorf("failed to get PR info: %w", err)
 		}
@@ -457,7 +457,7 @@ func validateStepPreconditions(ctx context.Context, step PlanStep, eng mergeExec
 	case StepWaitCI:
 		// Validate PR exists and is open
 		branch := eng.GetBranch(step.BranchName)
-		prInfo, err := eng.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil {
 			return fmt.Errorf("failed to get PR info: %w", err)
 		}
@@ -529,7 +529,7 @@ func executeStep(ctx context.Context, step PlanStep, eng mergeExecuteEngine, spl
 		actualParent := result.NewParent
 		if actualParent == "" {
 			branch := eng.GetBranch(step.BranchName)
-			parent := eng.GetParent(branch)
+			parent := branch.GetParent()
 			if parent == nil {
 				actualParent = trunkName
 			} else {
@@ -632,7 +632,7 @@ func executeUpdatePRBase(ctx context.Context, eng mergeExecuteEngine, githubClie
 
 	// Get the parent revision (old base)
 	branch := eng.GetBranch(step.BranchName)
-	parent := eng.GetParent(branch)
+	parent := branch.GetParent()
 	parentName := ""
 	if parent == nil {
 		parentName = trunkName
@@ -763,7 +763,7 @@ func executeWaitCIWithProgress(ctx context.Context, step PlanStep, stepIndex int
 
 	// Get PR info for better error messages
 	branch := eng.GetBranch(step.BranchName)
-	prInfo, err := eng.GetPrInfo(branch)
+	prInfo, err := branch.GetPrInfo()
 	if err != nil {
 		return fmt.Errorf("failed to get PR info: %w", err)
 	}

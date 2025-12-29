@@ -19,7 +19,7 @@ func restackBranches(ctx *runtime.Context, branchesToRestack []string) error {
 	if currentBranch != nil {
 		if currentBranch.IsTracked() {
 			// Get full stack (up to trunk)
-			stack := eng.GetFullStack(*currentBranch)
+			stack := currentBranch.GetFullStack()
 			// Add branches to restack list
 			for _, b := range stack {
 				branchesToRestack = append(branchesToRestack, b.GetName())

@@ -59,7 +59,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 
 	// Get parent branch
 	// currentBranchObj already declared above
-	parent := eng.GetParent(currentBranchObj)
+	parent := currentBranchObj.GetParent()
 	parentName := ""
 	if parent == nil {
 		parentName = eng.Trunk().GetName()

@@ -21,7 +21,7 @@ func UpdateStackPRMetadata(ctx context.Context, branches []string, eng engine.En
 		go func(name string) {
 			defer wg.Done()
 			branch := eng.GetBranch(name)
-			prInfo, err := eng.GetPrInfo(branch)
+			prInfo, err := branch.GetPrInfo()
 			if err != nil || prInfo == nil || prInfo.Number() == nil {
 				return
 			}

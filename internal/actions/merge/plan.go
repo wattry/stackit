@@ -188,7 +188,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 	for _, branchName := range allBranches {
 		// Get PR info
 		branch := eng.GetBranch(branchName)
-		prInfo, err := eng.GetPrInfo(branch)
+		prInfo, err := branch.GetPrInfo()
 		if err != nil {
 			splog.Debug("Failed to get PR info for %s: %v", branchName, err)
 			validation.Valid = false
@@ -320,7 +320,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 
 		// Only get upstack of the current branch (the top of the stack being merged)
 		currentBranchObj := eng.GetBranch(planCurrentBranch)
-		upstack := eng.GetRelativeStackUpstack(currentBranchObj)
+		upstack := currentBranchObj.GetRelativeStackUpstack()
 		for _, ub := range upstack {
 			if ub.IsTracked() && !mergedMap[ub.GetName()] {
 				upstackBranches = append(upstackBranches, ub.GetName())

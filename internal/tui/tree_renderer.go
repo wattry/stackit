@@ -29,7 +29,7 @@ func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
 		},
 		func(branchName string) string {
 			branch := eng.GetBranch(branchName)
-			parent := eng.GetParent(branch)
+			parent := branch.GetParent()
 			if parent == nil {
 				return ""
 			}

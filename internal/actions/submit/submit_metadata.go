@@ -114,7 +114,7 @@ func GetReviewersWithPrompt(reviewersFlag string, _ *runtime.Context) ([]string,
 // PreparePRMetadata prepares PR metadata for a branch
 func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engine, ctx *runtime.Context) (*PRMetadata, error) {
 	branch := eng.GetBranch(branchName)
-	prInfo, _ := eng.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 
 	metadata := &PRMetadata{
 		Title:   getStringValue(prInfo, "Title"),

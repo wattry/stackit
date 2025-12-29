@@ -199,7 +199,7 @@ func TestUndoAfterMove(t *testing.T) {
 
 		// Get initial parent
 		branchinitialParent := s.Engine.GetBranch("feature2")
-		initialParent := s.Engine.GetParent(branchinitialParent)
+		initialParent := branchinitialParent.GetParent()
 		require.NotNil(t, initialParent)
 		require.Equal(t, "feature1", initialParent.GetName())
 
@@ -216,7 +216,7 @@ func TestUndoAfterMove(t *testing.T) {
 
 		// Verify parent changed
 		branchnewParent := s.Engine.GetBranch("feature2")
-		newParent := s.Engine.GetParent(branchnewParent)
+		newParent := branchnewParent.GetParent()
 		require.NotNil(t, newParent)
 		require.Equal(t, "main", newParent.GetName())
 
@@ -229,7 +229,7 @@ func TestUndoAfterMove(t *testing.T) {
 		// Verify parent restored
 		s.Engine.Rebuild(s.Engine.Trunk().GetName())
 		branchrestoredParent := s.Engine.GetBranch("feature2")
-		restoredParent := s.Engine.GetParent(branchrestoredParent)
+		restoredParent := branchrestoredParent.GetParent()
 		require.NotNil(t, restoredParent)
 		require.Equal(t, initialParent.GetName(), restoredParent.GetName())
 	})

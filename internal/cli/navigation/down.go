@@ -58,7 +58,7 @@ as an argument to move multiple levels at once.`,
 				// Traverse down the specified number of steps
 				targetBranch := *currentBranch
 				for i := 0; i < steps; i++ {
-					parent := ctx.Engine.GetParent(targetBranch)
+					parent := targetBranch.GetParent()
 					if parent == nil {
 						// No parent found - branch is untracked or we've gone past trunk
 						if i == 0 {

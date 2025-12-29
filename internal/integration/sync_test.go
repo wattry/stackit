@@ -32,7 +32,7 @@ func TestSync(t *testing.T) {
 
 		// Verify initial parent of feature-b is feature-a
 		branchB := eng.GetBranch("feature-b")
-		require.Equal(t, "feature-a", eng.GetParent(branchB).GetName())
+		require.Equal(t, "feature-a", branchB.GetParent().GetName())
 
 		// 2. Simulate GitHub PR metadata for feature-b pointing to main instead of feature-a
 		t.Log("Simulating changed PR base on GitHub...")
@@ -54,7 +54,7 @@ func TestSync(t *testing.T) {
 
 		// 4. Verify local parent of feature-b is now main
 		branchBAfter := eng.GetBranch("feature-b")
-		require.Equal(t, mainBranchName, eng.GetParent(branchBAfter).GetName(), "Local parent should have been updated to match GitHub PR base")
+		require.Equal(t, mainBranchName, branchBAfter.GetParent().GetName(), "Local parent should have been updated to match GitHub PR base")
 	})
 
 	t.Run("handles consolidation and deletion of merged branches", func(t *testing.T) {
@@ -190,10 +190,10 @@ func TestSync(t *testing.T) {
 		require.NotContains(t, allLocalBranches, "a")
 
 		// 3. Verify 'b' is reparented to 'main' (because GitHub says so)
-		require.Equal(t, "main", eng.GetParent(eng.GetBranch("b")).GetName())
+		require.Equal(t, "main", eng.GetBranch("b").GetParent().GetName())
 
 		// 4. Verify 'c' is reparented to 'main' (because 'a' was deleted)
-		require.Equal(t, "main", eng.GetParent(eng.GetBranch("c")).GetName())
+		require.Equal(t, "main", eng.GetBranch("c").GetParent().GetName())
 	})
 }
 
@@ -230,7 +230,7 @@ func TestSyncDraftPRs(t *testing.T) {
 
 	// 2. Verify it's a draft locally
 	branch := eng.GetBranch("branch-a")
-	prInfo, _ := eng.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 	require.True(t, prInfo.IsDraft())
 
 	// 3. Run sync
@@ -292,7 +292,7 @@ func TestSyncCleanupDiamond(t *testing.T) {
 	require.Contains(t, allLocalBranches, "c")
 
 	// Verify 'c' is reparented to 'main'
-	require.Equal(t, "main", eng.GetParent(eng.GetBranch("c")).GetName())
+	require.Equal(t, "main", eng.GetBranch("c").GetParent().GetName())
 }
 
 func TestSyncStaleDraftCleanup(t *testing.T) {
@@ -338,5 +338,5 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 	require.NotContains(t, allLocalBranches, "a")
 
 	// 'b' should be reparented to main
-	require.Equal(t, "main", eng.GetParent(eng.GetBranch("b")).GetName())
+	require.Equal(t, "main", eng.GetBranch("b").GetParent().GetName())
 }

@@ -271,7 +271,7 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 
 	for _, branchName := range branches {
 		branch := eng.GetBranch(branchName)
-		status, err := eng.GetPRSubmissionStatus(branch)
+		status, err := branch.GetPRSubmissionStatus()
 		if err != nil {
 			return nil, err
 		}
@@ -386,7 +386,7 @@ func getBranchesToSubmit(opts Options, eng engine.Engine) ([]string, error) {
 	if opts.Stack {
 		// Include descendants and ancestors
 		branch := eng.GetBranch(branchName)
-		stackBranches := eng.GetFullStack(branch)
+		stackBranches := branch.GetFullStack()
 		allBranches = make([]string, len(stackBranches))
 		for i, b := range stackBranches {
 			allBranches[i] = b.GetName()
@@ -394,7 +394,7 @@ func getBranchesToSubmit(opts Options, eng engine.Engine) ([]string, error) {
 	} else {
 		// Just ancestors (including current branch)
 		branch := eng.GetBranch(branchName)
-		downstackBranches := eng.GetRelativeStackDownstack(branch)
+		downstackBranches := branch.GetRelativeStackDownstack()
 		allBranches = make([]string, len(downstackBranches)+1)
 		for i, b := range downstackBranches {
 			allBranches[i] = b.GetName()
@@ -482,7 +482,7 @@ func createPullRequestQuiet(ctx context.Context, submissionInfo Info, eng engine
 func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Options, eng engine.Engine, githubClient github.Client, repoOwner, repoName string) (string, error) {
 	// Check if base changed
 	branch := eng.GetBranch(submissionInfo.BranchName)
-	prInfo, _ := eng.GetPrInfo(branch)
+	prInfo, _ := branch.GetPrInfo()
 	baseChanged := false
 	if prInfo != nil && prInfo.Base() != submissionInfo.Base {
 		baseChanged = true
@@ -533,7 +533,7 @@ func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Optio
 	}
 
 	// Get PR URL
-	prInfo, _ = eng.GetPrInfo(branch)
+	prInfo, _ = branch.GetPrInfo()
 	var prURL string
 	if prInfo != nil && prInfo.URL() != "" {
 		prURL = prInfo.URL()

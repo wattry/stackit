@@ -146,7 +146,8 @@ func (m *model) refresh() tea.Cmd {
 				return names
 			},
 			func(name string) string {
-				parent := m.engine.GetParent(m.engine.GetBranch(name))
+				branch := m.engine.GetBranch(name)
+				parent := branch.GetParent()
 				if parent == nil {
 					return ""
 				}
@@ -166,7 +167,7 @@ func (m *model) refresh() tea.Cmd {
 			ann := tree.BranchAnnotation{}
 
 			// PR Info
-			if pr, _ := m.engine.GetPrInfo(b); pr != nil {
+			if pr, _ := b.GetPrInfo(); pr != nil {
 				ann.PRNumber = pr.Number()
 				ann.PRState = pr.State()
 				ann.IsDraft = pr.IsDraft()
@@ -182,7 +183,7 @@ func (m *model) refresh() tea.Cmd {
 
 			// Scope
 			ann.Scope = m.engine.GetScope(b).String()
-			ann.ExplicitScope = m.engine.GetExplicitScope(b).String()
+			ann.ExplicitScope = b.GetExplicitScope().String()
 
 			renderer.SetAnnotation(b.GetName(), ann)
 		}
@@ -769,7 +770,7 @@ func (m *model) renderDetails() string {
 	scope := m.engine.GetScope(b)
 	sb.WriteString(labelStyle.Render("Scope:") + " " + style.ColorScope(scope.String()) + "\n")
 
-	parent := m.engine.GetParent(b)
+	parent := b.GetParent()
 	if parent != nil {
 		sb.WriteString(labelStyle.Render("Parent:") + " " + valueStyle.Render(parent.GetName()) + "\n")
 	}
