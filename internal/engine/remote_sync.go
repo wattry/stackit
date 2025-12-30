@@ -1,11 +1,14 @@
 package engine
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // IsRemoteSyncEnabled checks if metadata compatibility has been verified and sync is enabled
@@ -25,7 +28,10 @@ func (e *engineImpl) SetRemoteSyncEnabled(enabled bool) {
 
 // SetLastModifiedBy updates the metadata for a branch with the current user's information
 func (e *engineImpl) SetLastModifiedBy(branchName string) error {
-	name, _ := e.git.GetConfig("user.name")
+	name, err := git.GetUserName(context.Background())
+	if err != nil {
+		return fmt.Errorf("git user.name is required but not set: %w", err)
+	}
 	email, _ := e.git.GetConfig("user.email")
 
 	modifiedBy := &ModifiedBy{

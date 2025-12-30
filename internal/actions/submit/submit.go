@@ -257,7 +257,10 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	}
 
 	// Push metadata refs for successfully submitted branches
-	pushMetadataRefs(ctx, branchObjs)
+	if err := pushMetadataRefs(ctx, branchObjs); err != nil {
+		handler.OnEvent(CompletionEvent{Success: false, Message: "Submit failed"})
+		return fmt.Errorf("failed to push metadata to remote: %w. Your PRs were created/updated successfully, but metadata sync failed. Run 'st sync' and try submitting again", err)
+	}
 
 	handler.OnEvent(CompletionEvent{Success: true, Message: "Submit complete"})
 	return nil
@@ -556,23 +559,22 @@ func updatePullRequestQuiet(ctx *runtime.Context, submissionInfo Info, opts Opti
 }
 
 // pushMetadataRefs pushes metadata refs for submitted branches to remote
-func pushMetadataRefs(ctx *runtime.Context, branches []engine.Branch) {
+func pushMetadataRefs(ctx *runtime.Context, branches []engine.Branch) error {
 	if len(branches) == 0 {
-		return
+		return nil
 	}
 
 	// Update LastModifiedBy for each branch
 	for _, branch := range branches {
 		if err := ctx.Engine.SetLastModifiedBy(branch.GetName()); err != nil {
-			ctx.Splog.Debug("Failed to set last modified by for %s: %v", branch.GetName(), err)
+			return fmt.Errorf("failed to update metadata for %s: %w", branch.GetName(), err)
 		}
 	}
 
 	// Check if remote sync is enabled; if not, run compatibility test first
 	if !ctx.Engine.IsRemoteSyncEnabled() {
 		if err := git.TestRemoteRefCompatibility(); err != nil {
-			ctx.Splog.Debug("Remote metadata sync not supported: %v", err)
-			return
+			return fmt.Errorf("remote does not support metadata refs (GitHub compatibility check failed): %w", err)
 		}
 		ctx.Engine.SetRemoteSyncEnabled(true)
 		// Configure refspec so future git fetch commands also fetch metadata
@@ -589,6 +591,40 @@ func pushMetadataRefs(ctx *runtime.Context, branches []engine.Branch) {
 
 	// Push metadata refs
 	if err := git.PushMetadataRefs(branchNames); err != nil {
-		ctx.Splog.Debug("Failed to push metadata refs: %v", err)
+		// Check if this looks like a race condition (concurrent push)
+		if isRaceConditionError(err) {
+			return fmt.Errorf("metadata push rejected due to concurrent changes by another user. Run 'st sync' to pull the latest metadata, then retry: %w", err)
+		}
+		return fmt.Errorf("failed to push metadata refs: %w", err)
 	}
+
+	return nil
+}
+
+// isRaceConditionError checks if an error indicates a race condition during push
+func isRaceConditionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Git push rejection messages that indicate concurrent changes
+	return contains(errStr, "rejected") &&
+		(contains(errStr, "non-fast-forward") ||
+			contains(errStr, "fetch first") ||
+			contains(errStr, "needs force") ||
+			contains(errStr, "updates were rejected"))
+}
+
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 &&
+		(s == substr || (len(s) >= len(substr) && searchSubstring(s, substr)))
+}
+
+func searchSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
