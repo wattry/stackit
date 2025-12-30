@@ -15,10 +15,10 @@ import (
 var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
 
 // GetPRTitle gets the PR title, prompting if needed
-func GetPRTitle(branchName string, editInline bool, existingTitle string, scope string, eng engine.BranchReader) (string, error) {
+func GetPRTitle(branch engine.Branch, editInline bool, existingTitle string, scope string) (string, error) {
+	branchName := branch.GetName()
 	title := existingTitle
 	if title == "" {
-		branch := eng.GetBranch(branchName)
 		commits, err := branch.GetAllCommits(engine.CommitFormatSubject)
 		if err != nil || len(commits) == 0 {
 			title = branchName
@@ -51,10 +51,9 @@ func GetPRTitle(branchName string, editInline bool, existingTitle string, scope 
 }
 
 // GetPRBody gets the PR body, prompting if needed
-func GetPRBody(branchName string, editInline bool, existingBody string, eng engine.BranchReader) (string, error) {
+func GetPRBody(branch engine.Branch, editInline bool, existingBody string) (string, error) {
 	body := existingBody
 	if body == "" {
-		branch := eng.GetBranch(branchName)
 		messages, err := branch.GetAllCommits(engine.CommitFormatMessage)
 		if err == nil && len(messages) > 0 {
 			if len(messages) == 1 {
@@ -112,8 +111,7 @@ func GetReviewersWithPrompt(reviewersFlag string, _ *runtime.Context) ([]string,
 }
 
 // PreparePRMetadata prepares PR metadata for a branch
-func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engine, ctx *runtime.Context) (*PRMetadata, error) {
-	branch := eng.GetBranch(branchName)
+func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.Engine, ctx *runtime.Context) (*PRMetadata, error) {
 	prInfo, _ := branch.GetPrInfo()
 
 	metadata := &PRMetadata{
@@ -128,7 +126,7 @@ func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engin
 	scope := eng.GetScope(branch)
 
 	if shouldEditTitle || (prInfo == nil || prInfo.Title() == "") {
-		title, err := GetPRTitle(branchName, shouldEditTitle, metadata.Title, scope.String(), eng)
+		title, err := GetPRTitle(branch, shouldEditTitle, metadata.Title, scope.String())
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +134,7 @@ func PreparePRMetadata(branchName string, opts MetadataOptions, eng engine.Engin
 	}
 
 	if shouldEditBody || (prInfo == nil || prInfo.Body() == "") {
-		finalBody, err := GetPRBody(branchName, shouldEditBody, metadata.Body, eng)
+		finalBody, err := GetPRBody(branch, shouldEditBody, metadata.Body)
 		if err != nil {
 			return nil, err
 		}

@@ -15,12 +15,13 @@ func NewSyncCmd() *cobra.Command {
 		all     bool
 		force   bool
 		restack bool
+		dryRun  bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Sync all branches with remote",
-		Long: `Sync all branches with remote, prompting to delete any branches for PRs that have been merged or closed. 
+		Long: `Sync all branches with remote, prompting to delete any branches for PRs that have been merged or closed.
 Restacks all branches in your repository that can be restacked without conflicts.
 If trunk cannot be fast-forwarded to match remote, overwrites trunk with the remote version.`,
 		SilenceUsage: true,
@@ -31,6 +32,7 @@ If trunk cannot be fast-forwarded to match remote, overwrites trunk with the rem
 					All:     all,
 					Force:   force,
 					Restack: restack,
+					DryRun:  dryRun,
 				})
 			})
 		},
@@ -42,6 +44,7 @@ If trunk cannot be fast-forwarded to match remote, overwrites trunk with the rem
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Don't prompt for confirmation before overwriting or deleting a branch")
 	cmd.Flags().BoolVar(&restack, "restack", true, "Restack any branches that can be restacked without conflicts")
 	cmd.Flags().BoolVar(&noRestack, "no-restack", false, "Skip restacking branches")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview metadata changes without applying them")
 
 	// Apply --no-restack flag
 	cmd.PreRun = func(_ *cobra.Command, _ []string) {
