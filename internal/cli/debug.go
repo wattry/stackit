@@ -11,7 +11,8 @@ import (
 // newDebugCmd creates the debug command
 func newDebugCmd() *cobra.Command {
 	var (
-		limit int
+		limit      int
+		showRemote bool
 	)
 
 	cmd := &cobra.Command{
@@ -26,6 +27,7 @@ The output includes:
   - Complete stack state (branches, relationships, metadata, PR info)
   - Continuation state (if exists)
   - Repository information
+  - Remote metadata state (with --remote flag)
 
 Output is formatted as pretty-printed JSON for easy reading and parsing.`,
 		Args:         cobra.NoArgs,
@@ -34,13 +36,15 @@ Output is formatted as pretty-printed JSON for easy reading and parsing.`,
 			return common.Run(cmd, func(ctx *runtime.Context) error {
 				// Run debug action
 				return actions.DebugAction(ctx, actions.DebugOptions{
-					Limit: limit,
+					Limit:      limit,
+					ShowRemote: showRemote,
 				})
 			})
 		},
 	}
 
 	cmd.Flags().IntVar(&limit, "limit", 0, "Limit the number of recent commands to show (0 = all)")
+	cmd.Flags().BoolVar(&showRemote, "remote", false, "Fetch and show remote metadata state")
 
 	return cmd
 }

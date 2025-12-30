@@ -39,6 +39,18 @@ func (d *demoGitRunner) GetRemoteSha(_, _ string) (string, error) {
 	return "remote-sha", nil
 }
 
+func (d *demoGitRunner) GetConfig(_ string) (string, error) {
+	return "", nil
+}
+
+func (d *demoGitRunner) SetConfig(_, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) GetConfigAll(_ string) ([]string, error) {
+	return []string{}, nil
+}
+
 func (d *demoGitRunner) GetCurrentBranch() (string, error) {
 	return d.currentBranch, nil
 }
@@ -251,12 +263,6 @@ func (d *demoGitRunner) ListWorktrees(_ context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
-func (d *demoGitRunner) SetWorkingDir(_ string) {}
-
-func (d *demoGitRunner) GetWorkingDir() string {
-	return ""
-}
-
 func (d *demoGitRunner) RunGitCommand(_ ...string) (string, error) {
 	return "", nil
 }
@@ -304,3 +310,25 @@ func (d *demoGitRunner) GetParentCommitSHA(_ string) (string, error) {
 func (d *demoGitRunner) CheckCommutation(_ git.Hunk, _, _ string) (bool, error) {
 	return true, nil
 }
+
+func (d *demoGitRunner) PushMetadataRefs(_ []string) error {
+	return nil
+}
+
+func (d *demoGitRunner) FetchMetadataRefs() error {
+	return nil
+}
+
+func (d *demoGitRunner) DeleteRemoteMetadataRef(_ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) TestRemoteRefCompatibility() error {
+	return nil
+}
+
+func (d *demoGitRunner) IsRemoteSyncEnabled() bool {
+	return true
+}
+
+func (d *demoGitRunner) SetRemoteSyncEnabled(_ bool) {}

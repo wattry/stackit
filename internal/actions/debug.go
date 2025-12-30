@@ -13,16 +13,41 @@ import (
 
 // DebugOptions contains options for the debug command
 type DebugOptions struct {
-	Limit int // Limit number of recent commands to show (0 = all)
+	Limit      int  // Limit number of recent commands to show (0 = all)
+	ShowRemote bool // Fetch and show remote metadata state
 }
 
 // DebugInfo represents the complete debugging information
 type DebugInfo struct {
-	Timestamp         time.Time              `json:"timestamp"`
-	RecentCommands    []CommandSnapshot      `json:"recent_commands"`
-	StackState        StackStateInfo         `json:"stack_state"`
-	ContinuationState *ContinuationStateInfo `json:"continuation_state,omitempty"`
-	RepositoryInfo    RepositoryInfo         `json:"repository_info"`
+	Timestamp           time.Time                `json:"timestamp"`
+	RecentCommands      []CommandSnapshot        `json:"recent_commands"`
+	StackState          StackStateInfo           `json:"stack_state"`
+	ContinuationState   *ContinuationStateInfo   `json:"continuation_state,omitempty"`
+	RepositoryInfo      RepositoryInfo           `json:"repository_info"`
+	RemoteMetadataState *RemoteMetadataStateInfo `json:"remote_metadata_state,omitempty"`
+}
+
+// RemoteMetadataStateInfo represents the state of metadata on the remote
+type RemoteMetadataStateInfo struct {
+	RemoteStateAvailable bool                     `json:"remote_state_available"`
+	RemoteRefs           map[string]RemoteRefInfo `json:"remote_refs,omitempty"`
+	LocalVsRemoteDiffs   []MetadataDiffInfo       `json:"local_vs_remote_diffs,omitempty"`
+}
+
+// RemoteRefInfo represents information about a single remote ref
+type RemoteRefInfo struct {
+	SHA          string `json:"sha"`
+	LastModified string `json:"last_modified,omitempty"`
+	ModifiedBy   string `json:"modified_by,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+}
+
+// MetadataDiffInfo represents a difference between local and remote metadata
+type MetadataDiffInfo struct {
+	Branch      string   `json:"branch"`
+	DiffFields  []string `json:"diff_fields"`
+	LocalValue  string   `json:"local_value,omitempty"`
+	RemoteValue string   `json:"remote_value,omitempty"`
 }
 
 // CommandSnapshot represents a single command from the undo history
@@ -188,6 +213,34 @@ func DebugAction(ctx *runtime.Context, opts DebugOptions) error {
 		repoInfo.RemoteURL = remoteURL
 	}
 
+	var remoteMetadataState *RemoteMetadataStateInfo
+	if opts.ShowRemote {
+		_ = eng.LoadRemoteMetadataCache()
+		remoteCache := eng.GetRemoteMetadataCache()
+
+		remoteRefs := make(map[string]RemoteRefInfo)
+		// We need to list the actual refs to get SHAs and potentially modification info
+		// But for now, let's just use the cache
+		for branch, meta := range remoteCache {
+			info := RemoteRefInfo{}
+			if meta.LastModifiedAt != nil {
+				info.LastModified = meta.LastModifiedAt.Format(time.RFC3339)
+			}
+			if meta.LastModifiedBy != nil {
+				info.ModifiedBy = fmt.Sprintf("%s <%s>", meta.LastModifiedBy.GitName, meta.LastModifiedBy.GitEmail)
+			}
+			if meta.Scope != nil {
+				info.Scope = *meta.Scope
+			}
+			remoteRefs[branch] = info
+		}
+
+		remoteMetadataState = &RemoteMetadataStateInfo{
+			RemoteStateAvailable: eng.IsRemoteSyncEnabled(),
+			RemoteRefs:           remoteRefs,
+		}
+	}
+
 	debugInfo := DebugInfo{
 		Timestamp:      time.Now(),
 		RecentCommands: recentCommands,
@@ -201,8 +254,9 @@ func DebugAction(ctx *runtime.Context, opts DebugOptions) error {
 			}(),
 			Branches: branchInfos,
 		},
-		ContinuationState: continuationState,
-		RepositoryInfo:    repoInfo,
+		ContinuationState:   continuationState,
+		RepositoryInfo:      repoInfo,
+		RemoteMetadataState: remoteMetadataState,
 	}
 
 	jsonData, err := json.MarshalIndent(debugInfo, "", "  ")

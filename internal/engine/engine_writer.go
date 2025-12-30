@@ -418,11 +418,6 @@ func (e *engineImpl) RemoveWorktree(ctx context.Context, path string) error {
 	return e.git.RemoveWorktree(ctx, path)
 }
 
-// SetWorkingDir sets the working directory
-func (e *engineImpl) SetWorkingDir(dir string) {
-	e.git.SetWorkingDir(dir)
-}
-
 // RunGitCommand runs a git command
 func (e *engineImpl) RunGitCommand(args ...string) (string, error) {
 	return e.git.RunGitCommand(args...)

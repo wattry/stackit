@@ -53,6 +53,21 @@ type SplitManager interface {
 	ForceCheckoutBranch(ctx context.Context, branch Branch) error
 }
 
+// RemoteMetadataManager provides operations for syncing branch metadata with remote
+type RemoteMetadataManager interface {
+	IsRemoteSyncEnabled() bool
+	SetRemoteSyncEnabled(enabled bool)
+	SetLastModifiedBy(branchName string) error
+	LoadRemoteMetadataCache() error
+	ApplyRemoteMetadataIfExists(branchName string) error
+	GetRemoteMetadataCache() map[string]*Meta
+	ComputeMetadataDiff(branch string) (*MetadataDiff, error)
+	ComputeAllMetadataDiffs() ([]*MetadataDiff, error)
+	AcceptRemoteMetadata(branch string) error
+	RejectRemoteMetadata(branch string)
+	HasLocalModifications(branch string) bool
+}
+
 // ApplySplitOptions contains options for applying a split
 type ApplySplitOptions struct {
 	BranchToSplit string   // The branch being split
@@ -98,4 +113,5 @@ type Engine interface {
 	SplitManager
 	AbsorbManager
 	UndoManager
+	RemoteMetadataManager
 }

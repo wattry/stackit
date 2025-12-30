@@ -913,11 +913,6 @@ func (e *engineImpl) ListWorktrees(ctx context.Context) ([]string, error) {
 	return e.git.ListWorktrees(ctx)
 }
 
-// GetWorkingDir returns the current working directory
-func (e *engineImpl) GetWorkingDir() string {
-	return e.git.GetWorkingDir()
-}
-
 // RunGitCommandWithContext runs a git command with context
 func (e *engineImpl) RunGitCommandWithContext(ctx context.Context, args ...string) (string, error) {
 	return e.git.RunGitCommandWithContext(ctx, args...)
