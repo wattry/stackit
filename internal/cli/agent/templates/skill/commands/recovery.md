@@ -2,21 +2,23 @@
 
 Commands for troubleshooting, recovery, and diagnostics.
 
+> **CRITICAL:** Always run these commands with `--no-interactive`. For commands that require confirmation, include `--force` (for absorb) or `--yes` (for undo/merge).
+
 ## Recovery Commands
 
 | Command | Description |
 |---------|-------------|
-| `stackit undo` | Restore repo to state before a command |
-| `stackit continue` | Continue interrupted operation |
-| `stackit abort` | Abort interrupted operation |
+| `stackit undo --no-interactive --yes` | Restore repo to state before a command |
+| `stackit continue --no-interactive` | Continue interrupted operation |
+| `stackit abort --no-interactive` | Abort interrupted operation |
 
 ## Diagnostic Commands
 
 | Command | Description |
 |---------|-------------|
-| `stackit doctor` | Diagnose and fix setup issues |
-| `stackit info` | Show detailed branch info |
-| `stackit debug` | Dump debugging info |
+| `stackit doctor --no-interactive` | Diagnose and fix setup issues |
+| `stackit info --no-interactive` | Show detailed branch info |
+| `stackit debug --no-interactive` | Dump debugging info |
 
 ## Recovery Workflows
 
@@ -33,48 +35,48 @@ git status
 git add <resolved-files>
 
 # 3. Continue
-stackit continue
+stackit continue --no-interactive
 
 # Or abort if needed
-stackit abort
+stackit abort --no-interactive
 ```
 
 ### Undo Last Operation
 
 ```bash
 # Restore to previous state
-stackit undo
+stackit undo --no-interactive --yes
 
 # Check if it worked
-stackit log
+stackit log --no-interactive
 ```
 
 ### Branch Needs Restack
 
 ```bash
 # Rebase all branches to fix ancestry
-stackit restack
+stackit restack --no-interactive
 
 # Handle conflicts if they occur
 # Then continue
-stackit continue
+stackit continue --no-interactive
 ```
 
 ### Orphaned Branch (Parent Merged)
 
 ```bash
 # Sync will reparent automatically
-stackit sync
+stackit sync --no-interactive
 
 # Or manually restack
-stackit restack
+stackit restack --no-interactive
 ```
 
 ### PR Base Mismatch
 
 ```bash
 # Submit will update PR base branches
-stackit submit
+stackit submit --no-interactive
 ```
 
 ### Uncommitted Changes Blocking Operation
@@ -82,7 +84,7 @@ stackit submit
 ```bash
 # Option 1: Commit them
 git add .
-stackit modify
+stackit modify --no-interactive
 
 # Option 2: Stash them
 git stash
@@ -97,20 +99,20 @@ git stash pop
 
 ```bash
 # View structure
-stackit log
+stackit log --no-interactive
 
 # Get detailed info
-stackit info
+stackit info --no-interactive
 
 # Check for issues
-stackit doctor
+stackit doctor --no-interactive
 ```
 
 ### Debug Issues
 
 ```bash
 # Dump all diagnostic info
-stackit debug
+stackit debug --no-interactive
 
 # This shows:
 # - Git refs
@@ -122,8 +124,8 @@ stackit debug
 ## Troubleshooting Checklist
 
 When things go wrong:
-1. Check status: `git status` and `stackit log`
+1. Check status: `git status` and `stackit log --no-interactive`
 2. Look for interrupted operations (rebase, merge)
-3. Try `stackit doctor` for automatic fixes
-4. If stuck, `stackit abort` then `stackit undo`
-5. For persistent issues, check `stackit debug` output
+3. Try `stackit doctor --no-interactive` for automatic fixes
+4. If stuck, `stackit abort --no-interactive` then `stackit undo --no-interactive --yes`
+5. For persistent issues, check `stackit debug --no-interactive` output

@@ -10,11 +10,11 @@ Absorb working directory changes into the correct commits in your stack using in
 ## Context
 - Current branch: !`git branch --show-current`
 - Changed files: !`git status --short 2>/dev/null`
-- Stack structure: !`stackit log --oneline 2>/dev/null`
+- Stack structure: !`stackit log --oneline --no-interactive 2>/dev/null`
 
 ## What Absorb Does
 
-`stackit absorb` automatically assigns each change in your working directory to the "most appropriate" commit in your stack based on:
+`stackit absorb --no-interactive --force` automatically assigns each change in your working directory to the "most appropriate" commit in your stack based on:
 - Which commit last modified each line
 - File proximity and context
 - Change patterns
@@ -40,7 +40,7 @@ This is powerful but can occasionally cause compilation errors when dependencies
 
 4. **Run absorb:**
    ```bash
-   stackit absorb
+   stackit absorb --no-interactive --force
    ```
 
 5. **CRITICAL: Validate stack after absorb**
@@ -53,7 +53,7 @@ This is powerful but can occasionally cause compilation errors when dependencies
    grep -i "build\|test" README.md CONTRIBUTING.md
 
    # Test each branch in stack (bottom to top)
-   stackit foreach "<build-command>"
+   stackit foreach --no-interactive "<build-command>"
 
    # If ANY failures:
    # - STOP and mark absorb as incomplete
@@ -71,7 +71,7 @@ This is powerful but can occasionally cause compilation errors when dependencies
    ```
 
 6. **If ALL builds pass:**
-   - Show final stack state: `stackit log`
+   - Show final stack state: `stackit log --no-interactive`
    - Confirm absorb completed successfully
 
 7. **If ANY builds fail:**
@@ -96,7 +96,7 @@ git status
 # → 3 files modified
 
 # 2. Run absorb
-stackit absorb
+   stackit absorb --no-interactive --force
 # → Changes absorbed into commits
 
 # 3. CRITICAL: Validate
@@ -108,11 +108,11 @@ just build  # or npm build, cargo build, etc.
 # → Follow checklist to find and fix dependencies
 
 # 5. After fix, verify entire stack
-stackit foreach "just build"
+stackit foreach --no-interactive "just build"
 # → All branches build successfully
 
 # 6. Now absorb is complete
-stackit log
+stackit log --no-interactive
 # → Clean stack structure
 ```
 
@@ -122,8 +122,8 @@ stackit log
 
 This is the happy path - absorb worked perfectly:
 ```bash
-stackit absorb
-stackit foreach "just build"
+   stackit absorb --no-interactive --force
+stackit foreach --no-interactive "just build"
 # → All passed ✓
 # Done!
 ```
@@ -132,8 +132,8 @@ stackit foreach "just build"
 
 This is common and expected:
 ```bash
-stackit absorb
-stackit foreach "just build"
+   stackit absorb --no-interactive --force
+stackit foreach --no-interactive "just build"
 # → Branch 'add-validation' failed
 # → Branch 'add-api' failed
 
@@ -146,7 +146,7 @@ stackit foreach "just build"
 
 If absorb created too many issues:
 ```bash
-stackit undo  # Restore to pre-absorb state
+stackit undo --no-interactive --yes  # Restore to pre-absorb state
 # Manually create commits instead
 ```
 
@@ -154,7 +154,7 @@ stackit undo  # Restore to pre-absorb state
 
 - **If absorb command fails:** Show error, suggest committing changes manually
 - **If builds break:** MUST use fix-absorb workflow (not optional)
-- **If conflicts occur:** Use `stackit abort` to recover, then see absorb-conflict workflow
+- **If conflicts occur:** Use `stackit abort --no-interactive` to recover, then see absorb-conflict workflow
 - **Never leave stack in broken state** - always complete validation loop
 
 ## Conflict Resolution
@@ -163,19 +163,19 @@ If absorb encounters a merge conflict:
 
 1. **Diagnose the conflict:**
    ```bash
-   stackit absorb --show-conflict
+   stackit absorb --show-conflict --no-interactive
    ```
    This shows staged changes, stack structure, and guidance.
 
 2. **Abort and recover:**
    ```bash
-   stackit abort
+   stackit abort --no-interactive
    ```
    This returns you to your original branch and restores any stashed changes.
 
 3. **Resolution strategies:**
    - **Split the change:** Use `git add -p` to stage only parts that absorb cleanly
-   - **Create new commit:** Use `stackit create` for changes that don't belong in existing commits
+   - **Create new commit:** Use `stackit create --no-interactive` for changes that don't belong in existing commits
    - **Manual application:** Checkout target branch and apply changes directly
 
 See [../skills/stackit/workflows/absorb-conflict.md](../skills/stackit/workflows/absorb-conflict.md) for detailed conflict resolution guidance.
@@ -193,7 +193,7 @@ For better absorb results:
 | Operation | Use When | Risks |
 |-----------|----------|-------|
 | `stackit modify` | Amending current commit only | Low - changes go to known commit |
-| `stackit absorb` | Multiple commits need updates | Medium - heuristic assignment |
+| `stackit absorb --no-interactive --force` | Multiple commits need updates | Medium - heuristic assignment |
 
 ## Important Notes
 

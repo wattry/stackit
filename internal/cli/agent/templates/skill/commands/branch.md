@@ -2,6 +2,8 @@
 
 Commands for creating, modifying, and managing individual branches.
 
+> **CRITICAL:** Always run these commands with `--no-interactive`.
+
 ## Creating and Modifying
 
 | Command | Description |
