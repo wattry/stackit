@@ -154,8 +154,31 @@ stackit undo  # Restore to pre-absorb state
 
 - **If absorb command fails:** Show error, suggest committing changes manually
 - **If builds break:** MUST use fix-absorb workflow (not optional)
-- **If conflicts occur:** Guide through resolution
+- **If conflicts occur:** Use `stackit abort` to recover, then see absorb-conflict workflow
 - **Never leave stack in broken state** - always complete validation loop
+
+## Conflict Resolution
+
+If absorb encounters a merge conflict:
+
+1. **Diagnose the conflict:**
+   ```bash
+   stackit absorb --show-conflict
+   ```
+   This shows staged changes, stack structure, and guidance.
+
+2. **Abort and recover:**
+   ```bash
+   stackit abort
+   ```
+   This returns you to your original branch and restores any stashed changes.
+
+3. **Resolution strategies:**
+   - **Split the change:** Use `git add -p` to stage only parts that absorb cleanly
+   - **Create new commit:** Use `stackit create` for changes that don't belong in existing commits
+   - **Manual application:** Checkout target branch and apply changes directly
+
+See [../skills/stackit/workflows/absorb-conflict.md](../skills/stackit/workflows/absorb-conflict.md) for detailed conflict resolution guidance.
 
 ## Prevention Tips
 

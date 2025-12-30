@@ -110,6 +110,48 @@ This merges all approved PRs in your stack, bottom-up, and cleans up the merged 
 
 ---
 
+## Claude Code Integration
+
+Stackit includes specialized commands designed for Claude Code, providing intelligent automation for common stacking workflows. These commands understand stack context and can perform complex operations with minimal user input.
+
+### Available Claude Commands
+
+| Command | Description | When to Use |
+|:---|:---|:---|
+| `stack-status` | View current stack state, branch position, and health status | Getting oriented in a complex stack |
+| `stack-create [branch-name]` | Create a new stacked branch with intelligent naming and commit messages | Adding a new feature branch to your stack |
+| `stack-submit [--stack \| --draft]` | Submit branches as PRs with auto-generated descriptions | Creating or updating pull requests |
+| `stack-sync` | Sync with trunk, cleanup merged branches, and restack | Keeping your stack up-to-date with main |
+| `stack-restack` | Rebase all branches to ensure proper ancestry | Fixing branch relationships after changes |
+| `stack-absorb` | Intelligently absorb working changes into correct commits | Applying fixes across multiple stack branches, with conflict resolution guidance |
+| `stack-fix` | Diagnose and fix common stack issues | Resolving compilation errors or structural problems |
+
+### Setting Up Claude Integration
+
+```bash
+stackit agent init
+```
+
+This creates the necessary integration files for Claude Code to use these specialized commands. The commands are designed to:
+
+- **Understand Context**: Each command analyzes your current stack state and git status
+- **Provide Validation**: Commands include quality checks and error handling
+- **Guide Through Issues**: When conflicts or errors occur, commands provide step-by-step resolution guidance
+- **Ensure Safety**: All commands prioritize data safety and provide undo capabilities
+
+### Example Claude Workflow
+
+```bash
+# Claude can help with complex stacking operations
+stack-create add-user-auth    # Creates branch with proper commit message
+# Make changes...
+stack-absorb                 # Intelligently distributes changes across commits
+stack-fix                    # Diagnoses and fixes any issues
+stack-submit --stack         # Creates/updates all PRs in the stack
+```
+
+---
+
 ## Command Reference
 
 ### Navigation
