@@ -1,6 +1,8 @@
 # Absorb Conflict Resolution
 
-Guide for resolving conflicts during `stackit absorb` operations. Unlike regular git conflicts, absorb conflicts occur when staged changes cannot be cleanly applied to their target commits in the stack.
+Guide for resolving conflicts during `stackit absorb --no-interactive --force` operations. Unlike regular git conflicts, absorb conflicts occur when staged changes cannot be cleanly applied to their target commits in the stack.
+
+> **CRITICAL:** Always run stackit commands with `--no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
 
 ## Understanding Absorb Conflicts
 
@@ -45,10 +47,10 @@ When absorb fails with a conflict, identify where the change should go:
 
 ```bash
 # Show absorb plan (dry run)
-stackit absorb --dry-run
+stackit absorb --dry-run --no-interactive
 
 # View commits in current branch's stack
-stackit log
+stackit log --no-interactive
 
 # See what each commit changed
 git log --oneline --stat HEAD~5..HEAD
@@ -99,10 +101,10 @@ git checkout <target-branch>
 
 # 3. Amend the commit
 git add path/to/file.go
-stackit modify
+stackit modify --no-interactive
 
 # 4. Restack to propagate
-stackit restack
+stackit restack --no-interactive
 ```
 
 ### Strategy B: Split the Change
@@ -117,13 +119,13 @@ git reset HEAD
 git add -p  # Use patch mode to select hunks
 
 # 3. Absorb the first part
-stackit absorb
+stackit absorb --no-interactive --force
 
 # 4. Stage the remaining part
 git add -p
 
 # 5. Absorb (will go to different commit)
-stackit absorb
+stackit absorb --no-interactive --force
 ```
 
 ### Strategy C: Create New Commit
@@ -133,7 +135,7 @@ If the change doesn't belong in any existing commit:
 ```bash
 # 1. Keep the staged changes
 # 2. Create a new commit on top
-stackit create "description of change"
+stackit create --no-interactive "description of change"
 ```
 
 ### Strategy D: Interactive Resolution
@@ -142,10 +144,10 @@ For complex cases, use the absorb conflict workflow:
 
 ```bash
 # 1. Show what absorb wants to do
-stackit absorb --dry-run
+stackit absorb --dry-run --no-interactive
 
 # 2. If conflict occurs, check state
-stackit absorb --show-conflict
+stackit absorb --show-conflict --no-interactive
 
 # 3. Resolve the conflict manually
 # Edit the file, removing conflict markers
@@ -154,10 +156,10 @@ stackit absorb --show-conflict
 git add path/to/file.go
 
 # 5. Re-run absorb after resolution
-stackit absorb
+stackit absorb --no-interactive --force
 
 # Or abort and try a different approach
-stackit abort
+stackit abort --no-interactive
 ```
 
 ## Step 5: Verify and Complete
@@ -166,11 +168,11 @@ After resolution:
 
 ```bash
 # 1. Verify the stack structure
-stackit log
+stackit log --no-interactive
 
 # 2. Build/test each affected branch
-stackit foreach "just build"
-stackit foreach "just test"
+stackit foreach --no-interactive "just build"
+stackit foreach --no-interactive "just test"
 
 # 3. Check for any remaining issues
 git status
@@ -275,7 +277,7 @@ Three-way merge couldn't auto-resolve. Manually resolve or use Claude assistance
 
 ### Left in detached HEAD state
 
-Absorb failed midway. Run `stackit abort` to recover.
+Absorb failed midway. Run `stackit abort --no-interactive` to recover.
 
 ### Changes lost after conflict
 
@@ -293,4 +295,4 @@ Check `git stash list` - absorb stashes changes before starting. Use `git stash 
 - All staged changes applied to appropriate commits
 - No conflict markers in any files
 - Stack builds and tests pass
-- `stackit log` shows clean structure
+- `stackit log --no-interactive` shows clean structure

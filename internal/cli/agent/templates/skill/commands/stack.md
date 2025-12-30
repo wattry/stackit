@@ -2,26 +2,28 @@
 
 Commands for managing the entire stack or multiple branches.
 
+> **CRITICAL:** Always run these commands with `--no-interactive`.
+
 ## Stack Maintenance
 
 | Command | Description |
 |---------|-------------|
-| `stackit restack` | Rebase all branches to ensure proper ancestry |
-| `stackit sync` | Pull trunk, delete merged branches, restack |
+| `stackit restack --no-interactive` | Rebase all branches to ensure proper ancestry |
+| `stackit sync --no-interactive` | Pull trunk, delete merged branches, restack |
 | `stackit merge` | Merge approved PRs and cleanup |
 
 ## Bulk Operations
 
 | Command | Description |
 |---------|-------------|
-| `stackit foreach` | Run command on each branch in stack |
-| `stackit submit` | Push branches and create/update PRs |
+| `stackit foreach --no-interactive` | Run command on each branch in stack |
+| `stackit submit --no-interactive` | Push branches and create/update PRs |
 | `stackit reorder` | Interactively reorder branches |
 | `stackit move` | Rebase branch onto new parent |
 
 ## Common Flag Patterns
 
-### stackit submit
+### stackit submit --no-interactive
 - `--stack` - Submit entire stack (alias: `ss`)
 - `--draft` - Create as draft PRs
 - `--edit` - Edit PR metadata interactively
@@ -29,16 +31,16 @@ Commands for managing the entire stack or multiple branches.
 **Examples:**
 ```bash
 # Submit current branch and ancestors
-stackit submit
+stackit submit --no-interactive
 
 # Submit entire stack
-stackit submit --stack
+stackit submit --no-interactive --stack
 
 # Submit as drafts
-stackit submit --draft --stack
+stackit submit --no-interactive --draft --stack
 ```
 
-### stackit sync
+### stackit sync --no-interactive
 - `--restack` - Auto-restack after cleanup
 
 **What it does:**
@@ -47,19 +49,19 @@ stackit submit --draft --stack
 3. Deletes branches whose PRs were closed
 4. Optionally restacks remaining branches
 
-### stackit foreach
-**Usage:** `stackit foreach "command to run"`
+### stackit foreach --no-interactive
+**Usage:** `stackit foreach --no-interactive "command to run"`
 
 **Examples:**
 ```bash
 # Build all branches
-stackit foreach "just build"
+stackit foreach --no-interactive "just build"
 
 # Test all branches
-stackit foreach "npm test"
+stackit foreach --no-interactive "npm test"
 
 # Show status on each
-stackit foreach "git status --short"
+stackit foreach --no-interactive "git status --short"
 ```
 
 ## Workflow Examples
@@ -67,26 +69,26 @@ stackit foreach "git status --short"
 ### Start a feature stack
 ```bash
 git add .
-echo "feat: implement user authentication" | stackit create
+echo "feat: implement user authentication" | stackit create --no-interactive
 # Work on next part
 git add .
-echo "feat: add JWT token validation" | stackit create
+echo "feat: add JWT token validation" | stackit create --no-interactive
 ```
 
 ### Submit for review
 ```bash
-stackit submit --stack
+stackit submit --no-interactive --stack
 ```
 
 ### After code review changes
 ```bash
 git add .
-stackit modify
-stackit restack
-stackit submit
+stackit modify --no-interactive
+stackit restack --no-interactive
+stackit submit --no-interactive
 ```
 
 ### Sync with main
 ```bash
-stackit sync --restack
+stackit sync --no-interactive --restack
 ```

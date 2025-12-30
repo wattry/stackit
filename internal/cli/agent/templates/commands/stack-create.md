@@ -11,7 +11,7 @@ Create a new stacked branch on top of the current branch. Branch name is optiona
 ## Context
 - Current branch: !`git branch --show-current`
 - Staged changes: !`git diff --cached --stat 2>/dev/null || echo 'No staged changes'`
-- Stack state: !`stackit log --oneline 2>/dev/null || echo 'Not initialized'`
+- Stack state: !`stackit log --oneline --no-interactive 2>/dev/null || echo 'Not initialized'`
 
 ## Arguments
 $ARGUMENTS
@@ -38,10 +38,10 @@ $ARGUMENTS
    - Otherwise: stackit will auto-generate from commit message
 
 5. **Run command using pipe** (preferred):
-   - With branch name: `echo "commit message" | stackit create branch-name`
-   - Auto-generate name: `echo "commit message" | stackit create`
+   - With branch name: `echo "commit message" | stackit create branch-name --no-interactive`
+   - Auto-generate name: `echo "commit message" | stackit create --no-interactive`
 
-6. Show new stack state with `stackit log`
+6. Show new stack state with `stackit log --no-interactive`
 
 ## Error Handling
 - If on trunk: warn user they should create from a feature branch or confirm

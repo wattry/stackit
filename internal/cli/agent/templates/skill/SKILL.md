@@ -16,6 +16,9 @@ You are an expert at using Stackit to manage stacked Git branches. Stackit helps
 - Parent/child relationships
 - Which branches need attention
 
+**CRITICAL: Non-Interactive Mode**
+When calling `stackit` commands, **ALWAYS** include the `--no-interactive` flag. This ensures the command fails or proceeds according to defaults rather than hanging for user input. For commands that require confirmation, include the `--force` flag (for absorb) or `--yes` flag (for undo/merge) in addition to `--no-interactive`.
+
 **Check for project conventions:**
 - Read CONTRIBUTING.md if present for project-specific guidelines
 - Follow documented commit message formats, PR templates, and workflows
@@ -28,6 +31,8 @@ Run the stack analyzer to check health and get actionable suggestions:
 bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 ```
 
+> **Note:** All stackit commands below should be called with `--no-interactive`.
+
 ## Core Workflows
 
 ### Creating a New Branch
@@ -37,31 +42,31 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 3. **Create branch** (name optional, auto-generated from message):
    ```bash
    # Preferred: pipe format
-   echo "commit message" | stackit create
+   echo "commit message" | stackit create --no-interactive
 
    # With explicit name
-   echo "commit message" | stackit create branch-name
+   echo "commit message" | stackit create branch-name --no-interactive
    ```
 
 ### Submitting PRs
 
-1. Check stack state: `stackit log`
+1. Check stack state: `stackit log --no-interactive`
 2. Submit options:
-   - Current + ancestors: `stackit submit`
-   - Entire stack: `stackit submit --stack`
-   - As drafts: `stackit submit --draft`
+   - Current + ancestors: `stackit submit --no-interactive`
+   - Entire stack: `stackit submit --stack --no-interactive`
+   - As drafts: `stackit submit --draft --no-interactive`
 
 ### Syncing with Main
 
-1. Sync with trunk and cleanup: `stackit sync`
-2. If branches were deleted: `stackit restack`
+1. Sync with trunk and cleanup: `stackit sync --no-interactive`
+2. If branches were deleted: `stackit restack --no-interactive`
 
 ### Fixing Issues
 
-- **Rebase conflicts:** Resolve files, then `stackit continue`
-- **Absorb conflicts:** See [workflows/absorb-conflict.md](workflows/absorb-conflict.md) or use `stackit absorb --show-conflict`
-- **Abort operation:** `stackit abort`
-- **Undo last command:** `stackit undo`
+- **Rebase conflicts:** Resolve files, then `stackit continue --no-interactive`
+- **Absorb conflicts:** See [workflows/absorb-conflict.md](workflows/absorb-conflict.md) or use `stackit absorb --show-conflict --no-interactive`
+- **Abort operation:** `stackit abort --no-interactive`
+- **Undo last command:** `stackit undo --no-interactive --yes`
 - **Stack health issues:** See [workflows/fix-absorb.md](workflows/fix-absorb.md) or run `/stack-fix`
 
 ## Commit Message Examples
@@ -129,7 +134,7 @@ When generating commit messages:
 1. Check README.md and CONTRIBUTING.md for project guidelines
 2. Follow documented conventions if available
 3. Default to conventional commit format: `type(scope): description`
-4. **Always use pipe format:** `echo "message" | stackit create`
+4. **Always use pipe format:** `echo "message" | stackit create --no-interactive`
 
 **Validation loop:**
 - Generate message

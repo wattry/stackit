@@ -10,14 +10,14 @@ Submit branches to GitHub and create/update PRs.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`stackit log 2>/dev/null`
+- Stack state: !`stackit log --no-interactive 2>/dev/null`
 
 ## Arguments
 $ARGUMENTS
 
 ## Instructions
 
-1. Run `stackit log` to see branches to submit
+1. Run `stackit log --no-interactive` to see branches to submit
 
 2. For each branch that will be submitted, gather commit info:
    `git log --oneline <parent>..<branch>`
@@ -45,13 +45,13 @@ $ARGUMENTS
    - Only proceed when PR meets quality standards
 
 5. Run submit command:
-   - Current branch only: `stackit submit`
-   - Entire stack: `stackit submit --stack`
-   - As drafts: `stackit submit --draft`
+   - Current branch only: `stackit submit --no-interactive`
+   - Entire stack: `stackit submit --stack --no-interactive`
+   - As drafts: `stackit submit --draft --no-interactive`
 
 6. Report created/updated PR URLs
 
 ## Error Handling
-- If branch needs restack: run `stackit restack` first
+- If branch needs restack: run `stackit restack --no-interactive` first
 - If push fails: check for upstream changes
 - If PR creation fails: show GitHub error
