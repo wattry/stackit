@@ -164,6 +164,7 @@ func runAgentInit(local, force bool) error {
 	workflowFiles := []string{
 		"fix-absorb.md",
 		"conflict-resolution.md",
+		"absorb-conflict.md",
 	}
 
 	for _, filename := range workflowFiles {
@@ -262,7 +263,7 @@ func runAgentInit(local, force bool) error {
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/SKILL.md\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/reference.md\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/commands/ (4 reference files)\n", getDisplayPath(baseDir, local))
-	fmt.Printf("✓ Created %s/.claude/skills/stackit/workflows/ (2 workflow guides)\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/skills/stackit/workflows/ (3 workflow guides)\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/scripts/ (2 utility scripts)\n", getDisplayPath(baseDir, local))
 	fmt.Println()
 	fmt.Println("Slash commands:")

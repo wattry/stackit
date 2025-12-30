@@ -3,6 +3,7 @@ package absorb
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -699,5 +700,141 @@ func DefaultConfig() *Config {
 		require.NoError(t, err)
 		require.Contains(t, string(content), "ABSORBED-default")
 		require.Contains(t, string(content), "NewField")
+	})
+}
+
+func TestAbsorbConflictHandling(t *testing.T) {
+	t.Run("IsAbsorbInProgress returns false in normal state", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch with a commit
+		s.CreateBranch("test-branch")
+		s.TrackBranch("test-branch", "main")
+
+		testFile := filepath.Join(s.Scene.Dir, "test.go")
+		err := os.WriteFile(testFile, []byte("package main\n\nfunc test() {}\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+		s.RunGit("commit", "-m", "add test.go")
+		s.Rebuild()
+
+		// Should return false in normal state
+		require.False(t, IsAbsorbInProgress(s.Context))
+	})
+
+	t.Run("IsAbsorbInProgress returns true in detached HEAD state", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch with a commit
+		s.CreateBranch("test-branch")
+		s.TrackBranch("test-branch", "main")
+
+		testFile := filepath.Join(s.Scene.Dir, "test.go")
+		err := os.WriteFile(testFile, []byte("package main\n\nfunc test() {}\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+		s.RunGit("commit", "-m", "add test.go")
+		s.Rebuild()
+
+		// Simulate a failed absorb by detaching HEAD
+		s.RunGit("checkout", "--detach", "HEAD")
+
+		// Should return true in detached HEAD state (with checkout in reflog)
+		require.True(t, IsAbsorbInProgress(s.Context))
+	})
+
+	t.Run("ShowConflict displays staged changes info", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch with a commit
+		s.CreateBranch("test-branch")
+		s.TrackBranch("test-branch", "main")
+
+		testFile := filepath.Join(s.Scene.Dir, "test.go")
+		err := os.WriteFile(testFile, []byte("package main\n\nfunc test() {}\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+		s.RunGit("commit", "-m", "add test.go")
+		s.Rebuild()
+
+		// Stage a change
+		err = os.WriteFile(testFile, []byte("package main\n\nfunc test() { modified }\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+
+		// ShowConflict should work without error when we have staged changes
+		err = ShowConflict(s.Context)
+		require.NoError(t, err)
+	})
+
+	t.Run("ShowConflict handles no staged changes", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch with a commit but no staged changes
+		s.CreateBranch("test-branch")
+		s.TrackBranch("test-branch", "main")
+
+		testFile := filepath.Join(s.Scene.Dir, "test.go")
+		err := os.WriteFile(testFile, []byte("package main\n\nfunc test() {}\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+		s.RunGit("commit", "-m", "add test.go")
+		s.Rebuild()
+
+		// ShowConflict should work without error when no staged changes
+		err = ShowConflict(s.Context)
+		require.NoError(t, err)
+	})
+
+	t.Run("Abort handles normal state", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch with a commit
+		s.CreateBranch("test-branch")
+		s.TrackBranch("test-branch", "main")
+
+		testFile := filepath.Join(s.Scene.Dir, "test.go")
+		err := os.WriteFile(testFile, []byte("package main\n\nfunc test() {}\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+		s.RunGit("commit", "-m", "add test.go")
+		s.Rebuild()
+
+		// Abort should work without error when not in a failed absorb state
+		err = Abort(s.Context)
+		require.NoError(t, err)
+	})
+
+	t.Run("Abort recovers from detached HEAD state", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch with a commit
+		s.CreateBranch("test-branch")
+		s.TrackBranch("test-branch", "main")
+
+		testFile := filepath.Join(s.Scene.Dir, "test.go")
+		err := os.WriteFile(testFile, []byte("package main\n\nfunc test() {}\n"), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "test.go")
+		s.RunGit("commit", "-m", "add test.go")
+		s.Rebuild()
+
+		// Simulate a failed absorb by detaching HEAD
+		s.RunGit("checkout", "--detach", "HEAD")
+
+		// Verify we're in detached HEAD state
+		output, err := s.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", "--abbrev-ref", "HEAD")
+		require.NoError(t, err)
+		require.Equal(t, "HEAD", strings.TrimSpace(output))
+
+		// Abort should recover from detached HEAD
+		err = Abort(s.Context)
+		require.NoError(t, err)
+
+		// Verify we're back on a branch (reflog should help find it)
+		output, err = s.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", "--abbrev-ref", "HEAD")
+		require.NoError(t, err)
+		// After abort, we should be on test-branch
+		require.Equal(t, "test-branch", strings.TrimSpace(output))
 	})
 }

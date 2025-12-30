@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/absorb"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/runtime"
 )
@@ -16,15 +17,21 @@ func newAbortCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "abort",
-		Short: "Abort the current stackit command halted by a rebase conflict",
-		Long: `Aborts the current stackit command halted by a rebase conflict.
+		Short: "Abort the current stackit command halted by a conflict",
+		Long: `Aborts the current stackit command halted by a conflict.
 
-This command cancels any in-progress operation (such as restack, sync, or merge)
-that has been paused due to a rebase conflict. Any changes made during the
-operation will be rolled back.`,
+This command cancels any in-progress operation (such as restack, sync, merge,
+or absorb) that has been paused due to a conflict. Any changes made during
+the operation will be rolled back.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *runtime.Context) error {
+				// Check for absorb in progress first - it has its own abort logic
+				if absorb.IsAbsorbInProgress(ctx) {
+					return absorb.Abort(ctx)
+				}
+
+				// Otherwise use the standard abort action
 				return actions.AbortAction(ctx, actions.AbortOptions{
 					Force: force,
 				})

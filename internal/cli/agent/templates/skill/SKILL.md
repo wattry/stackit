@@ -59,6 +59,7 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 ### Fixing Issues
 
 - **Rebase conflicts:** Resolve files, then `stackit continue`
+- **Absorb conflicts:** See [workflows/absorb-conflict.md](workflows/absorb-conflict.md) or use `stackit absorb --show-conflict`
 - **Abort operation:** `stackit abort`
 - **Undo last command:** `stackit undo`
 - **Stack health issues:** See [workflows/fix-absorb.md](workflows/fix-absorb.md) or run `/stack-fix`
@@ -113,6 +114,7 @@ Quick reference: [reference.md](reference.md)
 For complex operations requiring multiple steps:
 - **Fixing compilation errors after absorb:** [workflows/fix-absorb.md](workflows/fix-absorb.md)
 - **Resolving conflicts during rebase:** [workflows/conflict-resolution.md](workflows/conflict-resolution.md)
+- **Resolving absorb conflicts:** [workflows/absorb-conflict.md](workflows/absorb-conflict.md)
 
 ## Auto-Generation Guidelines
 
