@@ -68,7 +68,8 @@ func TestReorderCommand(t *testing.T) {
 		// Run reorder command
 		cmd = exec.Command(binaryPath, "reorder")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(os.Environ(), "EDITOR="+editorScript)
+		// Set both EDITOR and GIT_EDITOR to ensure test editor is used
+		cmd.Env = append(os.Environ(), "EDITOR="+editorScript, "GIT_EDITOR="+editorScript)
 		output, err = cmd.CombinedOutput()
 		require.NoError(t, err, "reorder command failed: %s", string(output))
 		require.Contains(t, string(output), "Reordered", "should mention reordering")
@@ -150,7 +151,8 @@ func TestReorderCommand(t *testing.T) {
 		// Run reorder command
 		cmd = exec.Command(binaryPath, "reorder")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(os.Environ(), "EDITOR="+editorScript)
+		// Set both EDITOR and GIT_EDITOR to ensure test editor is used
+		cmd.Env = append(os.Environ(), "EDITOR="+editorScript, "GIT_EDITOR="+editorScript)
 		output, err = cmd.CombinedOutput()
 		require.NoError(t, err, "reorder command failed: %s", string(output))
 
@@ -202,7 +204,8 @@ func TestReorderCommand(t *testing.T) {
 		// Run reorder command - should fail
 		cmd := exec.Command(binaryPath, "reorder")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(os.Environ(), "EDITOR="+editorScript)
+		// Set both EDITOR and GIT_EDITOR to ensure test editor is used
+		cmd.Env = append(os.Environ(), "EDITOR="+editorScript, "GIT_EDITOR="+editorScript)
 		output, err := cmd.CombinedOutput()
 		require.Error(t, err, "reorder should fail when branch is removed")
 		require.Contains(t, string(output), "was removed", "error should mention branch removal")
@@ -249,7 +252,8 @@ func TestReorderCommand(t *testing.T) {
 		// Run reorder command
 		cmd := exec.Command(binaryPath, "reorder")
 		cmd.Dir = scene.Dir
-		cmd.Env = append(os.Environ(), "EDITOR="+editorScript)
+		// Set both EDITOR and GIT_EDITOR to ensure test editor is used
+		cmd.Env = append(os.Environ(), "EDITOR="+editorScript, "GIT_EDITOR="+editorScript)
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, "reorder command failed: %s", string(output))
 		require.Contains(t, string(output), "unchanged", "should mention order unchanged")

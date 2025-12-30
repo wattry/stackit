@@ -75,7 +75,6 @@ type WorkingTree interface {
 	GetUnmergedFiles(ctx context.Context) ([]string, error)
 	ParseStagedHunks(ctx context.Context) ([]git.Hunk, error)
 	ListWorktrees(ctx context.Context) ([]string, error)
-	GetWorkingDir() string
 }
 
 // GitRunner provides low-level git command execution
@@ -127,7 +126,6 @@ type CommitOperations interface {
 type WorktreeOperations interface {
 	AddWorktree(ctx context.Context, path string, branch string, detach bool) error
 	RemoveWorktree(ctx context.Context, path string) error
-	SetWorkingDir(dir string)
 }
 
 // GitCommandRunner provides low-level git command execution

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -72,9 +73,6 @@ func (r *CommandRunner) runWithEnv(ctx context.Context, env []string, args ...st
 	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)
-	if r.workingDir != "" {
-		cmd.Dir = r.workingDir
-	}
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
@@ -109,9 +107,6 @@ func (r *CommandRunner) runInternal(ctx context.Context, input string, trim bool
 	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)
-	if r.workingDir != "" {
-		cmd.Dir = r.workingDir
-	}
 	if input != "" {
 		cmd.Stdin = strings.NewReader(input)
 	}
@@ -234,6 +229,9 @@ type Runner interface {
 	GetRemote() string
 	FetchRemoteShas(remote string) (map[string]string, error)
 	GetRemoteSha(remote, branchName string) (string, error)
+	GetConfig(key string) (string, error)
+	SetConfig(key, value string) error
+	GetConfigAll(key string) ([]string, error)
 
 	// Branch Management
 	GetCurrentBranch() (string, error)
@@ -288,10 +286,6 @@ type Runner interface {
 	RemoveWorktree(ctx context.Context, path string) error
 	ListWorktrees(ctx context.Context) ([]string, error)
 
-	// Runner state
-	SetWorkingDir(dir string)
-	GetWorkingDir() string
-
 	// Low-level Commands
 	RunGitCommand(args ...string) (string, error)
 	RunGitCommandWithContext(ctx context.Context, args ...string) (string, error)
@@ -306,6 +300,12 @@ type Runner interface {
 	ReadBlob(sha string) (string, error)
 	ListRefs(prefix string) (map[string]string, error)
 
+	// Remote Metadata Ref Operations
+	PushMetadataRefs(branches []string) error
+	FetchMetadataRefs() error
+	DeleteRemoteMetadataRef(branch string) error
+	TestRemoteRefCompatibility() error
+
 	// Absorb and Hunks
 	GetParentCommitSHA(commitSHA string) (string, error)
 	CheckCommutation(hunk Hunk, commitSHA, parentSHA string) (bool, error)
@@ -317,46 +317,20 @@ func NewRealRunner() Runner {
 	return &realRunner{}
 }
 
-// NewRealRunnerWithDir returns a standard implementation of Runner that calls
-// the package-level git functions in a specific directory.
-func NewRealRunnerWithDir(dir string) Runner {
-	return &realRunner{workingDir: dir}
-}
-
 // realRunner implements Runner by calling the actual git package functions
 type realRunner struct {
-	workingDir string
-}
-
-func (r *realRunner) SetWorkingDir(dir string) {
-	r.workingDir = dir
-}
-
-func (r *realRunner) GetWorkingDir() string {
-	return r.workingDir
+	repo *Repository
 }
 
 func (r *realRunner) RunGitCommandWithContext(ctx context.Context, args ...string) (string, error) {
-	if r.workingDir != "" {
-		runner := &CommandRunner{workingDir: r.workingDir}
-		return runner.Run(ctx, args...)
-	}
 	return RunGitCommandWithContext(ctx, args...)
 }
 
 func (r *realRunner) RunGitCommandRawWithContext(ctx context.Context, args ...string) (string, error) {
-	if r.workingDir != "" {
-		runner := &CommandRunner{workingDir: r.workingDir}
-		return runner.runInternal(ctx, "", false, args...)
-	}
 	return RunGitCommandRawWithContext(ctx, args...)
 }
 
 func (r *realRunner) InitDefaultRepo() error {
-	if r.workingDir != "" {
-		_, err := RunGitCommandInDir(r.workingDir, "rev-parse", "--is-inside-work-tree")
-		return err
-	}
 	return InitDefaultRepo()
 }
 
@@ -372,11 +346,36 @@ func (r *realRunner) GetRemoteSha(remote, branchName string) (string, error) {
 	return GetRemoteSha(remote, branchName)
 }
 
+func (r *realRunner) GetConfig(key string) (string, error) {
+	return GetConfig(key)
+}
+
+func (r *realRunner) SetConfig(key, value string) error {
+	return SetConfig(key, value)
+}
+
+func (r *realRunner) GetConfigAll(key string) ([]string, error) {
+	return GetConfigAll(key)
+}
+
 func (r *realRunner) GetCurrentBranch() (string, error) {
+	if r.repo != nil {
+		head, err := r.repo.Head()
+		if err != nil {
+			return "", err
+		}
+		if !head.Name().IsBranch() {
+			return "", fmt.Errorf("HEAD is not on a branch")
+		}
+		return head.Name().Short(), nil
+	}
 	return GetCurrentBranch()
 }
 
 func (r *realRunner) GetAllBranchNames() ([]string, error) {
+	if r.repo != nil {
+		return r.repo.GetBranchNames()
+	}
 	return GetAllBranchNames()
 }
 
@@ -493,7 +492,7 @@ func (r *realRunner) CommitWithOptions(opts CommitOptions) error {
 }
 
 func (r *realRunner) Commit(message string, verbose int, noVerify bool) error {
-	return CommitWithOptions(CommitOptions{
+	return r.CommitWithOptions(CommitOptions{
 		Message:  message,
 		Verbose:  verbose,
 		NoVerify: noVerify,
@@ -553,7 +552,7 @@ func (r *realRunner) ListWorktrees(ctx context.Context) ([]string, error) {
 }
 
 func (r *realRunner) RunGitCommand(args ...string) (string, error) {
-	return RunGitCommand(args...)
+	return r.RunGitCommandWithContext(context.Background(), args...)
 }
 
 func (r *realRunner) RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error) {
@@ -584,11 +583,29 @@ func (r *realRunner) ListRefs(prefix string) (map[string]string, error) {
 	return ListRefs(prefix)
 }
 
+func (r *realRunner) PushMetadataRefs(branches []string) error {
+	return PushMetadataRefs(branches)
+}
+
+func (r *realRunner) FetchMetadataRefs() error {
+	return FetchMetadataRefs()
+}
+
+func (r *realRunner) DeleteRemoteMetadataRef(branch string) error {
+	return DeleteRemoteMetadataRef(branch)
+}
+
+func (r *realRunner) TestRemoteRefCompatibility() error {
+	return TestRemoteRefCompatibility()
+}
+
 func (r *realRunner) GetParentCommitSHA(commitSHA string) (string, error) {
 	return GetParentCommitSHA(commitSHA)
 }
 
 func (r *realRunner) CheckCommutation(hunk Hunk, commitSHA, parentSHA string) (bool, error) {
+	// This is very complex and relies on low-level logic. For now, we'll keep calling the package level.
+	// But in a real implementation, we should move this logic into a shared helper that takes a Runner.
 	return CheckCommutation(hunk, commitSHA, parentSHA)
 }
 

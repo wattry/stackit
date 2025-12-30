@@ -18,6 +18,8 @@ type engineImpl struct {
 	scopeMap          map[string]string   // branch -> scope
 	lockedMap         map[string]bool     // branch -> locked
 	remoteShas        map[string]string   // branch -> remote SHA (populated by PopulateRemoteShas)
+	remoteMetaCache   map[string]*Meta    // branch -> remote metadata
+	localModified     map[string]bool     // branches with local changes not yet pushed
 	maxUndoStackDepth int
 	git               git.Runner
 	mu                sync.RWMutex
@@ -55,6 +57,8 @@ func NewEngine(opts Options) (Engine, error) {
 		scopeMap:          make(map[string]string),
 		lockedMap:         make(map[string]bool),
 		remoteShas:        make(map[string]string),
+		remoteMetaCache:   make(map[string]*Meta),
+		localModified:     make(map[string]bool),
 		maxUndoStackDepth: maxDepth,
 		git:               g,
 	}

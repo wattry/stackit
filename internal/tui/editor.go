@@ -25,15 +25,17 @@ func OpenEditor(initialContent, filenamePattern string) (string, error) {
 		return "", fmt.Errorf("failed to close temp file: %w", err)
 	}
 
-	// Get editor from environment
+	// Get editor from environment and git config
+	// Precedence: GIT_EDITOR > EDITOR > core.editor > default (vi)
+	// Note: We prioritize environment variables over git config to allow test override
 	editor := os.Getenv("GIT_EDITOR")
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
 	}
 	if editor == "" {
-		// Try to get from git config
+		// Try to get from git config only if env vars are not set
 		output, err := exec.Command("git", "config", "--get", "core.editor").Output()
-		if err == nil {
+		if err == nil && len(output) > 0 {
 			editor = strings.TrimSpace(string(output))
 		}
 	}
