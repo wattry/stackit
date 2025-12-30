@@ -21,7 +21,6 @@ func syncRemoteMetadata(ctx *runtime.Context, opts *Options) error {
 	if err := git.FetchMetadataRefs(); err != nil {
 		// Non-fatal: remote may not have metadata yet
 		splog.Debug("No remote metadata to fetch: %v", err)
-		return nil
 	}
 
 	// Configure refspec so future git fetch commands also fetch metadata
@@ -32,10 +31,9 @@ func syncRemoteMetadata(ctx *runtime.Context, opts *Options) error {
 	// Load remote metadata into cache
 	if err := eng.LoadRemoteMetadataCache(); err != nil {
 		splog.Debug("Failed to load remote metadata cache: %v", err)
-		return nil
 	}
 
-	// Handle orphaned local metadata (dual-checkout scenario)
+	// Handle orphaned local metadata (dual-checkout scenario or manual branch deletion)
 	if err := handleOrphanedMetadata(ctx, opts); err != nil {
 		return err
 	}
@@ -85,9 +83,12 @@ func handleOrphanedMetadata(ctx *runtime.Context, opts *Options) error {
 	if opts.DryRun {
 		splog.Info("\n=== Orphaned metadata (dry run) ===")
 		for _, info := range orphaned {
-			if info.HasLocalChanges {
+			switch {
+			case !info.ExistsLocally:
+				splog.Info("  %s: local branch gone, would delete metadata", style.ColorBranchName(info.BranchName, false))
+			case info.HasLocalChanges:
 				splog.Info("  %s: has local changes, would prompt", style.ColorBranchName(info.BranchName, false))
-			} else {
+			default:
 				splog.Info("  %s: no local changes, would delete sync state", style.ColorBranchName(info.BranchName, false))
 			}
 		}
@@ -96,8 +97,12 @@ func handleOrphanedMetadata(ctx *runtime.Context, opts *Options) error {
 
 	for _, info := range orphaned {
 		if info.Action == engine.OrphanedActionDelete {
-			// No local changes - silently remove sync state
-			if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
+			// No local changes - silently remove sync state or delete ref if branch is gone
+			if !info.ExistsLocally {
+				if err := eng.DeleteMetadataRef(engine.NewBranch(info.BranchName, eng)); err != nil {
+					splog.Debug("Failed to delete orphaned metadata ref for %s: %v", info.BranchName, err)
+				}
+			} else if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
 				splog.Debug("Failed to delete metadata hash for %s: %v", info.BranchName, err)
 			}
 		} else {

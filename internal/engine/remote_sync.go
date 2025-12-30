@@ -187,12 +187,20 @@ func (e *engineImpl) ComputeMetadataDiff(branch string) (*MetadataDiff, error) {
 	return diff, nil
 }
 
-// ComputeAllMetadataDiffs computes diffs for all branches in the remote cache
+// ComputeAllMetadataDiffs computes diffs for all branches in the remote cache that exist locally
 func (e *engineImpl) ComputeAllMetadataDiffs() ([]*MetadataDiff, error) {
 	e.mu.RLock()
+	// Filter to only include branches that exist locally (as git branches)
+	localBranches := make(map[string]bool)
+	for _, b := range e.branches {
+		localBranches[b] = true
+	}
+
 	branches := make([]string, 0, len(e.remoteMetaCache))
 	for b := range e.remoteMetaCache {
-		branches = append(branches, b)
+		if localBranches[b] {
+			branches = append(branches, b)
+		}
 	}
 	e.mu.RUnlock()
 
@@ -282,11 +290,12 @@ type OrphanedMetadataInfo struct {
 	BranchName      string
 	Action          OrphanedMetadataAction
 	HasLocalChanges bool
+	ExistsLocally   bool
 	LocalMeta       *Meta
 }
 
-// FindOrphanedLocalMetadata identifies branches that have local metadata but no remote metadata
-// This handles the "dual-checkout scenario" where someone else deleted the branch/metadata
+// FindOrphanedLocalMetadata identifies branches that have local metadata but no corresponding local branch or remote metadata.
+// This handles scenarios where branches were deleted elsewhere or manually via git.
 func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -297,33 +306,51 @@ func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error)
 		return nil, err
 	}
 
+	// Create a map of local branches for faster lookup
+	localBranches := make(map[string]bool)
+	for _, b := range e.branches {
+		localBranches[b] = true
+	}
+
 	orphaned := make([]OrphanedMetadataInfo, 0, len(localRefs))
 
 	for refName := range localRefs {
 		branchName := refName[len("refs/stackit/metadata/"):]
 
-		// Skip if remote metadata exists for this branch
-		if _, hasRemote := e.remoteMetaCache[branchName]; hasRemote {
+		// Metadata is orphaned if the local branch is gone
+		existsLocally := localBranches[branchName]
+		_, hasRemote := e.remoteMetaCache[branchName]
+
+		// If it exists locally and has remote metadata, it's not orphaned (it's active and synced)
+		if existsLocally && hasRemote {
 			continue
 		}
 
-		// Check if this branch was previously synced (has LocalOnlyHash)
+		// If it exists locally but has no remote metadata, it's not orphaned (it's a local-only branch)
+		// UNLESS it was previously synced (has LocalOnlyHash).
 		local, err := e.readMetadataRef(branchName)
 		if err != nil {
 			continue
 		}
 
-		// If LocalOnlyHash is nil, this branch was never synced from remote
-		// so it's not orphaned - it's just a local-only branch
-		if local.LocalOnlyHash == nil {
+		if existsLocally && local.LocalOnlyHash == nil {
 			continue
 		}
 
-		// This is orphaned metadata - remote was deleted but local still exists
-		hasLocalChanges := e.computeMetadataHash(local) != *local.LocalOnlyHash
+		// At this point, metadata is orphaned if:
+		// 1. The local branch is gone (manual deletion)
+		// 2. The remote metadata is gone but was previously synced (dual-checkout scenario)
+
+		// Check for local changes relative to last sync
+		hasLocalChanges := false
+		if local.LocalOnlyHash != nil {
+			hasLocalChanges = e.computeMetadataHash(local) != *local.LocalOnlyHash
+		}
 
 		action := OrphanedActionDelete
-		if hasLocalChanges {
+		if hasLocalChanges && existsLocally {
+			// Only prompt if the branch still exists locally but remote metadata is gone.
+			// If the local branch is gone, we should just delete the metadata ref.
 			action = OrphanedActionPrompt
 		}
 
@@ -331,6 +358,7 @@ func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error)
 			BranchName:      branchName,
 			Action:          action,
 			HasLocalChanges: hasLocalChanges,
+			ExistsLocally:   existsLocally,
 			LocalMeta:       local,
 		})
 	}
