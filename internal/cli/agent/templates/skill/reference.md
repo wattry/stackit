@@ -26,7 +26,7 @@ bash ~/.claude/skills/stackit/scripts/validate_pr.sh "PR Title" "PR Body"
 |---------|-------------|
 | `stackit log` | Display the branch tree visualization |
 | `stackit log full` | Show tree with GitHub PR status and CI checks |
-| `stackit checkout` | Interactive branch switcher |
+| `stackit checkout [branch]` | Switch to a specific branch |
 | `stackit up` | Move to the child branch |
 | `stackit down` | Move to the parent branch |
 | `stackit top` | Move to the top of the stack |

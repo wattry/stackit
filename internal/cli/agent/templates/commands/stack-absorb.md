@@ -10,7 +10,7 @@ Absorb working directory changes into the correct commits in your stack using in
 ## Context
 - Current branch: !`git branch --show-current`
 - Changed files: !`git status --short 2>/dev/null`
-- Stack structure: !`stackit log --oneline --no-interactive 2>/dev/null`
+- Stack structure: !`stackit log --no-interactive 2>/dev/null`
 
 ## What Absorb Does
 

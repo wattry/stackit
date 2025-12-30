@@ -11,7 +11,7 @@ Create a new stacked branch on top of the current branch. Branch name is optiona
 ## Context
 - Current branch: !`git branch --show-current`
 - Staged changes: !`git diff --cached --stat 2>/dev/null || echo 'No staged changes'`
-- Stack state: !`stackit log --oneline --no-interactive 2>/dev/null || echo 'Not initialized'`
+- Stack state: !`stackit log --no-interactive 2>/dev/null || echo 'Not initialized'`
 
 ## Arguments
 $ARGUMENTS

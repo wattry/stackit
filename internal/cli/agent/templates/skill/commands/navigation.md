@@ -9,8 +9,8 @@ Commands for moving through your stack and viewing stack state.
 | Command | Description |
 |---------|-------------|
 | `stackit log --no-interactive` | Display the branch tree visualization |
-| `stackit log --no-interactive full` | Show tree with GitHub PR status and CI checks |
-| `stackit checkout --no-interactive` | Interactive branch switcher |
+| `stackit log full --no-interactive` | Show tree with GitHub PR status and CI checks |
+| `stackit checkout [branch] --no-interactive` | Switch to a specific branch |
 
 ## Movement Commands
 
@@ -33,5 +33,5 @@ Commands for moving through your stack and viewing stack state.
 ## Quick Tips
 
 - Always run `stackit log --no-interactive` first to understand your position
-- Use `stackit checkout --no-interactive` for interactive selection when you have many branches
-- `stackit log --no-interactive full` shows PR status - useful before submitting
+- Use `stackit checkout <branch> --no-interactive` to switch to a specific branch
+- `stackit log full --no-interactive` shows PR status - useful before submitting
