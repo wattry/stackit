@@ -18,6 +18,8 @@ type engineImpl struct {
 	scopeMap          map[string]string   // branch -> scope
 	lockedMap         map[string]bool     // branch -> locked
 	remoteShas        map[string]string   // branch -> remote SHA (populated by PopulateRemoteShas)
+	remoteMetaCache   map[string]*Meta    // branch -> remote metadata
+	localModified     map[string]bool     // branches with local changes not yet pushed
 	maxUndoStackDepth int
 	git               git.Runner
 	mu                sync.RWMutex
@@ -55,6 +57,8 @@ func NewEngine(opts Options) (Engine, error) {
 		scopeMap:          make(map[string]string),
 		lockedMap:         make(map[string]bool),
 		remoteShas:        make(map[string]string),
+		remoteMetaCache:   make(map[string]*Meta),
+		localModified:     make(map[string]bool),
 		maxUndoStackDepth: maxDepth,
 		git:               g,
 	}
@@ -70,7 +74,38 @@ func NewEngine(opts Options) (Engine, error) {
 		return nil, fmt.Errorf("failed to rebuild engine: %w", err)
 	}
 
+	// Auto-fetch remote metadata on first use (fresh clone scenario)
+	e.maybeAutoFetchRemoteMetadata()
+
 	return e, nil
+}
+
+// maybeAutoFetchRemoteMetadata fetches remote metadata if this appears to be a fresh clone
+func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
+	// Check if refspec is already configured
+	refspecs, err := git.GetConfigAll("remote.origin.fetch")
+	if err == nil {
+		metadataRefspec := "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*"
+		for _, rs := range refspecs {
+			if rs == metadataRefspec {
+				// Already configured, nothing to do
+				return
+			}
+		}
+	}
+
+	// Not configured yet - this might be a fresh clone
+	// Try to fetch metadata refs
+	if err := git.FetchMetadataRefs(); err != nil {
+		// No remote metadata available, or error fetching - that's okay
+		return
+	}
+
+	// Configure refspec for future fetches
+	_ = git.EnsureMetadataRefspecConfigured()
+
+	// Load remote metadata cache
+	_ = e.LoadRemoteMetadataCache()
 }
 
 // Reset clears all branch metadata and rebuilds with new trunk

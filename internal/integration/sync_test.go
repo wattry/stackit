@@ -1,6 +1,9 @@
 package integration
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -339,4 +342,103 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 
 	// 'b' should be reparented to main
 	require.Equal(t, "main", eng.GetBranch("b").GetParent().GetName())
+}
+
+func TestSyncRemoteMetadata(t *testing.T) {
+	t.Run("loads remote metadata cache", func(t *testing.T) {
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch
+		sh.CreateBranch("feature-a").
+			CommitChange("file-a", "content-a").
+			TrackBranch("feature-a", "main")
+
+		eng := sh.Engine
+
+		// Set local metadata
+		branch := eng.GetBranch("feature-a")
+		require.NoError(t, eng.SetLocked(branch, false))
+
+		// Create remote metadata refs (simulating a successful fetch)
+		remoteMeta := &engine.Meta{
+			Locked: true,
+			Scope:  scopePtr("remote-scope"),
+		}
+		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
+
+		// Load remote metadata cache (this is what sync does after fetching)
+		err := eng.LoadRemoteMetadataCache()
+		require.NoError(t, err)
+
+		// Verify remote metadata cache was loaded
+		cache := eng.GetRemoteMetadataCache()
+		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
+		require.True(t, cache["feature-a"].Locked, "Remote metadata should show locked=true")
+		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
+	})
+
+	t.Run("detects metadata conflicts", func(t *testing.T) {
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		sh.CreateBranch("feature-b").
+			CommitChange("file-b", "content-b").
+			TrackBranch("feature-b", "main")
+
+		eng := sh.Engine
+
+		// Set local metadata: locked=false
+		branch := eng.GetBranch("feature-b")
+		require.NoError(t, eng.SetLocked(branch, false))
+
+		// Create remote metadata refs: locked=true (conflict)
+		remoteMeta := &engine.Meta{
+			Locked: true,
+		}
+		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
+
+		// Load remote metadata cache
+		err := eng.LoadRemoteMetadataCache()
+		require.NoError(t, err)
+
+		// Compute diff to verify conflict detection
+		diff, err := eng.ComputeMetadataDiff("feature-b")
+		require.NoError(t, err)
+		require.NotNil(t, diff)
+		require.True(t, diff.HasConflict, "Should detect conflict between local and remote metadata")
+
+		// Verify the specific field that differs
+		require.Len(t, diff.Differences, 1)
+		require.Equal(t, "locked", diff.Differences[0].Field)
+		require.Equal(t, false, diff.Differences[0].LocalValue)
+		require.Equal(t, true, diff.Differences[0].RemoteValue)
+	})
+}
+
+// createRemoteMetadataRefForSync creates a ref at refs/stackit/remote-metadata/<branch>
+func createRemoteMetadataRefForSync(t *testing.T, sh *scenario.Scenario, branchName string, meta *engine.Meta) {
+	t.Helper()
+
+	data, err := json.Marshal(meta)
+	require.NoError(t, err)
+
+	tmpFile := filepath.Join(sh.Scene.Dir, ".git", "tmp-meta-"+branchName)
+	err = os.WriteFile(tmpFile, data, 0600)
+	require.NoError(t, err)
+	defer os.Remove(tmpFile)
+
+	blobSha, err := sh.Scene.Repo.RunGitCommandAndGetOutput("hash-object", "-w", tmpFile)
+	require.NoError(t, err)
+
+	// Remove trailing newline
+	if len(blobSha) > 0 && blobSha[len(blobSha)-1] == '\n' {
+		blobSha = blobSha[:len(blobSha)-1]
+	}
+
+	refName := "refs/stackit/remote-metadata/" + branchName
+	err = sh.Scene.Repo.RunGitCommand("update-ref", refName, blobSha)
+	require.NoError(t, err)
+}
+
+func scopePtr(s string) *string {
+	return &s
 }

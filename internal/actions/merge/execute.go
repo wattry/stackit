@@ -148,16 +148,11 @@ func ExecuteInWorktree(ctx context.Context, eng mergeExecuteEngine, splog *tui.S
 		return fmt.Errorf("failed to add worktree: %w", err)
 	}
 
-	// 3. Set working directory for git commands
-	originalWorkDir := eng.GetWorkingDir()
-	eng.SetWorkingDir(worktreePath)
-
 	trunk := eng.Trunk()
 
-	// Ensure we restore working directory and clean up on exit (unless there's a conflict)
+	// Ensure we clean up on exit (unless there's a conflict)
 	cleanupWorktree := true
 	defer func() {
-		eng.SetWorkingDir(originalWorkDir)
 		if cleanupWorktree {
 			splog.Debug("Cleaning up worktree at %s", worktreePath)
 			if cleanupErr := eng.RemoveWorktree(context.Background(), worktreePath); cleanupErr != nil {

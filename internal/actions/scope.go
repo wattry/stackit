@@ -61,6 +61,11 @@ func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
 			return fmt.Errorf("failed to unset scope: %w", err)
 		}
 		splog.Info("Unset explicit scope for branch %s. It will now inherit from its parent.", style.ColorBranchName(currentBranch, false))
+
+		// Push metadata changes to remote
+		if err := pushMetadataForSingleBranch(ctx, currentBranch); err != nil {
+			splog.Debug("Failed to push metadata changes: %v", err)
+		}
 		return nil
 	}
 
@@ -99,6 +104,43 @@ func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
 				}
 			}
 		}
+	}
+
+	// Push metadata changes to remote
+	if err := pushMetadataForSingleBranch(ctx, currentBranch); err != nil {
+		splog.Debug("Failed to push metadata changes: %v", err)
+	}
+
+	return nil
+}
+
+// pushMetadataForSingleBranch is a helper that pushes metadata for a single branch
+func pushMetadataForSingleBranch(ctx *runtime.Context, branchName string) error {
+	eng := ctx.Engine
+	splog := ctx.Splog
+
+	// Update LastModifiedBy
+	if err := eng.SetLastModifiedBy(branchName); err != nil {
+		splog.Debug("Failed to update metadata for %s: %v", branchName, err)
+	}
+
+	// Check if remote sync is enabled; if not, run compatibility test first
+	if !eng.IsRemoteSyncEnabled() {
+		if err := git.TestRemoteRefCompatibility(); err != nil {
+			splog.Debug("Remote metadata sync not supported: %v", err)
+			return nil // Non-fatal
+		}
+		eng.SetRemoteSyncEnabled(true)
+		// Configure refspec so future git fetch commands also fetch metadata
+		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+			splog.Debug("Failed to configure metadata refspec: %v", err)
+		}
+	}
+
+	// Push metadata ref
+	if err := git.PushMetadataRefs([]string{branchName}); err != nil {
+		splog.Debug("Failed to push metadata refs: %v", err)
+		return err
 	}
 
 	return nil

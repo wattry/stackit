@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -151,6 +152,28 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 		}
 	}
 
+	// Fetch and apply remote metadata for all branches in the stack
+	if err := git.FetchMetadataRefs(); err != nil {
+		splog.Debug("No remote metadata to fetch: %v", err)
+	} else {
+		// Configure refspec so future git fetch commands also fetch metadata
+		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+			splog.Debug("Failed to configure metadata refspec: %v", err)
+		}
+		if err := eng.LoadRemoteMetadataCache(); err != nil {
+			splog.Debug("Failed to load remote metadata cache: %v", err)
+		} else {
+			for _, branchName := range branchesToSync {
+				if branchName == eng.Trunk().GetName() {
+					continue
+				}
+				if err := eng.ApplyRemoteMetadataIfExists(branchName); err != nil {
+					splog.Debug("Failed to apply metadata for %s: %v", branchName, err)
+				}
+			}
+		}
+	}
+
 	// Checkout target branch
 	if err := eng.CheckoutBranch(gctx, eng.GetBranch(targetBranch)); err != nil {
 		return fmt.Errorf("failed to checkout target branch %s: %w", targetBranch, err)
@@ -176,7 +199,7 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 		}
 		sorted := eng.SortBranchesTopologically(uniqueBranches)
 		if len(sorted) > 0 {
-			if err := RestackBranches(gctx, sorted, eng, splog, ctx.RepoRoot); err != nil {
+			if err := RestackBranches(ctx, sorted); err != nil {
 				return fmt.Errorf("restack failed: %w", err)
 			}
 		}

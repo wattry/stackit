@@ -14,13 +14,13 @@ import (
 )
 
 // ValidateBranchesToSubmit validates that branches are ready to submit
-func ValidateBranchesToSubmit(ctx context.Context, branches []string, eng engine.Engine, runtimeCtx *runtime.Context) error {
+func ValidateBranchesToSubmit(ctx *runtime.Context, branches []string) error {
 	// Sync PR info first
-	repoOwner, repoName, _ := utils.GetRepoInfo(ctx)
+	repoOwner, repoName, _ := utils.GetRepoInfo(ctx.Context)
 	if repoOwner != "" && repoName != "" {
-		if err := github.SyncPrInfo(ctx, branches, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
-			branch := eng.GetBranch(name)
-			_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
+		if err := github.SyncPrInfo(ctx.Context, branches, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
+			branch := ctx.Engine.GetBranch(name)
+			_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
 				&prInfo.Number,
 				prInfo.Title,
 				prInfo.Body,
@@ -31,22 +31,22 @@ func ValidateBranchesToSubmit(ctx context.Context, branches []string, eng engine
 			))
 		}); err != nil {
 			// Non-fatal, continue
-			runtimeCtx.Splog.Debug("Failed to sync PR info: %v", err)
+			ctx.Splog.Debug("Failed to sync PR info: %v", err)
 		}
 	}
 
 	// Validate base revisions
-	if err := validateBaseRevisions(branches, eng, runtimeCtx); err != nil {
+	if err := validateBaseRevisions(branches, ctx.Engine, ctx); err != nil {
 		return err
 	}
 
 	// Validate no empty branches
-	if err := validateNoEmptyBranches(ctx, branches, eng, runtimeCtx); err != nil {
+	if err := validateNoEmptyBranches(ctx.Context, branches, ctx.Engine, ctx); err != nil {
 		return err
 	}
 
 	// Validate no merged/closed branches
-	if err := validateNoMergedOrClosedBranches(branches, eng, runtimeCtx); err != nil {
+	if err := validateNoMergedOrClosedBranches(branches, ctx.Engine, ctx); err != nil {
 		return err
 	}
 
@@ -57,7 +57,7 @@ func ValidateBranchesToSubmit(ctx context.Context, branches []string, eng engine
 // 1. Its parent is trunk, OR
 // 2. We are submitting its parent before it and it does not need restacking, OR
 // 3. Its base matches the existing head for its parent's PR
-func validateBaseRevisions(branches []string, eng engine.Engine, runtimeCtx *runtime.Context) error {
+func validateBaseRevisions(branches []string, eng engine.Engine, ctx *runtime.Context) error {
 	validatedBranches := make(map[string]bool)
 
 	for _, branchName := range branches {
@@ -68,7 +68,7 @@ func validateBaseRevisions(branches []string, eng engine.Engine, runtimeCtx *run
 		switch {
 		case parentBranch.IsTrunk():
 			if !branch.IsBranchUpToDate() {
-				runtimeCtx.Splog.Info("Note that %s has fallen behind trunk. You may encounter conflicts if you attempt to merge it.",
+				ctx.Splog.Info("Note that %s has fallen behind trunk. You may encounter conflicts if you attempt to merge it.",
 					style.ColorBranchName(branchName, false))
 			}
 		case validatedBranches[parentBranchName]:
@@ -127,7 +127,7 @@ func validateNoEmptyBranches(ctx context.Context, branches []string, eng engine.
 }
 
 // validateNoMergedOrClosedBranches checks for merged/closed PRs and prompts user if found
-func validateNoMergedOrClosedBranches(branches []string, eng engine.Engine, runtimeCtx *runtime.Context) error {
+func validateNoMergedOrClosedBranches(branches []string, eng engine.Engine, ctx *runtime.Context) error {
 	mergedOrClosedBranches := []string{}
 	for _, branchName := range branches {
 		branch := eng.GetBranch(branchName)
@@ -145,10 +145,10 @@ func validateNoMergedOrClosedBranches(branches []string, eng engine.Engine, runt
 	}
 
 	hasMultiple := len(mergedOrClosedBranches) > 1
-	runtimeCtx.Splog.Tip("You can use 'stackit sync' to find and delete all merged/closed branches automatically and rebase their children.")
-	runtimeCtx.Splog.Warn("PR%s for the following branch%s already been merged or closed:", actions.PluralSuffix(hasMultiple), actions.PluralSuffix(hasMultiple))
+	ctx.Splog.Tip("You can use 'stackit sync' to find and delete all merged/closed branches automatically and rebase their children.")
+	ctx.Splog.Warn("PR%s for the following branch%s already been merged or closed:", actions.PluralSuffix(hasMultiple), actions.PluralSuffix(hasMultiple))
 	for _, b := range mergedOrClosedBranches {
-		runtimeCtx.Splog.Warn("▸ %s", b)
+		ctx.Splog.Warn("▸ %s", b)
 	}
 
 	// For now, we'll clear PR info and allow creating new PRs (non-interactive mode)

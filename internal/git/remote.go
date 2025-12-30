@@ -8,6 +8,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
+// DefaultRemote is the default name for the remote repository
+const DefaultRemote = "origin"
+
 // PruneRemote prunes stale remote-tracking branches
 func PruneRemote(remote string) error {
 	repo, err := GetDefaultRepo()
@@ -39,7 +42,7 @@ func PruneRemote(remote string) error {
 func GetRemote() string {
 	repo, err := GetDefaultRepo()
 	if err != nil {
-		return "origin"
+		return DefaultRemote
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
@@ -60,7 +63,7 @@ func GetRemote() string {
 	}
 
 	// Fallback to origin
-	return "origin"
+	return DefaultRemote
 }
 
 // FetchRemoteShas fetches the SHAs of all branches on the remote.

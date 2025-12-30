@@ -12,6 +12,7 @@ type Options struct {
 	All     bool
 	Force   bool
 	Restack bool
+	DryRun  bool
 }
 
 // Action performs the sync operation
@@ -42,6 +43,11 @@ func Action(ctx *runtime.Context, opts Options) error {
 
 	// Sync PR info
 	if err := syncGitHubInfo(ctx, &branchesToRestack); err != nil {
+		return err
+	}
+
+	// Sync remote metadata
+	if err := syncRemoteMetadata(ctx, &opts); err != nil {
 		return err
 	}
 

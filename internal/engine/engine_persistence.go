@@ -75,7 +75,9 @@ func (e *engineImpl) DeleteMetadataRef(branch Branch) error {
 	return e.git.DeleteRef(refName)
 }
 
-// RenameMetadataRef renames a metadata ref from one branch name to another
+// RenameMetadataRef copies metadata from old branch name to new branch name.
+// The old metadata ref is kept for potential cleanup by garbage collection
+// or for collaborative scenarios where others still reference the old name.
 func (e *engineImpl) RenameMetadataRef(oldBranch, newBranch Branch) error {
 	oldRefName := fmt.Sprintf("%s%s", MetadataRefPrefix, oldBranch.GetName())
 	newRefName := fmt.Sprintf("%s%s", MetadataRefPrefix, newBranch.GetName())
@@ -85,13 +87,14 @@ func (e *engineImpl) RenameMetadataRef(oldBranch, newBranch Branch) error {
 		return nil //nolint:nilerr // Nothing to rename
 	}
 
+	// Copy metadata to new ref (keep old ref for cleanup later)
 	if err := e.git.UpdateRef(newRefName, sha); err != nil {
 		return fmt.Errorf("failed to create new metadata ref: %w", err)
 	}
 
-	if err := e.git.DeleteRef(oldRefName); err != nil {
-		return fmt.Errorf("failed to delete old metadata ref: %w", err)
-	}
+	// Note: We intentionally keep the old ref around for collaborative scenarios.
+	// The old metadata will be cleaned up during garbage collection or when
+	// the orphaned metadata detection runs during sync.
 
 	return nil
 }

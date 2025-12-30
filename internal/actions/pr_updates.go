@@ -1,32 +1,31 @@
 package actions
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 
-	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/runtime"
 )
 
 var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
 
 // UpdateStackPRMetadata updates PR titles and body footers for a list of branches
-func UpdateStackPRMetadata(ctx context.Context, branches []string, eng engine.Engine, githubClient github.Client, repoOwner, repoName string) {
+func UpdateStackPRMetadata(ctx *runtime.Context, branches []string, repoOwner, repoName string) {
 	var wg sync.WaitGroup
 	for _, branchName := range branches {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			branch := eng.GetBranch(name)
+			branch := ctx.Engine.GetBranch(name)
 			prInfo, err := branch.GetPrInfo()
 			if err != nil || prInfo == nil || prInfo.Number() == nil {
 				return
 			}
 
-			scope := eng.GetScope(branch)
+			scope := ctx.Engine.GetScope(branch)
 			updatedTitle := prInfo.Title()
 			if !scope.IsEmpty() {
 				if scopeRegex.MatchString(updatedTitle) {
@@ -38,7 +37,7 @@ func UpdateStackPRMetadata(ctx context.Context, branches []string, eng engine.En
 				}
 			}
 
-			footer := CreatePRBodyFooter(name, eng)
+			footer := CreatePRBodyFooter(name, ctx.Engine)
 			updatedBody := UpdatePRBodyFooter(prInfo.Body(), footer)
 
 			if updatedTitle != prInfo.Title() || updatedBody != prInfo.Body() {
@@ -50,11 +49,11 @@ func UpdateStackPRMetadata(ctx context.Context, branches []string, eng engine.En
 					updateOpts.Body = &updatedBody
 				}
 
-				if err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, *prInfo.Number(), updateOpts); err != nil {
+				if err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *prInfo.Number(), updateOpts); err != nil {
 					return
 				}
 
-				_ = eng.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody))
+				_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody))
 			}
 		}(branchName)
 	}

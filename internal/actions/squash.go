@@ -61,7 +61,7 @@ func SquashAction(ctx *runtime.Context, opts SquashOptions) error {
 
 	// Restack upstack branches
 	if len(upstackBranches) > 0 {
-		if err := RestackBranches(context, upstackBranches, eng, splog, ctx.RepoRoot); err != nil {
+		if err := RestackBranches(ctx, upstackBranches); err != nil {
 			return fmt.Errorf("failed to restack upstack branches: %w", err)
 		}
 	}
