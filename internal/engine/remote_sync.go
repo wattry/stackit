@@ -33,9 +33,6 @@ func (e *engineImpl) SetLastModifiedBy(branchName string) error {
 		GitEmail: email,
 	}
 
-	// GitHub username resolution will be implemented in Phase 5
-	// For now, we'll just set the git name and email.
-
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
