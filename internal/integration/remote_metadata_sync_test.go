@@ -161,6 +161,61 @@ func TestRemoteMetadataSync(t *testing.T) {
 		// Should now be detected as modified
 		require.True(t, eng.HasLocalModifications("feature-d"))
 	})
+
+	t.Run("ignores remote metadata for non-existent local branches", func(t *testing.T) {
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		eng := sh.Engine
+
+		// 1. Simulate remote metadata for a branch that doesn't exist locally
+		remoteMeta := &engine.Meta{
+			Locked: true,
+			Scope:  strPtr("remote-scope"),
+		}
+		createRemoteMetadataRef(t, sh, "non-existent-branch", remoteMeta)
+
+		// 2. Load remote metadata cache
+		err := eng.LoadRemoteMetadataCache()
+		require.NoError(t, err)
+
+		// 3. Compute all diffs - should be empty because branch doesn't exist locally
+		diffs, err := eng.ComputeAllMetadataDiffs()
+		require.NoError(t, err)
+		require.Empty(t, diffs, "expected no diffs for non-existent local branches")
+	})
+
+	t.Run("identifies orphaned metadata when local branch is gone", func(t *testing.T) {
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		eng := sh.Engine
+
+		// 1. Create a branch and metadata
+		sh.CreateBranch("temp-branch").
+			CommitChange("temp-file", "content").
+			TrackBranch("temp-branch", "main")
+
+		// 2. Switch back to main and delete the git branch but keep the metadata ref
+		sh.Checkout("main")
+		err := sh.Scene.Repo.RunGitCommand("branch", "-D", "temp-branch")
+		require.NoError(t, err)
+
+		// 3. Rebuild engine so it knows the branch is gone
+		sh.Rebuild()
+
+		// 4. Find orphaned metadata
+		orphaned, err := eng.FindOrphanedLocalMetadata()
+		require.NoError(t, err)
+
+		// Should find the orphaned metadata for the deleted branch
+		found := false
+		for _, info := range orphaned {
+			if info.BranchName == "temp-branch" {
+				found = true
+				require.False(t, info.ExistsLocally)
+				require.Equal(t, engine.OrphanedActionDelete, info.Action)
+				break
+			}
+		}
+		require.True(t, found, "expected to find orphaned metadata for deleted branch")
+	})
 }
 
 // createRemoteMetadataRef creates a ref at refs/stackit/remote-metadata/<branch> to simulate fetched remote metadata
