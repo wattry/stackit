@@ -11,8 +11,6 @@ import (
 // restackBranches handles restacking branches after sync operations
 func restackBranches(ctx *runtime.Context, branchesToRestack []string) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
-	gctx := ctx.Context
 
 	// Add current branch stack to restack list
 	currentBranch := eng.CurrentBranch()
@@ -52,7 +50,7 @@ func restackBranches(ctx *runtime.Context, branchesToRestack []string) error {
 
 	// Restack branches
 	if len(sortedBranches) > 0 {
-		if err := actions.RestackBranches(gctx, sortedBranches, eng, splog, ctx.RepoRoot); err != nil {
+		if err := actions.RestackBranches(ctx, sortedBranches); err != nil {
 			return fmt.Errorf("failed to restack branches: %w", err)
 		}
 	}

@@ -42,7 +42,7 @@ func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string) error {
 
 		// Update PR body footers if needed
 		if ctx.GitHubClient != nil {
-			actions.UpdateStackPRMetadata(gctx, branchNames, eng, ctx.GitHubClient, repoOwner, repoName)
+			actions.UpdateStackPRMetadata(ctx, branchNames, repoOwner, repoName)
 		}
 	}
 

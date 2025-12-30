@@ -101,7 +101,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 		for i, name := range childrenToRestack {
 			branches[i] = eng.GetBranch(name)
 		}
-		if err := actions.RestackBranches(ctx.Context, branches, eng, splog, ctx.RepoRoot); err != nil {
+		if err := actions.RestackBranches(ctx, branches); err != nil {
 			return fmt.Errorf("failed to restack children: %w", err)
 		}
 	}

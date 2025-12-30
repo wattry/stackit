@@ -2,7 +2,6 @@
 package submit
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -60,17 +59,13 @@ type Info struct {
 
 // Action performs the submit operation with an event handler for progress feedback.
 func Action(ctx *runtime.Context, opts Options, handler Handler) error {
-	eng := ctx.Engine
-	splog := ctx.Splog
-	goCtx := ctx.Context
-
 	// Validate flags
 	if opts.Draft && opts.Publish {
 		return fmt.Errorf("can't use both --publish and --draft flags in one command")
 	}
 
 	// Get branches to submit
-	branches, err := getBranchesToSubmit(opts, eng)
+	branches, err := getBranchesToSubmit(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -79,15 +74,15 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 		return nil
 	}
 
-	currentBranch := eng.CurrentBranch()
+	currentBranch := ctx.Engine.CurrentBranch()
 	currentBranchName := ""
 	if currentBranch != nil {
 		currentBranchName = currentBranch.GetName()
 	}
 
 	// Populate remote SHAs early for accurate display
-	if err := eng.PopulateRemoteShas(); err != nil {
-		splog.Debug("Failed to populate remote SHAs: %v", err)
+	if err := ctx.Engine.PopulateRemoteShas(); err != nil {
+		ctx.Splog.Debug("Failed to populate remote SHAs: %v", err)
 	}
 
 	// Build tree structure for display
@@ -96,13 +91,13 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	scopeMap := make(map[string]string)
 
 	for i, branchName := range branches {
-		branch := eng.GetBranch(branchName)
+		branch := ctx.Engine.GetBranch(branchName)
 		branchObjs[i] = branch
 		fixedMap[branchName] = branch.IsBranchUpToDate()
 		scopeMap[branchName] = branch.GetScope().String()
 	}
 
-	stackTree := tree.NewStackTree(branchObjs, currentBranchName, eng.Trunk().GetName())
+	stackTree := tree.NewStackTree(branchObjs, currentBranchName, ctx.Engine.Trunk().GetName())
 
 	// Display the stack
 	handler.OnEvent(StackDisplayEvent{
@@ -117,9 +112,9 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 		// Convert []string to []engine.Branch for RestackBranches
 		branchObjects := make([]engine.Branch, len(branches))
 		for i, branchName := range branches {
-			branchObjects[i] = eng.GetBranch(branchName)
+			branchObjects[i] = ctx.Engine.GetBranch(branchName)
 		}
-		if err := actions.RestackBranches(goCtx, branchObjects, eng, splog, ctx.RepoRoot); err != nil {
+		if err := actions.RestackBranches(ctx, branchObjects); err != nil {
 			return fmt.Errorf("failed to restack branches: %w", err)
 		}
 		handler.OnEvent(RestackEvent{Completed: true})
@@ -128,12 +123,12 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	// Validate and prepare branches
 	handler.OnEvent(PreparingEvent{})
 
-	if err := ValidateBranchesToSubmit(goCtx, branches, eng, ctx); err != nil {
+	if err := ValidateBranchesToSubmit(ctx, branches); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
 	// Prepare branches for submit (show planning phase with current indicator)
-	submissionInfos, err := prepareBranchesForSubmit(branches, opts, eng, ctx, currentBranchName, handler)
+	submissionInfos, err := prepareBranchesForSubmit(ctx, branchObjs, opts, currentBranchName, handler)
 	if err != nil {
 		return fmt.Errorf("failed to prepare branches: %w", err)
 	}
@@ -180,7 +175,7 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	}
 	repoOwner, repoName := githubClient.GetOwnerRepo()
 
-	remote := eng.GetRemote()
+	remote := ctx.Engine.GetRemote()
 	var wg sync.WaitGroup
 	var submitErr error
 	var errMu sync.Mutex
@@ -195,7 +190,7 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 				Status:     StatusSubmitting,
 			})
 
-			if err := pushBranchIfNeeded(ctx, info, opts, remote, eng); err != nil {
+			if err := pushBranchIfNeeded(ctx, info, opts, remote); err != nil {
 				handler.OnEvent(BranchProgressEvent{
 					BranchName: info.BranchName,
 					Status:     StatusError,
@@ -216,9 +211,9 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 			)
 			var err error
 			if info.Action == actionCreate {
-				prURL, err = createPullRequestQuiet(goCtx, info, eng, githubClient, repoOwner, repoName)
+				prURL, err = createPullRequestQuiet(ctx, info, repoOwner, repoName)
 			} else {
-				prURL, err = updatePullRequestQuiet(goCtx, info, opts, eng, githubClient, repoOwner, repoName)
+				prURL, err = updatePullRequestQuiet(ctx, info, opts, repoOwner, repoName)
 			}
 
 			if err != nil {
@@ -244,7 +239,7 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 			// Open in browser if requested
 			if opts.View && prURL != "" {
 				if err := utils.OpenBrowser(prURL); err != nil {
-					splog.Debug("Failed to open browser: %v", err)
+					ctx.Splog.Debug("Failed to open browser: %v", err)
 				}
 			}
 		}(submissionInfo)
@@ -258,19 +253,22 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 
 	// Update PR body footers silently
 	if opts.SubmitFooter {
-		actions.UpdateStackPRMetadata(goCtx, branches, eng, githubClient, repoOwner, repoName)
+		actions.UpdateStackPRMetadata(ctx, branches, repoOwner, repoName)
 	}
+
+	// Push metadata refs for successfully submitted branches
+	pushMetadataRefs(ctx, branchObjs)
 
 	handler.OnEvent(CompletionEvent{Success: true, Message: "Submit complete"})
 	return nil
 }
 
 // prepareBranchesForSubmit prepares submission info for each branch, emitting events via handler
-func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine, runtimeCtx *runtime.Context, currentBranch string, handler Handler) ([]Info, error) {
+func prepareBranchesForSubmit(ctx *runtime.Context, branches []engine.Branch, opts Options, currentBranch string, handler Handler) ([]Info, error) {
 	submissionInfos := make([]Info, 0, len(branches))
 
-	for _, branchName := range branches {
-		branch := eng.GetBranch(branchName)
+	for _, branch := range branches {
+		branchName := branch.GetName()
 		status, err := branch.GetPRSubmissionStatus()
 		if err != nil {
 			return nil, err
@@ -334,16 +332,15 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 			ReviewersPrompt:   opts.Reviewers == "" && opts.Edit,
 		}
 
-		metadata, err := PreparePRMetadata(branchName, metadataOpts, eng, runtimeCtx)
+		metadata, err := PreparePRMetadata(branch, metadataOpts, ctx.Engine, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare metadata for %s: %w", branchName, err)
 		}
 
 		// Get SHAs
-		branchObj := eng.GetBranch(branchName)
-		headSHA, _ := branchObj.GetRevision()
-		parentBranchName := branchObj.GetParentPrecondition()
-		parentBranch := eng.GetBranch(parentBranchName)
+		headSHA, _ := branch.GetRevision()
+		parentBranchName := branch.GetParentPrecondition()
+		parentBranch := ctx.Engine.GetBranch(parentBranchName)
 		baseSHA, _ := parentBranch.GetRevision()
 
 		submissionInfo := Info{
@@ -371,11 +368,11 @@ func prepareBranchesForSubmit(branches []string, opts Options, eng engine.Engine
 }
 
 // getBranchesToSubmit returns the list of branches to submit based on options
-func getBranchesToSubmit(opts Options, eng engine.Engine) ([]string, error) {
+func getBranchesToSubmit(ctx *runtime.Context, opts Options) ([]string, error) {
 	// Get branch scope
 	branchName := opts.Branch
 	if branchName == "" {
-		currentBranch := eng.CurrentBranch()
+		currentBranch := ctx.Engine.CurrentBranch()
 		if currentBranch == nil {
 			return nil, fmt.Errorf("not on a branch and no branch specified")
 		}
@@ -385,7 +382,7 @@ func getBranchesToSubmit(opts Options, eng engine.Engine) ([]string, error) {
 	var allBranches []string
 	if opts.Stack {
 		// Include descendants and ancestors
-		branch := eng.GetBranch(branchName)
+		branch := ctx.Engine.GetBranch(branchName)
 		stackBranches := branch.GetFullStack()
 		allBranches = make([]string, len(stackBranches))
 		for i, b := range stackBranches {
@@ -393,7 +390,7 @@ func getBranchesToSubmit(opts Options, eng engine.Engine) ([]string, error) {
 		}
 	} else {
 		// Just ancestors (including current branch)
-		branch := eng.GetBranch(branchName)
+		branch := ctx.Engine.GetBranch(branchName)
 		downstackBranches := branch.GetRelativeStackDownstack()
 		allBranches = make([]string, len(downstackBranches)+1)
 		for i, b := range downstackBranches {
@@ -406,7 +403,7 @@ func getBranchesToSubmit(opts Options, eng engine.Engine) ([]string, error) {
 	branches := []string{}
 	branchSet := make(map[string]bool)
 	for _, b := range allBranches {
-		branchObj := eng.GetBranch(b)
+		branchObj := ctx.Engine.GetBranch(b)
 		if !branchObj.IsTrunk() && !branchSet[b] {
 			branches = append(branches, b)
 			branchSet[b] = true
@@ -425,14 +422,14 @@ func getGitHubClient(ctx *runtime.Context) (github.Client, error) {
 }
 
 // pushBranchIfNeeded pushes a branch to remote if needed
-func pushBranchIfNeeded(ctx *runtime.Context, submissionInfo Info, opts Options, remote string, eng engine.SyncManager) error {
+func pushBranchIfNeeded(ctx *runtime.Context, submissionInfo Info, opts Options, remote string) error {
 	// Skip if dry run
 	if opts.DryRun {
 		return nil
 	}
 
 	forceWithLease := !opts.Force
-	if err := eng.PushBranch(ctx.Context, submissionInfo.BranchName, remote, git.PushOptions{
+	if err := ctx.Engine.PushBranch(ctx.Context, submissionInfo.BranchName, remote, git.PushOptions{
 		Force:          opts.Force,
 		ForceWithLease: forceWithLease,
 		NoVerify:       !ctx.Verify,
@@ -446,7 +443,7 @@ func pushBranchIfNeeded(ctx *runtime.Context, submissionInfo Info, opts Options,
 }
 
 // createPullRequestQuiet creates a new pull request without logging
-func createPullRequestQuiet(ctx context.Context, submissionInfo Info, eng engine.Engine, githubClient github.Client, repoOwner, repoName string) (string, error) {
+func createPullRequestQuiet(ctx *runtime.Context, submissionInfo Info, repoOwner, repoName string) (string, error) {
 	createOpts := github.CreatePROptions{
 		Title:         submissionInfo.Metadata.Title,
 		Body:          submissionInfo.Metadata.Body,
@@ -456,7 +453,7 @@ func createPullRequestQuiet(ctx context.Context, submissionInfo Info, eng engine
 		Reviewers:     submissionInfo.Metadata.Reviewers,
 		TeamReviewers: submissionInfo.Metadata.TeamReviewers,
 	}
-	pr, err := githubClient.CreatePullRequest(ctx, repoOwner, repoName, createOpts)
+	pr, err := ctx.GitHubClient.CreatePullRequest(ctx.Context, repoOwner, repoName, createOpts)
 	if err != nil {
 		return "", fmt.Errorf("failed to create PR for %s: %w", submissionInfo.BranchName, err)
 	}
@@ -464,8 +461,8 @@ func createPullRequestQuiet(ctx context.Context, submissionInfo Info, eng engine
 	// Update PR info
 	prNumber := pr.Number
 	prURL := pr.HTMLURL
-	branch := eng.GetBranch(submissionInfo.BranchName)
-	_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
+	branch := ctx.Engine.GetBranch(submissionInfo.BranchName)
+	_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
 		&prNumber,
 		submissionInfo.Metadata.Title,
 		submissionInfo.Metadata.Body,
@@ -479,9 +476,9 @@ func createPullRequestQuiet(ctx context.Context, submissionInfo Info, eng engine
 }
 
 // updatePullRequestQuiet updates an existing pull request without logging
-func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Options, eng engine.Engine, githubClient github.Client, repoOwner, repoName string) (string, error) {
+func updatePullRequestQuiet(ctx *runtime.Context, submissionInfo Info, opts Options, repoOwner, repoName string) (string, error) {
 	// Check if base changed
-	branch := eng.GetBranch(submissionInfo.BranchName)
+	branch := ctx.Engine.GetBranch(submissionInfo.BranchName)
 	prInfo, _ := branch.GetPrInfo()
 	baseChanged := false
 	if prInfo != nil && prInfo.Base() != submissionInfo.Base {
@@ -510,7 +507,7 @@ func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Optio
 		// Only update base if there are commits between base and head
 		if submissionInfo.BaseSHA != submissionInfo.HeadSHA {
 			// Check if there are actually commits between base and head
-			branch := eng.GetBranch(submissionInfo.BranchName)
+			branch := ctx.Engine.GetBranch(submissionInfo.BranchName)
 			commits, err := branch.GetAllCommits(engine.CommitFormatSHA)
 			if err == nil && len(commits) > 0 {
 				// There are commits, safe to update base
@@ -528,7 +525,7 @@ func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Optio
 		}
 	}
 
-	if err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts); err != nil {
+	if err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts); err != nil {
 		return "", fmt.Errorf("failed to update PR for %s: %w", submissionInfo.BranchName, err)
 	}
 
@@ -539,13 +536,13 @@ func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Optio
 		prURL = prInfo.URL()
 	} else {
 		// Get from GitHub
-		pr, err := githubClient.GetPullRequestByBranch(ctx, repoOwner, repoName, submissionInfo.BranchName)
+		pr, err := ctx.GitHubClient.GetPullRequestByBranch(ctx.Context, repoOwner, repoName, submissionInfo.BranchName)
 		if err == nil && pr != nil {
 			prURL = pr.HTMLURL
 		}
 	}
 
-	_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
+	_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
 		submissionInfo.PRNumber,
 		submissionInfo.Metadata.Title,
 		submissionInfo.Metadata.Body,
@@ -556,4 +553,42 @@ func updatePullRequestQuiet(ctx context.Context, submissionInfo Info, opts Optio
 	))
 
 	return prURL, nil
+}
+
+// pushMetadataRefs pushes metadata refs for submitted branches to remote
+func pushMetadataRefs(ctx *runtime.Context, branches []engine.Branch) {
+	if len(branches) == 0 {
+		return
+	}
+
+	// Update LastModifiedBy for each branch
+	for _, branch := range branches {
+		if err := ctx.Engine.SetLastModifiedBy(branch.GetName()); err != nil {
+			ctx.Splog.Debug("Failed to set last modified by for %s: %v", branch.GetName(), err)
+		}
+	}
+
+	// Check if remote sync is enabled; if not, run compatibility test first
+	if !ctx.Engine.IsRemoteSyncEnabled() {
+		if err := git.TestRemoteRefCompatibility(); err != nil {
+			ctx.Splog.Debug("Remote metadata sync not supported: %v", err)
+			return
+		}
+		ctx.Engine.SetRemoteSyncEnabled(true)
+		// Configure refspec so future git fetch commands also fetch metadata
+		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+			ctx.Splog.Debug("Failed to configure metadata refspec: %v", err)
+		}
+	}
+
+	// Extract branch names for git.PushMetadataRefs
+	branchNames := make([]string, len(branches))
+	for i, branch := range branches {
+		branchNames[i] = branch.GetName()
+	}
+
+	// Push metadata refs
+	if err := git.PushMetadataRefs(branchNames); err != nil {
+		ctx.Splog.Debug("Failed to push metadata refs: %v", err)
+	}
 }

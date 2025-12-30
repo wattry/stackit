@@ -143,7 +143,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	})
 
 	// Restack source and all its descendants
-	if err := actions.RestackBranches(gctx, branchesToRestack, eng, splog, ctx.RepoRoot); err != nil {
+	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
 		return fmt.Errorf("failed to restack branches: %w", err)
 	}
 
