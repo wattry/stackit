@@ -9,12 +9,13 @@ import (
 
 // Hunk represents a single hunk of changes in a diff
 type Hunk struct {
-	File     string // File path
-	OldStart int    // Line number in old file (1-indexed)
-	OldCount int    // Number of lines in old file
-	NewStart int    // Line number in new file (1-indexed)
-	NewCount int    // Number of lines in new file
-	Content  string // The actual diff content (including header)
+	File      string // File path
+	OldStart  int    // Line number in old file (1-indexed)
+	OldCount  int    // Number of lines in old file
+	NewStart  int    // Line number in new file (1-indexed)
+	NewCount  int    // Number of lines in new file
+	Content   string // The actual diff content (including header)
+	IndexLine string // The index line from the diff (e.g., "index abc123..def456 100644") for --3way merging
 }
 
 // ParseStagedHunks parses the output of `git diff --cached` into structured hunks
@@ -37,6 +38,7 @@ func ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
 
 	var currentHunk *Hunk
 	var currentFile string
+	var currentIndexLine string
 	var hunkLines []string
 
 	for _, line := range lines {
@@ -60,6 +62,15 @@ func ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
 					currentFile = strings.TrimPrefix(bPath, "b/")
 				}
 			}
+			// Reset index line for new file
+			currentIndexLine = ""
+			continue
+		}
+
+		// Capture the index line (e.g., "index abc123..def456 100644")
+		// This is needed for --3way merge to work
+		if strings.HasPrefix(line, "index ") {
+			currentIndexLine = line
 			continue
 		}
 
@@ -84,11 +95,12 @@ func ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
 			}
 
 			currentHunk = &Hunk{
-				File:     currentFile,
-				OldStart: oldStart,
-				OldCount: oldCount,
-				NewStart: newStart,
-				NewCount: newCount,
+				File:      currentFile,
+				OldStart:  oldStart,
+				OldCount:  oldCount,
+				NewStart:  newStart,
+				NewCount:  newCount,
+				IndexLine: currentIndexLine,
 			}
 			hunkLines = []string{line}
 			continue

@@ -83,6 +83,10 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 			}
 			for file, fileHunks := range hunksByFile {
 				patchContent.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", file, file))
+				// Include index line if available (needed for --3way merge)
+				if len(fileHunks) > 0 && fileHunks[0].IndexLine != "" {
+					patchContent.WriteString(fileHunks[0].IndexLine + "\n")
+				}
 				patchContent.WriteString(fmt.Sprintf("--- a/%s\n", file))
 				patchContent.WriteString(fmt.Sprintf("+++ b/%s\n", file))
 				for _, hunk := range fileHunks {
@@ -96,8 +100,9 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 				return fmt.Errorf("failed to write hunks patch: %w", err)
 			}
 
-			// Apply hunks to the worktree and index
-			if _, err := e.git.RunGitCommandWithContext(ctx, "apply", patchFile); err != nil {
+			// Apply hunks to the worktree and index using --3way for better conflict handling
+			// --3way allows git to fall back to three-way merge when the patch context doesn't match exactly
+			if _, err := e.git.RunGitCommandWithContext(ctx, "apply", "--3way", patchFile); err != nil {
 				return fmt.Errorf("failed to apply hunks for commit %s: %w", commitSHA[:8], err)
 			}
 

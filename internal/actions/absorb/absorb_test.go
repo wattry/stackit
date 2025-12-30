@@ -1,6 +1,8 @@
 package absorb
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -177,5 +179,456 @@ func TestAbsorbScopeBoundaries(t *testing.T) {
 		require.Len(t, downstackBranches, 2)
 		require.Equal(t, "scoped-b", downstackBranches[0].GetName())
 		require.Equal(t, "scoped-a", downstackBranches[1].GetName())
+	})
+}
+
+func TestAbsorbWithInterveningCommits(t *testing.T) {
+	t.Run("absorb handles changes when intervening commits modify same file", func(t *testing.T) {
+		// This test verifies that absorb can apply changes to an earlier commit
+		// even when later commits have modified the same file, using three-way merge.
+		// The key is having enough separation between sections so commutation check
+		// correctly attributes the change to branch-a, but the file context has changed.
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a shared file with initial content on main - use many lines for separation
+		sharedFile := filepath.Join(s.Scene.Dir, "shared.go")
+		initialContent := `package main
+
+// ===========================================
+// SECTION A - Modified in branch-a
+// ===========================================
+
+func sectionA() {
+	// section A line 1
+	// section A line 2
+	// section A line 3
+	// section A line 4
+	// section A line 5
+}
+
+// ===========================================
+// SPACER SECTION - Never modified
+// ===========================================
+
+func spacer() {
+	// spacer line 1
+	// spacer line 2
+	// spacer line 3
+	// spacer line 4
+	// spacer line 5
+	// spacer line 6
+	// spacer line 7
+	// spacer line 8
+	// spacer line 9
+	// spacer line 10
+}
+
+// ===========================================
+// SECTION B - Modified in branch-b
+// ===========================================
+
+func sectionB() {
+	// section B line 1
+	// section B line 2
+	// section B line 3
+	// section B line 4
+	// section B line 5
+}
+`
+		err := os.WriteFile(sharedFile, []byte(initialContent), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "shared.go")
+		s.RunGit("commit", "-m", "add shared.go")
+
+		// Create branch-a modifying section A
+		s.CreateBranch("branch-a")
+		s.TrackBranch("branch-a", "main")
+
+		contentAfterBranchA := `package main
+
+// ===========================================
+// SECTION A - Modified in branch-a
+// ===========================================
+
+func sectionA() {
+	// BRANCH-A: modified section A line 1
+	// BRANCH-A: modified section A line 2
+	// section A line 3
+	// section A line 4
+	// section A line 5
+}
+
+// ===========================================
+// SPACER SECTION - Never modified
+// ===========================================
+
+func spacer() {
+	// spacer line 1
+	// spacer line 2
+	// spacer line 3
+	// spacer line 4
+	// spacer line 5
+	// spacer line 6
+	// spacer line 7
+	// spacer line 8
+	// spacer line 9
+	// spacer line 10
+}
+
+// ===========================================
+// SECTION B - Modified in branch-b
+// ===========================================
+
+func sectionB() {
+	// section B line 1
+	// section B line 2
+	// section B line 3
+	// section B line 4
+	// section B line 5
+}
+`
+		err = os.WriteFile(sharedFile, []byte(contentAfterBranchA), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "shared.go")
+		s.RunGit("commit", "-m", "modify section A in branch-a")
+		s.Rebuild()
+
+		// Create branch-b on top of branch-a modifying section B (far away from section A)
+		s.CreateBranch("branch-b")
+		s.TrackBranch("branch-b", "branch-a")
+
+		contentAfterBranchB := `package main
+
+// ===========================================
+// SECTION A - Modified in branch-a
+// ===========================================
+
+func sectionA() {
+	// BRANCH-A: modified section A line 1
+	// BRANCH-A: modified section A line 2
+	// section A line 3
+	// section A line 4
+	// section A line 5
+}
+
+// ===========================================
+// SPACER SECTION - Never modified
+// ===========================================
+
+func spacer() {
+	// spacer line 1
+	// spacer line 2
+	// spacer line 3
+	// spacer line 4
+	// spacer line 5
+	// spacer line 6
+	// spacer line 7
+	// spacer line 8
+	// spacer line 9
+	// spacer line 10
+}
+
+// ===========================================
+// SECTION B - Modified in branch-b
+// ===========================================
+
+func sectionB() {
+	// BRANCH-B: modified section B line 1
+	// BRANCH-B: modified section B line 2
+	// section B line 3
+	// section B line 4
+	// section B line 5
+}
+`
+		err = os.WriteFile(sharedFile, []byte(contentAfterBranchB), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "shared.go")
+		s.RunGit("commit", "-m", "modify section B in branch-b")
+		s.Rebuild()
+
+		// Now we're on branch-b. Stage a change that modifies section A (introduced in branch-a)
+		// This change should be absorbed into branch-a, but the file context has changed
+		// because branch-b modified section B.
+		stagedContent := `package main
+
+// ===========================================
+// SECTION A - Modified in branch-a
+// ===========================================
+
+func sectionA() {
+	// ABSORBED: this change should go to branch-a
+	// BRANCH-A: modified section A line 2
+	// section A line 3
+	// section A line 4
+	// section A line 5
+}
+
+// ===========================================
+// SPACER SECTION - Never modified
+// ===========================================
+
+func spacer() {
+	// spacer line 1
+	// spacer line 2
+	// spacer line 3
+	// spacer line 4
+	// spacer line 5
+	// spacer line 6
+	// spacer line 7
+	// spacer line 8
+	// spacer line 9
+	// spacer line 10
+}
+
+// ===========================================
+// SECTION B - Modified in branch-b
+// ===========================================
+
+func sectionB() {
+	// BRANCH-B: modified section B line 1
+	// BRANCH-B: modified section B line 2
+	// section B line 3
+	// section B line 4
+	// section B line 5
+}
+`
+		err = os.WriteFile(sharedFile, []byte(stagedContent), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "shared.go")
+
+		// Run absorb with force flag (non-interactive)
+		err = Action(s.Context, Options{Force: true})
+		require.NoError(t, err)
+
+		// Verify the change was absorbed into branch-a
+		s.Checkout("branch-a")
+
+		// Read the file content on branch-a
+		content, err := os.ReadFile(sharedFile)
+		require.NoError(t, err)
+
+		// The change should have been applied to branch-a
+		require.Contains(t, string(content), "ABSORBED: this change should go to branch-a")
+	})
+
+	t.Run("absorb with three-way merge when context lines differ", func(t *testing.T) {
+		// This test specifically verifies the --3way merge functionality:
+		// We create a scenario where the patch context doesn't match exactly
+		// because an intervening commit has modified lines far away in the same file.
+		// Key: changes must be far enough apart to avoid the commutation margin (3 lines).
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		sharedFile := filepath.Join(s.Scene.Dir, "config.go")
+		initialContent := `package config
+
+// ============================================
+// SECTION 1: Configuration struct (modified by branch-b)
+// ============================================
+
+type Config struct {
+	Name    string
+	Value   int
+	Enabled bool
+}
+
+// ============================================
+// SPACER - Large gap to avoid commutation overlap
+// ============================================
+
+func spacer1() {}
+func spacer2() {}
+func spacer3() {}
+func spacer4() {}
+func spacer5() {}
+func spacer6() {}
+func spacer7() {}
+func spacer8() {}
+func spacer9() {}
+func spacer10() {}
+
+// ============================================
+// SECTION 2: DefaultConfig (modified by branch-a)
+// ============================================
+
+// DefaultConfig returns default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		Name:    "default",
+		Value:   0,
+		Enabled: false,
+	}
+}
+`
+		err := os.WriteFile(sharedFile, []byte(initialContent), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "config.go")
+		s.RunGit("commit", "-m", "add config.go")
+
+		// branch-a modifies DefaultConfig (far at the end)
+		s.CreateBranch("branch-a")
+		s.TrackBranch("branch-a", "main")
+
+		contentAfterBranchA := `package config
+
+// ============================================
+// SECTION 1: Configuration struct (modified by branch-b)
+// ============================================
+
+type Config struct {
+	Name    string
+	Value   int
+	Enabled bool
+}
+
+// ============================================
+// SPACER - Large gap to avoid commutation overlap
+// ============================================
+
+func spacer1() {}
+func spacer2() {}
+func spacer3() {}
+func spacer4() {}
+func spacer5() {}
+func spacer6() {}
+func spacer7() {}
+func spacer8() {}
+func spacer9() {}
+func spacer10() {}
+
+// ============================================
+// SECTION 2: DefaultConfig (modified by branch-a)
+// ============================================
+
+// DefaultConfig returns default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		Name:    "branch-a-default",
+		Value:   100,
+		Enabled: false,
+	}
+}
+`
+		err = os.WriteFile(sharedFile, []byte(contentAfterBranchA), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "config.go")
+		s.RunGit("commit", "-m", "update default config in branch-a")
+		s.Rebuild()
+
+		// branch-b modifies Config struct (at the beginning, far from DefaultConfig)
+		s.CreateBranch("branch-b")
+		s.TrackBranch("branch-b", "branch-a")
+
+		contentAfterBranchB := `package config
+
+// ============================================
+// SECTION 1: Configuration struct (modified by branch-b)
+// ============================================
+
+type Config struct {
+	Name     string
+	Value    int
+	Enabled  bool
+	NewField string // Added by branch-b
+}
+
+// ============================================
+// SPACER - Large gap to avoid commutation overlap
+// ============================================
+
+func spacer1() {}
+func spacer2() {}
+func spacer3() {}
+func spacer4() {}
+func spacer5() {}
+func spacer6() {}
+func spacer7() {}
+func spacer8() {}
+func spacer9() {}
+func spacer10() {}
+
+// ============================================
+// SECTION 2: DefaultConfig (modified by branch-a)
+// ============================================
+
+// DefaultConfig returns default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		Name:    "branch-a-default",
+		Value:   100,
+		Enabled: false,
+	}
+}
+`
+		err = os.WriteFile(sharedFile, []byte(contentAfterBranchB), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "config.go")
+		s.RunGit("commit", "-m", "add NewField in branch-b")
+		s.Rebuild()
+
+		// Stage a change to DefaultConfig (should go to branch-a)
+		// Because branch-b modified the file (added NewField), the patch context
+		// will have different surrounding lines than at branch-a's commit point.
+		// This tests the --3way merge functionality.
+		stagedContent := `package config
+
+// ============================================
+// SECTION 1: Configuration struct (modified by branch-b)
+// ============================================
+
+type Config struct {
+	Name     string
+	Value    int
+	Enabled  bool
+	NewField string // Added by branch-b
+}
+
+// ============================================
+// SPACER - Large gap to avoid commutation overlap
+// ============================================
+
+func spacer1() {}
+func spacer2() {}
+func spacer3() {}
+func spacer4() {}
+func spacer5() {}
+func spacer6() {}
+func spacer7() {}
+func spacer8() {}
+func spacer9() {}
+func spacer10() {}
+
+// ============================================
+// SECTION 2: DefaultConfig (modified by branch-a)
+// ============================================
+
+// DefaultConfig returns default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		Name:    "ABSORBED-default",
+		Value:   100,
+		Enabled: false,
+	}
+}
+`
+		err = os.WriteFile(sharedFile, []byte(stagedContent), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "config.go")
+
+		// Run absorb
+		err = Action(s.Context, Options{Force: true})
+		require.NoError(t, err)
+
+		// Verify the change was absorbed into branch-a
+		s.Checkout("branch-a")
+		content, err := os.ReadFile(sharedFile)
+		require.NoError(t, err)
+		require.Contains(t, string(content), "ABSORBED-default")
+
+		// Verify branch-b still has NewField after restack
+		s.Checkout("branch-b")
+		content, err = os.ReadFile(sharedFile)
+		require.NoError(t, err)
+		require.Contains(t, string(content), "ABSORBED-default")
+		require.Contains(t, string(content), "NewField")
 	})
 }
