@@ -411,6 +411,75 @@ func sectionB() {
 		require.Contains(t, string(content), "ABSORBED: this change should go to branch-a")
 	})
 
+	t.Run("absorb cleans up on failure and restores original branch", func(t *testing.T) {
+		// This test verifies that when absorb fails, it cleans up properly
+		// and returns the user to their original branch without leaving
+		// the repository in a detached HEAD or unmerged state.
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		sharedFile := filepath.Join(s.Scene.Dir, "cleanup.go")
+		initialContent := `package main
+
+func example() {
+	// line 1
+	// line 2
+	// line 3
+}
+`
+		err := os.WriteFile(sharedFile, []byte(initialContent), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "cleanup.go")
+		s.RunGit("commit", "-m", "add cleanup.go")
+
+		// branch-a modifies the function
+		s.CreateBranch("branch-a")
+		s.TrackBranch("branch-a", "main")
+
+		contentAfterBranchA := `package main
+
+func example() {
+	// BRANCH-A modification
+	// line 2
+	// line 3
+}
+`
+		err = os.WriteFile(sharedFile, []byte(contentAfterBranchA), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "cleanup.go")
+		s.RunGit("commit", "-m", "modify in branch-a")
+		s.Rebuild()
+
+		// Stage a change
+		stagedContent := `package main
+
+func example() {
+	// STAGED change
+	// line 2
+	// line 3
+}
+`
+		err = os.WriteFile(sharedFile, []byte(stagedContent), 0600)
+		require.NoError(t, err)
+		s.RunGit("add", "cleanup.go")
+
+		// Remember which branch we're on
+		originalBranch, err := s.Scene.Repo.CurrentBranchName()
+		require.NoError(t, err)
+		require.Equal(t, "branch-a", originalBranch)
+
+		// Run absorb
+		_ = Action(s.Context, Options{Force: true})
+
+		// Regardless of success or failure, we should be back on the original branch
+		currentBranch, branchErr := s.Scene.Repo.CurrentBranchName()
+		require.NoError(t, branchErr)
+		require.Equal(t, originalBranch, currentBranch, "should be back on original branch after absorb")
+
+		// Verify no unmerged files left behind
+		hasUnstaged, _ := s.Scene.Repo.HasUnstagedChanges()
+		require.False(t, hasUnstaged, "should not have unstaged changes after absorb")
+	})
+
 	t.Run("absorb with three-way merge when context lines differ", func(t *testing.T) {
 		// This test specifically verifies the --3way merge functionality:
 		// We create a scenario where the patch context doesn't match exactly
