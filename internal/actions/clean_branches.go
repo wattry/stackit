@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -165,6 +166,11 @@ func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[s
 			if err := eng.DeleteBranch(ctx, branch); err != nil {
 				splog.Debug("Failed to delete %s: %v", branchName, err)
 				continue
+			}
+
+			// Delete remote metadata ref (best effort, don't fail if it doesn't exist)
+			if err := git.DeleteRemoteMetadataRef(branchName); err != nil {
+				splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
 			}
 
 			splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))

@@ -66,6 +66,8 @@ type RemoteMetadataManager interface {
 	AcceptRemoteMetadata(branch string) error
 	RejectRemoteMetadata(branch string)
 	HasLocalModifications(branch string) bool
+	FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error)
+	DeleteLocalMetadataHash(branchName string) error
 }
 
 // ApplySplitOptions contains options for applying a split

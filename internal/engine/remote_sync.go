@@ -263,3 +263,89 @@ type FieldDiff struct {
 	LocalValue  interface{}
 	RemoteValue interface{}
 }
+
+// OrphanedMetadataAction represents the action to take for orphaned metadata
+type OrphanedMetadataAction string
+
+const (
+	// OrphanedActionDelete indicates the local metadata should be deleted
+	OrphanedActionDelete OrphanedMetadataAction = "delete"
+	// OrphanedActionPrompt indicates the user should be prompted
+	OrphanedActionPrompt OrphanedMetadataAction = "prompt"
+)
+
+// OrphanedMetadataInfo contains information about orphaned local metadata
+type OrphanedMetadataInfo struct {
+	BranchName      string
+	Action          OrphanedMetadataAction
+	HasLocalChanges bool
+	LocalMeta       *Meta
+}
+
+// FindOrphanedLocalMetadata identifies branches that have local metadata but no remote metadata
+// This handles the "dual-checkout scenario" where someone else deleted the branch/metadata
+func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	// List all local metadata refs
+	localRefs, err := e.git.ListRefs("refs/stackit/metadata/")
+	if err != nil {
+		return nil, err
+	}
+
+	orphaned := make([]OrphanedMetadataInfo, 0, len(localRefs))
+
+	for refName := range localRefs {
+		branchName := refName[len("refs/stackit/metadata/"):]
+
+		// Skip if remote metadata exists for this branch
+		if _, hasRemote := e.remoteMetaCache[branchName]; hasRemote {
+			continue
+		}
+
+		// Check if this branch was previously synced (has LocalOnlyHash)
+		local, err := e.readMetadataRef(branchName)
+		if err != nil {
+			continue
+		}
+
+		// If LocalOnlyHash is nil, this branch was never synced from remote
+		// so it's not orphaned - it's just a local-only branch
+		if local.LocalOnlyHash == nil {
+			continue
+		}
+
+		// This is orphaned metadata - remote was deleted but local still exists
+		hasLocalChanges := e.computeMetadataHash(local) != *local.LocalOnlyHash
+
+		action := OrphanedActionDelete
+		if hasLocalChanges {
+			action = OrphanedActionPrompt
+		}
+
+		orphaned = append(orphaned, OrphanedMetadataInfo{
+			BranchName:      branchName,
+			Action:          action,
+			HasLocalChanges: hasLocalChanges,
+			LocalMeta:       local,
+		})
+	}
+
+	return orphaned, nil
+}
+
+// DeleteLocalMetadataHash removes the LocalOnlyHash from a branch's metadata
+// This effectively "un-syncs" the branch so it won't be considered orphaned
+func (e *engineImpl) DeleteLocalMetadataHash(branchName string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	local, err := e.readMetadataRef(branchName)
+	if err != nil {
+		return err
+	}
+
+	local.LocalOnlyHash = nil
+	return e.writeMetadataRef(branchName, local)
+}

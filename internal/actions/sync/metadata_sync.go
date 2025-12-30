@@ -35,6 +35,11 @@ func syncRemoteMetadata(ctx *runtime.Context, opts *Options) error {
 		return nil
 	}
 
+	// Handle orphaned local metadata (dual-checkout scenario)
+	if err := handleOrphanedMetadata(ctx, opts); err != nil {
+		return err
+	}
+
 	// Compute diffs
 	diffs, err := eng.ComputeAllMetadataDiffs()
 	if err != nil {
@@ -55,6 +60,88 @@ func syncRemoteMetadata(ctx *runtime.Context, opts *Options) error {
 	for _, diff := range diffs {
 		if err := promptAndResolveConflict(ctx, diff); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// handleOrphanedMetadata handles branches where remote metadata was deleted but local exists
+func handleOrphanedMetadata(ctx *runtime.Context, opts *Options) error {
+	eng := ctx.Engine
+	splog := ctx.Splog
+
+	orphaned, err := eng.FindOrphanedLocalMetadata()
+	if err != nil {
+		splog.Debug("Failed to find orphaned metadata: %v", err)
+		return nil
+	}
+
+	if len(orphaned) == 0 {
+		return nil
+	}
+
+	// Handle --dry-run flag
+	if opts.DryRun {
+		splog.Info("\n=== Orphaned metadata (dry run) ===")
+		for _, info := range orphaned {
+			if info.HasLocalChanges {
+				splog.Info("  %s: has local changes, would prompt", style.ColorBranchName(info.BranchName, false))
+			} else {
+				splog.Info("  %s: no local changes, would delete sync state", style.ColorBranchName(info.BranchName, false))
+			}
+		}
+		return nil
+	}
+
+	for _, info := range orphaned {
+		if info.Action == engine.OrphanedActionDelete {
+			// No local changes - silently remove sync state
+			if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
+				splog.Debug("Failed to delete metadata hash for %s: %v", info.BranchName, err)
+			}
+		} else {
+			// Has local changes - prompt user
+			if err := promptOrphanedMetadata(ctx, info); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// promptOrphanedMetadata prompts the user about orphaned metadata with local changes
+func promptOrphanedMetadata(ctx *runtime.Context, info engine.OrphanedMetadataInfo) error {
+	eng := ctx.Engine
+	splog := ctx.Splog
+
+	splog.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
+		style.ColorBranchName(info.BranchName, false))
+	splog.Info("  locked: %v", info.LocalMeta.Locked)
+	if info.LocalMeta.Scope != nil {
+		splog.Info("  scope: %s", *info.LocalMeta.Scope)
+	}
+
+	accept, err := promptYesNo("Push your local metadata to remote?")
+	if err != nil {
+		return err
+	}
+
+	if accept {
+		// Push local metadata to remote
+		if err := eng.SetLastModifiedBy(info.BranchName); err != nil {
+			splog.Debug("Failed to set last modified by: %v", err)
+		}
+		if err := git.PushMetadataRefs([]string{info.BranchName}); err != nil {
+			splog.Debug("Failed to push metadata: %v", err)
+		} else {
+			splog.Info("Pushed metadata for %s", style.ColorBranchName(info.BranchName, false))
+		}
+	} else {
+		// Accept deletion - remove sync state
+		if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
+			splog.Debug("Failed to delete metadata hash: %v", err)
 		}
 	}
 
