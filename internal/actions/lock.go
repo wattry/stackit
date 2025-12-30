@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -28,6 +29,7 @@ func LockAction(ctx *runtime.Context, branchName string) error {
 		IncludeCurrent:   true,
 	})
 
+	affectedBranches := []string{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
@@ -36,6 +38,12 @@ func LockAction(ctx *runtime.Context, branchName string) error {
 			return fmt.Errorf("failed to lock branch %s: %w", b.GetName(), err)
 		}
 		splog.Info("Locked %s.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+		affectedBranches = append(affectedBranches, b.GetName())
+	}
+
+	// Push metadata changes to remote
+	if err := pushMetadataForBranches(ctx, affectedBranches); err != nil {
+		splog.Debug("Failed to push metadata changes: %v", err)
 	}
 
 	return nil
@@ -57,6 +65,7 @@ func UnlockAction(ctx *runtime.Context, branchName string) error {
 		RecursiveChildren: true,
 	})
 
+	affectedBranches := []string{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
@@ -65,6 +74,51 @@ func UnlockAction(ctx *runtime.Context, branchName string) error {
 			return fmt.Errorf("failed to unlock branch %s: %w", b.GetName(), err)
 		}
 		splog.Info("Unlocked %s.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+		affectedBranches = append(affectedBranches, b.GetName())
+	}
+
+	// Push metadata changes to remote
+	if err := pushMetadataForBranches(ctx, affectedBranches); err != nil {
+		splog.Debug("Failed to push metadata changes: %v", err)
+	}
+
+	return nil
+}
+
+// pushMetadataForBranches pushes metadata for the given branches to remote
+func pushMetadataForBranches(ctx *runtime.Context, branchNames []string) error {
+	if len(branchNames) == 0 {
+		return nil
+	}
+
+	eng := ctx.Engine
+	splog := ctx.Splog
+
+	// Update LastModifiedBy for each branch
+	for _, branchName := range branchNames {
+		if err := eng.SetLastModifiedBy(branchName); err != nil {
+			splog.Debug("Failed to update metadata for %s: %v", branchName, err)
+			continue
+		}
+	}
+
+	// Check if remote sync is enabled; if not, run compatibility test first
+	if !eng.IsRemoteSyncEnabled() {
+		if err := git.TestRemoteRefCompatibility(); err != nil {
+			splog.Debug("Remote metadata sync not supported: %v", err)
+			return nil // Non-fatal
+		}
+		eng.SetRemoteSyncEnabled(true)
+		// Configure refspec so future git fetch commands also fetch metadata
+		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+			splog.Debug("Failed to configure metadata refspec: %v", err)
+		}
+	}
+
+	// Push metadata refs
+	if err := git.PushMetadataRefs(branchNames); err != nil {
+		splog.Debug("Failed to push metadata refs: %v", err)
+		return err
 	}
 
 	return nil

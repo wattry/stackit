@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -39,6 +40,20 @@ func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
 		_, err := eng.GetRevision(branch)
 		if err != nil {
 			return fmt.Errorf("branch %s does not exist", branchName)
+		}
+
+		// For remote branches, fetch metadata to show the latest info
+		if err := git.FetchMetadataRefs(); err != nil {
+			splog.Debug("Failed to fetch remote metadata: %v", err)
+		} else {
+			if err := eng.LoadRemoteMetadataCache(); err != nil {
+				splog.Debug("Failed to load remote metadata cache: %v", err)
+			} else {
+				// Apply remote metadata if available
+				if err := eng.ApplyRemoteMetadataIfExists(branchName); err != nil {
+					splog.Debug("Failed to apply remote metadata for %s: %v", branchName, err)
+				}
+			}
 		}
 	}
 
