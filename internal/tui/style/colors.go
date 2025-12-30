@@ -37,3 +37,10 @@ func ColorCyan(text string) string {
 		Foreground(lipgloss.Color("6")).
 		Render(text)
 }
+
+// ColorGreen colors text green
+func ColorGreen(text string) string {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("2")).
+		Render(text)
+}
