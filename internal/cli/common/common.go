@@ -2,20 +2,24 @@
 package common
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // GetGlobalOptions returns runtime.GlobalOptions populated from a cobra.Command's flags
-func GetGlobalOptions(cmd *cobra.Command) runtime.GlobalOptions {
+func GetGlobalOptions(cmd *cobra.Command) app.GlobalOptions {
 	interactive, _ := cmd.Flags().GetBool("interactive")
 	verify, _ := cmd.Flags().GetBool("verify")
 	debug, _ := cmd.Flags().GetBool("debug")
 	quiet, _ := cmd.Flags().GetBool("quiet")
 
-	return runtime.GlobalOptions{
+	return app.GlobalOptions{
 		Interactive: interactive,
 		Verify:      verify,
 		Debug:       debug,
@@ -24,13 +28,26 @@ func GetGlobalOptions(cmd *cobra.Command) runtime.GlobalOptions {
 }
 
 // Run is a helper that provides a runtime context to a command's execution function
-func Run(cmd *cobra.Command, fn func(ctx *runtime.Context) error) error {
+func Run(cmd *cobra.Command, fn func(ctx *app.Context) error) error {
 	opts := GetGlobalOptions(cmd)
-	ctx, err := runtime.GetContext(cmd.Context(), opts)
+	ctx, err := app.GetContext(cmd.Context(), opts)
 	if err != nil {
 		return err
 	}
-	return fn(ctx)
+	err = fn(ctx)
+	if err != nil {
+		return HandleCommandError(err)
+	}
+	return nil
+}
+
+// HandleCommandError formats known error types for user display.
+func HandleCommandError(err error) error {
+	var modErr *errors.BranchModificationError
+	if errors.As(err, &modErr) {
+		return fmt.Errorf("%s", style.FormatBranchModificationError(modErr))
+	}
+	return err
 }
 
 // CompleteBranches is a helper for cobra.ValidArgsFunction and RegisterFlagCompletionFunc

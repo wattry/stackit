@@ -10,9 +10,10 @@ import (
 	"strings"
 	"sync"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // Options contains options for the foreach command
@@ -26,7 +27,7 @@ type Options struct {
 }
 
 // Action executes a command on each branch in the stack with event handling
-func Action(ctx *runtime.Context, opts Options, handler Handler) error {
+func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 
 	currentBranch := eng.CurrentBranch()
@@ -80,7 +81,7 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	return foreachSequential(ctx, opts, nonTrunkBranches, handler)
 }
 
-func foreachSequential(ctx *runtime.Context, opts Options, branches []engine.Branch, handler Handler) error {
+func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch, handler Handler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -209,10 +210,7 @@ func foreachSequential(ctx *runtime.Context, opts Options, branches []engine.Bra
 	return nil
 }
 
-func foreachParallel(ctx *runtime.Context, opts Options, branches []engine.Branch, handler Handler) error {
-	eng := ctx.Engine
-	splog := ctx.Splog
-
+func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, handler Handler) error {
 	numJobs := opts.Jobs
 	if numJobs <= 0 {
 		numJobs = stdruntime.NumCPU()
@@ -227,8 +225,6 @@ func foreachParallel(ctx *runtime.Context, opts Options, branches []engine.Branc
 	}
 
 	results := make(chan result, len(branches))
-	sem := make(chan struct{}, numJobs)
-	var wg sync.WaitGroup
 
 	// Context for canceling remaining jobs if fail-fast is on
 	runCtx, cancel := context.WithCancel(ctx.Context)
@@ -237,109 +233,54 @@ func foreachParallel(ctx *runtime.Context, opts Options, branches []engine.Branc
 	var mu sync.Mutex
 	var firstErr error
 
-	for _, b := range branches {
-		wg.Add(1)
-		go func(branch engine.Branch) {
-			defer wg.Done()
+	concurrency.RunWithWorkers(branches, numJobs, func(branch engine.Branch) {
+		select {
+		case <-runCtx.Done():
+			return
+		default:
+		}
 
-			select {
-			case <-runCtx.Done():
-				return
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
+		branchName := branch.GetName()
+
+		// Emit running event
+		handler.OnEvent(BranchProgressEvent{
+			BranchName: branchName,
+			Status:     StatusRunning,
+		})
+
+		res := executeCommandOnBranch(runCtx, ctx, branch, fullCommand)
+
+		if res.err != nil {
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = res.err
+			}
+			mu.Unlock()
+			if opts.FailFast {
+				cancel()
 			}
 
-			branchName := branch.GetName()
-
-			// Emit running event
 			handler.OnEvent(BranchProgressEvent{
 				BranchName: branchName,
-				Status:     StatusRunning,
+				Status:     StatusError,
+				Output:     res.output,
+				Error:      res.err,
 			})
+		} else {
+			handler.OnEvent(BranchProgressEvent{
+				BranchName: branchName,
+				Status:     StatusDone,
+				Output:     res.output,
+			})
+		}
 
-			res := result{branchName: branchName}
-
-			// Create a temporary directory for the worktree
-			tmpDir, err := os.MkdirTemp("", "stackit-foreach-*")
-			if err != nil {
-				res.err = fmt.Errorf("failed to create temporary directory: %w", err)
-				handler.OnEvent(BranchProgressEvent{
-					BranchName: branchName,
-					Status:     StatusError,
-					Error:      res.err,
-				})
-				results <- res
-				return
-			}
-			defer func() {
-				_ = os.RemoveAll(tmpDir)
-			}()
-
-			worktreePath := filepath.Join(tmpDir, "worktree")
-
-			// Add detached worktree
-			if err := eng.AddWorktree(runCtx, worktreePath, branchName, true); err != nil {
-				res.err = fmt.Errorf("failed to add worktree: %w", err)
-				handler.OnEvent(BranchProgressEvent{
-					BranchName: branchName,
-					Status:     StatusError,
-					Error:      res.err,
-				})
-				results <- res
-				return
-			}
-			defer func() {
-				// Use context.Background for cleanup to ensure it runs even if runCtx is canceled
-				if cleanupErr := eng.RemoveWorktree(context.Background(), worktreePath); cleanupErr != nil {
-					splog.Debug("Failed to remove worktree at %s: %v", worktreePath, cleanupErr)
-				}
-			}()
-
-			var output strings.Builder
-			cmd := exec.CommandContext(runCtx, "/bin/sh", "-c", fullCommand)
-			cmd.Stdout = &output
-			cmd.Stderr = &output
-			cmd.Dir = worktreePath
-			cmd.Env = os.Environ()
-
-			if err := cmd.Run(); err != nil {
-				res.err = err
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				mu.Unlock()
-				if opts.FailFast {
-					cancel()
-				}
-			}
-			res.output = output.String()
-
-			// Emit progress event
-			if res.err != nil {
-				handler.OnEvent(BranchProgressEvent{
-					BranchName: branchName,
-					Status:     StatusError,
-					Output:     res.output,
-					Error:      res.err,
-				})
-			} else {
-				handler.OnEvent(BranchProgressEvent{
-					BranchName: branchName,
-					Status:     StatusDone,
-					Output:     res.output,
-				})
-			}
-
-			results <- res
-		}(b)
-	}
-
-	// Close results channel when all goroutines are done
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
+		results <- result{
+			branchName: res.branchName,
+			output:     res.output,
+			err:        res.err,
+		}
+	})
+	close(results)
 
 	// Collect all results for consolidated output
 	allResults := make([]BranchResult, 0, len(branches))
@@ -394,4 +335,53 @@ func foreachParallel(ctx *runtime.Context, opts Options, branches []engine.Branc
 		Results: sortedResults,
 	})
 	return nil
+}
+
+func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch engine.Branch, fullCommand string) struct {
+	branchName string
+	output     string
+	err        error
+} {
+	res := struct {
+		branchName string
+		output     string
+		err        error
+	}{branchName: branch.GetName()}
+
+	// Create a temporary directory for the worktree
+	tmpDir, err := os.MkdirTemp("", "stackit-foreach-*")
+	if err != nil {
+		res.err = fmt.Errorf("failed to create temporary directory: %w", err)
+		return res
+	}
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+
+	worktreePath := filepath.Join(tmpDir, "worktree")
+
+	// Add detached worktree
+	if err := appCtx.Engine.AddWorktree(ctx, worktreePath, branch.GetName(), true); err != nil {
+		res.err = fmt.Errorf("failed to add worktree: %w", err)
+		return res
+	}
+	defer func() {
+		// Use context.Background for cleanup to ensure it runs even if ctx is canceled
+		if cleanupErr := appCtx.Engine.RemoveWorktree(context.Background(), worktreePath); cleanupErr != nil {
+			appCtx.Splog.Debug("Failed to remove worktree at %s: %v", worktreePath, cleanupErr)
+		}
+	}()
+
+	var output strings.Builder
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", fullCommand)
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	cmd.Dir = worktreePath
+	cmd.Env = os.Environ()
+
+	if err := cmd.Run(); err != nil {
+		res.err = err
+	}
+	res.output = output.String()
+	return res
 }

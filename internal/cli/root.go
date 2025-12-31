@@ -93,6 +93,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(navigation.NewDownCmd())
 	rootCmd.AddCommand(branch.NewFoldCmd())
 	rootCmd.AddCommand(stack.NewForeachCmd())
+	rootCmd.AddCommand(branch.NewFreezeCmd())
 	rootCmd.AddCommand(branch.NewGetCmd())
 	rootCmd.AddCommand(newInfoCmd())
 	rootCmd.AddCommand(newInitCmd())
@@ -120,6 +121,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(navigation.NewTrunkCmd())
 	rootCmd.AddCommand(newUndoCmd())
 	rootCmd.AddCommand(navigation.NewUpCmd())
+	rootCmd.AddCommand(branch.NewUnfreezeCmd())
 	rootCmd.AddCommand(branch.NewUnlockCmd())
 	rootCmd.AddCommand(newConfigCmd())
 

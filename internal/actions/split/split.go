@@ -7,9 +7,9 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // Style specifies the split mode
@@ -37,7 +37,7 @@ type Result struct {
 }
 
 // Action performs the split operation
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	context := ctx.Context
@@ -48,8 +48,8 @@ func Action(ctx *runtime.Context, opts Options) error {
 		return fmt.Errorf("not on a branch")
 	}
 
-	if currentBranch.IsLocked() {
-		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", currentBranch.GetName())
+	if err := currentBranch.EnsureCanModify(); err != nil {
+		return err
 	}
 
 	// Check for uncommitted tracked changes

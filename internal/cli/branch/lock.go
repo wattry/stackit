@@ -6,8 +6,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewLockCmd creates the lock command
@@ -17,17 +17,18 @@ func NewLockCmd() *cobra.Command {
 		Short: "Lock specified branch and its downstack",
 		Long: `Lock specified branch and branches downstack of it.
 
-Locking a branch prevents local modifications to the branch including any restacks. 
-You can still sync remote changes to the branch with st sync or st get. 
-You can also build PRs on top of a locked branch. 
+Locking a branch prevents local modifications and restacking for everyone 
+collaborating on the stack. The locked status is stored in remote metadata 
+and shared with others when they 'st get' or 'st sync' the stack.
 
-Locking can be useful when you want to stack on top of someone else’s PRs 
-without making any changes to them. 
+Use 'st lock' to signal to your team that certain branches are stable and 
+should not be modified. For local-only protection (e.g. when building on 
+top of a colleague's PR), use 'st freeze' instead.
 
-This operation can be undone with st unlock.`,
+This operation can be undone with 'st unlock'.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
 				if len(args) > 0 {
 					branchName = args[0]
@@ -52,11 +53,14 @@ func NewUnlockCmd() *cobra.Command {
 		Short: "Unlock specified branch and its upstack",
 		Long: `Unlock specified branch and branches upstack of it.
 
-Locking a branch prevents local modifications to the branch including any restacks. 
-Unlocking will enable local modifications to the branch.`,
+Unlocking a branch re-enables local modifications and restacking for everyone 
+by clearing the shared lock in remote metadata. 
+
+If the branch is also frozen locally, you will still need to run 'st unfreeze' 
+to enable modifications.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
 				if len(args) > 0 {
 					branchName = args[0]

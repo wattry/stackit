@@ -3,14 +3,14 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // LockAction locks the specified branch and all branches downstack of it
-func LockAction(ctx *runtime.Context, branchName string) error {
+func LockAction(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -50,7 +50,7 @@ func LockAction(ctx *runtime.Context, branchName string) error {
 }
 
 // UnlockAction unlocks the specified branch and all branches upstack of it
-func UnlockAction(ctx *runtime.Context, branchName string) error {
+func UnlockAction(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -86,7 +86,7 @@ func UnlockAction(ctx *runtime.Context, branchName string) error {
 }
 
 // pushMetadataForBranches pushes metadata for the given branches to remote
-func pushMetadataForBranches(ctx *runtime.Context, branchNames []string) error {
+func pushMetadataForBranches(ctx *app.Context, branchNames []string) error {
 	if len(branchNames) == 0 {
 		return nil
 	}

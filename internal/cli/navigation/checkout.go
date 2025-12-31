@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewCheckoutCmd creates the checkout command
@@ -28,7 +28,7 @@ by typing. Use flags to customize which branches are shown.`,
 		ValidArgsFunction: common.CompleteBranches,
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Get branch name from args
 				branchName := ""
 				if len(args) > 0 {

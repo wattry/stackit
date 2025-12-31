@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/split"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewSplitCmd creates the split command
@@ -34,7 +34,7 @@ split without options will prompt for a splitting strategy.`,
 		// Disable default help flag to allow -h for --by-hunk
 		DisableFlagParsing: false,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Determine split style - check all flag variants
 				var style split.Style
 				switch {

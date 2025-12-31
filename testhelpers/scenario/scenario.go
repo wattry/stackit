@@ -11,10 +11,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 )
@@ -25,7 +25,7 @@ type Scenario struct {
 	T          *testing.T
 	Scene      *testhelpers.Scene
 	Engine     engine.Engine
-	Context    *runtime.Context
+	Context    *app.Context
 	BinaryPath string
 }
 
@@ -54,7 +54,7 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 	})
 	require.NoError(t, err)
 
-	ctx := runtime.NewContext(eng)
+	ctx := app.NewContext(eng)
 	ctx.RepoRoot = scene.Dir
 
 	return &Scenario{

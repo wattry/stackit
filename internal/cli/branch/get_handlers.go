@@ -90,11 +90,11 @@ func (h *SimpleGetHandler) Complete(summary getAction.Summary) {
 	// Checkout message
 	h.splog.Info("Checked out %s", style.ColorBranchName(summary.TargetBranch, true))
 
-	// Locked message if applicable
-	if summary.IsLocked {
-		h.splog.Info("Branch %s was retrieved in 'locked' mode, making it uneditable",
+	// Status messages
+	if summary.IsFrozen {
+		h.splog.Info("Branch %s was retrieved in 'frozen' mode (local-only), making it uneditable",
 			style.ColorBranchName(summary.TargetBranch, false))
-		h.splog.Info("Use %s to make it editable", style.ColorCyan("st unlock"))
+		h.splog.Info("Use %s to make it editable", style.ColorCyan("st unfreeze"))
 	}
 }
 

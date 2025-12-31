@@ -120,6 +120,50 @@ func (e *engineImpl) restackBranch(
 		return RestackBranchResult{Result: RestackUnneeded}, nil
 	}
 
+	if e.IsFrozen(branch) {
+		// For frozen branches, we update via hard reset to remote instead of rebase
+		remote := e.git.GetRemote()
+		remoteBranch := fmt.Sprintf("%s/%s", remote, branchName)
+		remoteSha, err := e.git.GetRemoteRevision(branchName)
+		if err != nil {
+			// If remote branch is not found, just skip restack
+			return RestackBranchResult{Result: RestackUnneeded}, nil //nolint:nilerr
+		}
+		if remoteSha == "" {
+			return RestackBranchResult{Result: RestackUnneeded}, nil
+		}
+
+		localSha, err := branch.GetRevision()
+		if err != nil {
+			return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to get local revision for frozen branch %s: %w", branchName, err)
+		}
+		if localSha != remoteSha {
+			if _, err := e.git.RunGitCommandWithContext(ctx, "reset", "--hard", remoteBranch); err != nil {
+				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to hard reset frozen branch %s to %s: %w", branchName, remoteBranch, err)
+			}
+
+			// After hard reset, update parent revision in metadata to match current parent tip
+			// This ensures children know where they are stacked.
+			parentBranch := e.GetBranch(parent)
+			parentRev, err := parentBranch.GetRevision()
+			if err != nil {
+				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to get parent revision for %s: %w", branchName, err)
+			}
+			if parentRev != "" {
+				if err := e.UpdateParentRevision(branchName, parentRev); err != nil {
+					return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to update metadata for %s: %w", branchName, err)
+				}
+			}
+
+			return RestackBranchResult{
+				Result:            RestackDone,
+				RebasedBranchBase: remoteSha,
+			}, nil
+		}
+
+		return RestackBranchResult{Result: RestackUnneeded}, nil
+	}
+
 	// Track reparenting info
 	var reparented bool
 	var oldParent string

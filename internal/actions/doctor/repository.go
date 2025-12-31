@@ -3,14 +3,14 @@ package doctor
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 )
 
 // checkRepository performs repository-related checks
-func checkRepository(ctx *runtime.Context, splog *tui.Splog, warnings []string, errors []string, trunk string) ([]string, []string) {
+func checkRepository(ctx *app.Context, splog *tui.Splog, warnings []string, errors []string, trunk string) ([]string, []string) {
 	// Check if we're in a git repository
 	if ctx.RepoRoot == "" {
 		if err := git.InitDefaultRepo(); err != nil {

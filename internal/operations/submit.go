@@ -6,13 +6,13 @@ import (
 	"sync"
 
 	submitAction "stackit.dev/stackit/internal/actions/submit"
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
 )
 
 // SubmitOperation wraps the submit action as an async Operation.
 type SubmitOperation struct {
 	BaseOperation
-	ctx     *runtime.Context
+	ctx     *app.Context
 	options submitAction.Options
 
 	// progress channel for emitting updates
@@ -26,7 +26,7 @@ type SubmitOperation struct {
 }
 
 // NewSubmitOperation creates a new submit operation.
-func NewSubmitOperation(ctx *runtime.Context, options submitAction.Options) *SubmitOperation {
+func NewSubmitOperation(ctx *app.Context, options submitAction.Options) *SubmitOperation {
 	return &SubmitOperation{
 		BaseOperation: BaseOperation{
 			id: nextID("submit"),

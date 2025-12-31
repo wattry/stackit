@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewTopCmd creates the top command
@@ -21,7 +21,7 @@ children exist at any level, you will be prompted to select which branch
 to follow.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Execute top action
 				return actions.SwitchBranchAction(actions.DirectionTop, ctx)
 			})

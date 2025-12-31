@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/move"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -30,7 +30,7 @@ func NewMoveCmd() *cobra.Command {
 If no branch is passed in, opens an interactive selector to choose the target branch.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Default source to current branch
 				sourceBranch := source
 				if sourceBranch == "" {
@@ -72,7 +72,7 @@ If no branch is passed in, opens an interactive selector to choose the target br
 }
 
 // interactiveOntoSelection shows an interactive branch selector for choosing the "onto" branch
-func interactiveOntoSelection(ctx *runtime.Context, sourceBranch string) (string, error) {
+func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, error) {
 	eng := ctx.Engine
 	initialIndex := -1
 	seenBranches := make(map[string]bool)

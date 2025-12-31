@@ -7,12 +7,13 @@ import (
 	"sync"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/utils"
+	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // Options contains options for the submit command
@@ -58,7 +59,7 @@ type Info struct {
 }
 
 // Action performs the submit operation with an event handler for progress feedback.
-func Action(ctx *runtime.Context, opts Options, handler Handler) error {
+func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Validate flags
 	if opts.Draft && opts.Publish {
 		return fmt.Errorf("can't use both --publish and --draft flags in one command")
@@ -166,7 +167,7 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 		}
 	}
 
-	// Start submission phase
+	// Start submission phase with a worker pool to avoid spawning too many goroutines
 	handler.OnEvent(SubmissionStartEvent{Branches: branchInfos})
 
 	githubClient, err := getGitHubClient(ctx)
@@ -176,75 +177,20 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	repoOwner, repoName := githubClient.GetOwnerRepo()
 
 	remote := ctx.Engine.GetRemote()
-	var wg sync.WaitGroup
 	var submitErr error
 	var errMu sync.Mutex
 
-	for _, submissionInfo := range submissionInfos {
-		wg.Add(1)
-		go func(info Info) {
-			defer wg.Done()
-
-			handler.OnEvent(BranchProgressEvent{
-				BranchName: info.BranchName,
-				Status:     StatusSubmitting,
-			})
-
-			if err := pushBranchIfNeeded(ctx, info, opts, remote); err != nil {
-				handler.OnEvent(BranchProgressEvent{
-					BranchName: info.BranchName,
-					Status:     StatusError,
-					Error:      err,
-				})
+	if len(submissionInfos) > 0 {
+		concurrency.Run(submissionInfos, func(info Info) {
+			if err := submitBranch(ctx, info, opts, handler, repoOwner, repoName, remote); err != nil {
 				errMu.Lock()
 				if submitErr == nil {
 					submitErr = err
 				}
 				errMu.Unlock()
-				return
 			}
-
-			var prURL string
-			const (
-				actionCreate = "create"
-				actionUpdate = "update"
-			)
-			var err error
-			if info.Action == actionCreate {
-				prURL, err = createPullRequestQuiet(ctx, info, repoOwner, repoName)
-			} else {
-				prURL, err = updatePullRequestQuiet(ctx, info, opts, repoOwner, repoName)
-			}
-
-			if err != nil {
-				handler.OnEvent(BranchProgressEvent{
-					BranchName: info.BranchName,
-					Status:     StatusError,
-					Error:      err,
-				})
-				errMu.Lock()
-				if submitErr == nil {
-					submitErr = err
-				}
-				errMu.Unlock()
-				return
-			}
-
-			handler.OnEvent(BranchProgressEvent{
-				BranchName: info.BranchName,
-				Status:     StatusDone,
-				URL:        prURL,
-			})
-
-			// Open in browser if requested
-			if opts.View && prURL != "" {
-				if err := utils.OpenBrowser(prURL); err != nil {
-					ctx.Splog.Debug("Failed to open browser: %v", err)
-				}
-			}
-		}(submissionInfo)
+		})
 	}
-	wg.Wait()
 
 	if submitErr != nil {
 		handler.OnEvent(CompletionEvent{Success: false, Message: "Submit failed"})
@@ -267,7 +213,7 @@ func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 }
 
 // prepareBranchesForSubmit prepares submission info for each branch, emitting events via handler
-func prepareBranchesForSubmit(ctx *runtime.Context, branches []engine.Branch, opts Options, currentBranch string, handler Handler) ([]Info, error) {
+func prepareBranchesForSubmit(ctx *app.Context, branches []engine.Branch, opts Options, currentBranch string, handler Handler) ([]Info, error) {
 	submissionInfos := make([]Info, 0, len(branches))
 
 	for _, branch := range branches {
@@ -371,7 +317,7 @@ func prepareBranchesForSubmit(ctx *runtime.Context, branches []engine.Branch, op
 }
 
 // getBranchesToSubmit returns the list of branches to submit based on options
-func getBranchesToSubmit(ctx *runtime.Context, opts Options) ([]string, error) {
+func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 	// Get branch scope
 	branchName := opts.Branch
 	if branchName == "" {
@@ -416,8 +362,61 @@ func getBranchesToSubmit(ctx *runtime.Context, opts Options) ([]string, error) {
 	return branches, nil
 }
 
+// submitBranch submits a single branch
+func submitBranch(ctx *app.Context, info Info, opts Options, handler Handler, repoOwner, repoName, remote string) error {
+	handler.OnEvent(BranchProgressEvent{
+		BranchName: info.BranchName,
+		Status:     StatusSubmitting,
+	})
+
+	if err := pushBranchIfNeeded(ctx, info, opts, remote); err != nil {
+		handler.OnEvent(BranchProgressEvent{
+			BranchName: info.BranchName,
+			Status:     StatusError,
+			Error:      err,
+		})
+		return err
+	}
+
+	var prURL string
+	const (
+		actionCreate = "create"
+		actionUpdate = "update"
+	)
+	var err error
+	if info.Action == actionCreate {
+		prURL, err = createPullRequestQuiet(ctx, info, repoOwner, repoName)
+	} else {
+		prURL, err = updatePullRequestQuiet(ctx, info, opts, repoOwner, repoName)
+	}
+
+	if err != nil {
+		handler.OnEvent(BranchProgressEvent{
+			BranchName: info.BranchName,
+			Status:     StatusError,
+			Error:      err,
+		})
+		return err
+	}
+
+	handler.OnEvent(BranchProgressEvent{
+		BranchName: info.BranchName,
+		Status:     StatusDone,
+		URL:        prURL,
+	})
+
+	// Open in browser if requested
+	if opts.View && prURL != "" {
+		if err := utils.OpenBrowser(prURL); err != nil {
+			ctx.Splog.Debug("Failed to open browser: %v", err)
+		}
+	}
+
+	return nil
+}
+
 // getGitHubClient returns the GitHub client from context
-func getGitHubClient(ctx *runtime.Context) (github.Client, error) {
+func getGitHubClient(ctx *app.Context) (github.Client, error) {
 	if ctx.GitHubClient != nil {
 		return ctx.GitHubClient, nil
 	}
@@ -425,7 +424,7 @@ func getGitHubClient(ctx *runtime.Context) (github.Client, error) {
 }
 
 // pushBranchIfNeeded pushes a branch to remote if needed
-func pushBranchIfNeeded(ctx *runtime.Context, submissionInfo Info, opts Options, remote string) error {
+func pushBranchIfNeeded(ctx *app.Context, submissionInfo Info, opts Options, remote string) error {
 	// Skip if dry run
 	if opts.DryRun {
 		return nil
@@ -446,7 +445,7 @@ func pushBranchIfNeeded(ctx *runtime.Context, submissionInfo Info, opts Options,
 }
 
 // createPullRequestQuiet creates a new pull request without logging
-func createPullRequestQuiet(ctx *runtime.Context, submissionInfo Info, repoOwner, repoName string) (string, error) {
+func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, repoName string) (string, error) {
 	createOpts := github.CreatePROptions{
 		Title:         submissionInfo.Metadata.Title,
 		Body:          submissionInfo.Metadata.Body,
@@ -479,7 +478,7 @@ func createPullRequestQuiet(ctx *runtime.Context, submissionInfo Info, repoOwner
 }
 
 // updatePullRequestQuiet updates an existing pull request without logging
-func updatePullRequestQuiet(ctx *runtime.Context, submissionInfo Info, opts Options, repoOwner, repoName string) (string, error) {
+func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options, repoOwner, repoName string) (string, error) {
 	// Check if base changed
 	branch := ctx.Engine.GetBranch(submissionInfo.BranchName)
 	prInfo, _ := branch.GetPrInfo()
@@ -559,7 +558,7 @@ func updatePullRequestQuiet(ctx *runtime.Context, submissionInfo Info, opts Opti
 }
 
 // pushMetadataRefs pushes metadata refs for submitted branches to remote
-func pushMetadataRefs(ctx *runtime.Context, branches []engine.Branch) error {
+func pushMetadataRefs(ctx *app.Context, branches []engine.Branch) error {
 	if len(branches) == 0 {
 		return nil
 	}

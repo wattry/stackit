@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewRenameCmd creates the rename command
@@ -24,7 +24,7 @@ Note that this removes any association to a pull request, as GitHub pull request
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				newName := ""
 				if len(args) > 0 {
 					newName = args[0]

@@ -6,6 +6,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"stackit.dev/stackit/internal/errors"
 )
 
 // GetLogShortColor returns a styled string with the color from StackitColors
@@ -184,6 +186,16 @@ func IconCIPending() string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("●")
 }
 
+// IconFrozen returns the frozen icon (snowflake)
+func IconFrozen() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render("❄")
+}
+
+// IconLocked returns the locked icon (lock)
+func IconLocked() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("🔒")
+}
+
 // ColorPRNumberByState colors PR number based on state
 func ColorPRNumberByState(prNumber int, state string, isDraft bool) string {
 	prefix := fmt.Sprintf("#%d", prNumber)
@@ -198,4 +210,27 @@ func ColorPRNumberByState(prNumber int, state string, isDraft bool) string {
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(prefix) // cyan
 	}
+}
+
+// FormatBranchModificationError formats a BranchModificationError with colors and helpful instructions
+func FormatBranchModificationError(err *errors.BranchModificationError) string {
+	var state, cmd string
+	switch {
+	case err.IsLocked && err.IsFrozen:
+		state = "locked and frozen"
+		cmd = "st unlock' and 'st unfreeze"
+	case err.IsLocked:
+		state = "locked"
+		cmd = "st unlock"
+	case err.IsFrozen:
+		state = "frozen"
+		cmd = "st unfreeze"
+	}
+
+	branchNameColored := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render(err.BranchName)
+
+	return fmt.Sprintf("branch %s is %s. Use '%s' to enable modifications",
+		branchNameColored,
+		state,
+		cmd)
 }

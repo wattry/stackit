@@ -41,6 +41,7 @@ Stackit manages the complexity of this workflow—automatically handling rebases
 - 🧭 **Easy navigation** — Move `up`, `down`, `top`, or `bottom` of your stack
 - 🧹 **Auto cleanup** — Detect and delete merged branches during `sync`
 - 🎯 **Smart scoping** — Associate branches with Jira tickets, Linear IDs, or other logical scopes
+- 🔒 **Branch protection** — `lock` or `freeze` branches to prevent accidental modifications
 - 🔍 **Branch inspection** — Easily see parent/child relationships with `children` and `parent` commands
 - ⚙️ **Advanced configuration** — Customize branch naming patterns and submit behavior
 - 🤖 **AI assistant integration** — Generate integration files for Cursor and Claude Code
@@ -180,6 +181,8 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit scope [name]` | Manage logical scope (Jira ticket, Linear ID) for current branch |
 | `stackit lock [branch]` | Lock a branch and its downstack (prevent local changes) |
 | `stackit unlock [branch]` | Unlock a branch and its upstack (allow local changes) |
+| `stackit freeze [branch]` | Freeze a branch (prevent local changes, local only) |
+| `stackit unfreeze [branch]` | Unfreeze a branch |
 
 ### Stack Operations
 | Command | Description |
@@ -250,7 +253,27 @@ To work on a stack created by someone else or on another machine:
 # Sync an entire stack by providing a PR number or branch name
 stackit get 123
 ```
-By default, `get` locks the fetched branches to prevent accidental local modifications while you build on top of them. Use `stackit unlock` if you need to modify them.
+By default, `get` **freezes** the fetched branches locally. This prevents accidental local modifications while you build on top of them, without affecting the original author's metadata. Use `stackit unfreeze` if you need to modify them.
+
+---
+
+## Frozen & Locked Branches
+
+Stackit provides two ways to protect branches from accidental modification.
+
+### Frozen Branches (Local)
+**Frozen** status is strictly **local** to your machine. It's the recommended way to protect branches you've fetched from others.
+- **Use Case**: You want to stack your own work on top of someone else's PRs without accidentally changing their commits.
+- **Behavior**: Prevents `modify`, `squash`, `absorb`, and `restack`. `st sync` will update frozen branches by hard-resetting them to their remote tracking branch instead of rebasing.
+- **Commands**: `st freeze`, `st unfreeze`
+
+### Locked Branches (Shared)
+**Locked** status is **shared** with everyone collaborating on the stack via remote metadata.
+- **Use Case**: You want to signal to your team that a set of branches are stable and should not be modified by anyone.
+- **Behavior**: Same restrictions as frozen branches, but visible to all users who `st get` or `st sync` the stack.
+- **Commands**: `st lock`, `st unlock`
+
+---
 
 ### Automation & CI
 Stackit is designed to be easily scriptable. Use global flags to control behavior in non-interactive environments:

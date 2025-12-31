@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -86,7 +86,7 @@ func GetPRBody(branch engine.Branch, editInline bool, existingBody string) (stri
 }
 
 // GetReviewers gets reviewers from flag or prompts user
-func GetReviewers(reviewersFlag string, _ *runtime.Context) ([]string, []string, error) {
+func GetReviewers(reviewersFlag string) ([]string, []string, error) {
 	if reviewersFlag == "" {
 		return nil, nil, nil
 	}
@@ -96,7 +96,7 @@ func GetReviewers(reviewersFlag string, _ *runtime.Context) ([]string, []string,
 }
 
 // GetReviewersWithPrompt gets reviewers, prompting if flag is empty
-func GetReviewersWithPrompt(reviewersFlag string, _ *runtime.Context) ([]string, []string, error) {
+func GetReviewersWithPrompt(reviewersFlag string) ([]string, []string, error) {
 	if reviewersFlag == "" {
 		result, err := tui.PromptTextInput("Reviewers (comma-separated GitHub usernames):", "")
 		if err != nil {
@@ -111,7 +111,7 @@ func GetReviewersWithPrompt(reviewersFlag string, _ *runtime.Context) ([]string,
 }
 
 // PreparePRMetadata prepares PR metadata for a branch
-func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.Engine, ctx *runtime.Context) (*PRMetadata, error) {
+func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.Engine, ctx *app.Context) (*PRMetadata, error) {
 	prInfo, _ := branch.GetPrInfo()
 
 	metadata := &PRMetadata{
@@ -153,14 +153,14 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.En
 	}
 
 	if opts.ReviewersPrompt {
-		reviewers, teamReviewers, err := GetReviewersWithPrompt(opts.Reviewers, ctx)
+		reviewers, teamReviewers, err := GetReviewersWithPrompt(opts.Reviewers)
 		if err != nil {
 			return nil, err
 		}
 		metadata.Reviewers = reviewers
 		metadata.TeamReviewers = teamReviewers
 	} else if opts.Reviewers != "" {
-		reviewers, teamReviewers, err := GetReviewers(opts.Reviewers, ctx)
+		reviewers, teamReviewers, err := GetReviewers(opts.Reviewers)
 		if err != nil {
 			return nil, err
 		}

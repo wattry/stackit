@@ -3,8 +3,8 @@ package demo
 import (
 	"time"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -25,7 +25,7 @@ func simulateDelay(base time.Duration) {
 
 func init() {
 	// Register the demo engine factory with runtime package
-	runtime.DemoEngineFactory = func() engine.Engine {
+	app.DemoEngineFactory = func() engine.Engine {
 		eng, _ := NewDemoEngine()
 		return eng
 	}
@@ -34,12 +34,12 @@ func init() {
 // NewDemoContext creates a demo engine and context if in demo mode.
 // Returns (context, true) if in demo mode, (nil, false) otherwise.
 // Deprecated: Use runtime.NewContextAuto instead.
-func NewDemoContext() (*runtime.Context, bool) {
+func NewDemoContext() (*app.Context, bool) {
 	if !utils.IsDemoMode() {
 		return nil, false
 	}
 	eng, _ := NewDemoEngine()
-	return runtime.NewContext(eng), true
+	return app.NewContext(eng), true
 }
 
 // NewDemoEngine creates a new demo engine using the standard engine implementation

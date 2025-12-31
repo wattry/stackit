@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -23,7 +23,7 @@ in the stack. This is useful for understanding the structure of your stack
 and seeing which branch the current branch is based on.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Get current branch
 				currentBranch := ctx.Engine.CurrentBranch()
 				if currentBranch == nil {

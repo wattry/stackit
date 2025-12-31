@@ -4,15 +4,15 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
 
 // syncGitHubInfo synchronizes PR information from GitHub and updates local parents
-func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string, handler Handler, _ *Summary) error {
+func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handler, _ *Summary) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
@@ -93,7 +93,7 @@ type ParentsResult struct {
 }
 
 // ParentsFromGitHubBase synchronizes local parents with GitHub PR base branches
-func ParentsFromGitHubBase(ctx *runtime.Context) (*ParentsResult, error) {
+func ParentsFromGitHubBase(ctx *app.Context) (*ParentsResult, error) {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context

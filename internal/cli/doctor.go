@@ -4,9 +4,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/doctor"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // newDoctorCmd creates the doctor command
@@ -25,7 +25,7 @@ The doctor command checks:
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Get config values
 				cfg, _ := config.LoadConfig(ctx.RepoRoot)
 				trunk := cfg.Trunk()

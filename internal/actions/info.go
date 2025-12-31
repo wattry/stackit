@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -21,7 +21,7 @@ type InfoOptions struct {
 }
 
 // InfoAction displays information about a branch
-func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
+func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -70,7 +70,10 @@ func InfoAction(ctx *runtime.Context, opts InfoOptions) error {
 	coloredBranchName := style.ColorBranchName(branchName, isCurrent)
 
 	if branch.IsLocked() {
-		coloredBranchName += " " + style.ColorDim("(locked)")
+		coloredBranchName += " " + style.IconLocked() + " " + style.ColorDim("(locked)")
+	}
+	if branch.IsFrozen() {
+		coloredBranchName += " " + style.IconFrozen() + " " + style.ColorDim("(frozen)")
 	}
 
 	if !isTrunk && !branch.IsBranchUpToDate() {

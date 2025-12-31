@@ -11,10 +11,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/submit"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	submitComponent "stackit.dev/stackit/internal/tui/components/submit"
 	"stackit.dev/stackit/internal/tui/components/tree"
@@ -80,7 +80,7 @@ func addSubmitFlags(cmd *cobra.Command, f *submitFlags) {
 }
 
 func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
-	return common.Run(cmd, func(ctx *runtime.Context) error {
+	return common.Run(cmd, func(ctx *app.Context) error {
 		// Get config values
 		cfg, _ := config.LoadConfig(ctx.RepoRoot)
 		submitFooter := cfg.SubmitFooter()

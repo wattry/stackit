@@ -4,18 +4,18 @@ import (
 	"context"
 
 	syncAction "stackit.dev/stackit/internal/actions/sync"
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
 )
 
 // SyncOperation wraps the sync action as an async Operation.
 type SyncOperation struct {
 	BaseOperation
-	ctx     *runtime.Context
+	ctx     *app.Context
 	options syncAction.Options
 }
 
 // NewSyncOperation creates a new sync operation.
-func NewSyncOperation(ctx *runtime.Context, options syncAction.Options) *SyncOperation {
+func NewSyncOperation(ctx *app.Context, options syncAction.Options) *SyncOperation {
 	return &SyncOperation{
 		BaseOperation: BaseOperation{
 			id: nextID("sync"),

@@ -3,8 +3,8 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -17,7 +17,7 @@ type RenameOptions struct {
 }
 
 // RenameAction renames the current branch and updates metadata
-func RenameAction(ctx *runtime.Context, opts RenameOptions) error {
+func RenameAction(ctx *app.Context, opts RenameOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -31,8 +31,8 @@ func RenameAction(ctx *runtime.Context, opts RenameOptions) error {
 	}
 
 	branch := eng.GetBranch(currentBranch)
-	if branch.IsLocked() {
-		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", style.ColorBranchName(currentBranch, true))
+	if err := branch.EnsureCanModify(); err != nil {
+		return err
 	}
 
 	newName := opts.NewName

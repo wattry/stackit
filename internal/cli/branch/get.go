@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewGetCmd creates the get command
@@ -14,7 +14,7 @@ func NewGetCmd() *cobra.Command {
 		downstack bool
 		force     bool
 		restack   bool
-		unlocked  bool
+		unfrozen  bool
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +30,7 @@ Note that remote-only branches upstack of the branch are not currently synced.
 If no branch is provided, sync the current stack.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				branchOrPR := ""
 				if len(args) > 0 {
 					branchOrPR = args[0]
@@ -43,7 +43,7 @@ If no branch is provided, sync the current stack.`,
 					Downstack: downstack,
 					Force:     force,
 					Restack:   restack,
-					Unlocked:  unlocked,
+					Unfrozen:  unfrozen,
 				}, handler)
 			})
 		},
@@ -55,7 +55,7 @@ If no branch is provided, sync the current stack.`,
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite all fetched branches with remote source of truth")
 	cmd.Flags().BoolVar(&restack, "restack", true, "Restack any branches in the stack that can be restacked without conflicts")
 	cmd.Flags().BoolVar(&noRestack, "no-restack", false, "Skip restacking branches")
-	cmd.Flags().BoolVarP(&unlocked, "unlocked", "U", false, "Checkout new branches as unlocked (allow local edits)")
+	cmd.Flags().BoolVarP(&unfrozen, "unfrozen", "U", false, "Checkout new branches as unfrozen (allow local edits)")
 
 	// Apply --no-restack flag
 	cmd.PreRun = func(_ *cobra.Command, _ []string) {

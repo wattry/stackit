@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // restackBranches handles restacking branches after sync operations
-func restackBranches(ctx *runtime.Context, branchesToRestack []string, handler Handler, summary *Summary) error {
+func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handler, summary *Summary) error {
 	eng := ctx.Engine
 
 	// Add current branch stack to restack list

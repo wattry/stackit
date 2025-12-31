@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/sync"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewSyncCmd creates the sync command
@@ -26,7 +26,7 @@ Restacks all branches in your repository that can be restacked without conflicts
 If trunk cannot be fast-forwarded to match remote, overwrites trunk with the remote version.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Create handler based on TTY availability
 				handler := NewSyncHandler(ctx.Splog)
 

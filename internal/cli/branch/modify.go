@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewModifyCmd creates the modify command
@@ -40,7 +40,7 @@ Examples:
   stackit modify --interactive-rebase     # Interactive rebase on branch commits`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Determine noEdit flag:
 				// - If --no-edit is explicitly set, use it
 				// - If message is provided, don't open editor (noEdit = true)

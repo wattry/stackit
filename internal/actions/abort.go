@@ -3,9 +3,9 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -15,7 +15,7 @@ type AbortOptions struct {
 }
 
 // AbortAction cancels an in-progress operation
-func AbortAction(ctx *runtime.Context, opts AbortOptions) error {
+func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

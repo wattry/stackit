@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/absorb"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewAbsorbCmd creates the absorb command
@@ -35,7 +35,7 @@ If absorb encounters a merge conflict, use 'stackit abort' to restore the origin
 Use --show-conflict to see the current conflict state and what changes were being applied.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Handle conflict resolution flags
 				if showConflict {
 					return absorb.ShowConflict(ctx)

@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewRestackCmd creates the restack command
@@ -28,7 +28,7 @@ func NewRestackCmd() *cobra.Command {
 If conflicts are encountered, you will be prompted to resolve them via an interactive Git rebase.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Validation: only one scope flag at a time
 				scopeFlags := 0
 				if downstack {

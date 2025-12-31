@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -36,7 +36,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Parse steps from positional argument if provided
 				if len(args) > 0 {
 					parsedSteps, err := strconv.Atoi(args[0])

@@ -4,7 +4,7 @@ package doctor
 import (
 	"fmt"
 
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
 )
 
 // Options contains options for the doctor command
@@ -14,7 +14,7 @@ type Options struct {
 }
 
 // Action runs diagnostic checks on the stackit environment and repository
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	splog := ctx.Splog
 	eng := ctx.Engine
 

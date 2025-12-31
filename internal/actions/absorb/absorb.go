@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -23,7 +23,7 @@ type Options struct {
 }
 
 // Action performs the absorb operation
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -154,10 +154,11 @@ func Action(ctx *runtime.Context, opts Options) error {
 		hunksByBranch[branchName][target.CommitSHA] = append(hunksByBranch[branchName][target.CommitSHA], target.Hunk)
 	}
 
-	// Check if any target branches are locked
+	// Check if any target branches are locked or frozen
 	for branchName := range hunksByBranch {
-		if eng.GetBranch(branchName).IsLocked() {
-			return fmt.Errorf("cannot absorb into locked branch %s", style.ColorBranchName(branchName, branchName == currentBranch.GetName()))
+		branch := eng.GetBranch(branchName)
+		if err := branch.EnsureCanModify(); err != nil {
+			return err
 		}
 	}
 

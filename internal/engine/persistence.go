@@ -26,6 +26,11 @@ type Meta struct {
 	LocalOnlyHash  *string     `json:"localOnlyHash,omitempty"`  // Hash of local-only state for change detection
 }
 
+// LocalMeta represents branch metadata that is strictly local and never pushed
+type LocalMeta struct {
+	Frozen bool `json:"frozen,omitempty"`
+}
+
 // ModifiedBy represents information about who last modified the metadata
 type ModifiedBy struct {
 	GitName        string  `json:"gitName"`

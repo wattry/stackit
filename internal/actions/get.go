@@ -5,10 +5,10 @@ import (
 	"strconv"
 
 	getAction "stackit.dev/stackit/internal/actions/get"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/handlers"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -17,11 +17,11 @@ type GetOptions struct {
 	Downstack bool // Don't sync upstack branches if branch exists locally
 	Force     bool // Overwrite all fetched branches with remote source of truth
 	Restack   bool // Restack after syncing (default true)
-	Unlocked  bool // Checkout new branches as unlocked
+	Unfrozen  bool // Checkout new branches as unfrozen
 }
 
 // GetAction performs the get operation
-func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions, handler getAction.Handler) error {
+func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler getAction.Handler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
@@ -129,7 +129,7 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions, handler
 	// Track statistics for summary
 	var branchesCreated, branchesUpdated int
 	branchPRInfo := make(map[string]*int)       // branch -> PR number
-	branchLockedStatus := make(map[string]bool) // branch -> is locked
+	branchFrozenStatus := make(map[string]bool) // branch -> is frozen
 
 	// Fetch PR info for branches if possible
 	if ctx.GitHubClient != nil {
@@ -167,12 +167,12 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions, handler
 					splog.Debug("Failed to track branch %s with parent %s: %v", branchName, parent, err)
 				}
 			}
-			// New branches are locked by default unless --unlocked
-			isLocked := !opts.Unlocked
-			branchLockedStatus[branchName] = isLocked
-			if isLocked {
-				if err := eng.SetLocked(eng.GetBranch(branchName), true); err != nil {
-					splog.Debug("Failed to lock new branch %s: %v", branchName, err)
+			// New branches are frozen by default unless --unfrozen
+			isFrozen := !opts.Unfrozen
+			branchFrozenStatus[branchName] = isFrozen
+			if isFrozen {
+				if err := eng.SetFrozen(eng.GetBranch(branchName), true); err != nil {
+					splog.Debug("Failed to freeze new branch %s: %v", branchName, err)
 				}
 			}
 			branchesCreated++
@@ -184,7 +184,6 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions, handler
 				Branch:   branchName,
 				PRNumber: branchPRInfo[branchName],
 				IsNew:    true,
-				IsLocked: isLocked,
 			})
 		} else {
 			if opts.Force {
@@ -292,14 +291,15 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions, handler
 	}
 
 	// Complete with summary
-	isLocked := branchLockedStatus[targetBranch]
+	targetBranchObj = eng.GetBranch(targetBranch)
+	isFrozenFinal := targetBranchObj.IsFrozen()
 	upToDate := branchesCreated == 0 && branchesUpdated == 0 && restacked == 0
 	handler.Complete(getAction.Summary{
 		TargetBranch:    targetBranch,
 		BranchesCreated: branchesCreated,
 		BranchesUpdated: branchesUpdated,
 		Restacked:       restacked,
-		IsLocked:        isLocked,
+		IsFrozen:        isFrozenFinal,
 		UpToDate:        upToDate,
 	})
 

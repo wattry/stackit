@@ -32,7 +32,7 @@ func TestGetCommand(t *testing.T) {
 		sh.OnBranch("feature-a").
 			Run("info").
 			OutputContains("feature-a").
-			OutputContains("(locked)")
+			OutputContains("(frozen)")
 	})
 
 	t.Run("get with force flag", func(t *testing.T) {

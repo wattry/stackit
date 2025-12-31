@@ -6,14 +6,14 @@ import (
 	"os"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // syncRemoteMetadata fetches and processes remote metadata
-func syncRemoteMetadata(ctx *runtime.Context, opts *Options) error {
+func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -65,7 +65,7 @@ func syncRemoteMetadata(ctx *runtime.Context, opts *Options) error {
 }
 
 // handleOrphanedMetadata handles branches where remote metadata was deleted but local exists
-func handleOrphanedMetadata(ctx *runtime.Context, opts *Options) error {
+func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -117,7 +117,7 @@ func handleOrphanedMetadata(ctx *runtime.Context, opts *Options) error {
 }
 
 // promptOrphanedMetadata prompts the user about orphaned metadata with local changes
-func promptOrphanedMetadata(ctx *runtime.Context, info engine.OrphanedMetadataInfo) error {
+func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -166,7 +166,7 @@ func printMetadataDiffs(diffs []*engine.MetadataDiff, splog interface{ Info(stri
 }
 
 // promptAndResolveConflict prompts the user to accept or reject remote metadata
-func promptAndResolveConflict(ctx *runtime.Context, diff *engine.MetadataDiff) error {
+func promptAndResolveConflict(ctx *app.Context, diff *engine.MetadataDiff) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

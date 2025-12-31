@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // newInfoCmd creates the info command
@@ -29,7 +29,7 @@ If no branch is specified, displays information about the current branch.`,
 		ValidArgsFunction: common.CompleteBranches,
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
 				if len(args) > 0 {
 					branchName = args[0]

@@ -3,7 +3,7 @@ package sync
 import (
 	"fmt"
 
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -16,7 +16,7 @@ type Options struct {
 }
 
 // Action performs the sync operation
-func Action(ctx *runtime.Context, opts Options, handler Handler) error {
+func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context

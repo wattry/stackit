@@ -1,6 +1,6 @@
-// Package runtime provides a context type that holds the engine and logger
+// Package app provides a context type that holds the engine and logger
 // for use throughout the application. This avoids passing multiple parameters.
-package runtime
+package app
 
 import (
 	"context"
