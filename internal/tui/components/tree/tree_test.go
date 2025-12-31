@@ -266,10 +266,10 @@ func TestBranchAnnotation_CheckStatus(t *testing.T) {
 	)
 
 	renderer.SetAnnotation("feature-1", BranchAnnotation{
-		CheckStatus: "PASSING",
+		CheckStatus: CheckStatusPassing,
 	})
 	renderer.SetAnnotation("feature-2", BranchAnnotation{
-		CheckStatus: "FAILING",
+		CheckStatus: CheckStatusFailing,
 	})
 
 	lines := renderer.RenderStack("main", RenderOptions{

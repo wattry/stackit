@@ -67,7 +67,8 @@ func registerTreeStories() {
 				CommitCount:  2,
 				LinesAdded:   50,
 				LinesDeleted: 10,
-				CheckStatus:  "PASSING",
+				CheckStatus:  tree.CheckStatusPassing,
+				ReviewStatus: "Approved",
 			})
 
 			pr2 := 102
@@ -77,7 +78,8 @@ func registerTreeStories() {
 				CommitCount:  5,
 				LinesAdded:   120,
 				LinesDeleted: 5,
-				CheckStatus:  "PENDING",
+				CheckStatus:  tree.CheckStatusPending,
+				ReviewStatus: "In Review",
 			})
 
 			return tree.NewModel(renderer)
@@ -119,11 +121,13 @@ func registerTreeStories() {
 			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
 
 			renderer.SetAnnotation("base-api", tree.BranchAnnotation{Scope: "API", ExplicitScope: "API", CommitCount: 1})
-			renderer.SetAnnotation("api-v2", tree.BranchAnnotation{Scope: "API", CommitCount: 10, LinesAdded: 400})
+			pr3 := 103
+			renderer.SetAnnotation("api-v2", tree.BranchAnnotation{PRNumber: &pr3, Scope: "API", CommitCount: 10, LinesAdded: 400, ReviewStatus: "Changes Requested", CheckStatus: tree.CheckStatusFailing})
 			renderer.SetAnnotation("api-docs", tree.BranchAnnotation{Scope: "API", CommitCount: 1, LinesAdded: 20})
 
 			renderer.SetAnnotation("base-auth", tree.BranchAnnotation{Scope: "AUTH", ExplicitScope: "AUTH", CommitCount: 1})
-			renderer.SetAnnotation("auth-fix", tree.BranchAnnotation{Scope: "AUTH", CommitCount: 3, LinesAdded: 30, LinesDeleted: 30, CheckStatus: "FAILING"})
+			pr4 := 104
+			renderer.SetAnnotation("auth-fix", tree.BranchAnnotation{PRNumber: &pr4, Scope: "AUTH", CommitCount: 3, LinesAdded: 30, LinesDeleted: 30, CheckStatus: tree.CheckStatusFailing, ReviewStatus: "Commented"})
 
 			return tree.NewModel(renderer)
 		},
