@@ -43,6 +43,23 @@ func TestMetaSerialization(t *testing.T) {
 	assert.True(t, meta.LastModifiedAt.Equal(*meta2.LastModifiedAt))
 }
 
+func TestLocalMetaSerialization(t *testing.T) {
+	meta := &LocalMeta{
+		Frozen: true,
+	}
+
+	// Marshal
+	data, err := json.Marshal(meta)
+	assert.NoError(t, err)
+
+	// Unmarshal
+	var meta2 LocalMeta
+	err = json.Unmarshal(data, &meta2)
+	assert.NoError(t, err)
+
+	assert.Equal(t, meta.Frozen, meta2.Frozen)
+}
+
 func TestMetaBackwardCompatibility(t *testing.T) {
 	// Old metadata format (no new fields)
 	jsonData := `{"parentBranchName":"main","locked":true}`

@@ -176,6 +176,15 @@ func TestAbsorbCommand(t *testing.T) {
 			// Initialize stackit
 			cmd := exec.Command(binaryPath, "init")
 			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			// Create a branch so we're not on trunk
+			if err := s.Repo.CreateChange("feature change 1", "test1", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "feature", "-m", "feature change 1")
+			cmd.Dir = s.Dir
 			return cmd.Run()
 		})
 

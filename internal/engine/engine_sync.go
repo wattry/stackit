@@ -122,8 +122,6 @@ func (e *engineImpl) restackBranch(
 
 	if e.IsFrozen(branch) {
 		// For frozen branches, we update via hard reset to remote instead of rebase
-		remote := e.git.GetRemote()
-		remoteBranch := fmt.Sprintf("%s/%s", remote, branchName)
 		remoteSha, err := e.git.GetRemoteRevision(branchName)
 		if err != nil {
 			// If remote branch is not found, just skip restack
@@ -138,11 +136,20 @@ func (e *engineImpl) restackBranch(
 			return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to get local revision for frozen branch %s: %w", branchName, err)
 		}
 		if localSha != remoteSha {
-			if _, err := e.git.RunGitCommandWithContext(ctx, "reset", "--hard", remoteBranch); err != nil {
-				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to hard reset frozen branch %s to %s: %w", branchName, remoteBranch, err)
+			// Update the branch reference to match remote
+			if err := e.git.UpdateBranchRef(branchName, remoteSha); err != nil {
+				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to update branch ref for frozen branch %s: %w", branchName, err)
 			}
 
-			// After hard reset, update parent revision in metadata to match current parent tip
+			// If the branch is currently checked out, we also need to reset the working tree
+			current := e.CurrentBranch()
+			if current != nil && current.GetName() == branchName {
+				if _, err := e.git.RunGitCommandWithContext(ctx, "reset", "--hard", "HEAD"); err != nil {
+					return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to reset working tree for frozen branch %s: %w", branchName, err)
+				}
+			}
+
+			// After update, update parent revision in metadata to match current parent tip
 			// This ensures children know where they are stacked.
 			parentBranch := e.GetBranch(parent)
 			parentRev, err := parentBranch.GetRevision()
