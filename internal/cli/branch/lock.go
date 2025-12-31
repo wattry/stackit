@@ -52,7 +52,7 @@ func NewUnlockCmd() *cobra.Command {
 		Short: "Unlock specified branch and its upstack",
 		Long: `Unlock specified branch and branches upstack of it.
 
-Freezing a branch prevents local modifications to the branch including any restacks. 
+Locking a branch prevents local modifications to the branch including any restacks. 
 Unlocking will enable local modifications to the branch.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

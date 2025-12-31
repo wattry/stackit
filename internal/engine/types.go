@@ -501,6 +501,11 @@ type PRSubmissionStatus struct {
 	PRInfo      *PrInfo
 }
 
+const (
+	// ReasonNoChanges indicates there are no changes to submit
+	ReasonNoChanges = "no changes"
+)
+
 // SquashOptions contains options for squashing commits
 type SquashOptions struct {
 	Message  string

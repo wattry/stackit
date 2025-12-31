@@ -19,11 +19,11 @@ func TestLockUnlockCommand(t *testing.T) {
 		// Lock feature-b (and feature-a)
 		sh.Run("lock feature-b").
 			Run("info").
-			OutputContains("(frozen)")
+			OutputContains("(locked)")
 
 		sh.Checkout("feature-a").
 			Run("info").
-			OutputContains("(frozen)")
+			OutputContains("(locked)")
 
 		// Attempt to modify locked branch should fail
 		sh.WriteFile("a", "modified").
@@ -33,11 +33,11 @@ func TestLockUnlockCommand(t *testing.T) {
 		// Unlock feature-a (and feature-b)
 		sh.Run("unlock feature-a").
 			Run("info").
-			OutputNotContains("(frozen)")
+			OutputNotContains("(locked)")
 
 		sh.Checkout("feature-b").
 			Run("info").
-			OutputNotContains("(frozen)")
+			OutputNotContains("(locked)")
 
 		// Now modification should work
 		sh.WriteFile("b", "modified").

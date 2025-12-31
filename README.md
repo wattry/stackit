@@ -250,7 +250,7 @@ To work on a stack created by someone else or on another machine:
 # Sync an entire stack by providing a PR number or branch name
 stackit get 123
 ```
-By default, `get` locks the fetched branches (marking them as **frozen**) to prevent accidental local modifications while you build on top of them. Use `stackit unlock` if you need to modify them.
+By default, `get` locks the fetched branches to prevent accidental local modifications while you build on top of them. Use `stackit unlock` if you need to modify them.
 
 ### Automation & CI
 Stackit is designed to be easily scriptable. Use global flags to control behavior in non-interactive environments:
