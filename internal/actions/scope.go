@@ -6,7 +6,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -25,7 +24,10 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 	splog := ctx.Splog
 
 	// Get current branch
-	currentBranch, _ := git.GetCurrentBranch()
+	currentBranch := ""
+	if cb := eng.CurrentBranch(); cb != nil {
+		currentBranch = cb.GetName()
+	}
 	isOnTrunk := currentBranch == eng.Trunk().GetName() || currentBranch == ""
 
 	// Handle Show
@@ -126,19 +128,19 @@ func pushMetadataForSingleBranch(ctx *app.Context, branchName string) error {
 
 	// Check if remote sync is enabled; if not, run compatibility test first
 	if !eng.IsRemoteSyncEnabled() {
-		if err := git.TestRemoteRefCompatibility(); err != nil {
+		if err := eng.Git().TestRemoteRefCompatibility(); err != nil {
 			splog.Debug("Remote metadata sync not supported: %v", err)
 			return nil // Non-fatal
 		}
 		eng.SetRemoteSyncEnabled(true)
 		// Configure refspec so future git fetch commands also fetch metadata
-		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
 			splog.Debug("Failed to configure metadata refspec: %v", err)
 		}
 	}
 
 	// Push metadata ref
-	if err := git.PushMetadataRefs([]string{branchName}); err != nil {
+	if err := eng.Git().PushMetadataRefs([]string{branchName}); err != nil {
 		splog.Debug("Failed to push metadata refs: %v", err)
 		return err
 	}

@@ -4,25 +4,21 @@ import (
 	"context"
 	"fmt"
 	"slices"
+
+	"stackit.dev/stackit/internal/git"
 )
 
-// rebuildData holds the results of gathering engine state from Git/metadata
-type rebuildData struct {
-	branches      []string
-	currentBranch string
-	allMeta       map[string]*Meta
-	allLocalMeta  map[string]*LocalMeta
-}
-
-// gatherRebuildData gathers the data needed to rebuild the engine cache
-func (e *engineImpl) gatherRebuildData(refreshCurrentBranch bool) (*rebuildData, error) {
+// rebuildInternal is the internal rebuild logic without locking
+// refreshCurrentBranch indicates whether to refresh currentBranch from Git
+func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	// Get all branch names
 	branches, err := e.git.GetAllBranchNames()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get branches: %w", err)
+		return fmt.Errorf("failed to get branches: %w", err)
 	}
 
 	var currentBranch string
+	// Refresh current branch from Git if requested (needed when called from Rebuild/Reset after branch switches)
 	if refreshCurrentBranch {
 		cb, err := e.git.GetCurrentBranch()
 		if err == nil {
@@ -31,22 +27,19 @@ func (e *engineImpl) gatherRebuildData(refreshCurrentBranch bool) (*rebuildData,
 	}
 
 	// Load metadata for each branch in parallel
-	allMeta, _ := e.batchReadMetadataRefs(branches)
-	allLocalMeta, _ := e.batchReadLocalMetadataRefs(branches)
+	allMeta, _ := e.git.BatchReadMetadata(branches)
+	allLocalMeta := e.git.BatchReadLocalMetadata(branches)
 
-	return &rebuildData{
-		branches:      branches,
-		currentBranch: currentBranch,
-		allMeta:       allMeta,
-		allLocalMeta:  allLocalMeta,
-	}, nil
+	e.applyRebuild(branches, currentBranch, allMeta, allLocalMeta)
+	return nil
 }
 
-// applyRebuildData updates the engine cache with the gathered data (caller must hold lock if needed)
-func (e *engineImpl) applyRebuildData(data *rebuildData, refreshCurrentBranch bool) {
-	e.branches = data.branches
-	if refreshCurrentBranch {
-		e.currentBranch = data.currentBranch
+// applyRebuild updates the internal state maps from the provided metadata results.
+// The caller MUST hold the engine's write lock (e.mu).
+func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMeta map[string]*git.Meta, allLocalMeta map[string]*git.LocalMeta) {
+	e.branches = branches
+	if currentBranch != "" {
+		e.currentBranch = currentBranch
 	}
 
 	// Reset maps
@@ -57,7 +50,7 @@ func (e *engineImpl) applyRebuildData(data *rebuildData, refreshCurrentBranch bo
 	e.frozenMap = make(map[string]bool)
 
 	// Collect results and populate maps sequentially to avoid lock contention/races
-	for name, meta := range data.allMeta {
+	for name, meta := range allMeta {
 		if meta.ParentBranchName != nil {
 			parent := *meta.ParentBranchName
 			e.parentMap[name] = parent
@@ -71,7 +64,7 @@ func (e *engineImpl) applyRebuildData(data *rebuildData, refreshCurrentBranch bo
 		}
 	}
 
-	for name, meta := range data.allLocalMeta {
+	for name, meta := range allLocalMeta {
 		if meta.Frozen {
 			e.frozenMap[name] = true
 		}
@@ -83,22 +76,10 @@ func (e *engineImpl) applyRebuildData(data *rebuildData, refreshCurrentBranch bo
 	}
 }
 
-// rebuildInternal is the internal rebuild logic without locking
-// refreshCurrentBranch indicates whether to refresh currentBranch from Git
-func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
-	data, err := e.gatherRebuildData(refreshCurrentBranch)
-	if err != nil {
-		return err
-	}
-
-	e.applyRebuildData(data, refreshCurrentBranch)
-	return nil
-}
-
 // updateBranchInCache updates the cache for a specific branch after restack/metadata changes
 func (e *engineImpl) updateBranchInCache(branchName string) {
 	// Read metadata for this branch
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		// If metadata doesn't exist, remove branch from all maps
 		if oldParent, exists := e.parentMap[branchName]; exists {
@@ -120,7 +101,7 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 	}
 
 	// Read local metadata too
-	localMeta, _ := e.readLocalMetadataRef(branchName)
+	localMeta, _ := e.git.ReadLocalMetadata(branchName)
 
 	// Get the old parent before updating
 	oldParent := e.parentMap[branchName]
@@ -182,17 +163,24 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 
 // rebuild loads all branches and their metadata from Git
 func (e *engineImpl) rebuild() error {
-	// Gather data outside the lock
-	data, err := e.gatherRebuildData(false)
+	// 1. Get all branch names (slow)
+	branches, err := e.git.GetAllBranchNames()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get branches: %w", err)
 	}
+
+	// 2. Get current branch (slow)
+	currentBranch, _ := e.git.GetCurrentBranch()
+
+	// 3. Load metadata for each branch in parallel (slow)
+	allMeta, _ := e.git.BatchReadMetadata(branches)
+	allLocalMeta := e.git.BatchReadLocalMetadata(branches)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Apply data inside the lock
-	e.applyRebuildData(data, false)
+	// 4. Update maps (fast)
+	e.applyRebuild(branches, currentBranch, allMeta, allLocalMeta)
 	return nil
 }
 
@@ -201,7 +189,7 @@ func (e *engineImpl) rebuild() error {
 // - No longer exists locally
 // - Has been merged into trunk
 // - Has a "MERGED" PR state in metadata
-func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName string, metaMap map[string]*Meta) bool {
+func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName string, metaMap map[string]*git.Meta) bool {
 	// Check if parent is trunk (no need to reparent)
 	if parentBranchName == e.trunk {
 		return false
@@ -248,7 +236,7 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 
 // findNearestValidAncestor finds the nearest ancestor that hasn't been merged/deleted
 // Returns trunk if all ancestors have been merged
-func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName string, metaMap map[string]*Meta) string {
+func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName string, metaMap map[string]*git.Meta) string {
 	current := e.parentMap[branchName]
 
 	for current != "" && current != e.trunk {

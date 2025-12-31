@@ -1,7 +1,6 @@
 package absorb
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -10,13 +9,9 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-// runGit is a helper to run git commands through the engine
-func runGit(ctx *app.Context, args ...string) (string, error) {
-	return ctx.Engine.RunGitCommand(args...)
-}
-
-const detachedHEAD = "HEAD"
-const absorbStashMarker = "stackit-absorb-temp"
+const (
+	absorbStashMarker = "stackit-absorb-temp"
+)
 
 // IsAbsorbInProgress checks if there's a failed absorb operation that needs cleanup.
 // This is detected by checking for:
@@ -24,17 +19,17 @@ const absorbStashMarker = "stackit-absorb-temp"
 // 2. Presence of absorb stash marker
 func IsAbsorbInProgress(ctx *app.Context) bool {
 	// Check for absorb stash marker
-	stashList, _ := runGit(ctx, "stash", "list")
+	stashList, _ := ctx.Engine.StashList(ctx.Context)
 	if strings.Contains(stashList, absorbStashMarker) {
 		return true
 	}
 
 	// Check for detached HEAD (might be mid-absorb failure)
-	currentBranch, _ := runGit(ctx, "rev-parse", "--abbrev-ref", "HEAD")
-	if strings.TrimSpace(currentBranch) == detachedHEAD {
+	// engine.CurrentBranch() returns nil if in detached HEAD.
+	if ctx.Engine.CurrentBranch() == nil {
 		// In detached HEAD - could be absorb or something else
 		// Check reflog for signs of absorb
-		reflog, _ := runGit(ctx, "reflog", "-5", "--format=%gs")
+		reflog, _ := ctx.Engine.GetReflog(ctx.Context, 5, "%gs")
 		// If recent reflog shows checkout from a branch (not a commit), likely absorb
 		if strings.Contains(reflog, "checkout: moving from") {
 			return true
@@ -51,20 +46,17 @@ func ShowConflict(ctx *app.Context) error {
 	eng := ctx.Engine
 
 	// Check if we're in a detached HEAD state (might be mid-absorb failure)
-	currentBranch, _ := runGit(ctx, "rev-parse", "--abbrev-ref", "HEAD")
-	if strings.TrimSpace(currentBranch) == detachedHEAD {
+	if eng.CurrentBranch() == nil {
 		splog.Warn("Repository is in detached HEAD state.")
 		splog.Info("This may be from a failed absorb. Run 'stackit absorb --abort' to recover.")
 		splog.Info("")
 
 		// Show unmerged files if any
-		unmerged, _ := runGit(ctx, "diff", "--name-only", "--diff-filter=U")
-		if strings.TrimSpace(unmerged) != "" {
+		unmerged, _ := eng.GetUnmergedFiles(ctx.Context)
+		if len(unmerged) > 0 {
 			splog.Info("Unmerged files:")
-			for _, file := range strings.Split(strings.TrimSpace(unmerged), "\n") {
-				if file != "" {
-					splog.Info("  - %s", file)
-				}
+			for _, file := range unmerged {
+				splog.Info("  - %s", file)
 			}
 			splog.Info("")
 		}
@@ -72,7 +64,7 @@ func ShowConflict(ctx *app.Context) error {
 	}
 
 	// Check for staged changes
-	hasStaged, err := eng.HasStagedChanges(context.Background())
+	hasStaged, err := eng.HasStagedChanges(ctx.Context)
 	if err != nil {
 		return fmt.Errorf("failed to check staged changes: %w", err)
 	}
@@ -87,7 +79,7 @@ func ShowConflict(ctx *app.Context) error {
 	splog.Info("Analyzing staged changes...\n")
 
 	// Parse staged hunks
-	hunks, err := eng.ParseStagedHunks(context.Background())
+	hunks, err := eng.ParseStagedHunks(ctx.Context)
 	if err != nil {
 		return fmt.Errorf("failed to parse staged hunks: %w", err)
 	}
@@ -146,15 +138,15 @@ func ShowConflict(ctx *app.Context) error {
 // Abort cleans up from a failed absorb state
 func Abort(ctx *app.Context) error {
 	splog := ctx.Splog
+	eng := ctx.Engine
 
 	// Check if we're in a detached HEAD state
-	currentBranch, _ := runGit(ctx, "rev-parse", "--abbrev-ref", "HEAD")
-	if strings.TrimSpace(currentBranch) != detachedHEAD {
+	if eng.CurrentBranch() != nil {
 		// Check for stashed changes from absorb
-		stashList, _ := runGit(ctx, "stash", "list")
+		stashList, _ := eng.StashList(ctx.Context)
 		if strings.Contains(stashList, absorbStashMarker) {
 			splog.Info("Found stashed changes from previous absorb attempt.")
-			if _, err := runGit(ctx, "stash", "pop"); err != nil {
+			if err := eng.StashPop(ctx.Context); err != nil {
 				splog.Warn("Failed to restore stashed changes: %v", err)
 			} else {
 				splog.Info("Restored your staged changes from stash.")
@@ -169,12 +161,12 @@ func Abort(ctx *app.Context) error {
 	splog.Info("Cleaning up failed absorb operation...")
 
 	// Reset any uncommitted changes
-	if _, err := runGit(ctx, "reset", "--hard", "HEAD"); err != nil {
+	if err := eng.ResetHard(ctx.Context, "HEAD"); err != nil {
 		splog.Warn("Failed to reset: %v", err)
 	}
 
 	// Find the original branch from reflog
-	reflog, _ := runGit(ctx, "reflog", "-20", "--format=%gs")
+	reflog, _ := eng.GetReflog(ctx.Context, 20, "%gs")
 	var originalBranch string
 	for _, line := range strings.Split(reflog, "\n") {
 		if strings.Contains(line, "checkout: moving from") {
@@ -189,8 +181,9 @@ func Abort(ctx *app.Context) error {
 		}
 	}
 
-	if originalBranch != "" && originalBranch != detachedHEAD {
-		if _, err := runGit(ctx, "checkout", originalBranch); err != nil {
+	if originalBranch != "" && originalBranch != "HEAD" {
+		branch := eng.GetBranch(originalBranch)
+		if err := eng.CheckoutBranch(ctx.Context, branch); err != nil {
 			splog.Warn("Failed to return to original branch %s: %v", originalBranch, err)
 			splog.Info("You can manually checkout your branch with: git checkout <branch-name>")
 		} else {
@@ -202,9 +195,9 @@ func Abort(ctx *app.Context) error {
 	}
 
 	// Pop stash if there is one
-	stashList, _ := runGit(ctx, "stash", "list")
+	stashList, _ := eng.StashList(ctx.Context)
 	if strings.Contains(stashList, absorbStashMarker) {
-		if _, err := runGit(ctx, "stash", "pop"); err != nil {
+		if err := eng.StashPop(ctx.Context); err != nil {
 			splog.Warn("Failed to restore stashed changes: %v", err)
 		} else {
 			splog.Info("Restored your staged changes from stash.")

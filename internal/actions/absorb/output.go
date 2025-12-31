@@ -7,8 +7,6 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
-const unknown = "unknown"
-
 // printDryRunOutput prints what would be absorbed in dry-run mode
 func printDryRunOutput(hunksByCommit map[string][]git.Hunk, unabsorbedHunks []git.Hunk, eng engine.Engine, splog *tui.Splog) {
 	splog.Info("Would absorb the following changes:")

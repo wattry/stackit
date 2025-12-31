@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -35,10 +36,10 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// 2. Simulate remote metadata with different values (locked=true, scope="remote-scope")
 		// This simulates what would happen after `git fetch origin refs/stackit/metadata/*:refs/stackit/remote-metadata/*`
-		remoteMeta := &engine.Meta{
+		remoteMeta := &git.Meta{
 			Locked: true,
 			Scope:  strPtr("remote-scope"),
-			LastModifiedBy: &engine.ModifiedBy{
+			LastModifiedBy: &git.ModifiedBy{
 				GitName:  "Remote User",
 				GitEmail: "remote@example.com",
 			},
@@ -88,7 +89,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		require.NoError(t, eng.SetScope(branch, engine.NewScope("same-scope")))
 
 		// Create identical remote metadata
-		remoteMeta := &engine.Meta{
+		remoteMeta := &git.Meta{
 			Locked: true,
 			Scope:  strPtr("same-scope"),
 		}
@@ -167,7 +168,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		eng := sh.Engine
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
-		remoteMeta := &engine.Meta{
+		remoteMeta := &git.Meta{
 			Locked: true,
 			Scope:  strPtr("remote-scope"),
 		}
@@ -219,7 +220,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 }
 
 // createRemoteMetadataRef creates a ref at refs/stackit/remote-metadata/<branch> to simulate fetched remote metadata
-func createRemoteMetadataRef(t *testing.T, sh *scenario.Scenario, branchName string, meta *engine.Meta) {
+func createRemoteMetadataRef(t *testing.T, sh *scenario.Scenario, branchName string, meta *git.Meta) {
 	t.Helper()
 
 	// Serialize metadata to JSON

@@ -4,18 +4,11 @@ import (
 	"fmt"
 )
 
-// GetMergeBase returns the merge base between two branches
-func GetMergeBase(branch1, branch2 string) (string, error) {
-	return GetMergeBaseByRef("refs/heads/"+branch1, "refs/heads/"+branch2)
+func (r *runner) getMergeBase(repo *Repository, branch1, branch2 string) (string, error) {
+	return r.getMergeBaseByRef(repo, "refs/heads/"+branch1, "refs/heads/"+branch2)
 }
 
-// GetMergeBaseByRef returns the merge base between two refs (can be branches or remote refs)
-func GetMergeBaseByRef(ref1Name, ref2Name string) (string, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return "", err
-	}
-
+func (r *runner) getMergeBaseByRef(repo *Repository, ref1Name, ref2Name string) (string, error) {
 	hash1, err := resolveRefHash(repo, ref1Name)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve ref1: %w", err)
@@ -27,8 +20,8 @@ func GetMergeBaseByRef(ref1Name, ref2Name string) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	commit1, err := repo.CommitObject(hash1)
 	if err != nil {
@@ -53,13 +46,7 @@ func GetMergeBaseByRef(ref1Name, ref2Name string) (string, error) {
 	return mergeBases[0].Hash.String(), nil
 }
 
-// IsAncestor checks if the first ref is an ancestor of the second ref
-func IsAncestor(ancestor, descendant string) (bool, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return false, err
-	}
-
+func (r *runner) isAncestor(repo *Repository, ancestor, descendant string) (bool, error) {
 	ancestorHash, err := resolveRefHash(repo, ancestor)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve ancestor ref: %w", err)
@@ -76,8 +63,8 @@ func IsAncestor(ancestor, descendant string) (bool, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	// Get commit objects
 	ancestorCommit, err := repo.CommitObject(ancestorHash)

@@ -35,11 +35,12 @@ func TestDebugHasUnstagedChanges(t *testing.T) {
 	fmt.Println()
 
 	// Check git status output directly
-	output, err := git.RunGitCommand("status", "--porcelain")
+	runner := git.NewRunner()
+	output, err := runner.GetStatusPorcelain(context.Background())
 	fmt.Printf("Git status output: %q\n", output)
 	require.NoError(t, err)
 
-	hasUnstaged, err := git.HasUnstagedChanges(context.Background())
+	hasUnstaged, err := runner.HasUnstagedChanges(context.Background())
 	fmt.Printf("HasUnstagedChanges result: %v\n", hasUnstaged)
 	require.NoError(t, err)
 	require.True(t, hasUnstaged)

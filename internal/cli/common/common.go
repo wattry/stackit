@@ -53,10 +53,8 @@ func HandleCommandError(err error) error {
 // CompleteBranches is a helper for cobra.ValidArgsFunction and RegisterFlagCompletionFunc
 // that returns all branch names in the repository.
 func CompleteBranches(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	if err := git.InitDefaultRepo(); err != nil {
-		return nil, cobra.ShellCompDirectiveError
-	}
-	branches, err := git.GetAllBranchNames()
+	runner := git.NewRunner()
+	branches, err := runner.GetAllBranchNames()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}

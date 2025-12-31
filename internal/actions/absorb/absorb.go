@@ -11,7 +11,6 @@ import (
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // Options contains options for the absorb command
@@ -55,7 +54,7 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	// Check if rebase is in progress
-	if err := utils.CheckRebaseInProgress(ctx.Context); err != nil {
+	if err := ctx.Git().CheckRebaseInProgress(ctx.Context); err != nil {
 		return err
 	}
 
@@ -66,11 +65,11 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	// Handle staging flags
-	stagingOpts := utils.StagingOptions{
+	stagingOpts := git.StagingOptions{
 		All:   opts.All,
 		Patch: opts.Patch,
 	}
-	if err := utils.StageChanges(ctx.Context, stagingOpts); err != nil {
+	if err := ctx.Git().StageChanges(ctx.Context, stagingOpts); err != nil {
 		return err
 	}
 
@@ -223,7 +222,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Stash all changes (staged and unstaged) before starting to rewrite commits
 	// This ensures a clean working directory for checkouts and prevents losing changes
-	stashOutput, stashErr := eng.StashPush(ctx.Context, "stackit-absorb-temp")
+	stashOutput, stashErr := eng.StashPush(ctx.Context, absorbStashMarker)
 	if stashErr == nil && !strings.Contains(stashOutput, "No local changes to save") {
 		defer func() {
 			// Restore stash after we're done
@@ -285,3 +284,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	return nil
 }
+
+const (
+	unknown = "unknown"
+)

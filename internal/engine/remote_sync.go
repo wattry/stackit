@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -28,13 +27,13 @@ func (e *engineImpl) SetRemoteSyncEnabled(enabled bool) {
 
 // SetLastModifiedBy updates the metadata for a branch with the current user's information
 func (e *engineImpl) SetLastModifiedBy(branchName string) error {
-	name, err := git.GetUserName(context.Background())
+	name, err := e.git.GetConfig("user.name")
 	if err != nil {
 		return fmt.Errorf("git user.name is required but not set: %w", err)
 	}
 	email, _ := e.git.GetConfig("user.email")
 
-	modifiedBy := &ModifiedBy{
+	modifiedBy := &git.ModifiedBy{
 		GitName:  name,
 		GitEmail: email,
 	}
@@ -42,9 +41,9 @@ func (e *engineImpl) SetLastModifiedBy(branchName string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
-		meta = &Meta{}
+		meta = &git.Meta{}
 	}
 	meta.LastModifiedBy = modifiedBy
 	now := time.Now()
@@ -54,20 +53,17 @@ func (e *engineImpl) SetLastModifiedBy(branchName string) error {
 	hash := e.computeMetadataHash(meta)
 	meta.LocalOnlyHash = &hash
 
-	return e.writeMetadataRef(branchName, meta)
+	return e.git.WriteMetadata(branchName, meta)
 }
 
 // LoadRemoteMetadataCache loads remote metadata refs into the engine's cache
 func (e *engineImpl) LoadRemoteMetadataCache() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	remoteRefs, err := e.git.ListRefs("refs/stackit/remote-metadata/")
 	if err != nil {
 		return err
 	}
 
-	e.remoteMetaCache = make(map[string]*Meta)
+	cache := make(map[string]*git.Meta)
 	for refName, sha := range remoteRefs {
 		branchName := refName[len("refs/stackit/remote-metadata/"):]
 		content, err := e.git.ReadBlob(sha)
@@ -75,13 +71,16 @@ func (e *engineImpl) LoadRemoteMetadataCache() error {
 			continue
 		}
 
-		var meta Meta
+		var meta git.Meta
 		if err := json.Unmarshal([]byte(content), &meta); err != nil {
 			continue
 		}
-		e.remoteMetaCache[branchName] = &meta
+		cache[branchName] = &meta
 	}
 
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.remoteMetaCache = cache
 	return nil
 }
 
@@ -104,9 +103,9 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	}
 
 	// Read existing local metadata to preserve fields not in remote (like PrInfo)
-	local, err := e.readMetadataRef(branchName)
+	local, err := e.git.ReadMetadata(branchName)
 	if err != nil {
-		local = &Meta{}
+		local = &git.Meta{}
 	}
 
 	// Update local with remote values
@@ -120,16 +119,16 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	hash := e.computeMetadataHash(local)
 	local.LocalOnlyHash = &hash
 
-	return e.writeMetadataRef(branchName, local)
+	return e.git.WriteMetadata(branchName, local)
 }
 
 // GetRemoteMetadataCache returns the current remote metadata cache
-func (e *engineImpl) GetRemoteMetadataCache() map[string]*Meta {
+func (e *engineImpl) GetRemoteMetadataCache() map[string]*git.Meta {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	// Return a copy to avoid external modification
-	cacheCopy := make(map[string]*Meta)
+	cacheCopy := make(map[string]*git.Meta)
 	for k, v := range e.remoteMetaCache {
 		cacheCopy[k] = v
 	}
@@ -139,7 +138,7 @@ func (e *engineImpl) GetRemoteMetadataCache() map[string]*Meta {
 // ComputeMetadataDiff compares local and remote metadata for a branch
 func (e *engineImpl) ComputeMetadataDiff(branch string) (*MetadataDiff, error) {
 	e.mu.RLock()
-	local, err := e.readMetadataRef(branch)
+	local, err := e.git.ReadMetadata(branch)
 	remote := e.remoteMetaCache[branch]
 	e.mu.RUnlock()
 
@@ -238,7 +237,7 @@ func (e *engineImpl) HasLocalModifications(branch string) bool {
 		return true
 	}
 
-	local, err := e.readMetadataRef(branch)
+	local, err := e.git.ReadMetadata(branch)
 	if err != nil || local.LocalOnlyHash == nil {
 		return false // Never synced or error, treat as not modified
 	}
@@ -248,7 +247,7 @@ func (e *engineImpl) HasLocalModifications(branch string) bool {
 }
 
 // computeMetadataHash calculates a hash of the syncable fields for change detection
-func (e *engineImpl) computeMetadataHash(meta *Meta) string {
+func (e *engineImpl) computeMetadataHash(meta *git.Meta) string {
 	// Hash of locked + scope (fields user can modify locally)
 	scope := ""
 	if meta.Scope != nil {
@@ -262,8 +261,8 @@ func (e *engineImpl) computeMetadataHash(meta *Meta) string {
 // MetadataDiff represents the differences between local and remote metadata
 type MetadataDiff struct {
 	Branch      string
-	LocalMeta   *Meta
-	RemoteMeta  *Meta
+	LocalMeta   *git.Meta
+	RemoteMeta  *git.Meta
 	Differences []FieldDiff
 	HasConflict bool
 }
@@ -291,7 +290,7 @@ type OrphanedMetadataInfo struct {
 	Action          OrphanedMetadataAction
 	HasLocalChanges bool
 	ExistsLocally   bool
-	LocalMeta       *Meta
+	LocalMeta       *git.Meta
 }
 
 // FindOrphanedLocalMetadata identifies branches that have local metadata but no corresponding local branch or remote metadata.
@@ -328,7 +327,7 @@ func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error)
 
 		// If it exists locally but has no remote metadata, it's not orphaned (it's a local-only branch)
 		// UNLESS it was previously synced (has LocalOnlyHash).
-		local, err := e.readMetadataRef(branchName)
+		local, err := e.git.ReadMetadata(branchName)
 		if err != nil {
 			continue
 		}
@@ -372,11 +371,11 @@ func (e *engineImpl) DeleteLocalMetadataHash(branchName string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	local, err := e.readMetadataRef(branchName)
+	local, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return err
 	}
 
 	local.LocalOnlyHash = nil
-	return e.writeMetadataRef(branchName, local)
+	return e.git.WriteMetadata(branchName, local)
 }

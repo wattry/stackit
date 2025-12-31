@@ -11,43 +11,10 @@ import (
 // DefaultRemote is the default name for the remote repository
 const DefaultRemote = "origin"
 
-// PruneRemote prunes stale remote-tracking branches
-func PruneRemote(remote string) error {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return err
-	}
-
+func (r *runner) getRemote(repo *Repository) string {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.Lock()
-	r, err := repo.Remote(remote)
-	if err != nil {
-		repo.mu.Unlock()
-		return err
-	}
-
-	// Fetch with pruning
-	err = r.Fetch(&gogit.FetchOptions{
-		Prune: true,
-	})
-	repo.mu.Unlock()
-	if err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-		// Prune is not critical, just log and continue
-		return nil //nolint:nilerr
-	}
-	return nil
-}
-
-// GetRemote returns the default remote name (usually "origin")
-func GetRemote() string {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return DefaultRemote
-	}
-
-	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	// Try to get current branch
 	head, err := repo.Head()
@@ -66,27 +33,20 @@ func GetRemote() string {
 	return DefaultRemote
 }
 
-// FetchRemoteShas fetches the SHAs of all branches on the remote.
-// Returns a map of branch name -> SHA.
-func FetchRemoteShas(remote string) (map[string]string, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return nil, err
-	}
-
+func (r *runner) fetchRemoteShas(repo *Repository, remote string) (map[string]string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	r, err := repo.Remote(remote)
-	repo.mu.RUnlock()
+	goGitMu.Lock()
+	rem, err := repo.Remote(remote)
+	goGitMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote %s: %w", remote, err)
 	}
 
 	// List remote references
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	refs, err := r.List(&gogit.ListOptions{})
-	repo.mu.RUnlock()
+	goGitMu.Lock()
+	refs, err := rem.List(&gogit.ListOptions{})
+	goGitMu.Unlock()
 	if err != nil {
 		if errors.Is(err, transport.ErrEmptyRemoteRepository) || errors.Is(err, gogit.NoErrAlreadyUpToDate) {
 			return make(map[string]string), nil

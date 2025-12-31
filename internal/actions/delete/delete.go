@@ -7,7 +7,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -93,7 +92,7 @@ func Action(ctx *app.Context, opts Options) error {
 	// Delete remote metadata for deleted branches
 	for _, b := range toDelete {
 		branchName := b.GetName()
-		if err := git.DeleteRemoteMetadataRef(branchName); err != nil {
+		if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
 			splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
 		}
 		splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))

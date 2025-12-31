@@ -9,7 +9,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // ReorderAction performs the reorder operation
@@ -19,18 +18,18 @@ func ReorderAction(ctx *app.Context) error {
 	gctx := ctx.Context
 
 	// Pre-checks: validate on branch
-	currentBranch, err := utils.ValidateOnBranch(ctx.Engine)
+	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
 		return err
 	}
 
 	// Pre-checks: ensure no rebase in progress
-	if err := utils.CheckRebaseInProgress(gctx); err != nil {
+	if err := ctx.Git().CheckRebaseInProgress(gctx); err != nil {
 		return err
 	}
 
 	// Pre-checks: ensure no uncommitted changes
-	if utils.HasUncommittedChanges(gctx) {
+	if ctx.Git().HasUncommittedChanges(gctx) {
 		return fmt.Errorf("cannot reorder with uncommitted changes. Please commit or stash them first")
 	}
 

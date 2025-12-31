@@ -51,6 +51,30 @@ func (d *demoGitRunner) GetConfigAll(_ string) ([]string, error) {
 	return []string{}, nil
 }
 
+func (d *demoGitRunner) AddConfigValue(_, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) GetUserName(_ context.Context) (string, error) {
+	return "demo-user", nil
+}
+
+func (d *demoGitRunner) DiscoverRepoRoot() (string, error) {
+	return "/demo/repo", nil
+}
+
+func (d *demoGitRunner) IsInsideRepo() bool {
+	return true
+}
+
+func (d *demoGitRunner) GetRepoRoot() string {
+	return "/demo/repo"
+}
+
+func (d *demoGitRunner) EnsureMetadataRefspecConfigured() error {
+	return nil
+}
+
 func (d *demoGitRunner) GetCurrentBranch() (string, error) {
 	return d.currentBranch, nil
 }
@@ -63,7 +87,16 @@ func (d *demoGitRunner) GetAllBranchNames() ([]string, error) {
 	return names, nil
 }
 
+func (d *demoGitRunner) FindRemoteBranch(_ context.Context, _ string) (string, error) {
+	return "main", nil
+}
+
 func (d *demoGitRunner) CheckoutBranch(_ context.Context, branchName string) error {
+	d.currentBranch = branchName
+	return nil
+}
+
+func (d *demoGitRunner) CheckoutBranchForce(_ context.Context, branchName string) error {
 	d.currentBranch = branchName
 	return nil
 }
@@ -108,6 +141,10 @@ func (d *demoGitRunner) UpdateBranchRef(_, _ string) error {
 
 func (d *demoGitRunner) GetRemoteRevision(_ string) (string, error) {
 	return "remote-rev", nil
+}
+
+func (d *demoGitRunner) GetCurrentRevision(_ context.Context) (string, error) {
+	return "head-sha", nil
 }
 
 func (d *demoGitRunner) GetRevision(branchName string) (string, error) {
@@ -175,6 +212,18 @@ func (d *demoGitRunner) RebaseAbort(_ context.Context) error {
 	return nil
 }
 
+func (d *demoGitRunner) InteractiveRebase(_ context.Context, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) IsMergeInProgress(_ context.Context) bool {
+	return false
+}
+
+func (d *demoGitRunner) MergeAbort(_ context.Context) error {
+	return nil
+}
+
 func (d *demoGitRunner) CherryPick(_ context.Context, commitSHA, _ string) (string, error) {
 	return commitSHA, nil
 }
@@ -187,6 +236,47 @@ func (d *demoGitRunner) StashPop(_ context.Context) error {
 	return nil
 }
 
+func (d *demoGitRunner) Fetch(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) CreateBranch(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) CreateBranchForce(_ context.Context, branchName, _ string) error {
+	d.branches = append(d.branches, Branch{Name: branchName})
+	return nil
+}
+
+func (d *demoGitRunner) Merge(_ context.Context, _ string, _ git.MergeOptions) error {
+	return nil
+}
+
+func (d *demoGitRunner) CheckoutPaths(_ context.Context, _ string, _ []string) error {
+	return nil
+}
+
+func (d *demoGitRunner) RemovePaths(_ context.Context, _ []string) error {
+	return nil
+}
+
+func (d *demoGitRunner) ResetMerge(_ context.Context, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) MixedReset(_ context.Context, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) ListStash(_ context.Context) (string, error) {
+	return "", nil
+}
+
+func (d *demoGitRunner) GetReflog(_ context.Context, _ int, _ string) (string, error) {
+	return "", nil
+}
+
 func (d *demoGitRunner) GetCommitRangeSHAs(_, _ string) ([]string, error) {
 	return []string{"sha1", "sha2"}, nil
 }
@@ -197,6 +287,18 @@ func (d *demoGitRunner) GetCommitHistorySHAs(_ string) ([]string, error) {
 
 func (d *demoGitRunner) GetRebaseHead() (string, error) {
 	return "rebase-head-sha", nil
+}
+
+func (d *demoGitRunner) IsRebaseInProgress(_ context.Context) bool {
+	return false
+}
+
+func (d *demoGitRunner) CheckRebaseInProgress(_ context.Context) error {
+	return nil
+}
+
+func (d *demoGitRunner) HasUncommittedChanges(_ context.Context) bool {
+	return false
 }
 
 func (d *demoGitRunner) ParseStagedHunks(_ context.Context) ([]git.Hunk, error) {
@@ -221,6 +323,26 @@ func (d *demoGitRunner) Commit(_ string, _ int, _ bool) error {
 
 func (d *demoGitRunner) StageAll(_ context.Context) error {
 	return nil
+}
+
+func (d *demoGitRunner) StageTracked(_ context.Context) error {
+	return nil
+}
+
+func (d *demoGitRunner) HasUntrackedFiles(_ context.Context) (bool, error) {
+	return false, nil
+}
+
+func (d *demoGitRunner) AddAll(_ context.Context) error {
+	return nil
+}
+
+func (d *demoGitRunner) StageChanges(_ context.Context, _ git.StagingOptions) error {
+	return nil
+}
+
+func (d *demoGitRunner) GetRepoInfo(_ context.Context) (string, string, error) {
+	return "owner", "repo", nil
 }
 
 func (d *demoGitRunner) HasStagedChanges(_ context.Context) (bool, error) {
@@ -255,6 +377,30 @@ func (d *demoGitRunner) GetUnmergedFiles(_ context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
+func (d *demoGitRunner) GetStagedDiff(_ context.Context, _ ...string) (string, error) {
+	return "", nil
+}
+
+func (d *demoGitRunner) GetUnstagedDiff(_ context.Context, _ ...string) (string, error) {
+	return "", nil
+}
+
+func (d *demoGitRunner) GetDiffNumstat(_, _ string) (string, error) {
+	return "1\t1\ttest.txt", nil
+}
+
+func (d *demoGitRunner) GetCommitLog(_, _ string) (string, error) {
+	return "demo commit", nil
+}
+
+func (d *demoGitRunner) GetStatusPorcelain(_ context.Context) (string, error) {
+	return "M  test.txt", nil
+}
+
+func (d *demoGitRunner) GetCommitTemplate(_ context.Context) (string, error) {
+	return "", nil
+}
+
 func (d *demoGitRunner) AddWorktree(_ context.Context, _, _ string, _ bool) error {
 	return nil
 }
@@ -267,20 +413,52 @@ func (d *demoGitRunner) ListWorktrees(_ context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
-func (d *demoGitRunner) RunGitCommand(_ ...string) (string, error) {
-	return "", nil
+func (d *demoGitRunner) UpdateRefWithLog(_ context.Context, _, _, _ string) error {
+	return nil
 }
 
-func (d *demoGitRunner) RunGitCommandWithContext(_ context.Context, _ ...string) (string, error) {
-	return "", nil
+func (d *demoGitRunner) VerifyRef(_ context.Context, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) GetCurrentBranchOrSHA(_ context.Context) (string, error) {
+	return "demo-branch", nil
+}
+
+func (d *demoGitRunner) CherryPickSimple(_ context.Context, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) CherryPickAbort(_ context.Context) error {
+	return nil
+}
+
+func (d *demoGitRunner) ApplyPatch(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (d *demoGitRunner) CommitAmendNoEdit(_ context.Context) error {
+	return nil
+}
+
+func (d *demoGitRunner) RebaseContinueNoEdit(_ context.Context) (git.RebaseResult, error) {
+	return git.RebaseDone, nil
+}
+
+func (d *demoGitRunner) StagePatch(_ context.Context) error {
+	return nil
 }
 
 func (d *demoGitRunner) RunGitCommandWithEnv(_ context.Context, _ []string, _ ...string) (string, error) {
 	return "", nil
 }
 
-func (d *demoGitRunner) RunGitCommandRawWithContext(_ context.Context, _ ...string) (string, error) {
+func (d *demoGitRunner) RunGHCommandWithContext(_ context.Context, _ ...string) (string, error) {
 	return "", nil
+}
+
+func (d *demoGitRunner) RunGitCommandInteractive(_ ...string) error {
+	return nil
 }
 
 func (d *demoGitRunner) GetRef(_ string) (string, error) {
@@ -295,6 +473,10 @@ func (d *demoGitRunner) DeleteRef(_ string) error {
 	return nil
 }
 
+func (d *demoGitRunner) CatFile(_ string) (string, error) {
+	return "{}", nil
+}
+
 func (d *demoGitRunner) CreateBlob(_ string) (string, error) {
 	return "blob-sha", nil
 }
@@ -305,6 +487,42 @@ func (d *demoGitRunner) ReadBlob(_ string) (string, error) {
 
 func (d *demoGitRunner) ListRefs(_ string) (map[string]string, error) {
 	return make(map[string]string), nil
+}
+
+func (d *demoGitRunner) ReadMetadata(_ string) (*git.Meta, error) {
+	return &git.Meta{}, nil
+}
+
+func (d *demoGitRunner) WriteMetadata(_ string, _ *git.Meta) error {
+	return nil
+}
+
+func (d *demoGitRunner) DeleteMetadata(_ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) RenameMetadata(_, _ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) ReadLocalMetadata(_ string) (*git.LocalMeta, error) {
+	return &git.LocalMeta{}, nil
+}
+
+func (d *demoGitRunner) WriteLocalMetadata(_ string, _ *git.LocalMeta) error {
+	return nil
+}
+
+func (d *demoGitRunner) ListMetadata() (map[string]string, error) {
+	return make(map[string]string), nil
+}
+
+func (d *demoGitRunner) BatchReadMetadata(_ []string) (map[string]*git.Meta, map[string]error) {
+	return make(map[string]*git.Meta), make(map[string]error)
+}
+
+func (d *demoGitRunner) BatchReadLocalMetadata(_ []string) map[string]*git.LocalMeta {
+	return make(map[string]*git.LocalMeta)
 }
 
 func (d *demoGitRunner) GetParentCommitSHA(_ string) (string, error) {
@@ -330,9 +548,3 @@ func (d *demoGitRunner) DeleteRemoteMetadataRef(_ string) error {
 func (d *demoGitRunner) TestRemoteRefCompatibility() error {
 	return nil
 }
-
-func (d *demoGitRunner) IsRemoteSyncEnabled() bool {
-	return true
-}
-
-func (d *demoGitRunner) SetRemoteSyncEnabled(_ bool) {}

@@ -8,7 +8,6 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // syncGitHubInfo synchronizes PR information from GitHub and updates local parents
@@ -24,10 +23,13 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 		branchNames[i] = b.GetName()
 	}
 
-	repoOwner, repoName, _ := utils.GetRepoInfo(gctx)
+	repoOwner, repoName, err := ctx.Git().GetRepoInfo(gctx)
+	if err != nil {
+		return fmt.Errorf("failed to get repository info: %w", err)
+	}
 	if repoOwner != "" && repoName != "" {
 		prsUpdated := 0
-		if err := github.SyncPrInfo(gctx, branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
+		if err := github.SyncPrInfo(gctx, ctx.Git(), branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
 			branch := eng.GetBranch(name)
 			_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
 				&prInfo.Number,

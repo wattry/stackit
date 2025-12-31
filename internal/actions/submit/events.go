@@ -1,7 +1,8 @@
-// Package submit provides functionality for submitting stacked branches as pull requests.
 package submit
 
-import "stackit.dev/stackit/internal/tui/components/tree"
+import (
+	"stackit.dev/stackit/internal/tui/components/tree"
+)
 
 // Event represents a feedback event from the submit action.
 // Implementations should use type switches to handle specific event types.

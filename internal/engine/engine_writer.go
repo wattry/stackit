@@ -9,6 +9,41 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
+// CreateBranch creates a new branch at the given start point
+func (e *engineImpl) CreateBranch(ctx context.Context, branchName string, startPoint string) error {
+	return e.git.CreateBranch(ctx, branchName, startPoint)
+}
+
+// ResetHard performs a hard reset to the given revision
+func (e *engineImpl) ResetHard(ctx context.Context, revision string) error {
+	return e.git.HardReset(ctx, revision)
+}
+
+// ResetMerge performs a merge reset to the given revision
+func (e *engineImpl) ResetMerge(ctx context.Context, revision string) error {
+	return e.git.ResetMerge(ctx, revision)
+}
+
+// Merge merges a revision into the current branch
+func (e *engineImpl) Merge(ctx context.Context, revision string, opts MergeOptions) error {
+	return e.git.Merge(ctx, revision, git.MergeOptions{
+		FFOnly:  opts.FFOnly,
+		NoEdit:  opts.NoEdit,
+		NoFF:    opts.NoFF,
+		Message: opts.Message,
+	})
+}
+
+// Fetch fetches from a remote
+func (e *engineImpl) Fetch(ctx context.Context, remote string, branch string) error {
+	return e.git.Fetch(ctx, remote, branch)
+}
+
+// InteractiveRebase starts an interactive rebase
+func (e *engineImpl) InteractiveRebase(ctx context.Context, onto string) error {
+	return e.git.InteractiveRebase(ctx, onto)
+}
+
 // PushBranch pushes a branch to the remote
 func (e *engineImpl) PushBranch(ctx context.Context, branchName string, remote string, opts git.PushOptions) error {
 	return e.git.PushBranch(ctx, branchName, remote, opts)
@@ -89,16 +124,13 @@ func (e *engineImpl) UntrackBranch(branchName string) error {
 		return fmt.Errorf("cannot untrack trunk branch")
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	// Delete metadata
-	if err := e.DeleteMetadataRef(e.GetBranch(branchName)); err != nil {
+	if err := e.git.DeleteMetadata(branchName); err != nil {
 		return fmt.Errorf("failed to delete metadata ref: %w", err)
 	}
 
-	// Rebuild cache (already holding lock, so call rebuildInternal)
-	return e.rebuildInternal(true)
+	// Rebuild cache
+	return e.rebuild()
 }
 
 // DeleteBranch deletes a branch and its metadata
@@ -141,14 +173,13 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	}
 
 	// Delete metadata
-	if err := e.DeleteMetadataRef(branch); err != nil {
+	if err := e.git.DeleteMetadata(branchName); err != nil {
 		splog := fmt.Sprintf("Warning: failed to delete metadata ref for %s: %v", branchName, err)
 		fmt.Println(splog)
 	}
 
 	// Delete local metadata
-	localRefName := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, branchName)
-	if err := e.git.DeleteRef(localRefName); err != nil {
+	if err := e.git.DeleteRef(fmt.Sprintf("%s%s", git.LocalMetadataRefPrefix, branchName)); err != nil {
 		splog := fmt.Sprintf("Warning: failed to delete local metadata ref for %s: %v", branchName, err)
 		fmt.Println(splog)
 	}
@@ -217,9 +248,6 @@ func (e *engineImpl) DeleteBranches(ctx context.Context, branches []Branch) ([]s
 
 // CheckoutBranch checks out an existing branch
 func (e *engineImpl) CheckoutBranch(ctx context.Context, branch Branch) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	branchName := branch.GetName()
 	if err := e.git.CheckoutBranch(ctx, branchName); err != nil {
 		// If it's already used by another worktree, try checking out detached
@@ -227,25 +255,34 @@ func (e *engineImpl) CheckoutBranch(ctx context.Context, branch Branch) error {
 			if err := e.git.CheckoutDetached(ctx, branchName); err != nil {
 				return err
 			}
+			e.mu.Lock()
 			e.currentBranch = "" // Detached HEAD
+			e.mu.Unlock()
 			return nil
 		}
 		return err
 	}
 
+	e.mu.Lock()
 	e.currentBranch = branchName
+	e.mu.Unlock()
 	return nil
+}
+
+// UpdateBranchRef updates a branch reference to point to a new revision
+func (e *engineImpl) UpdateBranchRef(branchName, revision string) error {
+	return e.git.UpdateBranchRef(branchName, revision)
 }
 
 // CreateAndCheckoutBranch creates and checks out a new branch
 func (e *engineImpl) CreateAndCheckoutBranch(ctx context.Context, branch Branch) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	branchName := branch.GetName()
 	if err := e.git.CreateAndCheckoutBranch(ctx, branchName); err != nil {
 		return err
 	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	e.currentBranch = branchName
 	// Add to branches list if not already there
@@ -275,13 +312,13 @@ func (e *engineImpl) UpdateParentRevision(branchName string, parentRev string) e
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
 
 	meta.ParentBranchRevision = &parentRev
-	if err := e.writeMetadataRef(branchName, meta); err != nil {
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
@@ -296,7 +333,7 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 	branchName := branch.GetName()
 
 	// Read existing metadata
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -310,7 +347,7 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 	}
 
 	// Write metadata
-	if err := e.writeMetadataRef(branchName, meta); err != nil {
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
@@ -332,7 +369,7 @@ func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
 	branchName := branch.GetName()
 
 	// Read existing metadata
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -341,7 +378,7 @@ func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
 	meta.Locked = locked
 
 	// Write metadata
-	if err := e.writeMetadataRef(branchName, meta); err != nil {
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
@@ -363,7 +400,7 @@ func (e *engineImpl) SetFrozen(branch Branch, frozen bool) error {
 	branchName := branch.GetName()
 
 	// Read existing local metadata
-	meta, err := e.readLocalMetadataRef(branchName)
+	meta, err := e.git.ReadLocalMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read local metadata: %w", err)
 	}
@@ -372,7 +409,7 @@ func (e *engineImpl) SetFrozen(branch Branch, frozen bool) error {
 	meta.Frozen = frozen
 
 	// Write local metadata
-	if err := e.writeLocalMetadataRef(branchName, meta); err != nil {
+	if err := e.git.WriteLocalMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write local metadata: %w", err)
 	}
 
@@ -388,15 +425,14 @@ func (e *engineImpl) SetFrozen(branch Branch, frozen bool) error {
 
 // RenameBranch renames a branch and its metadata
 func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Branch) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	oldName := oldBranch.GetName()
 	newName := newBranch.GetName()
 
+	e.mu.RLock()
 	// Get children before renaming anything
 	children := make([]string, len(e.childrenMap[oldName]))
 	copy(children, e.childrenMap[oldName])
+	e.mu.RUnlock()
 
 	// Rename git branch
 	if err := e.git.RenameBranch(ctx, oldName, newName); err != nil {
@@ -404,14 +440,14 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 	}
 
 	// Rename metadata ref
-	if err := e.RenameMetadataRef(oldBranch, newBranch); err != nil {
+	if err := e.git.RenameMetadata(oldName, newName); err != nil {
 		// Log but continue if metadata rename fails
 		fmt.Printf("Warning: failed to rename metadata ref: %v\n", err)
 	}
 
 	// Rename local metadata ref
-	oldLocalRef := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, oldName)
-	newLocalRef := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, newName)
+	oldLocalRef := fmt.Sprintf("%s%s", git.LocalMetadataRefPrefix, oldName)
+	newLocalRef := fmt.Sprintf("%s%s", git.LocalMetadataRefPrefix, newName)
 	if sha, err := e.git.GetRef(oldLocalRef); err == nil {
 		if err := e.git.UpdateRef(newLocalRef, sha); err == nil {
 			if err := e.git.DeleteRef(oldLocalRef); err != nil {
@@ -424,18 +460,18 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 
 	// Update children to point to the new branch name
 	for _, child := range children {
-		childMeta, err := e.readMetadataRef(child)
+		childMeta, err := e.git.ReadMetadata(child)
 		if err != nil {
 			continue
 		}
 		childMeta.ParentBranchName = &newName
-		if err := e.writeMetadataRef(child, childMeta); err != nil {
+		if err := e.git.WriteMetadata(child, childMeta); err != nil {
 			continue
 		}
 	}
 
 	// Rebuild in-memory state to be safe
-	return e.rebuildInternal(true)
+	return e.rebuild()
 }
 
 // Commit creates a new commit
@@ -447,9 +483,19 @@ func (e *engineImpl) Commit(_ context.Context, message string, verbose int, noVe
 	})
 }
 
+// CommitWithOptions creates a new commit with the given options
+func (e *engineImpl) CommitWithOptions(_ context.Context, opts git.CommitOptions) error {
+	return e.git.CommitWithOptions(opts)
+}
+
 // StageAll stages all changes
 func (e *engineImpl) StageAll(ctx context.Context) error {
 	return e.git.StageAll(ctx)
+}
+
+// StagePatch stages changes interactively
+func (e *engineImpl) StagePatch(ctx context.Context) error {
+	return e.git.StagePatch(ctx)
 }
 
 // StashPush pushes current changes to the stash
@@ -472,16 +518,6 @@ func (e *engineImpl) RemoveWorktree(ctx context.Context, path string) error {
 	return e.git.RemoveWorktree(ctx, path)
 }
 
-// RunGitCommand runs a git command
-func (e *engineImpl) RunGitCommand(args ...string) (string, error) {
-	return e.git.RunGitCommand(args...)
-}
-
-// RunGitCommandWithEnv runs a git command with environment variables
-func (e *engineImpl) RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error) {
-	return e.git.RunGitCommandWithEnv(ctx, env, args...)
-}
-
 // setParentInternal updates parent without locking (caller must hold lock)
 func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, parentBranchName string) error {
 	// Get new parent revision
@@ -491,7 +527,7 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 	}
 
 	// Read existing metadata
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -523,7 +559,7 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 	}
 
 	// Write metadata
-	if err := e.writeMetadataRef(branchName, meta); err != nil {
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 

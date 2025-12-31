@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -21,7 +20,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
-	currentBranch, err := utils.ValidateOnBranch(ctx.Engine)
+	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
 		return err
 	}
@@ -57,12 +56,9 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 		return nil
 	}
 
-	allBranches, err := git.GetAllBranchNames()
-	if err != nil {
-		return fmt.Errorf("failed to check existing branches: %w", err)
-	}
+	allBranches := eng.AllBranches()
 	for _, b := range allBranches {
-		if b == newName {
+		if b.GetName() == newName {
 			return fmt.Errorf("branch %s already exists", newName)
 		}
 	}

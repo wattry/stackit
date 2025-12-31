@@ -1,17 +1,15 @@
 package create
 
 import (
-	"context"
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
 
-func getCommitMessage(ctx context.Context) (string, error) {
-	template, err := git.GetCommitTemplate(ctx)
+func getCommitMessage(ctx *app.Context) (string, error) {
+	template, err := ctx.Engine.GetCommitTemplate(ctx.Context)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +43,7 @@ func getCommitMessageForBranch(ctx *app.Context, opts *Options, commitMessage st
 		}
 
 		// Interactive: get commit message from editor
-		msg, err := getCommitMessage(ctx.Context)
+		msg, err := getCommitMessage(ctx)
 		if err != nil {
 			return "", err
 		}

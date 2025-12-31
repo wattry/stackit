@@ -8,7 +8,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -18,13 +17,13 @@ func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 	splog := ctx.Splog
 
 	// Fetch remote metadata refs
-	if err := git.FetchMetadataRefs(); err != nil {
+	if err := eng.Git().FetchMetadataRefs(); err != nil {
 		// Non-fatal: remote may not have metadata yet
 		splog.Debug("No remote metadata to fetch: %v", err)
 	}
 
 	// Configure refspec so future git fetch commands also fetch metadata
-	if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+	if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
 		splog.Debug("Failed to configure metadata refspec: %v", err)
 	}
 
@@ -99,7 +98,7 @@ func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 		if info.Action == engine.OrphanedActionDelete {
 			// No local changes - silently remove sync state or delete ref if branch is gone
 			if !info.ExistsLocally {
-				if err := eng.DeleteMetadataRef(engine.NewBranch(info.BranchName, eng)); err != nil {
+				if err := eng.Git().DeleteMetadata(info.BranchName); err != nil {
 					splog.Debug("Failed to delete orphaned metadata ref for %s: %v", info.BranchName, err)
 				}
 			} else if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
@@ -138,7 +137,7 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 		if err := eng.SetLastModifiedBy(info.BranchName); err != nil {
 			splog.Debug("Failed to set last modified by: %v", err)
 		}
-		if err := git.PushMetadataRefs([]string{info.BranchName}); err != nil {
+		if err := eng.Git().PushMetadataRefs([]string{info.BranchName}); err != nil {
 			splog.Debug("Failed to push metadata: %v", err)
 		} else {
 			splog.Info("Pushed metadata for %s", style.ColorBranchName(info.BranchName, false))

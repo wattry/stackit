@@ -52,7 +52,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		require.Equal(t, "feature", *config.CreatedPRs[0].Head.Ref, "PR should be for feature branch")
 
 		// Verify that metadata was updated with LastModifiedBy after submit
-		meta, err := s.Engine.ReadMetadataRef("feature")
+		meta, err := s.Engine.Git().ReadMetadata("feature")
 		require.NoError(t, err, "Should be able to read metadata ref after submit")
 		require.NotNil(t, meta.LastModifiedBy, "LastModifiedBy should be set after submit")
 		require.NotEmpty(t, meta.LastModifiedBy.GitName, "LastModifiedBy.GitName should not be empty")
@@ -160,7 +160,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 
 		// Verify that metadata was updated for all submitted branches
 		for _, branchName := range []string{"P", "C1", "C2"} {
-			meta, err := s.Engine.ReadMetadataRef(branchName)
+			meta, err := s.Engine.Git().ReadMetadata(branchName)
 			require.NoError(t, err, "Should be able to read metadata for %s", branchName)
 			require.NotNil(t, meta.LastModifiedBy, "LastModifiedBy should be set for %s", branchName)
 		}

@@ -10,7 +10,7 @@ import (
 )
 
 // getGitHubToken gets the GitHub token (similar to internal/github/pr_info.go)
-func getGitHubToken() (string, error) {
+func getGitHubToken(runner git.Runner) (string, error) {
 	// Try environment variable first
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		// Trim whitespace to handle cases where secrets might have leading/trailing spaces
@@ -21,7 +21,7 @@ func getGitHubToken() (string, error) {
 	}
 
 	// Try gh CLI
-	output, err := git.RunGHCommandWithContext(context.Background(), "auth", "token")
+	output, err := runner.RunGHCommandWithContext(context.Background(), "auth", "token")
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub token: %w", err)
 	}

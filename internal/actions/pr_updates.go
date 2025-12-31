@@ -7,7 +7,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
 var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
@@ -19,7 +19,7 @@ func UpdateStackPRMetadata(ctx *app.Context, branches []string, repoOwner, repoN
 		return
 	}
 
-	concurrency.Run(branches, func(name string) {
+	utils.Run(branches, func(name string) {
 		updatePRMetadata(ctx, name, repoOwner, repoName)
 	})
 }

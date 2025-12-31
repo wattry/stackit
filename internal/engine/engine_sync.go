@@ -91,7 +91,7 @@ func (e *engineImpl) ResetTrunkToRemote(ctx context.Context) error {
 func (e *engineImpl) restackBranch(
 	ctx context.Context,
 	branch Branch,
-	metaMap map[string]*Meta,
+	metaMap map[string]*git.Meta,
 	revMap map[string]string,
 	rebuildAfterRestack bool,
 ) (RestackBranchResult, error) {
@@ -144,7 +144,7 @@ func (e *engineImpl) restackBranch(
 			// If the branch is currently checked out, we also need to reset the working tree
 			current := e.CurrentBranch()
 			if current != nil && current.GetName() == branchName {
-				if _, err := e.git.RunGitCommandWithContext(ctx, "reset", "--hard", "HEAD"); err != nil {
+				if err := e.git.HardReset(ctx, "HEAD"); err != nil {
 					return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to reset working tree for frozen branch %s: %w", branchName, err)
 				}
 			}
@@ -198,7 +198,7 @@ func (e *engineImpl) restackBranch(
 		// Update the cached metadata if we're using a metaMap, otherwise the subsequent
 		// write will overwrite the parent change.
 		if metaMap != nil {
-			if updatedMeta, err := e.readMetadataRef(branchName); err == nil {
+			if updatedMeta, err := e.git.ReadMetadata(branchName); err == nil {
 				metaMap[branchName] = updatedMeta
 			}
 		}
@@ -219,12 +219,12 @@ func (e *engineImpl) restackBranch(
 	}
 
 	// Get metadata (read once to avoid duplicate disk I/O)
-	var meta *Meta
+	var meta *git.Meta
 	if metaMap != nil {
 		meta = metaMap[branchName]
 	}
 	if meta == nil {
-		meta, err = e.readMetadataRef(branchName)
+		meta, err = e.git.ReadMetadata(branchName)
 		if err != nil {
 			return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to read metadata: %w", err)
 		}
@@ -307,7 +307,7 @@ func (e *engineImpl) restackBranch(
 	}
 
 	// Get the new rebased SHA
-	newRev, err := e.git.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	newRev, err := e.git.GetCurrentRevision(ctx)
 	if err != nil {
 		return RestackBranchResult{
 			Result:            RestackConflict,
@@ -319,7 +319,7 @@ func (e *engineImpl) restackBranch(
 	}
 
 	// Update the branch reference to the new rebased commit
-	_, err = e.git.RunGitCommandWithContext(ctx, "update-ref", "refs/heads/"+branchName, newRev)
+	err = e.git.UpdateBranchRef(branchName, newRev)
 	if err != nil {
 		return RestackBranchResult{
 			Result:            RestackConflict,
@@ -344,7 +344,7 @@ func (e *engineImpl) restackBranch(
 	// Update the cached metadata if we're using a metaMap, so subsequent branches in the batch
 	// see the updated ParentBranchRevision.
 	if metaMap != nil {
-		if updatedMeta, err := e.readMetadataRef(branchName); err == nil {
+		if updatedMeta, err := e.git.ReadMetadata(branchName); err == nil {
 			metaMap[branchName] = updatedMeta
 		}
 	}
@@ -372,14 +372,14 @@ func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (Re
 	originalBranch := e.CurrentBranch()
 	var originalRev string
 	if originalBranch == nil {
-		originalRev, _ = e.git.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+		originalRev, _ = e.git.GetCurrentRevision(ctx)
 	}
 
 	defer func() {
 		if originalBranch != nil {
 			_ = e.CheckoutBranch(ctx, *originalBranch)
 		} else if originalRev != "" {
-			_, _ = e.git.RunGitCommandWithContext(ctx, "checkout", "--detach", originalRev)
+			_ = e.git.CheckoutDetached(ctx, originalRev)
 		}
 	}()
 
@@ -414,7 +414,7 @@ func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (Re
 	e.mu.RUnlock()
 
 	// Fetch ALL metadata in parallel
-	allMeta, _ := e.batchReadMetadataRefs(involvedBranchNames)
+	allMeta, _ := e.git.BatchReadMetadata(involvedBranchNames)
 
 	// Fetch ALL revisions in parallel
 	allRevisions, _ := e.git.BatchGetRevisions(involvedBranchNames)
@@ -503,13 +503,13 @@ func (e *engineImpl) ContinueRebase(ctx context.Context, branchName string, reba
 	}
 
 	// Get the new rebased SHA
-	newRev, err := e.git.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	newRev, err := e.git.GetCurrentRevision(ctx)
 	if err != nil {
 		return ContinueRebaseResult{BranchName: branchName}, fmt.Errorf("failed to get new revision after rebase: %w", err)
 	}
 
 	// Update the branch reference to the new rebased commit
-	_, err = e.git.RunGitCommandWithContext(ctx, "update-ref", "refs/heads/"+branchName, newRev)
+	err = e.git.UpdateBranchRef(branchName, newRev)
 	if err != nil {
 		return ContinueRebaseResult{BranchName: branchName}, fmt.Errorf("failed to update branch reference %s: %w", branchName, err)
 	}

@@ -19,6 +19,7 @@ type StackNavigator interface {
 	BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, int]
 	SortBranchesTopologically(branches []Branch) []Branch
 	FindBranchForCommit(commitSHA string) (string, error)
+	ValidateOnBranch() (string, error)
 }
 
 // BranchStatus provides branch state information
@@ -34,6 +35,7 @@ type BranchStatus interface {
 	IsFrozen(branch Branch) bool
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string
+	GetRemoteURL(ctx context.Context) (string, error)
 	GetBranchRemoteDifference(branchName string) (string, error)
 }
 
@@ -47,16 +49,8 @@ type BranchInfo interface {
 	GetAllCommits(branch Branch, format CommitFormat) ([]string, error)
 	GetParentCommitSHA(commitSHA string) (string, error)
 	GetCommitSHA(branchName string, offset int) (string, error)
-}
-
-// MetadataStore handles ref-based metadata operations
-type MetadataStore interface {
-	ListMetadataRefs() (map[string]string, error)
-	ReadMetadataRef(branchName string) (*Meta, error)
-	BatchReadMetadataRefs(branchNames []string) (map[string]*Meta, map[string]error)
-	WriteMetadataRef(branch Branch, meta *Meta) error
-	DeleteMetadataRef(branch Branch) error
-	RenameMetadataRef(oldBranch, newBranch Branch) error
+	GetCurrentRevision(ctx context.Context) (string, error)
+	GetReflog(ctx context.Context, count int, format string) (string, error)
 }
 
 // GitDiffer handles diff and merge operations
@@ -72,16 +66,16 @@ type GitDiffer interface {
 type WorkingTree interface {
 	HasStagedChanges(ctx context.Context) (bool, error)
 	HasUnstagedChanges(ctx context.Context) (bool, error)
+	GetUnstagedDiff(ctx context.Context, files ...string) (string, error)
 	GetPendingChanges(ctx context.Context) ([]PendingChange, error)
+	GetCommitTemplate(ctx context.Context) (string, error)
 	GetUnmergedFiles(ctx context.Context) ([]string, error)
 	ParseStagedHunks(ctx context.Context) ([]git.Hunk, error)
 	ListWorktrees(ctx context.Context) ([]string, error)
-}
-
-// GitRunner provides low-level git command execution
-type GitRunner interface {
-	RunGitCommandWithContext(ctx context.Context, args ...string) (string, error)
-	RunGitCommandRawWithContext(ctx context.Context, args ...string) (string, error)
+	IsRebaseInProgress(ctx context.Context) bool
+	CheckoutPaths(ctx context.Context, branch string, pathspecs []string) error
+	RemovePaths(ctx context.Context, pathspecs []string) error
+	StashList(ctx context.Context) (string, error)
 }
 
 // BranchReader is a composite interface for backward compatibility
@@ -90,10 +84,8 @@ type BranchReader interface {
 	StackNavigator
 	BranchStatus
 	BranchInfo
-	MetadataStore
 	GitDiffer
 	WorkingTree
-	GitRunner
 }
 
 // BranchTracking handles branch tracking operations
@@ -114,12 +106,21 @@ type BranchMutations interface {
 	DeleteBranches(ctx context.Context, branches []Branch) ([]string, error)
 	CheckoutBranch(ctx context.Context, branch Branch) error
 	CreateAndCheckoutBranch(ctx context.Context, branch Branch) error
+	UpdateBranchRef(branchName, revision string) error
+	CreateBranch(ctx context.Context, branchName string, startPoint string) error
+	ResetHard(ctx context.Context, revision string) error
+	ResetMerge(ctx context.Context, revision string) error
+	Merge(ctx context.Context, revision string, opts MergeOptions) error
+	Fetch(ctx context.Context, remote string, branch string) error
+	InteractiveRebase(ctx context.Context, onto string) error
 }
 
 // CommitOperations handles staging and committing
 type CommitOperations interface {
 	Commit(ctx context.Context, message string, verbose int, noVerify bool) error
+	CommitWithOptions(ctx context.Context, opts git.CommitOptions) error
 	StageAll(ctx context.Context) error
+	StagePatch(ctx context.Context) error
 	StashPush(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
 }
@@ -128,12 +129,6 @@ type CommitOperations interface {
 type WorktreeOperations interface {
 	AddWorktree(ctx context.Context, path string, branch string, detach bool) error
 	RemoveWorktree(ctx context.Context, path string) error
-}
-
-// GitCommandRunner provides low-level git command execution
-type GitCommandRunner interface {
-	RunGitCommand(args ...string) (string, error)
-	RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error)
 }
 
 // Initializer handles repository initialization operations
@@ -147,10 +142,8 @@ type Initializer interface {
 type BranchWriter interface {
 	BranchTracking
 	BranchMutations
-	MetadataStore
 	CommitOperations
 	WorktreeOperations
-	GitCommandRunner
 	Initializer
 }
 

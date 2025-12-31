@@ -8,19 +8,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
-// GetCommitDate returns the commit date for a branch
-func GetCommitDate(branchName string) (time.Time, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return time.Time{}, err
-	}
-
+func (r *runner) getCommitDate(repo *Repository, branchName string) (time.Time, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	hash, err := resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -35,16 +29,10 @@ func GetCommitDate(branchName string) (time.Time, error) {
 	return commit.Author.When, nil
 }
 
-// GetCommitAuthor returns the commit author for a branch
-func GetCommitAuthor(branchName string) (string, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return "", err
-	}
-
+func (r *runner) getCommitAuthor(repo *Repository, branchName string) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	hash, err := resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -59,16 +47,10 @@ func GetCommitAuthor(branchName string) (string, error) {
 	return commit.Author.Name, nil
 }
 
-// GetRevision returns the SHA of a branch
-func GetRevision(branchName string) (string, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return "", err
-	}
-
+func (r *runner) getRevision(repo *Repository, branchName string) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	hash, err := resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -78,16 +60,10 @@ func GetRevision(branchName string) (string, error) {
 	return hash.String(), nil
 }
 
-// GetRemoteRevision returns the SHA of a remote branch (e.g., origin/branchName)
-func GetRemoteRevision(branchName string) (string, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return "", err
-	}
-
+func (r *runner) getRemoteRevision(repo *Repository, branchName string) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	// Try refs/remotes/origin/branchName
 	hash, err := resolveRefHashInternal(repo, "origin/"+branchName)
@@ -124,8 +100,8 @@ func iterateCommitsNoLock(repo *Repository, headHash, baseHash plumbing.Hash) ([
 // resolveRefHash resolves a ref (branch name, SHA, or ref path) to a hash
 func resolveRefHash(repo *Repository, ref string) (plumbing.Hash, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	return resolveRefHashInternal(repo, ref)
 }
@@ -161,8 +137,7 @@ func resolveRefHashInternal(repo *Repository, ref string) (plumbing.Hash, error)
 	return plumbing.ZeroHash, fmt.Errorf("failed to resolve ref %s: reference not found", ref)
 }
 
-// BatchGetRevisions returns the SHAs for multiple branches in parallel using a worker pool.
-func BatchGetRevisions(branchNames []string) (map[string]string, []error) {
+func (r *runner) batchGetRevisions(repo *Repository, branchNames []string) (map[string]string, []error) {
 	results := make(map[string]string)
 	var errors []error
 	resultsMu := sync.Mutex{}
@@ -172,8 +147,8 @@ func BatchGetRevisions(branchNames []string) (map[string]string, []error) {
 		return results, errors
 	}
 
-	concurrency.Run(branchNames, func(name string) {
-		sha, err := GetRevision(name)
+	utils.Run(branchNames, func(name string) {
+		sha, err := r.getRevision(repo, name)
 		if err != nil {
 			errorsMu.Lock()
 			errors = append(errors, fmt.Errorf("failed to get revision for %s: %w", name, err))

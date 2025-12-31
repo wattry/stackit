@@ -1,9 +1,14 @@
-// Package utils provides common utility functions for the stackit project.
+// Package utils provides shared utility functions for the stackit codebase.
 package utils
 
 import (
+	"os"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
+
+	"github.com/mattn/go-isatty"
 )
 
 const (
@@ -19,6 +24,8 @@ var (
 
 	// BranchNameIgnoreRegex matches trailing slashes and dots that should be removed
 	BranchNameIgnoreRegex = regexp.MustCompile(`[/.]*$`)
+
+	interactiveMode = true
 )
 
 // SanitizeBranchName sanitizes a branch name by replacing invalid characters
@@ -111,4 +118,127 @@ func ProcessBranchNamePattern(pattern string, username, date, message string) st
 
 	// Sanitize the final result
 	return SanitizeBranchName(result)
+}
+
+// CleanCommitMessage removes comments and trailing whitespace from a commit message
+func CleanCommitMessage(message string) string {
+	lines := strings.Split(message, "\n")
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimRight(line, " \t\r\n")
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		result = append(result, trimmed)
+	}
+
+	// Remove trailing empty lines
+	for len(result) > 0 && result[len(result)-1] == "" {
+		result = result[:len(result)-1]
+	}
+
+	// Remove leading empty lines
+	for len(result) > 0 && result[0] == "" {
+		result = result[1:]
+	}
+
+	return strings.Join(result, "\n")
+}
+
+// SetInteractive sets whether the TUI should be interactive
+func SetInteractive(interactive bool) {
+	interactiveMode = interactive
+}
+
+// IsTTY returns true if we can use a TTY for interactive TUI
+func IsTTY() bool {
+	if !interactiveMode {
+		return false
+	}
+	// First check if stdin/stdout are terminals
+	if !((isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())) &&
+		(isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()))) {
+		return false
+	}
+	// Also try to open /dev/tty to verify it's actually available
+	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	return true
+}
+
+// IsInteractive checks if we're in an interactive terminal
+func IsInteractive() bool {
+	return IsTTY()
+}
+
+// IsDemoMode returns true if STACKIT_DEMO environment variable is set
+func IsDemoMode() bool {
+	return os.Getenv("STACKIT_DEMO") != ""
+}
+
+// Run runs the given worker function for each item in the slice in parallel.
+// It uses runtime.GOMAXPROCS(0) as the default number of workers.
+func Run[T any](items []T, worker func(item T)) {
+	if len(items) == 0 {
+		return
+	}
+
+	numWorkers := runtime.GOMAXPROCS(0)
+	if numWorkers > len(items) {
+		numWorkers = len(items)
+	}
+
+	jobs := make(chan T, len(items))
+	for _, item := range items {
+		jobs <- item
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go func() {
+			defer wg.Done()
+			for item := range jobs {
+				worker(item)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// RunWithWorkers runs the given worker function for each item in the slice in parallel with a specified number of workers.
+func RunWithWorkers[T any](items []T, numWorkers int, worker func(item T)) {
+	if len(items) == 0 {
+		return
+	}
+
+	if numWorkers <= 0 {
+		numWorkers = runtime.GOMAXPROCS(0)
+	}
+
+	if numWorkers > len(items) {
+		numWorkers = len(items)
+	}
+
+	jobs := make(chan T, len(items))
+	for _, item := range items {
+		jobs <- item
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go func() {
+			defer wg.Done()
+			for item := range jobs {
+				worker(item)
+			}
+		}()
+	}
+	wg.Wait()
 }

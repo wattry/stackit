@@ -30,7 +30,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Environment checks
 	splog.Info("Environment:")
-	warnings, errors = checkEnvironment(splog, warnings, errors)
+	warnings, errors = checkEnvironment(ctx.Git(), splog, warnings, errors)
 
 	splog.Newline()
 

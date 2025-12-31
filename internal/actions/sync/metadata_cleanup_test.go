@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -23,7 +23,7 @@ func TestMetadataCleanup(t *testing.T) {
 			TrackBranch("temp-branch", "main")
 
 		// Verify metadata exists
-		refs, err := s.Engine.ListMetadataRefs()
+		refs, err := s.Engine.Git().ListMetadata()
 		require.NoError(t, err)
 		require.Contains(t, refs, "temp-branch")
 
@@ -44,7 +44,7 @@ func TestMetadataCleanup(t *testing.T) {
 		require.NoError(t, err)
 
 		// 6. Verify metadata ref for deleted branch is gone
-		refs, err = s.Engine.ListMetadataRefs()
+		refs, err = s.Engine.Git().ListMetadata()
 		require.NoError(t, err)
 		require.NotContains(t, refs, "temp-branch", "metadata ref should have been cleaned up")
 	})
@@ -53,7 +53,7 @@ func TestMetadataCleanup(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
-		remoteMeta := &engine.Meta{
+		remoteMeta := &git.Meta{
 			Locked: true,
 		}
 

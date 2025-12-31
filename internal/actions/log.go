@@ -9,7 +9,7 @@ import (
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // LogOptions contains options for the log command
@@ -45,7 +45,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	results := make(chan result, len(allBranches))
 
 	if len(allBranches) > 0 {
-		concurrency.Run(allBranches, func(branchObj engine.Branch) {
+		utils.Run(allBranches, func(branchObj engine.Branch) {
 			annotation := getBranchAnnotation(ctx, branchObj, opts)
 			results <- result{branchObj.GetName(), annotation}
 		})

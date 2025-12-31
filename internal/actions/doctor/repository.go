@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -13,21 +12,16 @@ import (
 func checkRepository(ctx *app.Context, splog *tui.Splog, warnings []string, errors []string, trunk string) ([]string, []string) {
 	// Check if we're in a git repository
 	if ctx.RepoRoot == "" {
-		if err := git.InitDefaultRepo(); err != nil {
+		if !ctx.Engine.Git().IsInsideRepo() {
 			errors = append(errors, "not in a git repository")
 			splog.Error("  not in a git repository")
-			return warnings, errors
-		}
-		if _, err := git.GetRepoRoot(); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to get repo root: %v", err))
-			splog.Error("  failed to get repo root: %v", err)
 			return warnings, errors
 		}
 	}
 	splog.Info("  ✅ Current directory is a git repository")
 
 	// Check remote configuration
-	remoteURL, err := git.RunGitCommandWithContext(ctx.Context, "config", "--get", "remote.origin.url")
+	remoteURL, err := ctx.Engine.GetRemoteURL(ctx.Context)
 	if err != nil {
 		warnings = append(warnings, "remote 'origin' is not configured")
 		splog.Warn("  remote 'origin' is not configured")
@@ -48,7 +42,7 @@ func checkRepository(ctx *app.Context, splog *tui.Splog, warnings []string, erro
 		splog.Error("  trunk branch not configured")
 	} else {
 		// Check if trunk branch exists
-		_, err := git.GetRevision(trunk)
+		_, err := ctx.Engine.GetRevision(ctx.Engine.GetBranch(trunk))
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("trunk branch '%s' does not exist", trunk))
 			splog.Error("  trunk branch '%s' does not exist", trunk)

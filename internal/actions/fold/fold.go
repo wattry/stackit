@@ -1,3 +1,4 @@
+// Package fold provides functionality for folding stacked branches.
 package fold
 
 import (
@@ -5,7 +6,6 @@ import (
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // Options contains options for the fold command
@@ -21,7 +21,7 @@ func Action(ctx *app.Context, opts Options) error {
 	gctx := ctx.Context
 
 	// Validate we're on a branch
-	currentBranch, err := utils.ValidateOnBranch(ctx.Engine)
+	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
 		return err
 	}
@@ -48,12 +48,12 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	// Check if rebase is in progress
-	if err := utils.CheckRebaseInProgress(gctx); err != nil {
+	if err := ctx.Git().CheckRebaseInProgress(gctx); err != nil {
 		return err
 	}
 
 	// Check for uncommitted changes
-	if utils.HasUncommittedChanges(gctx) {
+	if ctx.Git().HasUncommittedChanges(gctx) {
 		return fmt.Errorf("cannot fold with uncommitted changes. Please commit or stash them first")
 	}
 

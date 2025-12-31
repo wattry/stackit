@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-
-	"stackit.dev/stackit/internal/git"
 )
 
 var (
@@ -92,9 +90,6 @@ type SceneSetup func(*Scene) error
 // NOTE: This function uses os.Chdir() and is NOT safe for parallel tests.
 // Use NewSceneParallel for tests that can run in parallel.
 func NewScene(t *testing.T, setup SceneSetup) *Scene {
-	// Reset the default git repository to ensure this test gets a fresh one.
-	git.ResetDefaultRepo()
-
 	// Create temporary directory
 	tmpDir, err := os.MkdirTemp("", "stackit-test-*")
 	if err != nil {

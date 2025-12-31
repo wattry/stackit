@@ -1,13 +1,19 @@
-// Package git provides low-level Git operations, including repository access,
-// branch operations, commit information, PR operations, and metadata management.
-// It wraps go-git and provides a higher-level API for stackit's needs.
+// Package git provides low-level Git operations.
+//
+// It wraps git command execution and provides a Go-friendly interface for:
+//   - Branch management (create, delete, checkout, rename)
+//   - Commit operations (commit, amend, cherry-pick)
+//   - Repo state queries (status, diff, log, refs)
+//   - Remote operations (push, fetch, pull)
+//   - Metadata management (PR info, stack relationships)
+//
+// This package should be the only place where direct git commands are executed.
 package git
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -17,7 +23,6 @@ import (
 type Repository struct {
 	*gogit.Repository
 	path string
-	mu   sync.RWMutex
 }
 
 // OpenRepository opens a git repository at the given path
@@ -60,8 +65,8 @@ func (r *Repository) GetRepoRoot() string {
 // GetReference returns a reference by name
 func (r *Repository) GetReference(name string) (*plumbing.Reference, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	return r.Reference(plumbing.ReferenceName(name), true)
 }
@@ -69,8 +74,8 @@ func (r *Repository) GetReference(name string) (*plumbing.Reference, error) {
 // GetBranchNames returns all branch names
 func (r *Repository) GetBranchNames() ([]string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	branches, err := r.Branches()
 	if err != nil {
@@ -94,8 +99,8 @@ func (r *Repository) GetBranchNames() ([]string, error) {
 // GetCurrentBranch returns the current branch name
 func (r *Repository) GetCurrentBranch() (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	goGitMu.Lock()
+	defer goGitMu.Unlock()
 
 	head, err := r.Head()
 	if err != nil {

@@ -1,7 +1,8 @@
-// Package foreach provides functionality for executing commands on each branch in a stack.
 package foreach
 
-import "stackit.dev/stackit/internal/tui/components/tree"
+import (
+	"stackit.dev/stackit/internal/tui/components/tree"
+)
 
 // Event represents a feedback event from the foreach action.
 // Implementations should use type switches to handle specific event types.

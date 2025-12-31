@@ -12,13 +12,13 @@ import (
 	"golang.org/x/oauth2"
 
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // SyncPrInfo syncs PR information for branches from GitHub
-func SyncPrInfo(ctx context.Context, branchNames []string, repoOwner, repoName string, onUpdate func(string, *PullRequestInfo)) error {
+func SyncPrInfo(ctx context.Context, runner git.Runner, branchNames []string, repoOwner, repoName string, onUpdate func(string, *PullRequestInfo)) error {
 	// Get GitHub token
-	token, err := getGitHubToken()
+	token, err := getGitHubToken(runner)
 	if err != nil {
 		// If no token, skip PR syncing (non-fatal)
 		return nil //nolint:nilerr
@@ -27,7 +27,7 @@ func SyncPrInfo(ctx context.Context, branchNames []string, repoOwner, repoName s
 	// Get repository info if not provided
 	var repoInfo *RepoInfo
 	if repoOwner == "" || repoName == "" {
-		repoInfo, err = getRepoInfoWithHostname(ctx)
+		repoInfo, err = getRepoInfoWithHostname(ctx, runner)
 		if err != nil {
 			return nil //nolint:nilerr // Skip if can't determine repo
 		}
@@ -35,7 +35,7 @@ func SyncPrInfo(ctx context.Context, branchNames []string, repoOwner, repoName s
 		repoName = repoInfo.Repo
 	} else {
 		// Still need hostname for client configuration
-		repoInfo, err = getRepoInfoWithHostname(ctx)
+		repoInfo, err = getRepoInfoWithHostname(ctx, runner)
 		if err != nil {
 			return nil //nolint:nilerr // Skip if can't determine repo
 		}
@@ -52,7 +52,7 @@ func SyncPrInfo(ctx context.Context, branchNames []string, repoOwner, repoName s
 		return nil
 	}
 
-	concurrency.Run(branchNames, func(name string) {
+	utils.Run(branchNames, func(name string) {
 		pr, err := getPRInfoForBranch(ctx, client, repoOwner, repoName, name)
 		if err != nil {
 			return
@@ -122,7 +122,7 @@ func createGitHubClient(ctx context.Context, hostname, token string) (*github.Cl
 }
 
 // getGitHubToken gets GitHub token from environment or gh CLI
-func getGitHubToken() (string, error) {
+func getGitHubToken(runner git.Runner) (string, error) {
 	// Try environment variable first
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		// Trim whitespace to handle cases where secrets might have leading/trailing spaces
@@ -133,7 +133,7 @@ func getGitHubToken() (string, error) {
 	}
 
 	// Try gh CLI
-	output, err := git.RunGHCommandWithContext(context.Background(), "auth", "token")
+	output, err := runner.RunGHCommandWithContext(context.Background(), "auth", "token")
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub token: %w", err)
 	}
@@ -229,9 +229,9 @@ func ParseGitHubRemoteURL(remoteURL string) (*RepoInfo, error) {
 }
 
 // getRepoInfoWithHostname gets repository hostname, owner, and name from git remote
-func getRepoInfoWithHostname(ctx context.Context) (*RepoInfo, error) {
+func getRepoInfoWithHostname(_ context.Context, runner git.Runner) (*RepoInfo, error) {
 	// Get remote URL
-	remoteURL, err := git.RunGitCommandWithContext(ctx, "config", "--get", "remote.origin.url")
+	remoteURL, err := runner.GetConfig("remote.origin.url")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote URL: %w", err)
 	}

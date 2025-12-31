@@ -107,7 +107,8 @@ func HandlePassthrough(args []string) bool {
 
 			// Check if the command is modifying and the branch is locked or frozen
 			if slices.Contains(modifyingGitCommands, command) {
-				if locked, frozen, branch := isCurrentBranchLockedOrFrozen(); locked || frozen {
+				runner := git.NewRunner()
+				if locked, frozen, branch := isCurrentBranchLockedOrFrozen(runner); locked || frozen {
 					var state, cmd string
 					switch {
 					case locked && frozen:
@@ -165,8 +166,8 @@ func joinArgs(args []string) string {
 	return result
 }
 
-func isCurrentBranchLockedOrFrozen() (bool, bool, string) {
-	branch, err := git.RunGitCommand("rev-parse", "--abbrev-ref", "HEAD")
+func isCurrentBranchLockedOrFrozen(runner git.Runner) (bool, bool, string) {
+	branch, err := runner.GetCurrentBranch()
 	if err != nil {
 		return false, false, ""
 	}
@@ -174,8 +175,8 @@ func isCurrentBranchLockedOrFrozen() (bool, bool, string) {
 
 	locked := false
 	refName := "refs/stackit/metadata/" + branch
-	if sha, err := git.RunGitCommand("rev-parse", "--verify", refName); err == nil {
-		if content, err := git.RunGitCommand("cat-file", "-p", sha); err == nil {
+	if sha, err := runner.GetRef(refName); err == nil {
+		if content, err := runner.CatFile(sha); err == nil {
 			var meta struct {
 				Locked bool `json:"locked"`
 			}
@@ -187,8 +188,8 @@ func isCurrentBranchLockedOrFrozen() (bool, bool, string) {
 
 	frozen := false
 	localRefName := "refs/stackit/local-metadata/" + branch
-	if sha, err := git.RunGitCommand("rev-parse", "--verify", localRefName); err == nil {
-		if content, err := git.RunGitCommand("cat-file", "-p", sha); err == nil {
+	if sha, err := runner.GetRef(localRefName); err == nil {
+		if content, err := runner.CatFile(sha); err == nil {
 			var meta struct {
 				Frozen bool `json:"frozen"`
 			}

@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions"
-	getAction "stackit.dev/stackit/internal/actions/get"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -42,7 +41,7 @@ func TestGetAction(t *testing.T) {
 			RunGit("branch", "-D", "feature-a")
 
 		// Run GetAction with PR number
-		err := actions.GetAction(s.Context, "123", actions.GetOptions{}, &getAction.NullHandler{})
+		err := actions.GetAction(s.Context, "123", actions.GetOptions{}, &actions.GetNullHandler{})
 		require.NoError(t, err)
 
 		// Verify branch feature-a exists and is tracked
@@ -86,7 +85,7 @@ func TestGetAction(t *testing.T) {
 			RunGit("branch", "-D", "feature-b")
 
 		// Run GetAction for feature-b
-		err := actions.GetAction(s.Context, "feature-b", actions.GetOptions{}, &getAction.NullHandler{})
+		err := actions.GetAction(s.Context, "feature-b", actions.GetOptions{}, &actions.GetNullHandler{})
 		require.NoError(t, err)
 
 		// Verify both branches are tracked correctly
@@ -119,7 +118,7 @@ func TestGetAction(t *testing.T) {
 		s.RunGit("remote", "add", "origin", s.Scene.Dir)
 
 		// Run GetAction for feature-a
-		err := actions.GetAction(s.Context, "feature-a", actions.GetOptions{}, &getAction.NullHandler{})
+		err := actions.GetAction(s.Context, "feature-a", actions.GetOptions{}, &actions.GetNullHandler{})
 		require.NoError(t, err)
 
 		// feature-b should also have been refreshed/checked out because it's upstack of a
@@ -131,7 +130,7 @@ func TestGetAction(t *testing.T) {
 		s.WithInitialCommit().
 			WithUncommittedChange("dirty.txt")
 
-		err := actions.GetAction(s.Context, "some-branch", actions.GetOptions{}, &getAction.NullHandler{})
+		err := actions.GetAction(s.Context, "some-branch", actions.GetOptions{}, &actions.GetNullHandler{})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "uncommitted changes")
 	})

@@ -6,23 +6,26 @@ import (
 	"fmt"
 
 	"github.com/google/go-github/v62/github"
+
+	"stackit.dev/stackit/internal/git"
 )
 
-// RealGitHubClient implements Client using the real GitHub API
-type RealGitHubClient struct {
+// StackitGitHubClient implements Client using the real GitHub API
+type StackitGitHubClient struct {
 	client *github.Client
+	runner git.Runner
 	owner  string
 	repo   string
 }
 
-// NewRealGitHubClient creates a new RealGitHubClient
-func NewRealGitHubClient(ctx context.Context) (*RealGitHubClient, error) {
-	token, err := getGitHubToken()
+// NewGitHubClient creates a new RealGitHubClient
+func NewGitHubClient(ctx context.Context, runner git.Runner) (*StackitGitHubClient, error) {
+	token, err := getGitHubToken(runner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub token: %w", err)
 	}
 
-	repoInfo, err := getRepoInfoWithHostname(ctx)
+	repoInfo, err := getRepoInfoWithHostname(ctx, runner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository info: %w", err)
 	}
@@ -32,20 +35,21 @@ func NewRealGitHubClient(ctx context.Context) (*RealGitHubClient, error) {
 		return nil, fmt.Errorf("failed to create GitHub client: %w", err)
 	}
 
-	return &RealGitHubClient{
+	return &StackitGitHubClient{
 		client: client,
+		runner: runner,
 		owner:  repoInfo.Owner,
 		repo:   repoInfo.Repo,
 	}, nil
 }
 
 // GetOwnerRepo returns the repository owner and name
-func (c *RealGitHubClient) GetOwnerRepo() (string, string) {
+func (c *StackitGitHubClient) GetOwnerRepo() (string, string) {
 	return c.owner, c.repo
 }
 
 // CreatePullRequest creates a new pull request
-func (c *RealGitHubClient) CreatePullRequest(ctx context.Context, owner, repo string, opts CreatePROptions) (*PullRequestInfo, error) {
+func (c *StackitGitHubClient) CreatePullRequest(ctx context.Context, owner, repo string, opts CreatePROptions) (*PullRequestInfo, error) {
 	pr := &github.NewPullRequest{
 		Title: github.String(opts.Title),
 		Head:  github.String(opts.Head),
@@ -74,84 +78,12 @@ func (c *RealGitHubClient) CreatePullRequest(ctx context.Context, owner, repo st
 }
 
 // UpdatePullRequest updates an existing pull request
-func (c *RealGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts UpdatePROptions) error {
-	// Handle draft status changes via GraphQL
-	if opts.Draft != nil {
-		pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, prNumber)
-		if err == nil && pr.Draft != nil {
-			currentDraft := *pr.Draft
-			desiredDraft := *opts.Draft
-
-			if currentDraft != desiredDraft {
-				if pr.NodeID == nil {
-					return fmt.Errorf("PR %d does not have a Node ID", prNumber)
-				}
-
-				if err := updatePRDraftStatus(ctx, *pr.NodeID, desiredDraft); err != nil {
-					return fmt.Errorf("failed to update draft status for PR %d: %w", prNumber, err)
-				}
-			}
-		}
-	}
-
-	// Update other fields via REST API
-	update := &github.PullRequest{}
-
-	if opts.Title != nil {
-		update.Title = opts.Title
-	}
-	if opts.Body != nil {
-		update.Body = opts.Body
-	}
-	if opts.Base != nil {
-		update.Base = &github.PullRequestBranch{
-			Ref: opts.Base,
-		}
-	}
-
-	_, _, err := c.client.PullRequests.Edit(ctx, owner, repo, prNumber, update)
-	if err != nil {
-		return fmt.Errorf("failed to update pull request: %w", err)
-	}
-
-	// Update reviewers if specified
-	if len(opts.Reviewers) > 0 || len(opts.TeamReviewers) > 0 {
-		_, _, _ = c.client.PullRequests.RequestReviewers(ctx, owner, repo, prNumber, github.ReviewersRequest{
-			Reviewers:     opts.Reviewers,
-			TeamReviewers: opts.TeamReviewers,
-		})
-	}
-
-	// Rerequest review if specified
-	if opts.RerequestReview {
-		pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, prNumber)
-		if err == nil && pr.RequestedReviewers != nil {
-			var reviewers []string
-			var teamReviewers []string
-			for _, reviewer := range pr.RequestedReviewers {
-				reviewers = append(reviewers, *reviewer.Login)
-			}
-			for _, team := range pr.RequestedTeams {
-				teamReviewers = append(teamReviewers, *team.Slug)
-			}
-			if len(reviewers) > 0 || len(teamReviewers) > 0 {
-				_, _ = c.client.PullRequests.RemoveReviewers(ctx, owner, repo, prNumber, github.ReviewersRequest{
-					Reviewers:     reviewers,
-					TeamReviewers: teamReviewers,
-				})
-				_, _, _ = c.client.PullRequests.RequestReviewers(ctx, owner, repo, prNumber, github.ReviewersRequest{
-					Reviewers:     reviewers,
-					TeamReviewers: teamReviewers,
-				})
-			}
-		}
-	}
-
-	return nil
+func (c *StackitGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts UpdatePROptions) error {
+	return UpdatePullRequest(ctx, c.client, c.runner, owner, repo, prNumber, opts)
 }
 
 // GetPullRequestByBranch gets a pull request for a branch
-func (c *RealGitHubClient) GetPullRequestByBranch(ctx context.Context, owner, repo, branchName string) (*PullRequestInfo, error) {
+func (c *StackitGitHubClient) GetPullRequestByBranch(ctx context.Context, owner, repo, branchName string) (*PullRequestInfo, error) {
 	prs, _, err := c.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Head:  fmt.Sprintf("%s:%s", owner, branchName),
 		State: "all",
@@ -171,7 +103,7 @@ func (c *RealGitHubClient) GetPullRequestByBranch(ctx context.Context, owner, re
 }
 
 // GetPullRequest gets a pull request by number
-func (c *RealGitHubClient) GetPullRequest(ctx context.Context, owner, repo string, prNumber int) (*PullRequestInfo, error) {
+func (c *StackitGitHubClient) GetPullRequest(ctx context.Context, owner, repo string, prNumber int) (*PullRequestInfo, error) {
 	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, prNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pull request %d: %w", prNumber, err)
@@ -181,11 +113,11 @@ func (c *RealGitHubClient) GetPullRequest(ctx context.Context, owner, repo strin
 }
 
 // MergePullRequest merges a pull request
-func (c *RealGitHubClient) MergePullRequest(ctx context.Context, branchName string) error {
+func (c *StackitGitHubClient) MergePullRequest(ctx context.Context, branchName string) error {
 	return MergePullRequest(ctx, c.client, c.owner, c.repo, branchName)
 }
 
 // GetPRChecksStatus returns the check status for a PR
-func (c *RealGitHubClient) GetPRChecksStatus(ctx context.Context, branchName string) (*CheckStatus, error) {
+func (c *StackitGitHubClient) GetPRChecksStatus(ctx context.Context, branchName string) (*CheckStatus, error) {
 	return GetPRChecksStatus(ctx, c.client, c.owner, c.repo, branchName)
 }

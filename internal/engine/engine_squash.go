@@ -24,7 +24,7 @@ func (e *engineImpl) SquashCurrentBranch(ctx context.Context, opts SquashOptions
 	}
 
 	// Read metadata to get parent branch revision
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}

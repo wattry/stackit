@@ -34,7 +34,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	splog := ctx.Splog
 	gctx := ctx.Context
 
-	currentBranch, err := utils.ValidateOnBranch(ctx.Engine)
+	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	}
 
 	// Check if rebase is in progress
-	if err := utils.CheckRebaseInProgress(gctx); err != nil {
+	if err := ctx.Git().CheckRebaseInProgress(gctx); err != nil {
 		return err
 	}
 
@@ -73,12 +73,12 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	}
 
 	// Stage changes based on flags
-	stagingOpts := utils.StagingOptions{
+	stagingOpts := git.StagingOptions{
 		All:    opts.All,
 		Update: opts.Update,
 		Patch:  opts.Patch,
 	}
-	if err := utils.StageChanges(gctx, stagingOpts); err != nil {
+	if err := ctx.Git().StageChanges(gctx, stagingOpts); err != nil {
 		return err
 	}
 
@@ -93,7 +93,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 
 	// Check if there are staged changes (for new commits)
 	if opts.CreateCommit {
-		hasStagedChanges, err := git.HasStagedChanges(gctx)
+		hasStagedChanges, err := eng.HasStagedChanges(gctx)
 		if err != nil {
 			return fmt.Errorf("failed to check staged changes: %w", err)
 		}
@@ -113,7 +113,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 		NoVerify:    !ctx.Verify,
 	}
 
-	if err := git.CommitWithOptions(commitOpts); err != nil {
+	if err := eng.CommitWithOptions(gctx, commitOpts); err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
@@ -159,9 +159,9 @@ func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 		style.ColorBranchName(parentName, false))
 
 	// Run interactive rebase
-	if err := git.RunGitCommandInteractive("rebase", "-i", parentName); err != nil {
+	if err := eng.InteractiveRebase(gctx, parentName); err != nil {
 		// Check if rebase is in progress (conflict or user canceled)
-		if git.IsRebaseInProgress(gctx) {
+		if eng.IsRebaseInProgress(gctx) {
 			return fmt.Errorf("interactive rebase paused. Resolve conflicts and run 'git rebase --continue' or 'git rebase --abort'")
 		}
 		// Rebase might have been aborted by user

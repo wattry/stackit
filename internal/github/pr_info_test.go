@@ -146,9 +146,6 @@ func TestParseGitHubRemoteURL(t *testing.T) {
 // NOTE: NewScene is NOT safe for parallel tests, so these tests must run sequentially.
 func TestGetGitHubClient(t *testing.T) {
 	t.Run("creates client for github.com", func(t *testing.T) {
-		// Reset default repo to ensure clean state
-		git.ResetDefaultRepo()
-
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
@@ -161,17 +158,10 @@ func TestGetGitHubClient(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Initialize git repo (should work since NewScene changes to scene.Dir)
-		err = git.InitDefaultRepo()
-		if err != nil {
-			t.Skipf("Skipping test: failed to initialize git repo (may be sandbox restriction): %v", err)
-			return
-		}
-
 		// Mock token by setting environment variable
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background())
+		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner())
 		// Note: This may fail if gh CLI is not available, but that's okay for testing the logic
 		if err != nil {
 			// If it fails due to token issues, that's expected in test environment
@@ -192,9 +182,6 @@ func TestGetGitHubClient(t *testing.T) {
 	})
 
 	t.Run("creates client for GitHub Enterprise", func(t *testing.T) {
-		// Reset default repo to ensure clean state
-		git.ResetDefaultRepo()
-
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
@@ -207,17 +194,10 @@ func TestGetGitHubClient(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Initialize git repo
-		err = git.InitDefaultRepo()
-		if err != nil {
-			t.Skipf("Skipping test: failed to initialize git repo (may be sandbox restriction): %v", err)
-			return
-		}
-
 		// Mock token
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background())
+		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner())
 		if err != nil {
 			// If it fails due to token issues, that's expected in test environment
 			require.Contains(t, err.Error(), "token")
@@ -238,9 +218,6 @@ func TestGetGitHubClient(t *testing.T) {
 	})
 
 	t.Run("creates client for Enterprise GitHub with simple hostname", func(t *testing.T) {
-		// Reset default repo to ensure clean state
-		git.ResetDefaultRepo()
-
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
@@ -253,17 +230,10 @@ func TestGetGitHubClient(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Initialize git repo
-		err = git.InitDefaultRepo()
-		if err != nil {
-			t.Skipf("Skipping test: failed to initialize git repo (may be sandbox restriction): %v", err)
-			return
-		}
-
 		// Mock token
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background())
+		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner())
 		if err != nil {
 			// If it fails due to token issues, that's expected in test environment
 			require.Contains(t, err.Error(), "token")
