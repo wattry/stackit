@@ -532,3 +532,11 @@ type SquashOptions struct {
 	NoEdit   bool
 	NoVerify bool
 }
+
+// MergeOptions contains options for merging branches
+type MergeOptions struct {
+	FFOnly  bool
+	NoEdit  bool
+	NoFF    bool
+	Message string
+}

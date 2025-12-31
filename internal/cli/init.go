@@ -25,7 +25,8 @@ func isInteractive() bool {
 
 // InferTrunk attempts to infer the trunk branch name
 func InferTrunk(ctx context.Context, branchNames []string) string {
-	remoteBranch, err := git.FindRemoteBranch(ctx, "origin")
+	runner := git.NewRunner()
+	remoteBranch, err := runner.FindRemoteBranch(ctx, "origin")
 	if err == nil && remoteBranch != "" {
 		for _, name := range branchNames {
 			if name == remoteBranch {
@@ -66,13 +67,10 @@ func selectTrunkBranch(branchNames []string, inferredTrunk string, interactive b
 // Returns the repo root path. This is used by commands that need stackit
 // to be initialized but want to auto-initialize for convenience.
 func EnsureInitialized(ctx context.Context) (string, error) {
-	if err := git.InitDefaultRepo(); err != nil {
-		return "", fmt.Errorf("not a git repository: %w", err)
-	}
-
-	repoRoot, err := git.GetRepoRoot()
+	runner := git.NewRunner()
+	repoRoot, err := runner.DiscoverRepoRoot()
 	if err != nil {
-		return "", fmt.Errorf("failed to get repo root: %w", err)
+		return "", fmt.Errorf("not a git repository: %w", err)
 	}
 
 	cfg, _ := config.LoadConfig(repoRoot)
@@ -80,7 +78,7 @@ func EnsureInitialized(ctx context.Context) (string, error) {
 		splog := tui.NewSplog()
 		splog.Info("Stackit has not been initialized, attempting to setup now...")
 
-		branchNames, err := git.GetAllBranchNames()
+		branchNames, err := runner.GetAllBranchNames()
 		if err != nil {
 			return "", fmt.Errorf("failed to get branches: %w", err)
 		}
@@ -127,11 +125,8 @@ func newInitCmd() *cobra.Command {
 		Short:        "Initialize Stackit in the current repository",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := git.InitDefaultRepo(); err != nil {
-				return fmt.Errorf("not a git repository: %w", err)
-			}
-
-			repoRoot, err := git.GetRepoRoot()
+			runner := git.NewRunner()
+			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {
 				return fmt.Errorf("failed to get repo root: %w", err)
 			}
@@ -141,7 +136,7 @@ func newInitCmd() *cobra.Command {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			branchNames, err := git.GetAllBranchNames()
+			branchNames, err := runner.GetAllBranchNames()
 			if err != nil {
 				return fmt.Errorf("failed to get branches: %w", err)
 			}

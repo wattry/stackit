@@ -5,7 +5,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -19,8 +18,8 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
-	rebaseInProgress := git.IsRebaseInProgress(ctx.Context)
-	mergeInProgress := git.IsMergeInProgress(ctx.Context)
+	rebaseInProgress := eng.Git().IsRebaseInProgress(ctx.Context)
+	mergeInProgress := eng.Git().IsMergeInProgress(ctx.Context)
 
 	// Check for continuation state
 	hasContinuation := false
@@ -49,13 +48,13 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	// Abort Git operations
 	if rebaseInProgress {
 		splog.Info("Aborting rebase...")
-		if err := git.RebaseAbort(ctx.Context); err != nil {
+		if err := eng.Git().RebaseAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort rebase: %w", err)
 		}
 	}
 	if mergeInProgress {
 		splog.Info("Aborting merge...")
-		if err := git.MergeAbort(ctx.Context); err != nil {
+		if err := eng.Git().MergeAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort merge: %w", err)
 		}
 	}

@@ -5,7 +5,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -104,19 +103,19 @@ func pushMetadataForBranches(ctx *app.Context, branchNames []string) error {
 
 	// Check if remote sync is enabled; if not, run compatibility test first
 	if !eng.IsRemoteSyncEnabled() {
-		if err := git.TestRemoteRefCompatibility(); err != nil {
+		if err := eng.Git().TestRemoteRefCompatibility(); err != nil {
 			splog.Debug("Remote metadata sync not supported: %v", err)
 			return nil // Non-fatal
 		}
 		eng.SetRemoteSyncEnabled(true)
 		// Configure refspec so future git fetch commands also fetch metadata
-		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
 			splog.Debug("Failed to configure metadata refspec: %v", err)
 		}
 	}
 
 	// Push metadata refs
-	if err := git.PushMetadataRefs(branchNames); err != nil {
+	if err := eng.Git().PushMetadataRefs(branchNames); err != nil {
 		splog.Debug("Failed to push metadata refs: %v", err)
 		return err
 	}

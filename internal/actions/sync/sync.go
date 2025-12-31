@@ -1,10 +1,12 @@
+// Package sync provides functionality for synchronizing stacked branches with remote repositories.
 package sync
 
 import (
 	"fmt"
+	"strings"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/utils"
+	"stackit.dev/stackit/internal/handlers"
 )
 
 // Options contains options for the sync command
@@ -35,7 +37,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Check for uncommitted changes
-	if utils.HasUncommittedChanges(gctx) {
+	if ctx.Git().HasUncommittedChanges(gctx) {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
 	}
 
@@ -109,4 +111,161 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	handler.Complete(*summary)
 	return nil
+}
+
+// Re-export RestackResult constants from handlers package for convenience
+const (
+	RestackDone     = handlers.RestackDone
+	RestackUnneeded = handlers.RestackUnneeded
+	RestackConflict = handlers.RestackConflict
+)
+
+// RestackResult is an alias for handlers.RestackResult
+type RestackResult = handlers.RestackResult
+
+// RestackHandler is an alias for handlers.RestackHandler
+type RestackHandler = handlers.RestackHandler
+
+// Phase represents the current phase of the sync operation
+type Phase string
+
+// Phases of the sync operation
+const (
+	PhaseTrunk   Phase = "trunk"
+	PhaseGitHub  Phase = "github"
+	PhaseClean   Phase = "clean"
+	PhaseRestack Phase = "restack"
+)
+
+// EventType represents the type of sync event
+type EventType string
+
+// Event types for sync operations
+const (
+	EventStarted   EventType = "started"
+	EventProgress  EventType = "progress"
+	EventCompleted EventType = "completed"
+	EventSkipped   EventType = "skipped"
+)
+
+// Event represents a progress update during sync
+type Event struct {
+	Phase       Phase     // Current phase
+	Type        EventType // Event type
+	Branch      string    // Branch name (if applicable)
+	PRNumber    *int      // PR number (if applicable)
+	Message     string    // Human-readable description
+	OldRevision string    // For position changes
+	NewRevision string    // For position changes
+	Conflict    bool      // Is this a conflict?
+	Error       error     // If non-nil, this step had an error
+}
+
+// Summary holds aggregate results from a sync operation
+type Summary struct {
+	TrunkUpdated      bool     // Was trunk updated?
+	TrunkRevision     string   // New trunk revision (short hash)
+	BranchesSynced    int      // Number of branches synced from remote
+	BranchesRestacked int      // Number of branches restacked
+	BranchesDeleted   int      // Number of branches deleted
+	BranchesSkipped   int      // Number of branches skipped (due to conflicts)
+	ConflictBranches  []string // Names of branches that conflicted
+	UpToDate          bool     // Everything was already current
+}
+
+// HasChanges returns true if any operations were performed
+func (s *Summary) HasChanges() bool {
+	return s.TrunkUpdated || s.BranchesSynced > 0 || s.BranchesRestacked > 0 ||
+		s.BranchesDeleted > 0 || s.BranchesSkipped > 0
+}
+
+// Handler abstracts TTY vs non-TTY output for sync operations
+// It embeds RestackHandler to provide a unified interface for operations that include restacking
+type Handler interface {
+	// Start is called at the beginning of sync with the total operation count
+	Start(totalOps int)
+
+	// EmitEvent is called for each progress update
+	EmitEvent(event Event)
+
+	// Complete is called when sync finishes with the summary
+	Complete(summary Summary)
+
+	// RestackHandler methods are available for restack-specific output
+	// This allows the same handler to be used for standalone restack operations
+	RestackHandler
+}
+
+// NullHandler is a no-op handler for testing or when output is not needed
+type NullHandler struct{}
+
+// Start implements Handler.
+func (h *NullHandler) Start(_ int) {}
+
+// EmitEvent implements Handler.
+func (h *NullHandler) EmitEvent(_ Event) {}
+
+// Complete implements Handler.
+func (h *NullHandler) Complete(_ Summary) {}
+
+// OnRestackStart implements RestackHandler.
+func (h *NullHandler) OnRestackStart(_ int) {}
+
+// OnRestackBranch implements RestackHandler.
+func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int) {}
+
+// OnRestackComplete implements RestackHandler.
+func (h *NullHandler) OnRestackComplete(_, _ int, _ []string) {}
+
+// FormatSummaryParts returns the summary parts as a slice of strings
+// This is shared between SimpleSyncHandler and InteractiveSyncHandler
+func FormatSummaryParts(summary Summary) []string {
+	parts := []string{}
+
+	if summary.TrunkUpdated {
+		parts = append(parts, "pulled trunk")
+	}
+	if summary.BranchesSynced > 0 {
+		parts = append(parts, fmt.Sprintf("synced %d branch%s", summary.BranchesSynced, pluralES(summary.BranchesSynced)))
+	}
+	if summary.BranchesRestacked > 0 {
+		parts = append(parts, fmt.Sprintf("restacked %d", summary.BranchesRestacked))
+	}
+	if summary.BranchesDeleted > 0 {
+		parts = append(parts, fmt.Sprintf("deleted %d", summary.BranchesDeleted))
+	}
+	if summary.BranchesSkipped > 0 {
+		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", summary.BranchesSkipped))
+	}
+
+	return parts
+}
+
+// FormatSummaryString returns the full summary as a string
+func FormatSummaryString(summary Summary) string {
+	if summary.UpToDate {
+		return "Everything is up to date!"
+	}
+
+	parts := FormatSummaryParts(summary)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	result := "Summary: " + strings.Join(parts, ", ")
+
+	// Add actionable advice for conflicts
+	if len(summary.ConflictBranches) > 0 {
+		result += fmt.Sprintf("\n   Run 'st restack %s' to resolve and continue", summary.ConflictBranches[0])
+	}
+
+	return result
+}
+
+// pluralES returns "es" if count != 1, otherwise empty string (for "branch" -> "branches")
+func pluralES(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "es"
 }

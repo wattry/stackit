@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
@@ -37,14 +36,12 @@ func TrackAction(ctx *app.Context, opts TrackOptions) error {
 		}
 		if !parentExists && parent != eng.Trunk().GetName() {
 			// Refresh branches list and check again
-			branches, err := git.GetAllBranchNames()
-			if err == nil {
-				parentExists = false
-				for _, name := range branches {
-					if name == parent {
-						parentExists = true
-						break
-					}
+			allBranches := eng.AllBranches()
+			parentExists = false
+			for _, b := range allBranches {
+				if b.GetName() == parent {
+					parentExists = true
+					break
 				}
 			}
 			if !parentExists {
@@ -60,15 +57,15 @@ func TrackAction(ctx *app.Context, opts TrackOptions) error {
 
 		// Validate parent is an ancestor (unless force is used)
 		if !opts.Force {
-			parentRev, err := git.GetRevision(parent)
+			parentRev, err := eng.GetRevision(eng.GetBranch(parent))
 			if err != nil {
 				return fmt.Errorf("failed to get parent revision: %w", err)
 			}
-			branchRev, err := git.GetRevision(branchName)
+			branchRev, err := eng.GetRevision(eng.GetBranch(branchName))
 			if err != nil {
 				return fmt.Errorf("failed to get branch revision: %w", err)
 			}
-			isAnc, err := git.IsAncestor(parentRev, branchRev)
+			isAnc, err := eng.IsAncestor(parentRev, branchRev)
 			if err != nil {
 				return fmt.Errorf("failed to check ancestry: %w", err)
 			}
@@ -149,12 +146,12 @@ func trackBranchRecursively(ctx *app.Context, branchName string) error {
 		}
 
 		// Check if candidate is a child (has this branch as merge base)
-		mergeBase, err := git.GetMergeBase(candidate, branchName)
+		mergeBase, err := eng.GetMergeBase(candidate, branchName)
 		if err != nil {
 			continue
 		}
 
-		branchRev, err := git.GetRevision(branchName)
+		branchRev, err := eng.GetRevision(eng.GetBranch(branchName))
 		if err != nil {
 			continue
 		}

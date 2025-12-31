@@ -13,7 +13,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // ForeachOptions contains options for the foreach command
@@ -139,7 +139,7 @@ func foreachParallel(ctx *app.Context, opts ForeachOptions, branches []engine.Br
 		}
 	}
 
-	concurrency.RunWithWorkers(branchesToProcess, numJobs, func(branch engine.Branch) {
+	utils.RunWithWorkers(branchesToProcess, numJobs, func(branch engine.Branch) {
 		select {
 		case <-runCtx.Done():
 			return

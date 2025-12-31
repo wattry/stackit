@@ -1,3 +1,4 @@
+// Package split provides functionality for splitting stacked branches.
 package split
 
 import (
@@ -9,7 +10,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 )
 
 // Style specifies the split mode
@@ -53,7 +53,7 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	// Check for uncommitted tracked changes
-	hasUnstaged, err := git.HasUnstagedChanges(context)
+	hasUnstaged, err := eng.HasUnstagedChanges(context)
 	if err != nil {
 		return fmt.Errorf("failed to check unstaged changes: %w", err)
 	}

@@ -33,7 +33,7 @@ Use --all to see all configured trunk branches, or --add to add an additional tr
 			return common.Run(cmd, func(ctx *app.Context) error {
 				// Handle --add flag
 				if add != "" {
-					return handleAddTrunk(ctx.RepoRoot, add)
+					return handleAddTrunk(ctx.Git(), ctx.RepoRoot, add)
 				}
 
 				// Handle --all flag
@@ -54,9 +54,9 @@ Use --all to see all configured trunk branches, or --add to add an additional tr
 }
 
 // handleAddTrunk adds a new trunk branch
-func handleAddTrunk(repoRoot string, trunkName string) error {
+func handleAddTrunk(runner git.Runner, repoRoot string, trunkName string) error {
 	// Verify the branch exists
-	branches, err := git.GetAllBranchNames()
+	branches, err := runner.GetAllBranchNames()
 	if err != nil {
 		return fmt.Errorf("failed to get branches: %w", err)
 	}

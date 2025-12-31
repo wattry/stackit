@@ -7,10 +7,9 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // CleanBranchesOptions contains options for cleaning branches
@@ -48,7 +47,7 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 	}
 
 	if len(branchesToProcessPool) > 0 {
-		concurrency.Run(branchesToProcessPool, func(branch engine.Branch) {
+		utils.Run(branchesToProcessPool, func(branch engine.Branch) {
 			name := branch.GetName()
 			shouldDelete, reason := ShouldDeleteBranch(c, name, eng, opts.Force)
 			mu.Lock()
@@ -171,7 +170,7 @@ func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[s
 			}
 
 			// Delete remote metadata ref (best effort, don't fail if it doesn't exist)
-			if err := git.DeleteRemoteMetadataRef(branchName); err != nil {
+			if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
 				splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
 			}
 

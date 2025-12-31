@@ -6,12 +6,13 @@ import (
 	"os/exec"
 	"strings"
 
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
 
 // checkEnvironment performs environment-related checks
-func checkEnvironment(splog *tui.Splog, warnings []string, errors []string) ([]string, []string) {
+func checkEnvironment(runner git.Runner, splog *tui.Splog, warnings []string, errors []string) ([]string, []string) {
 	// Check git version
 	gitVersion, err := exec.Command("git", "version").Output()
 	if err != nil {
@@ -39,7 +40,7 @@ func checkEnvironment(splog *tui.Splog, warnings []string, errors []string) ([]s
 	}
 
 	// Check GitHub authentication
-	token, err := getGitHubToken()
+	token, err := getGitHubToken(runner)
 	if err != nil {
 		warnings = append(warnings, "GitHub authentication not configured (GITHUB_TOKEN env var or gh auth token)")
 		splog.Warn("  GitHub authentication not configured")
@@ -50,7 +51,7 @@ func checkEnvironment(splog *tui.Splog, warnings []string, errors []string) ([]s
 		} else {
 			// Try to create a GitHub client to verify connectivity
 			ghCtx := context.Background()
-			client, err := github.NewRealGitHubClient(ghCtx)
+			client, err := github.NewGitHubClient(ghCtx, runner)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("GitHub authentication failed: %v", err))
 				splog.Warn("  GitHub authentication failed: %v", err)

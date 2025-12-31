@@ -6,7 +6,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/timeutil"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -120,15 +119,15 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	// Abort any in-progress Git operations that might interfere with restoration
-	if git.IsRebaseInProgress(ctx.Context) {
+	if eng.Git().IsRebaseInProgress(ctx.Context) {
 		splog.Info("Aborting in-progress rebase before undo...")
-		if err := git.RebaseAbort(ctx.Context); err != nil {
+		if err := eng.Git().RebaseAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort rebase: %w", err)
 		}
 	}
-	if git.IsMergeInProgress(ctx.Context) {
+	if eng.Git().IsMergeInProgress(ctx.Context) {
 		splog.Info("Aborting in-progress merge before undo...")
-		if err := git.MergeAbort(ctx.Context); err != nil {
+		if err := eng.Git().MergeAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort merge: %w", err)
 		}
 	}

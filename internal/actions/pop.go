@@ -4,9 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // PopOptions contains options for the pop command
@@ -20,7 +18,7 @@ func PopAction(ctx *app.Context, _ PopOptions) error {
 	splog := ctx.Splog
 
 	// Validate we're on a branch
-	currentBranch, err := utils.ValidateOnBranch(ctx.Engine)
+	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
 		return err
 	}
@@ -37,12 +35,12 @@ func PopAction(ctx *app.Context, _ PopOptions) error {
 	}
 
 	// Check if rebase is in progress
-	if err := utils.CheckRebaseInProgress(ctx.Context); err != nil {
+	if err := ctx.Git().CheckRebaseInProgress(ctx.Context); err != nil {
 		return err
 	}
 
 	// Check for uncommitted changes
-	if utils.HasUncommittedChanges(ctx.Context) {
+	if ctx.Git().HasUncommittedChanges(ctx.Context) {
 		return fmt.Errorf("cannot pop with uncommitted changes. Please commit or stash them first")
 	}
 
@@ -65,7 +63,7 @@ func PopAction(ctx *app.Context, _ PopOptions) error {
 
 	// Soft reset to parent - this uncommits the current branch's changes
 	// and stages them, keeping the working tree unchanged
-	if err := git.SoftReset(ctx.Context, parentRev); err != nil {
+	if err := eng.Git().SoftReset(ctx.Context, parentRev); err != nil {
 		return fmt.Errorf("failed to reset to parent: %w", err)
 	}
 
@@ -80,7 +78,7 @@ func PopAction(ctx *app.Context, _ PopOptions) error {
 	}
 
 	// Check how many changes are staged
-	hasStaged, err := git.HasStagedChanges(ctx.Context)
+	hasStaged, err := eng.Git().HasStagedChanges(ctx.Context)
 	if err == nil && hasStaged {
 		splog.Info("Popped branch %s. Changes are now staged on %s.",
 			style.ColorBranchName(currentBranch, false),

@@ -14,7 +14,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 )
@@ -132,11 +131,8 @@ func (s *Scenario) CreateBranchQuiet(name string) *Scenario {
 // Rebuild refreshes the engine's internal state from the Git repository.
 func (s *Scenario) Rebuild() *Scenario {
 	s.T.Helper()
-	git.ResetDefaultRepo()
-	err := git.InitDefaultRepo()
-	require.NoError(s.T, err)
 	if s.Engine != nil {
-		err = s.Engine.Rebuild(s.Engine.Trunk().GetName())
+		err := s.Engine.Rebuild(s.Engine.Trunk().GetName())
 		require.NoError(s.T, err)
 	}
 	return s

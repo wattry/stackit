@@ -148,7 +148,7 @@ func (c *ConsolidateMergeExecutor) createConsolidationBranch(ctx context.Context
 	}
 
 	// Reset to trunk since CreateAndCheckoutBranch creates from current HEAD
-	if _, err := git.RunGitCommandWithContext(ctx, "reset", "--hard", c.engine.Trunk().GetName()); err != nil {
+	if err := c.engine.ResetHard(ctx, c.engine.Trunk().GetName()); err != nil {
 		return "", fmt.Errorf("failed to reset to trunk: %w", err)
 	}
 
@@ -157,7 +157,7 @@ func (c *ConsolidateMergeExecutor) createConsolidationBranch(ctx context.Context
 		c.splog.Info("  Merging %s (%d/%d)...", branchInfo.BranchName, i+1, len(c.plan.BranchesToMerge))
 
 		commitMsg := fmt.Sprintf("Consolidate %s: %s", branchInfo.BranchName, c.getBranchTitle(branchInfo))
-		if _, err := git.RunGitCommandWithContext(ctx, "merge", branchInfo.BranchName, "--no-ff", "-m", commitMsg); err != nil {
+		if err := c.engine.Merge(ctx, branchInfo.BranchName, engine.MergeOptions{NoFF: true, Message: commitMsg}); err != nil {
 			return "", fmt.Errorf("failed to merge %s: %w", branchInfo.BranchName, err)
 		}
 	}

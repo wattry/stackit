@@ -4,13 +4,92 @@ import (
 	"fmt"
 	"strconv"
 
-	getAction "stackit.dev/stackit/internal/actions/get"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/handlers"
-	"stackit.dev/stackit/internal/utils"
 )
+
+// GetPhase represents the current phase of the get operation
+type GetPhase string
+
+// Phases of the get operation
+const (
+	GetPhaseFetch    GetPhase = "fetch"    // Fetching branches from remote
+	GetPhaseSync     GetPhase = "sync"     // Syncing branches (create/update)
+	GetPhaseMetadata GetPhase = "metadata" // Fetching and applying metadata
+	GetPhaseCheckout GetPhase = "checkout" // Checking out target branch
+)
+
+// GetEventType represents the type of get event
+type GetEventType string
+
+// Event types for get operations
+const (
+	GetEventStarted   GetEventType = "started"
+	GetEventProgress  GetEventType = "progress"
+	GetEventCompleted GetEventType = "completed"
+	GetEventSkipped   GetEventType = "skipped"
+)
+
+// GetEvent represents a progress update during get
+type GetEvent struct {
+	Phase       GetPhase     // Current phase
+	Type        GetEventType // Event type
+	Branch      string       // Branch name (if applicable)
+	PRNumber    *int         // PR number (if applicable)
+	Message     string       // Human-readable description
+	NewRevision string       // For position changes
+	IsNew       bool         // Is this a new branch?
+	Error       error        // If non-nil, this step had an error
+}
+
+// GetSummary holds aggregate results from a get operation
+type GetSummary struct {
+	TargetBranch    string // The branch that was retrieved
+	BranchesCreated int    // Number of branches created
+	BranchesUpdated int    // Number of branches updated
+	Restacked       int    // Number of branches restacked
+	IsFrozen        bool   // Was the target branch frozen?
+	UpToDate        bool   // Everything was already current
+}
+
+// GetHandler abstracts TTY vs non-TTY output for get operations
+// It embeds RestackHandler to provide consistent output for restack phase
+type GetHandler interface {
+	// Start is called at the beginning of get with target info
+	Start(targetBranch string, prNumber *int)
+
+	// EmitEvent is called for each progress update
+	EmitEvent(event GetEvent)
+
+	// Complete is called when get finishes with the summary
+	Complete(summary GetSummary)
+
+	// RestackHandler methods are available for restack phase output
+	// This ensures consistent restack output between get, sync, and restack commands
+	handlers.RestackHandler
+}
+
+// GetNullHandler is a no-op handler for testing or when output is not needed
+type GetNullHandler struct{}
+
+// Start implements GetHandler.
+func (h *GetNullHandler) Start(_ string, _ *int) {}
+
+// EmitEvent implements GetHandler.
+func (h *GetNullHandler) EmitEvent(_ GetEvent) {}
+
+// Complete implements GetHandler.
+func (h *GetNullHandler) Complete(_ GetSummary) {}
+
+// OnRestackStart implements RestackHandler.
+func (h *GetNullHandler) OnRestackStart(_ int) {}
+
+// OnRestackBranch implements RestackHandler.
+func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int) {}
+
+// OnRestackComplete implements RestackHandler.
+func (h *GetNullHandler) OnRestackComplete(_, _ int, _ []string) {}
 
 // GetOptions contains options for the get command
 type GetOptions struct {
@@ -21,12 +100,12 @@ type GetOptions struct {
 }
 
 // GetAction performs the get operation
-func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler getAction.Handler) error {
+func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler GetHandler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
 
-	if utils.HasUncommittedChanges(gctx) {
+	if ctx.Git().HasUncommittedChanges(gctx) {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before running 'get'")
 	}
 
@@ -60,22 +139,22 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 	handler.Start(targetBranch, targetPRNumber)
 
 	// Emit fetch phase started
-	handler.EmitEvent(getAction.Event{
-		Phase: getAction.PhaseFetch,
-		Type:  getAction.EventStarted,
+	handler.EmitEvent(GetEvent{
+		Phase: GetPhaseFetch,
+		Type:  GetEventStarted,
 	})
 
 	// Fetch target branch from origin
 	remote := eng.GetRemote()
-	if _, err := eng.RunGitCommandWithContext(gctx, "fetch", remote, targetBranch); err != nil {
+	if err := eng.Fetch(gctx, remote, targetBranch); err != nil {
 		return fmt.Errorf("failed to fetch branch %s from %s: %w", targetBranch, remote, err)
 	}
 
 	// Emit trunk status (main/master)
 	trunkName := eng.Trunk().GetName()
-	handler.EmitEvent(getAction.Event{
-		Phase:  getAction.PhaseFetch,
-		Type:   getAction.EventCompleted,
+	handler.EmitEvent(GetEvent{
+		Phase:  GetPhaseFetch,
+		Type:   GetEventCompleted,
 		Branch: trunkName,
 	})
 
@@ -121,9 +200,9 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 	}
 
 	// Emit sync phase started
-	handler.EmitEvent(getAction.Event{
-		Phase: getAction.PhaseSync,
-		Type:  getAction.EventStarted,
+	handler.EmitEvent(GetEvent{
+		Phase: GetPhaseSync,
+		Type:  GetEventStarted,
 	})
 
 	// Track statistics for summary
@@ -152,13 +231,13 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 		}
 
 		// Fetch if not already fetched
-		_, _ = eng.RunGitCommandWithContext(gctx, "fetch", remote, branchName)
+		_ = eng.Fetch(gctx, remote, branchName)
 
 		branch := eng.GetBranch(branchName)
 		isNew := !branch.IsTracked()
 
 		if isNew {
-			if _, err := eng.RunGitCommandWithContext(gctx, "branch", branchName, fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
+			if err := eng.CreateBranch(gctx, branchName, fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
 				return fmt.Errorf("failed to create local branch %s: %w", branchName, err)
 			}
 			// Set initial metadata
@@ -178,21 +257,21 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 			branchesCreated++
 
 			// Emit sync event
-			handler.EmitEvent(getAction.Event{
-				Phase:    getAction.PhaseSync,
-				Type:     getAction.EventCompleted,
+			handler.EmitEvent(GetEvent{
+				Phase:    GetPhaseSync,
+				Type:     GetEventCompleted,
 				Branch:   branchName,
 				PRNumber: branchPRInfo[branchName],
 				IsNew:    true,
 			})
 		} else {
 			if opts.Force {
-				if _, err := eng.RunGitCommandWithContext(gctx, "reset", "--hard", fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
+				if err := eng.ResetHard(gctx, fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
 					return fmt.Errorf("failed to reset branch %s: %w", branchName, err)
 				}
 			} else {
 				// Try to merge. If conflicts, this will error and we'll stop.
-				if _, err := eng.RunGitCommandWithContext(gctx, "merge", fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
+				if err := eng.Merge(gctx, fmt.Sprintf("%s/%s", remote, branchName), engine.MergeOptions{}); err != nil {
 					return fmt.Errorf("conflict during sync of %s. Resolve conflicts and try again: %w", branchName, err)
 				}
 			}
@@ -205,9 +284,9 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 			branchesUpdated++
 
 			// Emit sync event
-			handler.EmitEvent(getAction.Event{
-				Phase:    getAction.PhaseSync,
-				Type:     getAction.EventCompleted,
+			handler.EmitEvent(GetEvent{
+				Phase:    GetPhaseSync,
+				Type:     GetEventCompleted,
 				Branch:   branchName,
 				PRNumber: branchPRInfo[branchName],
 				IsNew:    false,
@@ -216,11 +295,11 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 	}
 
 	// Fetch and apply remote metadata for all branches in the stack
-	if err := git.FetchMetadataRefs(); err != nil {
+	if err := eng.Git().FetchMetadataRefs(); err != nil {
 		splog.Debug("No remote metadata to fetch: %v", err)
 	} else {
 		// Configure refspec so future git fetch commands also fetch metadata
-		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
 			splog.Debug("Failed to configure metadata refspec: %v", err)
 		}
 		if err := eng.LoadRemoteMetadataCache(); err != nil {
@@ -294,7 +373,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler get
 	targetBranchObj = eng.GetBranch(targetBranch)
 	isFrozenFinal := targetBranchObj.IsFrozen()
 	upToDate := branchesCreated == 0 && branchesUpdated == 0 && restacked == 0
-	handler.Complete(getAction.Summary{
+	handler.Complete(GetSummary{
 		TargetBranch:    targetBranch,
 		BranchesCreated: branchesCreated,
 		BranchesUpdated: branchesUpdated,

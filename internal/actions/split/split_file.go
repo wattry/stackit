@@ -9,7 +9,6 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -58,8 +57,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 	}
 
 	// Checkout files from branchToSplit
-	args := append([]string{"checkout", branchToSplit.GetName(), "--"}, pathspecs...)
-	if _, err := git.RunGitCommandWithContext(ctx, args...); err != nil {
+	if err := eng.CheckoutPaths(ctx, branchToSplit.GetName(), pathspecs); err != nil {
 		// Cleanup: delete the new branch
 		_ = eng.DeleteBranch(ctx, newBranch)
 		return nil, fmt.Errorf("failed to checkout files: %w", err)
@@ -90,8 +88,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 	}
 
 	// Remove the files from the original branch (both index and working directory)
-	args = append([]string{"rm"}, pathspecs...)
-	if _, err := git.RunGitCommandWithContext(ctx, args...); err != nil {
+	if err := eng.RemovePaths(ctx, pathspecs); err != nil {
 		return nil, fmt.Errorf("failed to remove files: %w", err)
 	}
 

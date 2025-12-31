@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // ApplySplitToCommits creates branches at specified commit points
@@ -16,7 +18,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 	}
 
 	// Get metadata for the branch being split
-	meta, err := e.readMetadataRef(opts.BranchToSplit)
+	meta, err := e.git.ReadMetadata(opts.BranchToSplit)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -48,7 +50,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		}
 
 		// Create branch at that SHA
-		_, err = e.git.RunGitCommandWithContext(ctx, "branch", "-f", branchName, branchRevision)
+		err = e.git.CreateBranchForce(ctx, branchName, branchRevision)
 		if err != nil {
 			return fmt.Errorf("failed to create branch %s: %w", branchName, err)
 		}
@@ -61,14 +63,14 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		}
 
 		// Track branch with parent
-		newMeta := &Meta{
+		newMeta := &git.Meta{
 			ParentBranchName:     &lastBranchName,
 			ParentBranchRevision: &lastBranchRevision,
 		}
 
 		// Preserve PR info if applicable
 		if prInfo != nil {
-			newMeta.PrInfo = &PrInfoPersistence{
+			newMeta.PrInfo = &git.PrInfoPersistence{
 				Number:  prInfo.Number(),
 				Title:   stringPtr(prInfo.Title()),
 				Body:    stringPtr(prInfo.Body()),
@@ -79,7 +81,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 			}
 		}
 
-		if err := e.writeMetadataRef(branchName, newMeta); err != nil {
+		if err := e.git.WriteMetadata(branchName, newMeta); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", branchName, err)
 		}
 
@@ -125,7 +127,7 @@ func (e *engineImpl) Detach(ctx context.Context, revision string) error {
 	defer e.mu.Unlock()
 
 	// Checkout the revision in detached HEAD state
-	_, err := e.git.RunGitCommandWithContext(ctx, "checkout", "--detach", revision)
+	err := e.git.CheckoutDetached(ctx, revision)
 	if err != nil {
 		return fmt.Errorf("failed to detach HEAD: %w", err)
 	}
@@ -161,16 +163,16 @@ func (e *engineImpl) DetachAndResetBranchChanges(ctx context.Context, branchName
 	}
 
 	// Detach HEAD to the branch revision first
-	_, err = e.git.RunGitCommandWithContext(ctx, "checkout", "--detach", branchRevision)
+	err = e.git.CheckoutDetached(ctx, branchRevision)
 	if err != nil {
 		return fmt.Errorf("failed to detach HEAD: %w", err)
 	}
 
 	// Soft reset to the merge base - this keeps all the branch's changes
 	// but unstages them, allowing the user to re-stage them interactively
-	_, err = e.git.RunGitCommandWithContext(ctx, "reset", mergeBase)
+	err = e.git.MixedReset(ctx, mergeBase)
 	if err != nil {
-		return fmt.Errorf("failed to soft reset: %w", err)
+		return fmt.Errorf("failed to mixed reset: %w", err)
 	}
 
 	e.currentBranch = ""
@@ -183,7 +185,7 @@ func (e *engineImpl) ForceCheckoutBranch(ctx context.Context, branch Branch) err
 	defer e.mu.Unlock()
 
 	branchName := branch.GetName()
-	_, err := e.git.RunGitCommandWithContext(ctx, "checkout", "-f", branchName)
+	err := e.git.CheckoutBranchForce(ctx, branchName)
 	if err != nil {
 		return fmt.Errorf("failed to force checkout branch: %w", err)
 	}

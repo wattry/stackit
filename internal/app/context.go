@@ -1,5 +1,9 @@
 // Package app provides a context type that holds the engine and logger
 // for use throughout the application. This avoids passing multiple parameters.
+// Package app provides the execution context for stackit commands.
+//
+// It encapsulates shared dependencies and configuration needed by actions,
+// such as the engine instance, logger, and repository root path.
 package app
 
 import (
@@ -28,6 +32,14 @@ type Context struct {
 	Verify      bool
 	Debug       bool
 	Quiet       bool
+}
+
+// Git returns the git runner from the engine
+func (c *Context) Git() git.Runner {
+	if c.Engine == nil {
+		return nil
+	}
+	return c.Engine.Git()
 }
 
 // GlobalOptions holds settings from global flags
@@ -165,7 +177,7 @@ func NewContextAuto(ctx context.Context, repoRoot string, opts GlobalOptions) (*
 	runtimeCtx.Context = ctx
 
 	// Try to create real GitHub client (may fail if no token)
-	ghClient, err := github.NewRealGitHubClient(ctx)
+	ghClient, err := github.NewGitHubClient(ctx, runtimeCtx.Git())
 	if err == nil {
 		runtimeCtx.GitHubClient = ghClient
 	}
@@ -181,15 +193,11 @@ func GetContext(ctx context.Context, opts GlobalOptions) (*Context, error) {
 		return NewContextAuto(ctx, "", opts)
 	}
 
-	// Initialize git repository
-	if err := git.InitDefaultRepo(); err != nil {
-		return nil, fmt.Errorf("not a git repository: %w", err)
-	}
-
-	// Get repo root
-	repoRoot, err := git.GetRepoRoot()
+	// Get repo root using a runner
+	runner := git.NewRunner()
+	repoRoot, err := runner.DiscoverRepoRoot()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get repo root: %w", err)
+		return nil, fmt.Errorf("not a git repository: %w", err)
 	}
 
 	// Check if initialized

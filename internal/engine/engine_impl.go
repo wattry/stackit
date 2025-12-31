@@ -13,14 +13,14 @@ type engineImpl struct {
 	trunk             string
 	currentBranch     string
 	branches          []string
-	parentMap         map[string]string   // branch -> parent
-	childrenMap       map[string][]string // branch -> children
-	scopeMap          map[string]string   // branch -> scope
-	lockedMap         map[string]bool     // branch -> locked
-	frozenMap         map[string]bool     // branch -> frozen (local-only)
-	remoteShas        map[string]string   // branch -> remote SHA (populated by PopulateRemoteShas)
-	remoteMetaCache   map[string]*Meta    // branch -> remote metadata
-	localModified     map[string]bool     // branches with local changes not yet pushed
+	parentMap         map[string]string    // branch -> parent
+	childrenMap       map[string][]string  // branch -> children
+	scopeMap          map[string]string    // branch -> scope
+	lockedMap         map[string]bool      // branch -> locked
+	frozenMap         map[string]bool      // branch -> frozen (local-only)
+	remoteShas        map[string]string    // branch -> remote SHA (populated by PopulateRemoteShas)
+	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata
+	localModified     map[string]bool      // branches with local changes not yet pushed
 	maxUndoStackDepth int
 	git               git.Runner
 	mu                sync.RWMutex
@@ -30,7 +30,7 @@ type engineImpl struct {
 func NewEngine(opts Options) (Engine, error) {
 	g := opts.Git
 	if g == nil {
-		g = git.NewRealRunner()
+		g = git.NewRunner()
 	}
 
 	if err := g.InitDefaultRepo(); err != nil {
@@ -59,7 +59,7 @@ func NewEngine(opts Options) (Engine, error) {
 		lockedMap:         make(map[string]bool),
 		frozenMap:         make(map[string]bool),
 		remoteShas:        make(map[string]string),
-		remoteMetaCache:   make(map[string]*Meta),
+		remoteMetaCache:   make(map[string]*git.Meta),
 		localModified:     make(map[string]bool),
 		maxUndoStackDepth: maxDepth,
 		git:               g,
@@ -85,7 +85,7 @@ func NewEngine(opts Options) (Engine, error) {
 // maybeAutoFetchRemoteMetadata fetches remote metadata if this appears to be a fresh clone
 func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
 	// Check if refspec is already configured
-	refspecs, err := git.GetConfigAll("remote.origin.fetch")
+	refspecs, err := e.git.GetConfigAll("remote.origin.fetch")
 	if err == nil {
 		metadataRefspec := "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*"
 		for _, rs := range refspecs {
@@ -98,13 +98,13 @@ func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
 
 	// Not configured yet - this might be a fresh clone
 	// Try to fetch metadata refs
-	if err := git.FetchMetadataRefs(); err != nil {
+	if err := e.git.FetchMetadataRefs(); err != nil {
 		// No remote metadata available, or error fetching - that's okay
 		return
 	}
 
 	// Configure refspec for future fetches
-	_ = git.EnsureMetadataRefspecConfigured()
+	_ = e.git.EnsureMetadataRefspecConfigured()
 
 	// Load remote metadata cache
 	_ = e.LoadRemoteMetadataCache()
@@ -112,48 +112,53 @@ func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
 
 // Reset clears all branch metadata and rebuilds with new trunk
 func (e *engineImpl) Reset(newTrunkName string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.trunk = newTrunkName
-
-	metadataRefs, err := e.ListMetadataRefs()
+	metadataRefs, err := e.git.ListMetadata()
 	if err != nil {
 		return fmt.Errorf("failed to get metadata refs: %w", err)
 	}
 
 	for branchName := range metadataRefs {
-		if err := e.DeleteMetadataRef(e.GetBranch(branchName)); err != nil {
+		if err := e.git.DeleteMetadata(branchName); err != nil {
 			continue
 		}
 	}
 
-	// Already holding lock, so call rebuildInternal directly
-	return e.rebuildInternal(true)
+	e.mu.Lock()
+	e.trunk = newTrunkName
+	e.mu.Unlock()
+
+	return e.rebuild()
+}
+
+func (e *engineImpl) Git() git.Runner {
+	return e.git
 }
 
 // Rebuild reloads branch cache with new trunk
 func (e *engineImpl) Rebuild(newTrunkName string) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	e.trunk = newTrunkName
+	e.mu.Unlock()
 
-	// Already holding lock, so call rebuildInternal directly
-	return e.rebuildInternal(true)
+	return e.rebuild()
 }
 
 // PopulateRemoteShas populates remote branch information by fetching SHAs from remote
 func (e *engineImpl) PopulateRemoteShas() error {
 	remote := e.git.GetRemote()
 	remoteShas, err := e.git.FetchRemoteShas(remote)
-	if err != nil {
-		// Don't fail if we can't fetch remote SHAs (e.g., offline)
-		return nil
-	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	if err != nil {
+		// Don't fail if we can't fetch remote SHAs (e.g., offline)
+		// But ensure the map is at least initialized
+		if e.remoteShas == nil {
+			e.remoteShas = make(map[string]string)
+		}
+		return nil
+	}
 
 	e.remoteShas = remoteShas
 	return nil

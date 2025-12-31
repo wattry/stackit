@@ -1,3 +1,4 @@
+// Package create provides functionality for creating new stacked branches.
 package create
 
 import (
@@ -7,6 +8,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -33,7 +35,7 @@ func Action(ctx *app.Context, opts Options) error {
 	splog := ctx.Splog
 
 	// Get current branch
-	currentBranch, err := utils.ValidateOnBranch(ctx.Engine)
+	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
 		return err
 	}
@@ -61,12 +63,12 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Stage changes based on flags or prompt
 	if opts.All || opts.Update || opts.Patch {
-		stagingOpts := utils.StagingOptions{
+		stagingOpts := git.StagingOptions{
 			All:    opts.All,
 			Update: opts.Update,
 			Patch:  opts.Patch,
 		}
-		if err := utils.StageChanges(ctx.Context, stagingOpts); err != nil {
+		if err := ctx.Git().StageChanges(ctx.Context, stagingOpts); err != nil {
 			return err
 		}
 		hasStaged = true
@@ -181,7 +183,7 @@ func determineBranch(ctx *app.Context, opts *Options, commitMessage string, scop
 
 		// Generate branch name from pattern
 		var err error
-		branchName, err = pattern.GetBranchName(ctx.Context, commitMessage, scope)
+		branchName, err = pattern.GetBranchName(ctx, commitMessage, scope)
 		if err != nil {
 			return engine.Branch{}, err
 		}

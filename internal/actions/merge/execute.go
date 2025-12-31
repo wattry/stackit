@@ -34,6 +34,7 @@ type mergeExecuteEngine interface {
 	engine.BranchReader
 	engine.BranchWriter
 	engine.SyncManager
+	engine.SplitManager
 }
 
 // ExecuteOptions contains options for executing a merge plan
@@ -185,7 +186,7 @@ func ExecuteInWorktree(ctx context.Context, eng mergeExecuteEngine, splog *tui.S
 				} else {
 					// Refresh the worktree in case the branch ref was moved (e.g. restacked or trunk pulled)
 					// We use git reset --merge HEAD to safely refresh the worktree without losing local changes.
-					_, _ = eng.RunGitCommand("reset", "--merge", "HEAD")
+					_ = eng.ResetMerge(ctx, "HEAD")
 				}
 			}
 		}
@@ -657,7 +658,7 @@ func executeUpdatePRBase(ctx context.Context, eng mergeExecuteEngine, githubClie
 	}
 	var currentRev string
 	if currentBranch == "" {
-		currentRev, _ = eng.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+		currentRev, _ = eng.GetCurrentRevision(ctx)
 	}
 
 	gitResult, err := eng.Rebase(ctx, step.BranchName, trunkName, oldParentRev)
@@ -666,7 +667,7 @@ func executeUpdatePRBase(ctx context.Context, eng mergeExecuteEngine, githubClie
 	if currentBranch != "" {
 		_ = eng.CheckoutBranch(ctx, eng.GetBranch(currentBranch))
 	} else if currentRev != "" {
-		_, _ = eng.RunGitCommandWithContext(ctx, "checkout", "--detach", currentRev)
+		_ = eng.Detach(ctx, currentRev)
 	}
 
 	if err != nil {

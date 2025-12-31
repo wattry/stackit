@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/go-github/v62/github"
 	"golang.org/x/oauth2"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 const (
@@ -78,7 +80,7 @@ func CreatePullRequest(ctx context.Context, client *github.Client, owner, repo s
 }
 
 // UpdatePullRequest updates an existing pull request
-func UpdatePullRequest(ctx context.Context, client *github.Client, owner, repo string, prNumber int, opts UpdatePROptions) error {
+func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Runner, owner, repo string, prNumber int, opts UpdatePROptions) error {
 	// Handle draft status changes separately using GraphQL API, as the REST API
 	// doesn't support updating draft status. We need to use GraphQL mutation
 	// markPullRequestReadyForReview or convertPullRequestToDraft.
@@ -96,7 +98,7 @@ func UpdatePullRequest(ctx context.Context, client *github.Client, owner, repo s
 					return fmt.Errorf("PR %d does not have a Node ID", prNumber)
 				}
 
-				if err := updatePRDraftStatus(ctx, *pr.NodeID, desiredDraft); err != nil {
+				if err := updatePRDraftStatus(ctx, runner, *pr.NodeID, desiredDraft); err != nil {
 					return fmt.Errorf("failed to update draft status for PR %d: %w", prNumber, err)
 				}
 			}
@@ -187,13 +189,13 @@ func GetPullRequestByBranch(ctx context.Context, client *github.Client, owner, r
 }
 
 // GetGitHubClient creates a GitHub client with authentication
-func GetGitHubClient(ctx context.Context) (*github.Client, string, string, error) {
-	token, err := getGitHubToken()
+func GetGitHubClient(ctx context.Context, runner git.Runner) (*github.Client, string, string, error) {
+	token, err := getGitHubToken(runner)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to get GitHub token: %w", err)
 	}
 
-	repoInfo, err := getRepoInfoWithHostname(ctx)
+	repoInfo, err := getRepoInfoWithHostname(ctx, runner)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to get repository info: %w", err)
 	}
@@ -364,15 +366,15 @@ func GetPRChecksStatus(ctx context.Context, client *github.Client, owner, repo, 
 }
 
 // updatePRDraftStatus updates the draft status of a PR using GitHub's GraphQL API
-func updatePRDraftStatus(ctx context.Context, pullRequestID string, isDraft bool) error {
+func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID string, isDraft bool) error {
 	// Get GitHub token
-	token, err := getGitHubToken()
+	token, err := getGitHubToken(runner)
 	if err != nil {
 		return fmt.Errorf("failed to get GitHub token: %w", err)
 	}
 
 	// Get repository info to determine hostname
-	repoInfo, err := getRepoInfoWithHostname(ctx)
+	repoInfo, err := getRepoInfoWithHostname(ctx, runner)
 	if err != nil {
 		return fmt.Errorf("failed to get repository info: %w", err)
 	}

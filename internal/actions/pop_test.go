@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -33,12 +32,12 @@ func TestPopAction(t *testing.T) {
 		require.Equal(t, "main", currentBranch)
 
 		// Verify branch1 is deleted
-		branches, err := git.GetAllBranchNames()
+		branches, err := s.Engine.Git().GetAllBranchNames()
 		require.NoError(t, err)
 		require.NotContains(t, branches, "branch1")
 
 		// Verify changes are staged
-		hasStaged, err := git.HasStagedChanges(s.Context)
+		hasStaged, err := s.Engine.Git().HasStagedChanges(s.Context.Context)
 		require.NoError(t, err)
 		require.True(t, hasStaged, "Changes should be staged after pop")
 	})
@@ -64,7 +63,7 @@ func TestPopAction(t *testing.T) {
 		require.Equal(t, "main", parent.GetName())
 
 		// Verify branch1 is deleted
-		branches, err := git.GetAllBranchNames()
+		branches, err := s.Engine.Git().GetAllBranchNames()
 		require.NoError(t, err)
 		require.NotContains(t, branches, "branch1")
 	})

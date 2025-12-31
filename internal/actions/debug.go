@@ -8,7 +8,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 )
 
 // DebugOptions contains options for the debug command
@@ -128,7 +127,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 	currentBranch := eng.CurrentBranch()
 	allBranches := eng.AllBranches()
 
-	metadataRefs, err := eng.ListMetadataRefs()
+	metadataRefs, err := eng.Git().ListMetadata()
 	if err != nil {
 		metadataRefs = make(map[string]string)
 	}
@@ -137,7 +136,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 	for i, b := range allBranches {
 		branchNames[i] = b.GetName()
 	}
-	allMeta, _ := eng.BatchReadMetadataRefs(branchNames)
+	allMeta, _ := eng.Git().BatchReadMetadata(branchNames)
 
 	branchInfos := make([]BranchInfo, 0, len(allBranches))
 	for _, branch := range allBranches {
@@ -208,7 +207,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 	repoInfo := RepositoryInfo{
 		RepoRoot: repoRoot,
 	}
-	remoteURL, err := git.RunGitCommandWithContext(ctx.Context, "config", "--get", "remote.origin.url")
+	remoteURL, err := eng.GetRemoteURL(ctx.Context)
 	if err == nil {
 		repoInfo.RemoteURL = remoteURL
 	}

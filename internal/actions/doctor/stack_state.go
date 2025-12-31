@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -13,7 +12,7 @@ import (
 // checkStackState performs stack state and metadata integrity checks
 func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, errors []string, fix bool) ([]string, []string) {
 	// Get all branches
-	allBranches, err := git.GetAllBranchNames()
+	allBranches, err := eng.Git().GetAllBranchNames()
 	if err != nil {
 		errors = append(errors, fmt.Sprintf("failed to get branch names: %v", err))
 		splog.Error("  failed to get branch names: %v", err)
@@ -21,7 +20,7 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 	}
 
 	// Get all metadata refs
-	metadataRefs, err := eng.ListMetadataRefs()
+	metadataRefs, err := eng.Git().ListMetadata()
 	if err != nil {
 		errors = append(errors, fmt.Sprintf("failed to get metadata refs: %v", err))
 		splog.Error("  failed to get metadata refs: %v", err)
@@ -40,7 +39,7 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 		if !branchSet[branchName] {
 			orphanedCount++
 			if fix {
-				if err := eng.DeleteMetadataRef(eng.GetBranch(branchName)); err != nil {
+				if err := eng.Git().DeleteMetadata(branchName); err != nil {
 					splog.Error("  Failed to prune orphaned metadata for %s: %v", branchName, err)
 					warnings = append(warnings, fmt.Sprintf("orphaned metadata found for deleted branch '%s' (fix failed)", branchName))
 				} else {
@@ -72,7 +71,7 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 	for branchName := range metadataRefs {
 		metadataRefNames = append(metadataRefNames, branchName)
 	}
-	allMeta, allMetaErrs := eng.BatchReadMetadataRefs(metadataRefNames)
+	allMeta, allMetaErrs := eng.Git().BatchReadMetadata(metadataRefNames)
 
 	corruptedCount := 0
 	for _, branchName := range metadataRefNames {

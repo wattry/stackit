@@ -19,10 +19,7 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	branchName := branch.GetName()
 
 	// Save current state to restore later
-	originalRef, _ := e.git.RunGitCommandWithContext(ctx, "rev-parse", "--abbrev-ref", "HEAD")
-	if originalRef == "HEAD" || originalRef == "" {
-		originalRef, _ = e.git.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
-	}
+	originalRef, _ := e.git.GetCurrentBranchOrSHA(ctx)
 	originalRef = strings.TrimSpace(originalRef)
 
 	// Track if we've modified branch state - used for cleanup on error
@@ -31,17 +28,17 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	// Cleanup function to restore state on error
 	cleanup := func() {
 		// Reset any unmerged/dirty state
-		_, _ = e.git.RunGitCommandWithContext(ctx, "reset", "--hard", "HEAD")
+		_ = e.git.HardReset(ctx, "HEAD")
 		// Return to original ref
 		if originalRef != "" {
-			_, _ = e.git.RunGitCommandWithContext(ctx, "checkout", originalRef)
+			_ = e.git.CheckoutBranch(ctx, originalRef)
 		}
 	}
 
 	defer func() {
 		// Always try to return to original ref, but don't reset if successful
 		if originalRef != "" {
-			_, _ = e.git.RunGitCommandWithContext(ctx, "checkout", originalRef)
+			_ = e.git.CheckoutBranch(ctx, originalRef)
 		}
 	}()
 
@@ -56,7 +53,7 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	}
 
 	// Get base revision (parent of the first commit in the branch)
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata for %s: %w", branchName, err)
 	}
@@ -66,7 +63,7 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	currentBase := *meta.ParentBranchRevision
 
 	// Checkout base in detached HEAD
-	if _, err := e.git.RunGitCommandWithContext(ctx, "checkout", "--detach", currentBase); err != nil {
+	if err := e.git.CheckoutDetached(ctx, currentBase); err != nil {
 		return fmt.Errorf("failed to checkout base %s: %w", currentBase[:8], err)
 	}
 	branchModified = true
@@ -77,8 +74,8 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 		hunks, hasHunks := hunksByCommit[commitSHA]
 
 		// 1. Cherry-pick the original commit
-		if _, err := e.git.RunGitCommandWithContext(ctx, "cherry-pick", commitSHA); err != nil {
-			_, _ = e.git.RunGitCommandWithContext(ctx, "cherry-pick", "--abort")
+		if err := e.git.CherryPickSimple(ctx, commitSHA); err != nil {
+			_ = e.git.CherryPickAbort(ctx)
 			cleanup()
 			return fmt.Errorf("failed to cherry-pick %s: %w", commitSHA[:8], err)
 		}
@@ -120,22 +117,22 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 
 			// Apply hunks to the worktree and index using --3way for better conflict handling
 			// --3way allows git to fall back to three-way merge when the patch context doesn't match exactly
-			if _, err := e.git.RunGitCommandWithContext(ctx, "apply", "--3way", patchFile); err != nil {
+			if err := e.git.ApplyPatch(ctx, patchFile, true); err != nil {
 				cleanup()
 				return fmt.Errorf("failed to apply hunks for commit %s: %w", commitSHA[:8], err)
 			}
 
 			// Check for merge conflicts - git apply --3way can succeed but leave conflicts
-			unmergedOutput, _ := e.git.RunGitCommandWithContext(ctx, "diff", "--name-only", "--diff-filter=U")
-			if strings.TrimSpace(unmergedOutput) != "" {
+			unmerged, _ := e.git.GetUnmergedFiles(ctx)
+			if len(unmerged) > 0 {
 				// There are unmerged files - this means --3way resulted in conflicts
-				conflictFiles := strings.TrimSpace(unmergedOutput)
+				conflictFiles := strings.Join(unmerged, "\n")
 				cleanup()
 				return fmt.Errorf("merge conflict while applying hunks for commit %s. Conflicting files:\n%s\n\nThe changes could not be automatically merged. Consider manually applying the changes or splitting them into separate commits", commitSHA[:8], conflictFiles)
 			}
 
 			// 3. Amend the commit
-			if _, err := e.git.RunGitCommandWithContext(ctx, "commit", "-a", "--amend", "--no-edit", "--no-verify"); err != nil {
+			if err := e.git.CommitAmendNoEdit(ctx); err != nil {
 				cleanup()
 				return fmt.Errorf("failed to amend commit %s: %w", commitSHA[:8], err)
 			}
@@ -144,7 +141,7 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	_ = branchModified // Mark as used
 
 	// Get new tip
-	newTip, err := e.git.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	newTip, err := e.git.GetCurrentRevision(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get new tip: %w", err)
 	}

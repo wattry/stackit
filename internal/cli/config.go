@@ -35,13 +35,10 @@ Examples:
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			// Get repo root
-			if err := git.InitDefaultRepo(); err != nil {
-				return fmt.Errorf("not a git repository: %w", err)
-			}
-
-			repoRoot, err := git.GetRepoRoot()
+			runner := git.NewRunner()
+			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {
-				return fmt.Errorf("failed to get repo root: %w", err)
+				return fmt.Errorf("not a git repository: %w", err)
 			}
 
 			// If --list flag is set, or terminal is not interactive, show list
@@ -71,13 +68,10 @@ func newConfigGetCmd() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			// Get repo root
-			if err := git.InitDefaultRepo(); err != nil {
-				return fmt.Errorf("not a git repository: %w", err)
-			}
-
-			repoRoot, err := git.GetRepoRoot()
+			runner := git.NewRunner()
+			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {
-				return fmt.Errorf("failed to get repo root: %w", err)
+				return fmt.Errorf("not a git repository: %w", err)
 			}
 
 			key := args[0]
@@ -111,13 +105,10 @@ func newConfigSetCmd() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			// Get repo root
-			if err := git.InitDefaultRepo(); err != nil {
-				return fmt.Errorf("not a git repository: %w", err)
-			}
-
-			repoRoot, err := git.GetRepoRoot()
+			runner := git.NewRunner()
+			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {
-				return fmt.Errorf("failed to get repo root: %w", err)
+				return fmt.Errorf("not a git repository: %w", err)
 			}
 
 			key := args[0]

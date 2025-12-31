@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -29,7 +28,7 @@ func TestFoldAction(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify branch2 is deleted
-		branches, err := git.GetAllBranchNames()
+		branches, err := s.Engine.Git().GetAllBranchNames()
 		require.NoError(t, err)
 		require.NotContains(t, branches, "branch2")
 
@@ -67,7 +66,7 @@ func TestFoldAction(t *testing.T) {
 		require.Equal(t, "branch1", parent.GetName())
 
 		// Verify branch2 is deleted
-		branches, err := git.GetAllBranchNames()
+		branches, err := s.Engine.Git().GetAllBranchNames()
 		require.NoError(t, err)
 		require.NotContains(t, branches, "branch2")
 	})
@@ -87,7 +86,7 @@ func TestFoldAction(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify branch1 is deleted
-		branches, err := git.GetAllBranchNames()
+		branches, err := s.Engine.Git().GetAllBranchNames()
 		require.NoError(t, err)
 		require.NotContains(t, branches, "branch1")
 
@@ -125,7 +124,7 @@ func TestFoldAction(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify branch1 is deleted
-		branches, err := git.GetAllBranchNames()
+		branches, err := s.Engine.Git().GetAllBranchNames()
 		require.NoError(t, err)
 		require.NotContains(t, branches, "branch1")
 
@@ -282,7 +281,7 @@ func TestFoldAction(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify branch2 is deleted and we're on branch1
-		branches, _ := git.GetAllBranchNames()
+		branches, _ := s.Engine.Git().GetAllBranchNames()
 		require.NotContains(t, branches, "branch2")
 		current, _ := s.Scene.Repo.CurrentBranchName()
 		require.Equal(t, "branch1", current)
@@ -348,7 +347,7 @@ func TestFoldAction(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify branch1 is deleted
-		branches, _ := git.GetAllBranchNames()
+		branches, _ := s.Engine.Git().GetAllBranchNames()
 		require.NotContains(t, branches, "branch1")
 
 		// Verify we're on main

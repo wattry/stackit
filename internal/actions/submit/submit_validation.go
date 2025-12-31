@@ -10,15 +10,17 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // ValidateBranchesToSubmit validates that branches are ready to submit
 func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 	// Sync PR info first
-	repoOwner, repoName, _ := utils.GetRepoInfo(ctx.Context)
+	repoOwner, repoName, err := ctx.Git().GetRepoInfo(ctx.Context)
+	if err != nil {
+		return err
+	}
 	if repoOwner != "" && repoName != "" {
-		if err := github.SyncPrInfo(ctx.Context, branches, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
+		if err := github.SyncPrInfo(ctx.Context, ctx.Git(), branches, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
 			branch := ctx.Engine.GetBranch(name)
 			_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
 				&prInfo.Number,

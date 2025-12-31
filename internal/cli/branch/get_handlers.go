@@ -5,14 +5,14 @@ import (
 	"strings"
 	stdsync "sync"
 
-	getAction "stackit.dev/stackit/internal/actions/get"
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/handlers"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // NewGetHandler creates the appropriate handler based on TTY availability
-func NewGetHandler(splog *tui.Splog) getAction.Handler {
+func NewGetHandler(splog *tui.Splog) actions.GetHandler {
 	// For now, just use simple handler (can add interactive later)
 	return NewSimpleGetHandler(splog)
 }
@@ -20,7 +20,7 @@ func NewGetHandler(splog *tui.Splog) getAction.Handler {
 // SimpleGetHandler provides streaming text output for non-TTY environments
 type SimpleGetHandler struct {
 	splog        *tui.Splog
-	currentPhase getAction.Phase
+	currentPhase actions.GetPhase
 	mu           stdsync.Mutex
 	targetBranch string
 	prNumber     *int
@@ -42,12 +42,12 @@ func (h *SimpleGetHandler) Start(targetBranch string, prNumber *int) {
 }
 
 // EmitEvent handles progress updates
-func (h *SimpleGetHandler) EmitEvent(event getAction.Event) {
+func (h *SimpleGetHandler) EmitEvent(event actions.GetEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	// Handle phase transitions
-	if event.Type == getAction.EventStarted && event.Phase != h.currentPhase {
+	if event.Type == actions.GetEventStarted && event.Phase != h.currentPhase {
 		h.currentPhase = event.Phase
 		h.printPhaseHeader(event.Phase)
 		return
@@ -58,7 +58,7 @@ func (h *SimpleGetHandler) EmitEvent(event getAction.Event) {
 }
 
 // Complete is called when get finishes
-func (h *SimpleGetHandler) Complete(summary getAction.Summary) {
+func (h *SimpleGetHandler) Complete(summary actions.GetSummary) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -98,35 +98,35 @@ func (h *SimpleGetHandler) Complete(summary getAction.Summary) {
 	}
 }
 
-func (h *SimpleGetHandler) printPhaseHeader(phase getAction.Phase) {
+func (h *SimpleGetHandler) printPhaseHeader(phase actions.GetPhase) {
 	// Add spacing between phases (but not before first phase)
-	if h.currentPhase != "" && phase != getAction.PhaseFetch {
+	if h.currentPhase != "" && phase != actions.GetPhaseFetch {
 		h.splog.Newline()
 	}
 
 	switch phase {
-	case getAction.PhaseFetch:
+	case actions.GetPhaseFetch:
 		h.splog.Info("📥 Fetching from remote...")
-	case getAction.PhaseSync:
+	case actions.GetPhaseSync:
 		h.splog.Info("🔄 Syncing branches...")
-	case getAction.PhaseMetadata:
+	case actions.GetPhaseMetadata:
 		// Metadata phase is silent
-	case getAction.PhaseCheckout:
+	case actions.GetPhaseCheckout:
 		// Checkout is handled in Complete
 	}
 }
 
-func (h *SimpleGetHandler) printEventLine(event getAction.Event) {
+func (h *SimpleGetHandler) printEventLine(event actions.GetEvent) {
 	switch event.Phase {
-	case getAction.PhaseFetch:
+	case actions.GetPhaseFetch:
 		h.printFetchEvent(event)
-	case getAction.PhaseSync:
+	case actions.GetPhaseSync:
 		h.printSyncEvent(event)
 	}
 }
 
-func (h *SimpleGetHandler) printFetchEvent(event getAction.Event) {
-	if event.Type == getAction.EventCompleted {
+func (h *SimpleGetHandler) printFetchEvent(event actions.GetEvent) {
+	if event.Type == actions.GetEventCompleted {
 		if event.NewRevision != "" {
 			h.splog.Info("  %s fast-forwarded to %s",
 				style.ColorBranchName(event.Branch, false),
@@ -137,8 +137,8 @@ func (h *SimpleGetHandler) printFetchEvent(event getAction.Event) {
 	}
 }
 
-func (h *SimpleGetHandler) printSyncEvent(event getAction.Event) {
-	if event.Type != getAction.EventCompleted {
+func (h *SimpleGetHandler) printSyncEvent(event actions.GetEvent) {
+	if event.Type != actions.GetEventCompleted {
 		return
 	}
 

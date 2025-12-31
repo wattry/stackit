@@ -13,7 +13,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/components/tree"
-	"stackit.dev/stackit/internal/utils/concurrency"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // Options contains options for the foreach command
@@ -233,7 +233,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	var mu sync.Mutex
 	var firstErr error
 
-	concurrency.RunWithWorkers(branches, numJobs, func(branch engine.Branch) {
+	utils.RunWithWorkers(branches, numJobs, func(branch engine.Branch) {
 		select {
 		case <-runCtx.Done():
 			return
@@ -384,4 +384,113 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	}
 	res.output = output.String()
 	return res
+}
+
+// Event represents a feedback event from the foreach action.
+// Implementations should use type switches to handle specific event types.
+type Event interface {
+	foreachEvent() // marker method for type safety
+}
+
+// StackDisplayEvent indicates the initial stack visualization phase.
+// Handlers can use this to display the branches that will be processed.
+type StackDisplayEvent struct {
+	Stack   *tree.StackTree // tree structure for rendering the stack
+	Command string          // command being executed
+}
+
+func (StackDisplayEvent) foreachEvent() {}
+
+// ExecutionStartEvent indicates the execution phase is beginning.
+type ExecutionStartEvent struct {
+	Branches []BranchInfo
+}
+
+func (ExecutionStartEvent) foreachEvent() {}
+
+// BranchProgressEvent indicates per-branch execution progress.
+type BranchProgressEvent struct {
+	BranchName string
+	Status     BranchStatus
+	Output     string // command output (may be truncated)
+	Error      error  // set on failure
+}
+
+func (BranchProgressEvent) foreachEvent() {}
+
+// CompletionEvent indicates the action has finished.
+type CompletionEvent struct {
+	Success bool
+	Message string
+	Results []BranchResult // Consolidated results for all branches
+}
+
+func (CompletionEvent) foreachEvent() {}
+
+// BranchResult contains the final result for a branch
+type BranchResult struct {
+	BranchName string
+	Status     BranchStatus
+	Output     string
+	Error      error
+}
+
+// BranchStatus represents the status of a branch during execution.
+type BranchStatus string
+
+// BranchStatus values for tracking execution progress.
+const (
+	StatusPending BranchStatus = "pending"
+	StatusRunning BranchStatus = "running"
+	StatusDone    BranchStatus = "done"
+	StatusError   BranchStatus = "error"
+	StatusSkipped BranchStatus = "skipped"
+)
+
+// BranchInfo contains information about a branch for execution tracking.
+type BranchInfo struct {
+	Name string
+}
+
+// Handler receives events from the foreach action and handles user interaction.
+// Implementations should handle events appropriately for their UI context
+// (interactive terminal, non-interactive, dashboard, etc.)
+type Handler interface {
+	// OnEvent is called for each event during execution.
+	// Handlers should use type switches to handle specific event types.
+	OnEvent(event Event)
+}
+
+// ChannelHandler is a Handler that sends events to a channel.
+// Useful for async consumers like the dashboard.
+type ChannelHandler struct {
+	events chan Event
+}
+
+// NewChannelHandler creates a new ChannelHandler with a buffered channel.
+func NewChannelHandler(bufferSize int) *ChannelHandler {
+	return &ChannelHandler{
+		events: make(chan Event, bufferSize),
+	}
+}
+
+// OnEvent sends the event to the channel.
+// Non-blocking: if the channel is full, the event is dropped.
+func (h *ChannelHandler) OnEvent(e Event) {
+	select {
+	case h.events <- e:
+	default:
+		// Channel full, drop event to avoid blocking
+	}
+}
+
+// Events returns the event channel for reading.
+func (h *ChannelHandler) Events() <-chan Event {
+	return h.events
+}
+
+// Close closes the event channel.
+// Should be called when the action is complete.
+func (h *ChannelHandler) Close() {
+	close(h.events)
 }

@@ -1,3 +1,10 @@
+// Package tui provides the terminal user interface for stackit.
+//
+// It handles:
+//   - Interactive prompts and selections (using survey and bubbletea)
+//   - Structured logging and status reporting (Splog)
+//   - Terminal styling and colors (using lipgloss)
+//   - Progress indicators and UI components
 package tui
 
 import (
@@ -8,9 +15,9 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-isatty"
 
 	"stackit.dev/stackit/internal/tui/components/submit"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // Key constants for TUI interactions
@@ -215,34 +222,6 @@ func (m SubmitTUIModel) View() string {
 	return b.String()
 }
 
-var (
-	interactiveMode = true
-)
-
-// SetInteractive sets whether the TUI should be interactive
-func SetInteractive(interactive bool) {
-	interactiveMode = interactive
-}
-
-// IsTTY returns true if we can use a TTY for interactive TUI
-func IsTTY() bool {
-	if !interactiveMode {
-		return false
-	}
-	// First check if stdin/stdout are terminals
-	if !((isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())) &&
-		(isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()))) {
-		return false
-	}
-	// Also try to open /dev/tty to verify it's actually available
-	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return false
-	}
-	_ = f.Close()
-	return true
-}
-
 // RunSubmitTUI runs the submit TUI and returns when complete
 func RunSubmitTUI(items []submit.Item, submitFunc func(idx int) tea.Cmd) error {
 	m := NewSubmitTUIModel(items, submitFunc)
@@ -279,4 +258,13 @@ func RunSubmitTUISimple(items []submit.Item, submitFunc func(idx int) (string, e
 		splog.Info("  ✓ %s %s → %s", item.BranchName, actionDone, url)
 	}
 	return nil
+}
+
+// Re-export from utils for backward compatibility
+func IsTTY() bool {
+	return utils.IsTTY()
+}
+
+func SetInteractive(interactive bool) {
+	utils.SetInteractive(interactive)
 }

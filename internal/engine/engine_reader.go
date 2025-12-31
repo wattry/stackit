@@ -25,7 +25,8 @@ func (e *engineImpl) AllBranches() []Branch {
 func (e *engineImpl) CurrentBranch() *Branch {
 	current, err := e.git.GetCurrentBranch()
 	if err != nil {
-		current = "" // Not on a branch (e.g., detached HEAD)
+		// Not on a branch (e.g., detached HEAD)
+		current = ""
 	}
 
 	e.mu.Lock()
@@ -41,9 +42,18 @@ func (e *engineImpl) CurrentBranch() *Branch {
 	return &branch
 }
 
+// ValidateOnBranch ensures the user is on a branch
+func (e *engineImpl) ValidateOnBranch() (string, error) {
+	currentBranch := e.CurrentBranch()
+	if currentBranch == nil {
+		return "", fmt.Errorf("not on a branch")
+	}
+	return currentBranch.GetName(), nil
+}
+
 // GetPendingChanges returns the status of pending changes in the working directory
 func (e *engineImpl) GetPendingChanges(ctx context.Context) ([]PendingChange, error) {
-	output, err := e.git.RunGitCommandWithContext(ctx, "status", "--porcelain")
+	output, err := e.git.GetStatusPorcelain(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +138,6 @@ func (e *engineImpl) GetChildren(branch Branch) []Branch {
 	return []Branch{}
 }
 
-// GetChildrenInternal is deprecated - use GetChildren instead
-func (e *engineImpl) GetChildrenInternal(branchName string) []Branch {
-	return e.GetChildren(NewBranch(branchName, e))
-}
-
 // GetRelativeStack returns the stack relative to a branch
 // Returns branches in order: ancestors (if RecursiveParents), current (if IncludeCurrent), descendants (if RecursiveChildren)
 func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
@@ -173,22 +178,12 @@ func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
 	return result
 }
 
-// GetRelativeStackInternal is deprecated - GetRelativeStack already handles both Branch and internal calls
-func (e *engineImpl) GetRelativeStackInternal(branchName string, rng StackRange) []Branch {
-	return e.GetRelativeStack(NewBranch(branchName, e), rng)
-}
-
 // IsTrunk checks if a branch is the trunk
 func (e *engineImpl) IsTrunk(branch Branch) bool {
 	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return branchName == e.trunk
-}
-
-// IsTrunkInternal is deprecated - use IsTrunk instead
-func (e *engineImpl) IsTrunkInternal(branchName string) bool {
-	return e.IsTrunk(NewBranch(branchName, e))
 }
 
 // IsTracked checks if a branch is tracked (has metadata)
@@ -198,11 +193,6 @@ func (e *engineImpl) IsTracked(branch Branch) bool {
 	defer e.mu.RUnlock()
 	_, ok := e.parentMap[branchName]
 	return ok
-}
-
-// IsBranchTrackedInternal is deprecated - use IsTracked instead
-func (e *engineImpl) IsBranchTrackedInternal(branchName string) bool {
-	return e.IsTracked(NewBranch(branchName, e))
 }
 
 // GetScope returns the scope for a branch, inheriting from parent if not set
@@ -227,11 +217,6 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 		current = parent
 	}
 	return Empty()
-}
-
-// GetScopeInternal is deprecated - use GetScope instead
-func (e *engineImpl) GetScopeInternal(branchName string) Scope {
-	return e.GetScope(NewBranch(branchName, e))
 }
 
 // IsLocked checks if a branch is locked
@@ -266,11 +251,6 @@ func (e *engineImpl) getExplicitScope(branch Branch) Scope {
 	return e.GetExplicitScope(branch)
 }
 
-// GetExplicitScopeInternal is deprecated - use GetExplicitScope instead
-func (e *engineImpl) GetExplicitScopeInternal(branchName string) Scope {
-	return e.GetExplicitScope(NewBranch(branchName, e))
-}
-
 // IsUpToDate checks if a branch is up to date with its parent
 // A branch is up to date if its parent revision matches the stored parent revision
 func (e *engineImpl) IsUpToDate(branch Branch) bool {
@@ -294,7 +274,7 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 	}
 
 	// Get stored parent revision from metadata
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return false // No metadata, assume needs restack
 	}
@@ -307,20 +287,10 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 	return *meta.ParentBranchRevision == parentRev
 }
 
-// IsBranchUpToDateInternal is deprecated - use IsUpToDate instead
-func (e *engineImpl) IsBranchUpToDateInternal(branchName string) bool {
-	return e.IsUpToDate(NewBranch(branchName, e))
-}
-
 // GetCommitDate returns the commit date for a branch
 func (e *engineImpl) GetCommitDate(branch Branch) (time.Time, error) {
 	branchName := branch.GetName()
 	return e.git.GetCommitDate(branchName)
-}
-
-// GetCommitDateInternal is deprecated - use GetCommitDate instead
-func (e *engineImpl) GetCommitDateInternal(branchName string) (time.Time, error) {
-	return e.GetCommitDate(NewBranch(branchName, e))
 }
 
 // GetCommitAuthor returns the commit author for a branch
@@ -329,20 +299,10 @@ func (e *engineImpl) GetCommitAuthor(branch Branch) (string, error) {
 	return e.git.GetCommitAuthor(branchName)
 }
 
-// GetCommitAuthorInternal is deprecated - use GetCommitAuthor instead
-func (e *engineImpl) GetCommitAuthorInternal(branchName string) (string, error) {
-	return e.GetCommitAuthor(NewBranch(branchName, e))
-}
-
 // GetRevision returns the SHA of a branch
 func (e *engineImpl) GetRevision(branch Branch) (string, error) {
 	branchName := branch.GetName()
 	return e.git.GetRevision(branchName)
-}
-
-// GetRevisionInternal is deprecated - use GetRevision instead
-func (e *engineImpl) GetRevisionInternal(branchName string) (string, error) {
-	return e.GetRevision(NewBranch(branchName, e))
 }
 
 // GetCommitCount returns the number of commits for a branch
@@ -358,7 +318,7 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	}
 
 	// Get base revision (stored parent revision)
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	var base string
 	if err == nil && meta.ParentBranchRevision != nil {
 		base = *meta.ParentBranchRevision
@@ -390,11 +350,6 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	return len(commits), nil
 }
 
-// GetCommitCountInternal is deprecated - use GetCommitCount instead
-func (e *engineImpl) GetCommitCountInternal(branchName string) (int, error) {
-	return e.GetCommitCount(NewBranch(branchName, e))
-}
-
 // GetDiffStats returns diff stats for a branch
 func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	branchName := branch.GetName()
@@ -408,7 +363,7 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	}
 
 	// Get base revision (stored parent revision)
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	var base string
 	if err == nil && meta.ParentBranchRevision != nil {
 		base = *meta.ParentBranchRevision
@@ -431,7 +386,7 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	}
 
 	// Use git diff --numstat
-	output, err := e.git.RunGitCommand("diff", "--numstat", base, branchRev)
+	output, err := e.git.GetDiffNumstat(base, branchRev)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -455,25 +410,19 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	return added, deleted, nil
 }
 
-// GetDiffStatsInternal is deprecated - use GetDiffStats instead
-func (e *engineImpl) GetDiffStatsInternal(branchName string) (int, int, error) {
-	return e.GetDiffStats(NewBranch(branchName, e))
-}
-
 // BranchMatchesRemote checks if a branch matches its remote
 func (e *engineImpl) BranchMatchesRemote(branchName string) (bool, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	// Get local branch SHA
-	localSha, err := e.GetRevisionInternal(branchName)
-	if err != nil {
-		return false, nil
-	}
-
 	// First try to get remote SHA from cache (populated by PopulateRemoteShas)
 	remoteSha, exists := e.remoteShas[branchName]
 	if exists {
+		// Get local branch SHA
+		localSha, err := e.git.GetRevision(branchName)
+		if err != nil {
+			return false, nil
+		}
 		return localSha == remoteSha, nil
 	}
 
@@ -482,6 +431,12 @@ func (e *engineImpl) BranchMatchesRemote(branchName string) (bool, error) {
 	remoteTrackingSha, err := e.git.GetRemoteRevision(branchName)
 	if err != nil {
 		// No remote tracking branch exists
+		return false, nil
+	}
+
+	// Get local branch SHA
+	localSha, err := e.git.GetRevision(branchName)
+	if err != nil {
 		return false, nil
 	}
 
@@ -509,7 +464,7 @@ func (e *engineImpl) IsBranchEmpty(ctx context.Context, branchName string) (bool
 	}
 
 	// Get parent revision
-	parentRev, err := e.GetRevisionInternal(parent)
+	parentRev, err := e.git.GetRevision(parent)
 	if err != nil {
 		return false, err
 	}
@@ -587,7 +542,7 @@ func (e *engineImpl) FindBranchForCommit(commitSHA string) (string, error) {
 	e.mu.RUnlock()
 
 	for _, branchName := range branches {
-		commits, err := e.GetAllCommitsInternal(branchName, CommitFormatSHA)
+		commits, err := e.GetAllCommits(NewBranch(branchName, e), CommitFormatSHA)
 		if err != nil {
 			continue
 		}
@@ -615,7 +570,7 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 	}
 
 	// Get metadata to find parent revision
-	meta, err := e.readMetadataRef(branchName)
+	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
 		return nil, err
 	}
@@ -648,11 +603,11 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 		var formatted string
 		switch format {
 		case CommitFormatSubject:
-			formatted, _ = e.git.RunGitCommand("log", "-1", "--format=%s", sha)
+			formatted, _ = e.git.GetCommitLog(sha, "%s")
 		case CommitFormatMessage:
-			formatted, _ = e.git.RunGitCommand("log", "-1", "--format=%B", sha)
+			formatted, _ = e.git.GetCommitLog(sha, "%B")
 		case CommitFormatReadable:
-			formatted, _ = e.git.RunGitCommand("log", "-1", "--format=%h %s", sha)
+			formatted, _ = e.git.GetCommitLog(sha, "%h %s")
 		default:
 			return nil, fmt.Errorf("unknown commit format: %s", format)
 		}
@@ -660,11 +615,6 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 	}
 
 	return result, nil
-}
-
-// GetAllCommitsInternal is deprecated - use GetAllCommits instead
-func (e *engineImpl) GetAllCommitsInternal(branchName string, format CommitFormat) ([]string, error) {
-	return e.GetAllCommits(NewBranch(branchName, e), format)
 }
 
 // GetRelativeStackUpstack returns all branches in the upstack (descendants)
@@ -896,6 +846,10 @@ func (e *engineImpl) GetBranchRemoteDifference(branchName string) (string, error
 }
 
 // HasStagedChanges checks if there are staged changes in the repository
+func (e *engineImpl) GetUnstagedDiff(ctx context.Context, files ...string) (string, error) {
+	return e.git.GetUnstagedDiff(ctx, files...)
+}
+
 func (e *engineImpl) HasStagedChanges(ctx context.Context) (bool, error) {
 	return e.git.HasStagedChanges(ctx)
 }
@@ -920,14 +874,34 @@ func (e *engineImpl) ListWorktrees(ctx context.Context) ([]string, error) {
 	return e.git.ListWorktrees(ctx)
 }
 
-// RunGitCommandWithContext runs a git command with context
-func (e *engineImpl) RunGitCommandWithContext(ctx context.Context, args ...string) (string, error) {
-	return e.git.RunGitCommandWithContext(ctx, args...)
+// GetRemoteURL returns the remote URL
+func (e *engineImpl) GetRemoteURL(_ context.Context) (string, error) {
+	return e.git.GetConfig("remote.origin.url")
 }
 
-// RunGitCommandRawWithContext runs a git command raw with context
-func (e *engineImpl) RunGitCommandRawWithContext(ctx context.Context, args ...string) (string, error) {
-	return e.git.RunGitCommandRawWithContext(ctx, args...)
+// GetCurrentRevision returns the current revision (HEAD)
+func (e *engineImpl) GetCurrentRevision(_ context.Context) (string, error) {
+	return e.git.GetRevision("HEAD")
+}
+
+// GetReflog returns the reflog
+func (e *engineImpl) GetReflog(ctx context.Context, count int, format string) (string, error) {
+	return e.git.GetReflog(ctx, count, format)
+}
+
+// CheckoutPaths checks out specific paths from a branch
+func (e *engineImpl) CheckoutPaths(ctx context.Context, branch string, pathspecs []string) error {
+	return e.git.CheckoutPaths(ctx, branch, pathspecs)
+}
+
+// RemovePaths removes specific paths from the working tree
+func (e *engineImpl) RemovePaths(ctx context.Context, pathspecs []string) error {
+	return e.git.RemovePaths(ctx, pathspecs)
+}
+
+// StashList returns the stash list
+func (e *engineImpl) StashList(ctx context.Context) (string, error) {
+	return e.git.ListStash(ctx)
 }
 
 // ParseStagedHunks parses the output of `git diff --cached` into structured hunks
@@ -943,6 +917,11 @@ func (e *engineImpl) ShowDiff(ctx context.Context, left, right string, stat bool
 // ShowCommits returns commit log with optional patches/stat
 func (e *engineImpl) ShowCommits(ctx context.Context, base, head string, patch, stat bool) (string, error) {
 	return e.git.ShowCommits(ctx, base, head, patch, stat)
+}
+
+// GetCommitTemplate returns the commit template
+func (e *engineImpl) GetCommitTemplate(ctx context.Context) (string, error) {
+	return e.git.GetCommitTemplate(ctx)
 }
 
 // GetUnmergedFiles returns list of files with merge conflicts
@@ -963,4 +942,9 @@ func (e *engineImpl) GetCommitSHA(branchName string, offset int) (string, error)
 // IsAncestor checks if one commit is an ancestor of another
 func (e *engineImpl) IsAncestor(ancestor, descendant string) (bool, error) {
 	return e.git.IsAncestor(ancestor, descendant)
+}
+
+// IsRebaseInProgress checks if a rebase is in progress
+func (e *engineImpl) IsRebaseInProgress(ctx context.Context) bool {
+	return e.git.IsRebaseInProgress(ctx)
 }

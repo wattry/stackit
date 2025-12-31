@@ -1,7 +1,6 @@
 package git
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -18,13 +17,8 @@ type Hunk struct {
 	IndexLine string // The index line from the diff (e.g., "index abc123..def456 100644") for --3way merging
 }
 
-// ParseStagedHunks parses the output of `git diff --cached` into structured hunks
-func ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
-	diffOutput, err := GetStagedDiff(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get staged diff: %w", err)
-	}
-
+// ParseDiffOutput parses a diff output into structured hunks
+func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 	if diffOutput == "" {
 		return []Hunk{}, nil
 	}

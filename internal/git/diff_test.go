@@ -17,15 +17,14 @@ func TestIsDiffEmpty(t *testing.T) {
 		})
 
 		// Initialize git repo
-		err := git.InitDefaultRepo()
-		require.NoError(t, err)
+		runner := git.NewRunner()
 
 		// Get main revision
 		mainRev, err := scene.Repo.GetRef("main")
 		require.NoError(t, err)
 
 		// Branch with no changes should be empty
-		empty, err := git.IsDiffEmpty(context.Background(), "main", mainRev)
+		empty, err := runner.IsDiffEmpty(context.Background(), "main", mainRev)
 		require.NoError(t, err)
 		require.True(t, empty)
 	})
@@ -36,8 +35,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		})
 
 		// Initialize git repo
-		err := git.InitDefaultRepo()
-		require.NoError(t, err)
+		runner := git.NewRunner()
 
 		// Get main revision
 		mainRev, err := scene.Repo.GetRef("main")
@@ -50,7 +48,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		require.NoError(t, err)
 
 		// Branch should not be empty
-		empty, err := git.IsDiffEmpty(context.Background(), "branch1", mainRev)
+		empty, err := runner.IsDiffEmpty(context.Background(), "branch1", mainRev)
 		require.NoError(t, err)
 		require.False(t, empty)
 	})
@@ -61,8 +59,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		})
 
 		// Initialize git repo
-		err := git.InitDefaultRepo()
-		require.NoError(t, err)
+		runner := git.NewRunner()
 
 		// Get main revision
 		mainRev, err := scene.Repo.GetRef("main")
@@ -75,7 +72,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		require.NoError(t, err)
 
 		// Branch with no commits should be empty
-		empty, err := git.IsDiffEmpty(context.Background(), "branch1", mainRev)
+		empty, err := runner.IsDiffEmpty(context.Background(), "branch1", mainRev)
 		require.NoError(t, err)
 		require.True(t, empty)
 	})
@@ -87,7 +84,8 @@ func TestGetUnmergedFiles(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		files, err := git.GetUnmergedFiles(context.Background())
+		runner := git.NewRunner()
+		files, err := runner.GetUnmergedFiles(context.Background())
 		require.NoError(t, err)
 		require.Empty(t, files)
 	})
@@ -119,11 +117,12 @@ func TestGetUnmergedFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start rebase (will conflict)
-		_, err = git.Rebase(context.Background(), "branch1", "main", forkPoint)
+		runner := git.NewRunner()
+		_, err = runner.Rebase(context.Background(), "branch1", "main", forkPoint)
 		require.NoError(t, err)
 
 		// Should have unmerged files
-		files, err := git.GetUnmergedFiles(context.Background())
+		files, err := runner.GetUnmergedFiles(context.Background())
 		require.NoError(t, err)
 		require.NotEmpty(t, files)
 		require.Contains(t, files, "conflict_test.txt")

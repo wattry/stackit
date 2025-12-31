@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // GetPrInfo returns PR information for a branch
 func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
-	meta, err := e.readMetadataRef(branch.GetName())
+	meta, err := e.git.ReadMetadata(branch.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -40,18 +42,18 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	meta, err := e.readMetadataRef(branch.GetName())
+	meta, err := e.git.ReadMetadata(branch.GetName())
 	if err != nil {
-		meta = &Meta{}
+		meta = &git.Meta{}
 	}
 
 	if prInfo == nil {
 		meta.PrInfo = nil
-		return e.writeMetadataRef(branch.GetName(), meta)
+		return e.git.WriteMetadata(branch.GetName(), meta)
 	}
 
 	if meta.PrInfo == nil {
-		meta.PrInfo = &PrInfoPersistence{}
+		meta.PrInfo = &git.PrInfoPersistence{}
 	}
 
 	// Update PR info fields
@@ -81,7 +83,7 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 		meta.PrInfo.URL = &url
 	}
 
-	return e.writeMetadataRef(branch.GetName(), meta)
+	return e.git.WriteMetadata(branch.GetName(), meta)
 }
 
 // GetPRSubmissionStatus returns the submission status of a branch

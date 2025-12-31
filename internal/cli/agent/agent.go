@@ -55,7 +55,8 @@ These files contain instructions for AI agents on how to use stackit commands
 to manage stacked branches, create commits, submit PRs, and more.`,
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runAgentInit(local, force)
+			runner := git.NewRunner()
+			return runAgentInit(runner, local, force)
 		},
 	}
 
@@ -65,20 +66,17 @@ to manage stacked branches, create commits, submit PRs, and more.`,
 	return cmd
 }
 
-func runAgentInit(local, force bool) error {
+func runAgentInit(runner git.Runner, local, force bool) error {
 	var baseDir string
 	var err error
 
 	if local {
 		// Local installation - install in current repo
-		if err := git.InitDefaultRepo(); err != nil {
+		repoRoot, err := runner.DiscoverRepoRoot()
+		if err != nil {
 			return fmt.Errorf("not a git repository: %w", err)
 		}
-
-		baseDir, err = git.GetRepoRoot()
-		if err != nil {
-			return fmt.Errorf("failed to get repo root: %w", err)
-		}
+		baseDir = repoRoot
 	} else {
 		// Global installation - install in home directory
 		homeDir, err := os.UserHomeDir()

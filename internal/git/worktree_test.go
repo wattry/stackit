@@ -17,14 +17,10 @@ func TestWorktree(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-
-		// Initialize default repo for the runner
-		git.SetWorkingDir(scene.Repo.Dir)
-		err := git.InitDefaultRepo()
-		require.NoError(t, err)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir)
 
 		// Create a branch to checkout in the worktree
-		err = scene.Repo.CreateBranch("test-branch")
+		err := scene.Repo.CreateBranch("test-branch")
 		require.NoError(t, err)
 
 		// Create a temporary directory for the worktree
@@ -36,7 +32,7 @@ func TestWorktree(t *testing.T) {
 		worktreePath = filepath.Join(worktreePath, "worktree")
 
 		// Add worktree
-		err = git.AddWorktree(context.Background(), worktreePath, "test-branch", false)
+		err = runner.AddWorktree(context.Background(), worktreePath, "test-branch", false)
 		require.NoError(t, err)
 
 		// Verify worktree exists
@@ -44,16 +40,16 @@ func TestWorktree(t *testing.T) {
 		require.NoError(t, err)
 
 		// List worktrees
-		worktrees, err := git.ListWorktrees(context.Background())
+		worktrees, err := runner.ListWorktrees(context.Background())
 		require.NoError(t, err)
 		require.Contains(t, worktrees, worktreePath)
 
 		// Remove worktree
-		err = git.RemoveWorktree(context.Background(), worktreePath)
+		err = runner.RemoveWorktree(context.Background(), worktreePath)
 		require.NoError(t, err)
 
 		// Verify worktree is gone from list
-		worktrees, err = git.ListWorktrees(context.Background())
+		worktrees, err = runner.ListWorktrees(context.Background())
 		require.NoError(t, err)
 		require.NotContains(t, worktrees, worktreePath)
 	})
@@ -62,11 +58,7 @@ func TestWorktree(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-
-		// Initialize default repo for the runner
-		git.SetWorkingDir(scene.Repo.Dir)
-		err := git.InitDefaultRepo()
-		require.NoError(t, err)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir)
 
 		// Create a temporary directory for the worktree
 		tmpDir := t.TempDir()
@@ -74,7 +66,7 @@ func TestWorktree(t *testing.T) {
 		worktreePath := filepath.Join(tmpDir, "worktree-detached")
 
 		// Add detached worktree
-		err = git.AddWorktree(context.Background(), worktreePath, "", true)
+		err := runner.AddWorktree(context.Background(), worktreePath, "", true)
 		require.NoError(t, err)
 
 		// Verify worktree exists
@@ -82,7 +74,7 @@ func TestWorktree(t *testing.T) {
 		require.NoError(t, err)
 
 		// Clean up
-		err = git.RemoveWorktree(context.Background(), worktreePath)
+		err = runner.RemoveWorktree(context.Background(), worktreePath)
 		require.NoError(t, err)
 	})
 }

@@ -7,7 +7,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -43,7 +42,7 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 		}
 
 		// For remote branches, fetch metadata to show the latest info
-		if err := git.FetchMetadataRefs(); err != nil {
+		if err := eng.Git().FetchMetadataRefs(); err != nil {
 			splog.Debug("Failed to fetch remote metadata: %v", err)
 		} else {
 			if err := eng.LoadRemoteMetadataCache(); err != nil {

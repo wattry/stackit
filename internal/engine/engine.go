@@ -1,6 +1,16 @@
 // Package engine provides the core branch state management interface and implementation.
 // It tracks branch relationships, metadata, and provides operations for querying
 // and manipulating the branch stack.
+// Package engine manages the state and relationships of stacked branches.
+//
+// It is the core of stackit, responsible for:
+//   - Tracking parent-child relationships between branches
+//   - Storing and retrieving branch metadata (PR info, status, etc.)
+//   - Managing the branch stack structure
+//   - Coordinating branch operations like splitting, squashing, and restacking
+//
+// The engine abstracts the underlying storage (git refs, notes) and provides
+// a high-level interface for branch management.
 package engine
 
 import (
@@ -60,7 +70,7 @@ type RemoteMetadataManager interface {
 	SetLastModifiedBy(branchName string) error
 	LoadRemoteMetadataCache() error
 	ApplyRemoteMetadataIfExists(branchName string) error
-	GetRemoteMetadataCache() map[string]*Meta
+	GetRemoteMetadataCache() map[string]*git.Meta
 	ComputeMetadataDiff(branch string) (*MetadataDiff, error)
 	ComputeAllMetadataDiffs() ([]*MetadataDiff, error)
 	AcceptRemoteMetadata(branch string) error
@@ -116,4 +126,5 @@ type Engine interface {
 	AbsorbManager
 	UndoManager
 	RemoteMetadataManager
+	Git() git.Runner
 }

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,14 +20,17 @@ func TestAgentInit_Local(t *testing.T) {
 	err := os.Chdir(tempDir)
 	require.NoError(t, err, "should change to temp directory")
 
-	_, err = git.RunGitCommand("init")
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tempDir
+	err = cmd.Run()
 	require.NoError(t, err, "should initialize git repo")
 
 	// Set version for testing
 	TemplateVersion = "1.0.0"
 
 	// Run agent init --local
-	err = runAgentInit(true, false)
+	runner := git.NewRunner()
+	err = runAgentInit(runner, true, false)
 	require.NoError(t, err, "agent init should succeed")
 
 	// Verify directory structure
@@ -118,14 +122,17 @@ func TestAgentInit_VersionCheck(t *testing.T) {
 	err := os.Chdir(tempDir)
 	require.NoError(t, err, "should change to temp directory")
 
-	_, err = git.RunGitCommand("init")
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tempDir
+	err = cmd.Run()
 	require.NoError(t, err, "should initialize git repo")
 
 	// Set version for testing
 	TemplateVersion = "1.0.0"
 
 	// First installation
-	err = runAgentInit(true, false)
+	runner := git.NewRunner()
+	err = runAgentInit(runner, true, false)
 	require.NoError(t, err, "first install should succeed")
 
 	// Modify version to simulate older version
@@ -138,12 +145,12 @@ func TestAgentInit_VersionCheck(t *testing.T) {
 	require.NoError(t, err, "should write modified SKILL.md")
 
 	// Try to install again without force
-	err = runAgentInit(true, false)
+	err = runAgentInit(runner, true, false)
 	require.Error(t, err, "should fail without force flag")
 	require.Contains(t, err.Error(), "existing installation found")
 
 	// Install with force flag
-	err = runAgentInit(true, true)
+	err = runAgentInit(runner, true, true)
 	require.NoError(t, err, "should succeed with force flag")
 
 	// Verify version was updated
@@ -160,7 +167,8 @@ func TestAgentInit_NotGitRepo(t *testing.T) {
 	require.NoError(t, err, "should change to temp directory")
 
 	// Try to run agent init --local without git repo
-	err = runAgentInit(true, false)
+	runner := git.NewRunner()
+	err = runAgentInit(runner, true, false)
 	require.Error(t, err, "should fail when not in git repo")
 	require.Contains(t, err.Error(), "not a git repository")
 }

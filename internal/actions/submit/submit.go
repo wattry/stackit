@@ -13,7 +13,6 @@ import (
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/utils"
-	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // Options contains options for the submit command
@@ -181,7 +180,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	var errMu sync.Mutex
 
 	if len(submissionInfos) > 0 {
-		concurrency.Run(submissionInfos, func(info Info) {
+		utils.Run(submissionInfos, func(info Info) {
 			if err := submitBranch(ctx, info, opts, handler, repoOwner, repoName, remote); err != nil {
 				errMu.Lock()
 				if submitErr == nil {
@@ -572,24 +571,24 @@ func pushMetadataRefs(ctx *app.Context, branches []engine.Branch) error {
 
 	// Check if remote sync is enabled; if not, run compatibility test first
 	if !ctx.Engine.IsRemoteSyncEnabled() {
-		if err := git.TestRemoteRefCompatibility(); err != nil {
+		if err := ctx.Engine.Git().TestRemoteRefCompatibility(); err != nil {
 			return fmt.Errorf("remote does not support metadata refs (GitHub compatibility check failed): %w", err)
 		}
 		ctx.Engine.SetRemoteSyncEnabled(true)
 		// Configure refspec so future git fetch commands also fetch metadata
-		if err := git.EnsureMetadataRefspecConfigured(); err != nil {
+		if err := ctx.Engine.Git().EnsureMetadataRefspecConfigured(); err != nil {
 			ctx.Splog.Debug("Failed to configure metadata refspec: %v", err)
 		}
 	}
 
-	// Extract branch names for git.PushMetadataRefs
+	// Extract branch names for PushMetadataRefs
 	branchNames := make([]string, len(branches))
 	for i, branch := range branches {
 		branchNames[i] = branch.GetName()
 	}
 
 	// Push metadata refs
-	if err := git.PushMetadataRefs(branchNames); err != nil {
+	if err := ctx.Engine.Git().PushMetadataRefs(branchNames); err != nil {
 		// Check if this looks like a race condition (concurrent push)
 		if isRaceConditionError(err) {
 			return fmt.Errorf("metadata push rejected due to concurrent changes by another user. Run 'st sync' to pull the latest metadata, then retry: %w", err)
@@ -626,4 +625,142 @@ func searchSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// Event represents a feedback event from the submit action.
+// Implementations should use type switches to handle specific event types.
+type Event interface {
+	submitEvent() // marker method for type safety
+}
+
+// StackDisplayEvent indicates the initial stack visualization phase.
+// Handlers can use this to display the branches that will be processed.
+type StackDisplayEvent struct {
+	Stack    *tree.StackTree   // tree structure for rendering the stack
+	FixedMap map[string]bool   // branch -> is fixed (doesn't need restack)
+	ScopeMap map[string]string // branch -> scope
+}
+
+func (StackDisplayEvent) submitEvent() {}
+
+// RestackEvent indicates restack phase status.
+type RestackEvent struct {
+	Started   bool
+	Completed bool
+}
+
+func (RestackEvent) submitEvent() {}
+
+// PreparingEvent indicates the preparation/validation phase has started.
+type PreparingEvent struct{}
+
+func (PreparingEvent) submitEvent() {}
+
+// BranchPlanEvent indicates what will happen to each branch.
+type BranchPlanEvent struct {
+	BranchName string
+	Action     string // "create" or "update"
+	IsCurrent  bool
+	Skipped    bool
+	SkipReason string
+}
+
+func (BranchPlanEvent) submitEvent() {}
+
+// SubmissionStartEvent indicates the submission phase is beginning.
+type SubmissionStartEvent struct {
+	Branches []BranchInfo
+}
+
+func (SubmissionStartEvent) submitEvent() {}
+
+// BranchProgressEvent indicates per-branch submission progress.
+type BranchProgressEvent struct {
+	BranchName string
+	Status     BranchStatus
+	URL        string // set on success
+	Error      error  // set on failure
+}
+
+func (BranchProgressEvent) submitEvent() {}
+
+// CompletionEvent indicates the action has finished.
+type CompletionEvent struct {
+	Success bool
+	Message string // "All PRs up to date", "Dry run complete", etc.
+}
+
+func (CompletionEvent) submitEvent() {}
+
+// BranchStatus represents the status of a branch during submission.
+type BranchStatus string
+
+// BranchStatus values for tracking submission progress.
+const (
+	StatusPending    BranchStatus = "pending"
+	StatusSubmitting BranchStatus = "submitting"
+	StatusDone       BranchStatus = "done"
+	StatusError      BranchStatus = "error"
+	StatusSkipped    BranchStatus = "skipped"
+)
+
+// BranchInfo contains information about a branch for submission tracking.
+type BranchInfo struct {
+	Name     string
+	Action   string // "create" or "update"
+	PRNumber *int
+}
+
+// Handler receives events from the submit action and handles user interaction.
+// Implementations should handle events appropriately for their UI context
+// (interactive terminal, non-interactive, dashboard, etc.)
+type Handler interface {
+	// OnEvent is called for each event during submission.
+	// Handlers should use type switches to handle specific event types.
+	OnEvent(event Event)
+
+	// Confirm prompts for user confirmation when the --confirm flag is used.
+	// Returns (confirmed, error).
+	// Non-interactive handlers should return (defaultYes, nil).
+	Confirm(message string, defaultYes bool) (bool, error)
+}
+
+// ChannelHandler is a Handler that sends events to a channel.
+// Useful for async consumers like the dashboard.
+type ChannelHandler struct {
+	events chan Event
+}
+
+// NewChannelHandler creates a new ChannelHandler with a buffered channel.
+func NewChannelHandler(bufferSize int) *ChannelHandler {
+	return &ChannelHandler{
+		events: make(chan Event, bufferSize),
+	}
+}
+
+// OnEvent sends the event to the channel.
+// Non-blocking: if the channel is full, the event is dropped.
+func (h *ChannelHandler) OnEvent(e Event) {
+	select {
+	case h.events <- e:
+	default:
+		// Channel full, drop event to avoid blocking
+	}
+}
+
+// Confirm auto-confirms with the default value.
+// Dashboard operations don't support interactive confirmation.
+func (h *ChannelHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+	return defaultYes, nil
+}
+
+// Events returns the event channel for reading.
+func (h *ChannelHandler) Events() <-chan Event {
+	return h.events
+}
+
+// Close closes the event channel.
+// Should be called when the action is complete.
+func (h *ChannelHandler) Close() {
+	close(h.events)
 }

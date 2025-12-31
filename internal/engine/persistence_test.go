@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 func TestMetaSerialization(t *testing.T) {
@@ -13,12 +15,12 @@ func TestMetaSerialization(t *testing.T) {
 	scope := "feat/xyz"
 	now := time.Now().UTC().Truncate(time.Second) // JSON unmarshaling might lose sub-second precision
 
-	meta := &Meta{
+	meta := &git.Meta{
 		ParentBranchName: &parent,
 		Scope:            &scope,
 		Locked:           true,
-		BranchType:       BranchTypeUser,
-		LastModifiedBy: &ModifiedBy{
+		BranchType:       git.BranchTypeUser,
+		LastModifiedBy: &git.ModifiedBy{
 			GitName:  "John Doe",
 			GitEmail: "john@example.com",
 		},
@@ -30,7 +32,7 @@ func TestMetaSerialization(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Unmarshal
-	var meta2 Meta
+	var meta2 git.Meta
 	err = json.Unmarshal(data, &meta2)
 	assert.NoError(t, err)
 
@@ -44,7 +46,7 @@ func TestMetaSerialization(t *testing.T) {
 }
 
 func TestLocalMetaSerialization(t *testing.T) {
-	meta := &LocalMeta{
+	meta := &git.LocalMeta{
 		Frozen: true,
 	}
 
@@ -53,7 +55,7 @@ func TestLocalMetaSerialization(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Unmarshal
-	var meta2 LocalMeta
+	var meta2 git.LocalMeta
 	err = json.Unmarshal(data, &meta2)
 	assert.NoError(t, err)
 
@@ -64,13 +66,13 @@ func TestMetaBackwardCompatibility(t *testing.T) {
 	// Old metadata format (no new fields)
 	jsonData := `{"parentBranchName":"main","locked":true}`
 
-	var meta Meta
+	var meta git.Meta
 	err := json.Unmarshal([]byte(jsonData), &meta)
 	assert.NoError(t, err)
 
 	assert.Equal(t, "main", *meta.ParentBranchName)
 	assert.True(t, meta.Locked)
-	assert.Equal(t, BranchType(""), meta.BranchType) // Should be empty/default
+	assert.Equal(t, git.BranchType(""), meta.BranchType) // Should be empty/default
 	assert.Nil(t, meta.LastModifiedBy)
 	assert.Nil(t, meta.LastModifiedAt)
 }

@@ -17,6 +17,7 @@ import (
 // splitByHunkEngine is a minimal interface needed for splitting by hunk
 type splitByHunkEngine interface {
 	engine.BranchReader
+	engine.BranchWriter
 	engine.PRManager
 	engine.SplitManager
 }
@@ -64,7 +65,7 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 
 	// Loop while there are unstaged changes
 	for {
-		hasUnstaged, err := git.HasUnstagedChanges(ctx)
+		hasUnstaged, err := eng.HasUnstagedChanges(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check unstaged changes: %w", err)
 		}
@@ -73,7 +74,7 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 		}
 
 		// Show remaining changes
-		unstagedDiff, err := git.GetUnstagedDiff(ctx)
+		unstagedDiff, err := eng.GetUnstagedDiff(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get unstaged diff: %w", err)
 		}
@@ -84,14 +85,14 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 		splog.Info("Stage changes for branch %d:", len(branchNames)+1)
 
 		// Stage patch interactively
-		if err := git.StagePatch(); err != nil {
+		if err := eng.StagePatch(ctx); err != nil {
 			// If user cancels, restore branch
 			_ = eng.ForceCheckoutBranch(ctx, branchToSplit)
 			return nil, fmt.Errorf("canceled: no new branches created")
 		}
 
 		// Check if anything was staged
-		hasStaged, err := git.HasStagedChanges(ctx)
+		hasStaged, err := eng.HasStagedChanges(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check staged changes: %w", err)
 		}
@@ -125,7 +126,7 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 		}
 
 		// Create commit
-		if err := git.CommitWithOptions(git.CommitOptions{
+		if err := eng.CommitWithOptions(ctx, git.CommitOptions{
 			Message:  commitMessage,
 			NoVerify: true, // Split hunk commits are internal, hooks usually shouldn't run
 		}); err != nil {
@@ -149,7 +150,7 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 	// to resolve commit SHAs using GetCommitSHA(branchToSplit, offset).
 	// Since we've been creating commits in detached HEAD on top of the parent,
 	// we need the original branch name to now point to the tip of our new commits.
-	if err := git.UpdateBranchRef(branchToSplit.GetName(), "HEAD"); err != nil {
+	if err := eng.UpdateBranchRef(branchToSplit.GetName(), "HEAD"); err != nil {
 		return nil, fmt.Errorf("failed to update branch reference: %w", err)
 	}
 

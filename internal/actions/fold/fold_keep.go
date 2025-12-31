@@ -7,7 +7,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -30,10 +29,10 @@ func foldWithKeep(gctx context.Context, ctx *app.Context, currentBranch, parentB
 	}
 
 	// Try fast-forward merge first, fallback to regular merge
-	_, err := git.RunGitCommandWithContext(gctx, "merge", "--ff-only", parentBranch.GetName())
+	err := eng.Merge(gctx, parentBranch.GetName(), engine.MergeOptions{FFOnly: true})
 	if err != nil {
 		// Fast-forward failed, try regular merge
-		_, err = git.RunGitCommandWithContext(gctx, "merge", "--no-edit", parentBranch.GetName())
+		err = eng.Merge(gctx, parentBranch.GetName(), engine.MergeOptions{NoEdit: true})
 		if err != nil {
 			return fmt.Errorf("failed to merge %s into %s due to conflicts. Please resolve the conflicts and run 'git commit', or abort with 'git merge --abort'", parentBranch.GetName(), currentBranch.GetName())
 		}

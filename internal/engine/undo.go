@@ -127,7 +127,7 @@ func (e *engineImpl) TakeSnapshot(opts SnapshotOptions) error {
 	}
 
 	// Get all metadata ref SHAs
-	metadataRefs, err := e.ListMetadataRefs()
+	metadataRefs, err := e.git.ListMetadata()
 	if err != nil {
 		// If we can't get metadata refs, continue with empty map
 		metadataRefs = make(map[string]string)
@@ -376,14 +376,14 @@ func (e *engineImpl) RestoreSnapshot(ctx context.Context, snapshotID string) err
 	for branchName, sha := range snapshot.BranchSHAs {
 		refName := fmt.Sprintf("refs/heads/%s", branchName)
 		reflogMessage := fmt.Sprintf("stackit undo: restored to before '%s'", snapshot.Command)
-		_, err := e.git.RunGitCommandWithContext(ctx, "update-ref", "-m", reflogMessage, refName, sha)
+		err := e.git.UpdateRefWithLog(ctx, refName, sha, reflogMessage)
 		if err != nil {
 			// If branch doesn't exist, create it
 			// First check if it exists
-			_, checkErr := e.git.RunGitCommandWithContext(ctx, "rev-parse", "--verify", refName)
+			checkErr := e.git.VerifyRef(ctx, refName)
 			if checkErr != nil {
 				// Branch doesn't exist, create it
-				_, createErr := e.git.RunGitCommandWithContext(ctx, "update-ref", refName, sha)
+				createErr := e.git.UpdateRef(refName, sha)
 				if createErr != nil {
 					return fmt.Errorf("failed to restore branch %s: %w", branchName, createErr)
 				}
@@ -397,13 +397,13 @@ func (e *engineImpl) RestoreSnapshot(ctx context.Context, snapshotID string) err
 	for branchName, sha := range snapshot.MetadataSHAs {
 		refName := fmt.Sprintf("refs/stackit/metadata/%s", branchName)
 		reflogMessage := fmt.Sprintf("stackit undo: restored metadata to before '%s'", snapshot.Command)
-		_, err := e.git.RunGitCommandWithContext(ctx, "update-ref", "-m", reflogMessage, refName, sha)
+		err := e.git.UpdateRefWithLog(ctx, refName, sha, reflogMessage)
 		if err != nil {
 			// If metadata ref doesn't exist, create it
-			_, checkErr := e.git.RunGitCommandWithContext(ctx, "rev-parse", "--verify", refName)
+			checkErr := e.git.VerifyRef(ctx, refName)
 			if checkErr != nil {
 				// Metadata ref doesn't exist, create it
-				_, createErr := e.git.RunGitCommandWithContext(ctx, "update-ref", refName, sha)
+				createErr := e.git.UpdateRef(refName, sha)
 				if createErr != nil {
 					// Log but continue - metadata might be optional
 					continue
@@ -416,13 +416,13 @@ func (e *engineImpl) RestoreSnapshot(ctx context.Context, snapshotID string) err
 	}
 
 	// Delete metadata refs that were created after the snapshot
-	currentMetadataRefs, err := e.ListMetadataRefs()
+	currentMetadataRefs, err := e.git.ListMetadata()
 	if err == nil {
 		for branchName := range currentMetadataRefs {
 			if _, exists := snapshot.MetadataSHAs[branchName]; !exists {
 				// This metadata ref was created after the snapshot, delete it
 				refName := fmt.Sprintf("refs/stackit/metadata/%s", branchName)
-				_, _ = e.git.RunGitCommandWithContext(ctx, "update-ref", "-d", refName)
+				_ = e.git.DeleteRef(refName)
 			}
 		}
 	}
@@ -449,7 +449,7 @@ func (e *engineImpl) RestoreSnapshot(ctx context.Context, snapshotID string) err
 			// after we've updated the ref. Use reset --hard to be sure.
 			current, _ := e.git.GetCurrentBranch()
 			if current == branch.GetName() {
-				if _, err := e.git.RunGitCommandWithContext(ctx, "reset", "--hard", "HEAD"); err != nil {
+				if err := e.git.HardReset(ctx, "HEAD"); err != nil {
 					return fmt.Errorf("failed to reset working directory: %w", err)
 				}
 			} else {

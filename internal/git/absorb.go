@@ -1,7 +1,6 @@
 package git
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 )
@@ -11,49 +10,6 @@ type HunkTarget struct {
 	Hunk        Hunk
 	CommitSHA   string
 	CommitIndex int // Index in the commit list (0 = newest)
-}
-
-// CheckCommutation checks if a hunk commutes with a commit.
-// Two patches commute if they don't touch overlapping lines in the same file.
-func CheckCommutation(hunk Hunk, commitSHA, parentSHA string) (bool, error) {
-	commitDiff, err := GetCommitDiff(commitSHA, parentSHA)
-	if err != nil {
-		return false, fmt.Errorf("failed to get commit diff: %w", err)
-	}
-
-	if strings.TrimSpace(commitDiff) == "" {
-		return true, nil
-	}
-
-	commitHunks := parseDiffHunks(commitDiff, hunk.File)
-
-	fileInDiff := false
-	for _, line := range strings.Split(commitDiff, "\n") {
-		if strings.Contains(line, hunk.File) {
-			fileInDiff = true
-			break
-		}
-	}
-	if !fileInDiff {
-		return true, nil
-	}
-
-	// If file appears in diff but no hunks parsed, might be a rename or parsing failed
-	if len(commitHunks) == 0 {
-		return false, nil
-	}
-
-	for _, commitHunk := range commitHunks {
-		if commitHunk.File != hunk.File {
-			continue
-		}
-
-		if hunkOverlaps(hunk, commitHunk) {
-			return false, nil
-		}
-	}
-
-	return true, nil
 }
 
 // hunkOverlaps checks if two hunks have overlapping line ranges.
@@ -73,38 +29,6 @@ func hunkOverlaps(h1, h2 Hunk) bool {
 
 	overlap := h1Start <= h2End && h2Start <= h1End
 	return overlap
-}
-
-// GetCommitDiff returns the diff for a commit
-func GetCommitDiff(commitSHA, parentSHA string) (string, error) {
-	return RunGitCommand("diff", parentSHA, commitSHA)
-}
-
-// GetParentCommitSHA returns the parent commit SHA of a commit
-func GetParentCommitSHA(commitSHA string) (string, error) {
-	repo, err := GetDefaultRepo()
-	if err != nil {
-		return "", err
-	}
-
-	hash, err := resolveRefHash(repo, commitSHA)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve commit: %w", err)
-	}
-
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
-
-	commit, err := repo.CommitObject(hash)
-	if err != nil {
-		return "", fmt.Errorf("failed to get commit: %w", err)
-	}
-
-	if commit.NumParents() == 0 {
-		return "", fmt.Errorf("commit has no parents")
-	}
-
-	return commit.ParentHashes[0].String(), nil
 }
 
 // parseDiffHunks parses a diff output and extracts hunks for a specific file
