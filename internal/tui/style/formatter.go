@@ -149,3 +149,53 @@ func ColorScope(scope string) string {
 	}
 	return ColorDim("[" + scope + "]")
 }
+
+// ColorBranchNameBold colors a branch name with bold if current (green)
+func ColorBranchNameBold(branchName string, isCurrent bool) string {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+	if isCurrent {
+		style = style.Bold(true).Foreground(lipgloss.Color("2")) // green
+	}
+	return style.Render(branchName)
+}
+
+// IconReviewApproved returns the approved icon (green checkmark)
+func IconReviewApproved() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✔")
+}
+
+// IconReviewChangesRequested returns the changes requested icon (orange warning)
+func IconReviewChangesRequested() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("⚠")
+}
+
+// IconCIPassing returns a green dot for passing CI
+func IconCIPassing() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
+}
+
+// IconCIFailing returns a red dot for failing CI
+func IconCIFailing() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("●")
+}
+
+// IconCIPending returns a yellow dot for pending CI
+func IconCIPending() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("●")
+}
+
+// ColorPRNumberByState colors PR number based on state
+func ColorPRNumberByState(prNumber int, state string, isDraft bool) string {
+	prefix := fmt.Sprintf("#%d", prNumber)
+	if isDraft {
+		return ColorDim(prefix)
+	}
+	switch state {
+	case "MERGED":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Render(prefix) // purple
+	case "CLOSED":
+		return ColorDim(prefix)
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(prefix) // cyan
+	}
+}

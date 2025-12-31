@@ -38,7 +38,7 @@ func registerTreeStories() {
 	RegisterStory(Story{
 		Name:        "Linear Stack",
 		Category:    "Tree",
-		Description: "A simple 3-branch linear stack with some PR annotations",
+		Description: "A simple 3-branch linear stack with PR states",
 		CreateModel: func() tea.Model {
 			mock := &tree.MockTreeData{
 				CurrentBranch: "feature-2",
@@ -62,24 +62,106 @@ func registerTreeStories() {
 
 			pr1 := 101
 			renderer.SetAnnotation("feature-1", tree.BranchAnnotation{
-				PRNumber:     &pr1,
-				Scope:        "API",
-				CommitCount:  2,
-				LinesAdded:   50,
-				LinesDeleted: 10,
-				CheckStatus:  tree.CheckStatusPassing,
-				ReviewStatus: "Approved",
+				PRNumber:      &pr1,
+				Scope:         "API",
+				ExplicitScope: "API",
+				CommitCount:   2,
+				LinesAdded:    50,
+				LinesDeleted:  10,
+				CheckStatus:   tree.CheckStatusPassing,
+				ReviewStatus:  "Approved",
 			})
 
 			pr2 := 102
 			renderer.SetAnnotation("feature-2", tree.BranchAnnotation{
-				PRNumber:     &pr2,
-				Scope:        "UI",
-				CommitCount:  5,
-				LinesAdded:   120,
-				LinesDeleted: 5,
-				CheckStatus:  tree.CheckStatusPending,
-				ReviewStatus: "In Review",
+				PRNumber:      &pr2,
+				Scope:         "UI",
+				ExplicitScope: "UI",
+				CommitCount:   5,
+				LinesAdded:    120,
+				LinesDeleted:  5,
+				CheckStatus:   tree.CheckStatusPending,
+			})
+
+			return tree.NewModel(renderer)
+		},
+	})
+
+	RegisterStory(Story{
+		Name:        "PR States",
+		Category:    "Tree",
+		Description: "Shows different PR states: draft, merged, failing CI, changes requested",
+		CreateModel: func() tea.Model {
+			mock := &tree.MockTreeData{
+				CurrentBranch: "feature-active",
+				Trunk:         "main",
+				Children: map[string][]string{
+					"main":            {"feature-merged", "feature-draft", "feature-active"},
+					"feature-merged":  {},
+					"feature-draft":   {},
+					"feature-active":  {"feature-failing"},
+					"feature-failing": {},
+				},
+				Parents: map[string]string{
+					"feature-merged":  "main",
+					"feature-draft":   "main",
+					"feature-active":  "main",
+					"feature-failing": "feature-active",
+				},
+				Fixed: map[string]bool{
+					"main":            true,
+					"feature-merged":  true,
+					"feature-draft":   true,
+					"feature-active":  true,
+					"feature-failing": false, // needs restack
+				},
+			}
+			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+
+			// Merged PR - should be dimmed and collapsed
+			pr1 := 90
+			renderer.SetAnnotation("feature-merged", tree.BranchAnnotation{
+				PRNumber:      &pr1,
+				Scope:         "CORE",
+				ExplicitScope: "CORE",
+				PRState:       "MERGED",
+				CommitCount:   3,
+				LinesAdded:    100,
+			})
+
+			// Draft PR
+			pr2 := 95
+			renderer.SetAnnotation("feature-draft", tree.BranchAnnotation{
+				PRNumber:    &pr2,
+				Scope:       "CORE",
+				IsDraft:     true,
+				CommitCount: 1,
+				LinesAdded:  20,
+			})
+
+			// Active PR with approval
+			pr3 := 100
+			renderer.SetAnnotation("feature-active", tree.BranchAnnotation{
+				PRNumber:      &pr3,
+				Scope:         "API",
+				ExplicitScope: "API",
+				CommitCount:   2,
+				LinesAdded:    80,
+				LinesDeleted:  15,
+				CheckStatus:   tree.CheckStatusPassing,
+				ReviewStatus:  "Approved",
+			})
+
+			// Failing CI with changes requested
+			pr4 := 105
+			renderer.SetAnnotation("feature-failing", tree.BranchAnnotation{
+				PRNumber:     &pr4,
+				Scope:        "API",
+				CommitCount:  4,
+				LinesAdded:   200,
+				LinesDeleted: 50,
+				CheckStatus:  tree.CheckStatusFailing,
+				ReviewStatus: "Changes Requested",
 			})
 
 			return tree.NewModel(renderer)
@@ -120,14 +202,106 @@ func registerTreeStories() {
 			}
 			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
 
-			renderer.SetAnnotation("base-api", tree.BranchAnnotation{Scope: "API", ExplicitScope: "API", CommitCount: 1})
-			pr3 := 103
-			renderer.SetAnnotation("api-v2", tree.BranchAnnotation{PRNumber: &pr3, Scope: "API", CommitCount: 10, LinesAdded: 400, ReviewStatus: "Changes Requested", CheckStatus: tree.CheckStatusFailing})
-			renderer.SetAnnotation("api-docs", tree.BranchAnnotation{Scope: "API", CommitCount: 1, LinesAdded: 20})
+			// Base branch without PR - shows just stats
+			renderer.SetAnnotation("base-api", tree.BranchAnnotation{
+				Scope:         "API",
+				ExplicitScope: "API",
+				CommitCount:   1,
+				LinesAdded:    15,
+			})
 
-			renderer.SetAnnotation("base-auth", tree.BranchAnnotation{Scope: "AUTH", ExplicitScope: "AUTH", CommitCount: 1})
+			pr3 := 103
+			renderer.SetAnnotation("api-v2", tree.BranchAnnotation{
+				PRNumber:     &pr3,
+				Scope:        "API",
+				CommitCount:  10,
+				LinesAdded:   400,
+				LinesDeleted: 25,
+				ReviewStatus: "Changes Requested",
+				CheckStatus:  tree.CheckStatusFailing,
+			})
+
+			// Branch without PR, needs restack
+			renderer.SetAnnotation("api-docs", tree.BranchAnnotation{
+				Scope:       "API",
+				CommitCount: 1,
+				LinesAdded:  20,
+			})
+
+			renderer.SetAnnotation("base-auth", tree.BranchAnnotation{
+				Scope:         "AUTH",
+				ExplicitScope: "AUTH",
+				CommitCount:   1,
+				LinesAdded:    10,
+			})
+
 			pr4 := 104
-			renderer.SetAnnotation("auth-fix", tree.BranchAnnotation{PRNumber: &pr4, Scope: "AUTH", CommitCount: 3, LinesAdded: 30, LinesDeleted: 30, CheckStatus: tree.CheckStatusFailing, ReviewStatus: "Commented"})
+			renderer.SetAnnotation("auth-fix", tree.BranchAnnotation{
+				PRNumber:     &pr4,
+				Scope:        "AUTH",
+				CommitCount:  3,
+				LinesAdded:   30,
+				LinesDeleted: 30,
+				CheckStatus:  tree.CheckStatusPassing,
+				ReviewStatus: "Approved",
+			})
+
+			return tree.NewModel(renderer)
+		},
+	})
+
+	RegisterStory(Story{
+		Name:        "No PRs",
+		Category:    "Tree",
+		Description: "A stack where no PRs have been submitted yet - shows stats only",
+		CreateModel: func() tea.Model {
+			mock := &tree.MockTreeData{
+				CurrentBranch: "feature-c",
+				Trunk:         "main",
+				Children: map[string][]string{
+					"main":      {"feature-a"},
+					"feature-a": {"feature-b"},
+					"feature-b": {"feature-c"},
+					"feature-c": {},
+				},
+				Parents: map[string]string{
+					"feature-a": "main",
+					"feature-b": "feature-a",
+					"feature-c": "feature-b",
+				},
+				Fixed: map[string]bool{
+					"main":      true,
+					"feature-a": true,
+					"feature-b": true,
+					"feature-c": true,
+				},
+			}
+			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+
+			// Single commit - should NOT show commit count
+			renderer.SetAnnotation("feature-a", tree.BranchAnnotation{
+				Scope:         "CORE",
+				ExplicitScope: "CORE",
+				CommitCount:   1,
+				LinesAdded:    50,
+				LinesDeleted:  10,
+			})
+
+			// Multiple commits - SHOULD show commit count
+			renderer.SetAnnotation("feature-b", tree.BranchAnnotation{
+				Scope:        "CORE",
+				CommitCount:  3,
+				LinesAdded:   120,
+				LinesDeleted: 0,
+			})
+
+			// Zero lines changed - should NOT show +0/-0
+			renderer.SetAnnotation("feature-c", tree.BranchAnnotation{
+				Scope:        "CORE",
+				CommitCount:  1,
+				LinesAdded:   0,
+				LinesDeleted: 0,
+			})
 
 			return tree.NewModel(renderer)
 		},
