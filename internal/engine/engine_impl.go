@@ -145,17 +145,15 @@ func (e *engineImpl) Rebuild(newTrunkName string) error {
 
 // PopulateRemoteShas populates remote branch information by fetching SHAs from remote
 func (e *engineImpl) PopulateRemoteShas() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.remoteShas = make(map[string]string)
-
 	remote := e.git.GetRemote()
 	remoteShas, err := e.git.FetchRemoteShas(remote)
 	if err != nil {
 		// Don't fail if we can't fetch remote SHAs (e.g., offline)
 		return nil
 	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	e.remoteShas = remoteShas
 	return nil

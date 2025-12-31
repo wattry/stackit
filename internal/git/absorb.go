@@ -92,8 +92,8 @@ func GetParentCommitSHA(commitSHA string) (string, error) {
 		return "", fmt.Errorf("failed to resolve commit: %w", err)
 	}
 
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	commit, err := repo.CommitObject(hash)
 	if err != nil {
