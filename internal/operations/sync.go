@@ -60,9 +60,9 @@ func (o *SyncOperation) Start(ctx context.Context) <-chan Progress {
 		}
 
 		// Run the sync action
-		// Note: The current sync action doesn't have callbacks for progress,
-		// so we can only emit start/complete/failed for now.
-		err := syncAction.Action(o.ctx, o.options)
+		// Note: Pass nil handler to use the NullSyncHandler
+		// The operations framework has its own progress mechanism
+		err := syncAction.Action(o.ctx, o.options, nil)
 
 		if err != nil {
 			// Check if canceled

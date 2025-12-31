@@ -16,11 +16,28 @@ type Restacker interface {
 	engine.SyncManager
 }
 
+// RestackProgressCallback is called for each branch during restack
+// branchName: the branch being processed
+// result: the restack result (Done, Unneeded, Conflict)
+// newRev: the new revision if restacked (empty if not applicable)
+// conflict: true if this is a conflict
+type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool)
+
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *runtime.Context, branches []engine.Branch) error {
+	return RestackBranchesWithHandler(ctx, branches, nil)
+}
+
+// RestackBranchesWithHandler restacks branches with optional progress callback
+func RestackBranchesWithHandler(ctx *runtime.Context, branches []engine.Branch, callback RestackProgressCallback) error {
 	batchResult, err := ctx.Engine.RestackBranches(ctx.Context, branches)
 	if err != nil {
 		if batchResult.ConflictBranch != "" {
+			// Report the conflict via callback if provided
+			if callback != nil {
+				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true)
+			}
+
 			continuation := &config.ContinuationState{
 				BranchesToRestack:     batchResult.RemainingBranches,
 				RebasedBranchBase:     batchResult.RebasedBranchBase,
@@ -40,6 +57,11 @@ func RestackBranches(ctx *runtime.Context, branches []engine.Branch) error {
 
 	// Handle conflicts even when no error was returned
 	if batchResult.ConflictBranch != "" {
+		// Report the conflict via callback if provided
+		if callback != nil {
+			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true)
+		}
+
 		continuation := &config.ContinuationState{
 			BranchesToRestack:     batchResult.RemainingBranches,
 			RebasedBranchBase:     batchResult.RebasedBranchBase,
@@ -70,6 +92,25 @@ func RestackBranches(ctx *runtime.Context, branches []engine.Branch) error {
 			continue // Skip branches not processed (e.g., trunk)
 		}
 
+		// Get new revision if available
+		newRev := ""
+		if result.Result == engine.RestackDone {
+			if rev, err := branch.GetRevision(); err == nil {
+				if len(rev) > 7 {
+					newRev = rev[:7]
+				} else {
+					newRev = rev
+				}
+			}
+		}
+
+		// Report via callback if provided
+		if callback != nil {
+			callback(branchName, result.Result, newRev, false)
+			continue // Skip splog output when using callback handler
+		}
+
+		// Log via splog only when no callback is provided (backward compatibility)
 		if result.Reparented {
 			isCurrent := branchName == currentBranchName
 			ctx.Splog.Info("Reparented %s from %s to %s (parent was merged/deleted).",

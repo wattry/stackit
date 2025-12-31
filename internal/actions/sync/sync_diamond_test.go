@@ -268,7 +268,7 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: true, // Include restack this time
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		// Verify structure is preserved
@@ -350,7 +350,7 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: false,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		// Rebuild to pick up changes

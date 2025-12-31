@@ -15,7 +15,10 @@ require (
 	golang.org/x/oauth2 v0.34.0
 )
 
-require github.com/sahilm/fuzzy v0.1.1 // indirect
+require (
+	github.com/charmbracelet/harmonica v0.2.0 // indirect
+	github.com/sahilm/fuzzy v0.1.1 // indirect
+)
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

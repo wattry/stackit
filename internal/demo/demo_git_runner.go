@@ -171,6 +171,10 @@ func (d *demoGitRunner) RebaseContinue(_ context.Context) (git.RebaseResult, err
 	return git.RebaseDone, nil
 }
 
+func (d *demoGitRunner) RebaseAbort(_ context.Context) error {
+	return nil
+}
+
 func (d *demoGitRunner) CherryPick(_ context.Context, commitSHA, _ string) (string, error) {
 	return commitSHA, nil
 }

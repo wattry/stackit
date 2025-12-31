@@ -162,7 +162,12 @@ func (m *Model) View() string {
 
 			// Update custom label for status
 			if item.IsSkipped {
-				ann.CustomLabel = m.Styles.DimStyle.Render("(skipped: " + item.SkipReason + ")")
+				if item.SkipReason == SkipReasonNoChanges {
+					ann.PRAction = SkipReasonNoChanges
+					ann.CustomLabel = ""
+				} else {
+					ann.CustomLabel = m.Styles.DimStyle.Render("(skipped: " + item.SkipReason + ")")
+				}
 			} else {
 				switch item.Status {
 				case StatusSubmitting:
@@ -195,7 +200,15 @@ func (m *Model) View() string {
 			switch item.Status {
 			case StatusPending, "":
 				icon = m.Styles.DimStyle.Render("○")
-				status = m.Styles.DimStyle.Render("will " + item.Action)
+				if item.IsSkipped {
+					if item.SkipReason == SkipReasonNoChanges {
+						status = m.Styles.DimStyle.Render(SkipReasonNoChanges)
+					} else {
+						status = m.Styles.DimStyle.Render("skipped (" + item.SkipReason + ")")
+					}
+				} else {
+					status = m.Styles.DimStyle.Render("will " + item.Action)
+				}
 			case StatusSubmitting:
 				icon = m.Spinner.View()
 				action := "Creating"

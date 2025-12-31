@@ -366,16 +366,28 @@ func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 		})
 
 		// Set scopes and other annotations
+		items := make([]submitComponent.Item, 0, len(ev.Stack.Branches))
 		for _, branchName := range ev.Stack.Branches {
+			// Skip trunk - we don't submit it
+			if branchName == ev.Stack.TrunkBranch {
+				continue
+			}
+
 			scope := ev.ScopeMap[branchName]
 			renderer.SetAnnotation(branchName, tree.BranchAnnotation{
 				Scope:         scope,
 				ExplicitScope: scope,
 			})
+
+			items = append(items, submitComponent.Item{
+				BranchName: branchName,
+				Action:     "thinking...",
+				Status:     submitComponent.StatusPending,
+			})
 		}
 
-		// Create model with tree renderer
-		h.model = submitComponent.NewModel(nil)
+		// Create model with tree renderer and initial items
+		h.model = submitComponent.NewModel(items)
 		h.model.Renderer = renderer
 		h.model.RootBranch = h.findRootBranch()
 
