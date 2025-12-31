@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -1224,5 +1225,180 @@ func TestSetParentScenarios(t *testing.T) {
 		meta, _ := s.Engine.ReadMetadataRef("branch1")
 		require.Equal(t, mainNewSHA, *meta.ParentBranchRevision)
 		require.NotEqual(t, *originalMeta.ParentBranchRevision, *meta.ParentBranchRevision)
+	})
+}
+
+func TestFrozenBranches(t *testing.T) {
+	t.Run("set and check frozen status", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("feature").
+			Commit("feature change").
+			Checkout("main")
+
+		err := s.Engine.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		branch := s.Engine.GetBranch("feature")
+		require.False(t, branch.IsFrozen())
+
+		err = s.Engine.SetFrozen(branch, true)
+		require.NoError(t, err)
+		require.True(t, s.Engine.GetBranch("feature").IsFrozen())
+
+		err = s.Engine.SetFrozen(branch, false)
+		require.NoError(t, err)
+		require.False(t, s.Engine.GetBranch("feature").IsFrozen())
+	})
+
+	t.Run("canModify helper respects frozen status", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("feature").
+			Commit("feature change").
+			Checkout("main")
+
+		err := s.Engine.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		branch := s.Engine.GetBranch("feature")
+		require.True(t, branch.CanModify())
+
+		// Test frozen
+		err = s.Engine.SetFrozen(branch, true)
+		require.NoError(t, err)
+		require.False(t, s.Engine.GetBranch("feature").CanModify())
+
+		// Test locked
+		err = s.Engine.SetFrozen(branch, false)
+		require.NoError(t, err)
+		err = s.Engine.SetLocked(branch, true)
+		require.NoError(t, err)
+		require.False(t, s.Engine.GetBranch("feature").CanModify())
+	})
+
+	t.Run("EnsureCanModify returns proper error type for frozen branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("feature").
+			Commit("feature change").
+			Checkout("main")
+
+		err := s.Engine.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		branch := s.Engine.GetBranch("feature")
+
+		// Unmodified branch should not error
+		err = branch.EnsureCanModify()
+		require.NoError(t, err)
+
+		// Freeze the branch
+		err = s.Engine.SetFrozen(branch, true)
+		require.NoError(t, err)
+
+		// Now EnsureCanModify should return an error
+		branch = s.Engine.GetBranch("feature")
+		err = branch.EnsureCanModify()
+		require.Error(t, err)
+
+		// Error should match sentinel
+		require.ErrorIs(t, err, errors.ErrBranchModificationRestricted)
+
+		// Error should be extractable as BranchModificationError
+		var modErr *errors.BranchModificationError
+		require.ErrorAs(t, err, &modErr)
+		require.Equal(t, "feature", modErr.BranchName)
+		require.False(t, modErr.IsLocked)
+		require.True(t, modErr.IsFrozen)
+	})
+
+	t.Run("EnsureCanModify returns proper error type for locked branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("feature").
+			Commit("feature change").
+			Checkout("main")
+
+		err := s.Engine.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		branch := s.Engine.GetBranch("feature")
+
+		// Lock the branch
+		err = s.Engine.SetLocked(branch, true)
+		require.NoError(t, err)
+
+		// Now EnsureCanModify should return an error
+		branch = s.Engine.GetBranch("feature")
+		err = branch.EnsureCanModify()
+		require.Error(t, err)
+
+		// Error should match sentinel
+		require.ErrorIs(t, err, errors.ErrBranchModificationRestricted)
+
+		// Error should be extractable as BranchModificationError
+		var modErr *errors.BranchModificationError
+		require.ErrorAs(t, err, &modErr)
+		require.Equal(t, "feature", modErr.BranchName)
+		require.True(t, modErr.IsLocked)
+		require.False(t, modErr.IsFrozen)
+	})
+
+	t.Run("EnsureCanModify returns proper error type for locked and frozen branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("feature").
+			Commit("feature change").
+			Checkout("main")
+
+		err := s.Engine.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		branch := s.Engine.GetBranch("feature")
+
+		// Lock and freeze the branch
+		err = s.Engine.SetLocked(branch, true)
+		require.NoError(t, err)
+		err = s.Engine.SetFrozen(branch, true)
+		require.NoError(t, err)
+
+		// Now EnsureCanModify should return an error
+		branch = s.Engine.GetBranch("feature")
+		err = branch.EnsureCanModify()
+		require.Error(t, err)
+
+		// Error should be extractable as BranchModificationError with both flags
+		var modErr *errors.BranchModificationError
+		require.ErrorAs(t, err, &modErr)
+		require.Equal(t, "feature", modErr.BranchName)
+		require.True(t, modErr.IsLocked)
+		require.True(t, modErr.IsFrozen)
+
+		// Error message should mention both states
+		require.Contains(t, err.Error(), "locked and frozen")
+	})
+
+	t.Run("frozen status persists after engine rebuild", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("feature").
+			Commit("feature change").
+			Checkout("main")
+
+		err := s.Engine.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		branch := s.Engine.GetBranch("feature")
+		err = s.Engine.SetFrozen(branch, true)
+		require.NoError(t, err)
+		require.True(t, s.Engine.GetBranch("feature").IsFrozen())
+
+		// Rebuild the engine
+		err = s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		// Frozen status should persist
+		require.True(t, s.Engine.GetBranch("feature").IsFrozen())
 	})
 }

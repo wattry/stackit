@@ -33,6 +33,15 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("not on a branch")
 	}
 
+	// Check if current branch is trunk
+	if currentBranch.IsTrunk() {
+		return fmt.Errorf("cannot absorb into trunk branch %s", currentBranch.GetName())
+	}
+
+	if err := currentBranch.EnsureCanModify(); err != nil {
+		return err
+	}
+
 	// Take snapshot before modifying the repository
 	snapshotOpts := actions.NewSnapshot("absorb",
 		actions.WithFlag(opts.All, "--all"),
