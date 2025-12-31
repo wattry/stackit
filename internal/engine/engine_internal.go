@@ -6,25 +6,47 @@ import (
 	"slices"
 )
 
-// rebuildInternal is the internal rebuild logic without locking
-// refreshCurrentBranch indicates whether to refresh currentBranch from Git
-func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
+// rebuildData holds the results of gathering engine state from Git/metadata
+type rebuildData struct {
+	branches      []string
+	currentBranch string
+	allMeta       map[string]*Meta
+	allLocalMeta  map[string]*LocalMeta
+}
+
+// gatherRebuildData gathers the data needed to rebuild the engine cache
+func (e *engineImpl) gatherRebuildData(refreshCurrentBranch bool) (*rebuildData, error) {
 	// Get all branch names
 	branches, err := e.git.GetAllBranchNames()
 	if err != nil {
-		return fmt.Errorf("failed to get branches: %w", err)
+		return nil, fmt.Errorf("failed to get branches: %w", err)
 	}
-	e.branches = branches
 
-	// Refresh current branch from Git if requested (needed when called from Rebuild/Reset after branch switches)
+	var currentBranch string
 	if refreshCurrentBranch {
-		currentBranch, err := e.git.GetCurrentBranch()
-		if err != nil {
-			// Not on a branch (e.g., detached HEAD) - that's okay
-			e.currentBranch = ""
-		} else {
-			e.currentBranch = currentBranch
+		cb, err := e.git.GetCurrentBranch()
+		if err == nil {
+			currentBranch = cb
 		}
+	}
+
+	// Load metadata for each branch in parallel
+	allMeta, _ := e.batchReadMetadataRefs(branches)
+	allLocalMeta, _ := e.batchReadLocalMetadataRefs(branches)
+
+	return &rebuildData{
+		branches:      branches,
+		currentBranch: currentBranch,
+		allMeta:       allMeta,
+		allLocalMeta:  allLocalMeta,
+	}, nil
+}
+
+// applyRebuildData updates the engine cache with the gathered data (caller must hold lock if needed)
+func (e *engineImpl) applyRebuildData(data *rebuildData, refreshCurrentBranch bool) {
+	e.branches = data.branches
+	if refreshCurrentBranch {
+		e.currentBranch = data.currentBranch
 	}
 
 	// Reset maps
@@ -34,12 +56,8 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	e.lockedMap = make(map[string]bool)
 	e.frozenMap = make(map[string]bool)
 
-	// Load metadata for each branch in parallel
-	allMeta, _ := e.batchReadMetadataRefs(branches)
-	allLocalMeta, _ := e.batchReadLocalMetadataRefs(branches)
-
 	// Collect results and populate maps sequentially to avoid lock contention/races
-	for name, meta := range allMeta {
+	for name, meta := range data.allMeta {
 		if meta.ParentBranchName != nil {
 			parent := *meta.ParentBranchName
 			e.parentMap[name] = parent
@@ -53,7 +71,7 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 		}
 	}
 
-	for name, meta := range allLocalMeta {
+	for name, meta := range data.allLocalMeta {
 		if meta.Frozen {
 			e.frozenMap[name] = true
 		}
@@ -63,7 +81,17 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	for _, children := range e.childrenMap {
 		slices.Sort(children)
 	}
+}
 
+// rebuildInternal is the internal rebuild logic without locking
+// refreshCurrentBranch indicates whether to refresh currentBranch from Git
+func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
+	data, err := e.gatherRebuildData(refreshCurrentBranch)
+	if err != nil {
+		return err
+	}
+
+	e.applyRebuildData(data, refreshCurrentBranch)
 	return nil
 }
 
@@ -154,10 +182,18 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 
 // rebuild loads all branches and their metadata from Git
 func (e *engineImpl) rebuild() error {
+	// Gather data outside the lock
+	data, err := e.gatherRebuildData(false)
+	if err != nil {
+		return err
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	// Don't refresh currentBranch here - it should already be set correctly
-	return e.rebuildInternal(false)
+
+	// Apply data inside the lock
+	e.applyRebuildData(data, false)
+	return nil
 }
 
 // shouldReparentBranch checks if a parent branch should be reparented

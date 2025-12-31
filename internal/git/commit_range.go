@@ -19,8 +19,8 @@ func GetCommitRange(base string, head string, format string) ([]string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	headHash, err := resolveRefHashInternal(repo, head)
 	if err != nil {
@@ -92,8 +92,8 @@ func GetCommitSHA(branchName string, offset int) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	// Resolve branch reference
 	hash, err := resolveRefHashInternal(repo, branchName)

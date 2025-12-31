@@ -27,8 +27,8 @@ func GetMergeBaseByRef(ref1Name, ref2Name string) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	commit1, err := repo.CommitObject(hash1)
 	if err != nil {
@@ -76,8 +76,8 @@ func IsAncestor(ancestor, descendant string) (bool, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	// Get commit objects
 	ancestorCommit, err := repo.CommitObject(ancestorHash)

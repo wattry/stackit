@@ -19,8 +19,8 @@ func GetCommitDate(branchName string) (time.Time, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	hash, err := resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -43,8 +43,8 @@ func GetCommitAuthor(branchName string) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	hash, err := resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -67,8 +67,8 @@ func GetRevision(branchName string) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	hash, err := resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -86,8 +86,8 @@ func GetRemoteRevision(branchName string) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	// Try refs/remotes/origin/branchName
 	hash, err := resolveRefHashInternal(repo, "origin/"+branchName)
@@ -124,8 +124,8 @@ func iterateCommitsNoLock(repo *Repository, headHash, baseHash plumbing.Hash) ([
 // resolveRefHash resolves a ref (branch name, SHA, or ref path) to a hash
 func resolveRefHash(repo *Repository, ref string) (plumbing.Hash, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
 	return resolveRefHashInternal(repo, ref)
 }

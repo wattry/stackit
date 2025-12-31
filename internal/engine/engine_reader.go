@@ -23,13 +23,13 @@ func (e *engineImpl) AllBranches() []Branch {
 
 // CurrentBranch returns the current branch (nil if not on a branch)
 func (e *engineImpl) CurrentBranch() *Branch {
-	e.mu.Lock()
-	if current, err := e.git.GetCurrentBranch(); err == nil {
-		e.currentBranch = current
-	} else {
-		// Not on a branch (e.g., detached HEAD)
-		e.currentBranch = ""
+	current, err := e.git.GetCurrentBranch()
+	if err != nil {
+		current = "" // Not on a branch (e.g., detached HEAD)
 	}
+
+	e.mu.Lock()
+	e.currentBranch = current
 	e.mu.Unlock()
 
 	e.mu.RLock()
