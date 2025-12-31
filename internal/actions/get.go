@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strconv"
 
+	getAction "stackit.dev/stackit/internal/actions/get"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/handlers"
 	"stackit.dev/stackit/internal/runtime"
-	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -16,11 +17,11 @@ type GetOptions struct {
 	Downstack bool // Don't sync upstack branches if branch exists locally
 	Force     bool // Overwrite all fetched branches with remote source of truth
 	Restack   bool // Restack after syncing (default true)
-	Unfrozen  bool // Checkout new branches as unfrozen
+	Unlocked  bool // Checkout new branches as unlocked
 }
 
 // GetAction performs the get operation
-func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
+func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions, handler getAction.Handler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
@@ -30,6 +31,7 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 	}
 
 	targetBranch := ""
+	var targetPRNumber *int
 	if branchOrPR == "" {
 		current := eng.CurrentBranch()
 		if current == nil {
@@ -48,18 +50,34 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 				return fmt.Errorf("failed to get PR #%d: %w", prNum, err)
 			}
 			targetBranch = pr.Head
+			targetPRNumber = &prNum
 		} else {
 			targetBranch = branchOrPR
 		}
 	}
 
-	splog.Info("Syncing stack for %s...", style.ColorBranchName(targetBranch, true))
+	// Start the handler
+	handler.Start(targetBranch, targetPRNumber)
+
+	// Emit fetch phase started
+	handler.EmitEvent(getAction.Event{
+		Phase: getAction.PhaseFetch,
+		Type:  getAction.EventStarted,
+	})
 
 	// Fetch target branch from origin
 	remote := eng.GetRemote()
 	if _, err := eng.RunGitCommandWithContext(gctx, "fetch", remote, targetBranch); err != nil {
 		return fmt.Errorf("failed to fetch branch %s from %s: %w", targetBranch, remote, err)
 	}
+
+	// Emit trunk status (main/master)
+	trunkName := eng.Trunk().GetName()
+	handler.EmitEvent(getAction.Event{
+		Phase:  getAction.PhaseFetch,
+		Type:   getAction.EventCompleted,
+		Branch: trunkName,
+	})
 
 	// Identify branches to sync (ancestors + descendants)
 	branchesToSync := []string{targetBranch}
@@ -102,6 +120,31 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 		}
 	}
 
+	// Emit sync phase started
+	handler.EmitEvent(getAction.Event{
+		Phase: getAction.PhaseSync,
+		Type:  getAction.EventStarted,
+	})
+
+	// Track statistics for summary
+	var branchesCreated, branchesUpdated int
+	branchPRInfo := make(map[string]*int)       // branch -> PR number
+	branchLockedStatus := make(map[string]bool) // branch -> is locked
+
+	// Fetch PR info for branches if possible
+	if ctx.GitHubClient != nil {
+		owner, repo := ctx.GitHubClient.GetOwnerRepo()
+		for _, branchName := range branchesToSync {
+			if branchName == eng.Trunk().GetName() {
+				continue
+			}
+			if pr, err := ctx.GitHubClient.GetPullRequestByBranch(gctx, owner, repo, branchName); err == nil && pr != nil {
+				prNum := pr.Number
+				branchPRInfo[branchName] = &prNum
+			}
+		}
+	}
+
 	// Sync each branch
 	for _, branchName := range branchesToSync {
 		if branchName == eng.Trunk().GetName() {
@@ -115,7 +158,6 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 		isNew := !branch.IsTracked()
 
 		if isNew {
-			splog.Info("Creating local branch %s...", style.ColorBranchName(branchName, false))
 			if _, err := eng.RunGitCommandWithContext(gctx, "branch", branchName, fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
 				return fmt.Errorf("failed to create local branch %s: %w", branchName, err)
 			}
@@ -125,14 +167,26 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 					splog.Debug("Failed to track branch %s with parent %s: %v", branchName, parent, err)
 				}
 			}
-			// New branches are locked by default unless --unfrozen
-			if !opts.Unfrozen {
+			// New branches are locked by default unless --unlocked
+			isLocked := !opts.Unlocked
+			branchLockedStatus[branchName] = isLocked
+			if isLocked {
 				if err := eng.SetLocked(eng.GetBranch(branchName), true); err != nil {
 					splog.Debug("Failed to lock new branch %s: %v", branchName, err)
 				}
 			}
+			branchesCreated++
+
+			// Emit sync event
+			handler.EmitEvent(getAction.Event{
+				Phase:    getAction.PhaseSync,
+				Type:     getAction.EventCompleted,
+				Branch:   branchName,
+				PRNumber: branchPRInfo[branchName],
+				IsNew:    true,
+				IsLocked: isLocked,
+			})
 		} else {
-			splog.Info("Updating local branch %s...", style.ColorBranchName(branchName, false))
 			if opts.Force {
 				if _, err := eng.RunGitCommandWithContext(gctx, "reset", "--hard", fmt.Sprintf("%s/%s", remote, branchName)); err != nil {
 					return fmt.Errorf("failed to reset branch %s: %w", branchName, err)
@@ -149,6 +203,16 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 					splog.Debug("Failed to update parent for %s: %v", branchName, err)
 				}
 			}
+			branchesUpdated++
+
+			// Emit sync event
+			handler.EmitEvent(getAction.Event{
+				Phase:    getAction.PhaseSync,
+				Type:     getAction.EventCompleted,
+				Branch:   branchName,
+				PRNumber: branchPRInfo[branchName],
+				IsNew:    false,
+			})
 		}
 	}
 
@@ -185,6 +249,8 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 	}
 
 	// Restack if requested
+	var restacked, skipped int
+	var conflicts []string
 	if opts.Restack {
 		uniqueBranches := []engine.Branch{}
 		seen := make(map[string]bool)
@@ -199,13 +265,44 @@ func GetAction(ctx *runtime.Context, branchOrPR string, opts GetOptions) error {
 		}
 		sorted := eng.SortBranchesTopologically(uniqueBranches)
 		if len(sorted) > 0 {
-			if err := RestackBranches(ctx, sorted); err != nil {
+			// Use RestackHandler for consistent output
+			handler.OnRestackStart(len(sorted))
+
+			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool) {
+				prNumber := getPRNumber(eng, branchName)
+
+				switch result {
+				case engine.RestackDone:
+					restacked++
+					handler.OnRestackBranch(branchName, handlers.RestackDone, newRev, prNumber)
+				case engine.RestackUnneeded:
+					handler.OnRestackBranch(branchName, handlers.RestackUnneeded, "", prNumber)
+				case engine.RestackConflict:
+					skipped++
+					conflicts = append(conflicts, branchName)
+					handler.OnRestackBranch(branchName, handlers.RestackConflict, "", prNumber)
+				}
+			}); err != nil {
+				handler.OnRestackComplete(restacked, skipped, conflicts)
 				return fmt.Errorf("restack failed: %w", err)
 			}
+
+			handler.OnRestackComplete(restacked, skipped, conflicts)
 		}
 	}
 
-	splog.Info("Successfully synced stack for %s.", style.ColorBranchName(targetBranch, true))
+	// Complete with summary
+	isLocked := branchLockedStatus[targetBranch]
+	upToDate := branchesCreated == 0 && branchesUpdated == 0 && restacked == 0
+	handler.Complete(getAction.Summary{
+		TargetBranch:    targetBranch,
+		BranchesCreated: branchesCreated,
+		BranchesUpdated: branchesUpdated,
+		Restacked:       restacked,
+		IsLocked:        isLocked,
+		UpToDate:        upToDate,
+	})
+
 	return nil
 }
 
@@ -216,4 +313,14 @@ func contains(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// getPRNumber returns the PR number for a branch, or nil if not available
+func getPRNumber(eng engine.Engine, branchName string) *int {
+	branch := eng.GetBranch(branchName)
+	prInfo, err := branch.GetPrInfo()
+	if err != nil || prInfo == nil {
+		return nil
+	}
+	return prInfo.Number()
 }

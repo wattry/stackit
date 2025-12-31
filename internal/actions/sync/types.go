@@ -1,5 +1,22 @@
 package sync
 
+import (
+	"stackit.dev/stackit/internal/handlers"
+)
+
+// Re-export RestackResult constants from handlers package for convenience
+const (
+	RestackDone     = handlers.RestackDone
+	RestackUnneeded = handlers.RestackUnneeded
+	RestackConflict = handlers.RestackConflict
+)
+
+// RestackResult is an alias for handlers.RestackResult
+type RestackResult = handlers.RestackResult
+
+// RestackHandler is an alias for handlers.RestackHandler
+type RestackHandler = handlers.RestackHandler
+
 // Phase represents the current phase of the sync operation
 type Phase string
 
@@ -69,31 +86,6 @@ type Handler interface {
 	// This allows the same handler to be used for standalone restack operations
 	RestackHandler
 }
-
-// RestackHandler abstracts TTY vs non-TTY output for restack operations
-// This is a subset of Handler that can be used independently for the restack command
-type RestackHandler interface {
-	// OnRestackStart is called at the beginning of restack with branch count
-	OnRestackStart(branchCount int)
-
-	// OnRestackBranch is called for each branch during restack
-	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int)
-
-	// OnRestackComplete is called when restack finishes
-	OnRestackComplete(restacked, skipped int, conflicts []string)
-}
-
-// RestackResult represents the outcome of a restack operation for a single branch
-type RestackResult string
-
-const (
-	// RestackDone indicates the branch was successfully restacked
-	RestackDone RestackResult = "done"
-	// RestackUnneeded indicates the branch didn't need restacking
-	RestackUnneeded RestackResult = "unneeded"
-	// RestackConflict indicates the branch had a conflict
-	RestackConflict RestackResult = "conflict"
-)
 
 // NullHandler is a no-op handler for testing or when output is not needed
 type NullHandler struct{}

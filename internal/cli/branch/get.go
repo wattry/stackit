@@ -14,7 +14,7 @@ func NewGetCmd() *cobra.Command {
 		downstack bool
 		force     bool
 		restack   bool
-		unfrozen  bool
+		unlocked  bool
 	)
 
 	cmd := &cobra.Command{
@@ -36,20 +36,33 @@ If no branch is provided, sync the current stack.`,
 					branchOrPR = args[0]
 				}
 
+				// Create handler based on TTY availability
+				handler := NewGetHandler(ctx.Splog)
+
 				return actions.GetAction(ctx, branchOrPR, actions.GetOptions{
 					Downstack: downstack,
 					Force:     force,
 					Restack:   restack,
-					Unfrozen:  unfrozen,
-				})
+					Unlocked:  unlocked,
+				}, handler)
 			})
 		},
 	}
 
-	cmd.Flags().BoolVarP(&downstack, "downstack", "d", false, "When syncing a branch that already exists locally, don’t sync upstack branches.")
+	var noRestack bool
+
+	cmd.Flags().BoolVarP(&downstack, "downstack", "d", false, "When syncing a branch that already exists locally, don't sync upstack branches.")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite all fetched branches with remote source of truth")
 	cmd.Flags().BoolVar(&restack, "restack", true, "Restack any branches in the stack that can be restacked without conflicts")
-	cmd.Flags().BoolVarP(&unfrozen, "unfrozen", "U", false, "Checkout new branches as unfrozen (allow local edits)")
+	cmd.Flags().BoolVar(&noRestack, "no-restack", false, "Skip restacking branches")
+	cmd.Flags().BoolVarP(&unlocked, "unlocked", "U", false, "Checkout new branches as unlocked (allow local edits)")
+
+	// Apply --no-restack flag
+	cmd.PreRun = func(_ *cobra.Command, _ []string) {
+		if noRestack {
+			restack = false
+		}
+	}
 
 	return cmd
 }

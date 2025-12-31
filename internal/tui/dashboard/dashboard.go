@@ -818,7 +818,7 @@ func (m *model) getStatusString(branchName string) string {
 		return style.ColorDim("Trunk")
 	}
 	if branch.IsLocked() {
-		return style.ColorDim("Frozen")
+		return style.ColorDim("Locked")
 	}
 	if !m.engine.IsUpToDate(branch) {
 		return style.ColorNeedsRestack("Needs Restack")

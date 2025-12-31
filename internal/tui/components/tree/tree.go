@@ -517,7 +517,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
 	}
 	if annotation.IsLocked {
-		coloredBranchName += " " + style.ColorDim("(frozen)")
+		coloredBranchName += " " + style.ColorDim("(locked)")
 	}
 
 	result = append(result, prefix+styleObj.Render(symbol)+" "+coloredBranchName)
@@ -655,7 +655,7 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 	}
 
 	if annotation.IsLocked {
-		parts = append(parts, "(frozen)")
+		parts = append(parts, "(locked)")
 	}
 
 	if annotation.CustomLabel != "" {
@@ -700,7 +700,7 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 	}
 
 	if annotation.IsLocked {
-		parts = append(parts, style.ColorDim("(frozen)"))
+		parts = append(parts, style.ColorDim("(locked)"))
 	}
 
 	if annotation.PRState == PRStateMerged {
