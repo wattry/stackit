@@ -27,13 +27,16 @@ If trunk cannot be fast-forwarded to match remote, overwrites trunk with the rem
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *runtime.Context) error {
-				// Run sync action
+				// Create handler based on TTY availability
+				handler := NewSyncHandler(ctx.Splog)
+
+				// Run sync action with handler
 				return sync.Action(ctx, sync.Options{
 					All:     all,
 					Force:   force,
 					Restack: restack,
 					DryRun:  dryRun,
-				})
+				}, handler)
 			})
 		},
 	}

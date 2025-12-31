@@ -9,7 +9,7 @@ import (
 )
 
 // restackBranches handles restacking branches after sync operations
-func restackBranches(ctx *runtime.Context, branchesToRestack []string) error {
+func restackBranches(ctx *runtime.Context, branchesToRestack []string, handler Handler, summary *Summary) error {
 	eng := ctx.Engine
 
 	// Add current branch stack to restack list
@@ -48,12 +48,53 @@ func restackBranches(ctx *runtime.Context, branchesToRestack []string) error {
 	// Sort branches topologically (parents before children) for correct restack order
 	sortedBranches := eng.SortBranchesTopologically(uniqueBranches)
 
-	// Restack branches
+	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
-		if err := actions.RestackBranches(ctx, sortedBranches); err != nil {
+		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool) {
+			prNumber := getPRNumber(eng, branchName)
+
+			switch result {
+			case engine.RestackDone:
+				summary.BranchesRestacked++
+				handler.EmitEvent(Event{
+					Phase:       PhaseRestack,
+					Type:        EventCompleted,
+					Branch:      branchName,
+					PRNumber:    prNumber,
+					NewRevision: newRev,
+				})
+			case engine.RestackUnneeded:
+				handler.EmitEvent(Event{
+					Phase:    PhaseRestack,
+					Type:     EventCompleted,
+					Branch:   branchName,
+					PRNumber: prNumber,
+				})
+			case engine.RestackConflict:
+				summary.BranchesSkipped++
+				summary.ConflictBranches = append(summary.ConflictBranches, branchName)
+				handler.EmitEvent(Event{
+					Phase:    PhaseRestack,
+					Type:     EventSkipped,
+					Branch:   branchName,
+					PRNumber: prNumber,
+					Conflict: true,
+				})
+			}
+		}); err != nil {
 			return fmt.Errorf("failed to restack branches: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// getPRNumber returns the PR number for a branch if it has one
+func getPRNumber(eng engine.Engine, branchName string) *int {
+	branch := eng.GetBranch(branchName)
+	prInfo, err := branch.GetPrInfo()
+	if err != nil || prInfo == nil {
+		return nil
+	}
+	return prInfo.Number()
 }

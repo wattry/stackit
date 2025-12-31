@@ -262,6 +262,7 @@ type Runner interface {
 	PushBranch(ctx context.Context, branchName, remote string, opts PushOptions) error
 	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error)
 	RebaseContinue(ctx context.Context) (RebaseResult, error)
+	RebaseAbort(ctx context.Context) error
 	CherryPick(ctx context.Context, commitSHA, onto string) (string, error)
 	StashPush(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
@@ -465,6 +466,10 @@ func (r *realRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstre
 
 func (r *realRunner) RebaseContinue(ctx context.Context) (RebaseResult, error) {
 	return RebaseContinue(ctx)
+}
+
+func (r *realRunner) RebaseAbort(ctx context.Context) error {
+	return RebaseAbort(ctx)
 }
 
 func (r *realRunner) CherryPick(ctx context.Context, commitSHA, onto string) (string, error) {

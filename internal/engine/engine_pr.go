@@ -118,7 +118,7 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 
 	reason := ""
 	if !needsUpdate {
-		reason = "no changes"
+		reason = ReasonNoChanges
 	}
 
 	return PRSubmissionStatus{

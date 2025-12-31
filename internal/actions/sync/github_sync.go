@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"fmt"
+
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
@@ -10,7 +12,7 @@ import (
 )
 
 // syncGitHubInfo synchronizes PR information from GitHub and updates local parents
-func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string) error {
+func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string, handler Handler, _ *Summary) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
@@ -24,6 +26,7 @@ func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string) error {
 
 	repoOwner, repoName, _ := utils.GetRepoInfo(gctx)
 	if repoOwner != "" && repoName != "" {
+		prsUpdated := 0
 		if err := github.SyncPrInfo(gctx, branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
 			branch := eng.GetBranch(name)
 			_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
@@ -35,9 +38,25 @@ func syncGitHubInfo(ctx *runtime.Context, branchesToRestack *[]string) error {
 				prInfo.HTMLURL,
 				prInfo.Draft,
 			))
+			prsUpdated++
 		}); err != nil {
-			// Non-fatal, continue
-			splog.Debug("Failed to sync PR info: %v", err)
+			// GitHub failure aborts sync (per spec)
+			return fmt.Errorf("failed to sync PR info from GitHub: %w", err)
+		}
+
+		// Emit completion event with count
+		if prsUpdated > 0 {
+			handler.EmitEvent(Event{
+				Phase:   PhaseGitHub,
+				Type:    EventCompleted,
+				Message: fmt.Sprintf("Updated PR info for %d branches", prsUpdated),
+			})
+		} else {
+			handler.EmitEvent(Event{
+				Phase:   PhaseGitHub,
+				Type:    EventCompleted,
+				Message: "PR info up to date",
+			})
 		}
 
 		// Update PR body footers if needed

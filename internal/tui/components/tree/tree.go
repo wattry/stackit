@@ -21,13 +21,23 @@ const (
 	PRStateMerged = "MERGED"
 	// PRStateClosed indicates the PR has been closed
 	PRStateClosed = "CLOSED"
+
+	// CheckStatusNone indicates no CI status
+	CheckStatusNone = "NONE"
+	// CheckStatusPassing indicates CI is passing
+	CheckStatusPassing = "PASSING"
+	// CheckStatusFailing indicates CI is failing
+	CheckStatusFailing = "FAILING"
+	// CheckStatusPending indicates CI is pending
+	CheckStatusPending = "PENDING"
 )
 
 // BranchAnnotation holds per-branch display metadata
 type BranchAnnotation struct {
 	PRNumber      *int
 	PRAction      string // "create", "update", "skip", ""
-	CheckStatus   string // "PASSING", "FAILING", "PENDING", "NONE", ""
+	CheckStatus   string // PASSING, FAILING, PENDING, NONE, ""
+	ReviewStatus  string // "Approved", "In Review", "Changes Requested", "Commented", ""
 	IsDraft       bool
 	IsLocked      bool
 	NeedsRestack  bool
@@ -423,34 +433,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	isClosed := annotation.PRState == PRStateClosed
 	isDim := isMerged || isClosed
 
-	// Get branch info with colors
-	branchName := args.branchName
-	coloredBranchName := style.ColorBranchName(branchName, isCurrent)
-
-	if isSelected {
-		coloredBranchName = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("15")).
-			Bold(true).
-			Render(" " + branchName + " ")
-	}
-
-	// Add annotation
-	coloredBranchName += r.FormatAnnotationColored(annotation)
-
-	// Add compact stats
-	coloredBranchName += " " + r.formatCompactStats(annotation, isTrunk, args.hideStats)
-
-	// Add restack indicator if needed
-	if !r.isBranchFixed(branchName) {
-		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
-	}
-
-	if isDim {
-		coloredBranchName = style.ColorDim(coloredBranchName)
-	}
-
-	var result []string
+	// Build prefix for indentation
 	var prefixBuilder strings.Builder
 	for i := 0; i < args.indentLevel; i++ {
 		scope := ""
@@ -465,6 +448,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	}
 	prefix := prefixBuilder.String()
 
+	// Symbol styling
 	var symbol string
 	if isCurrent {
 		symbol = CurrentBranchSymbol
@@ -472,14 +456,12 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		symbol = BranchSymbol
 	}
 
-	// Style for the branch symbol and name
 	styleObj := lipgloss.NewStyle()
 	if color, ok := style.GetScopeColor(annotation.Scope); ok {
 		styleObj = styleObj.Foreground(color)
 	}
 
-	// Style for the vertical line below the symbol (connecting to parent)
-	// It should use the parent's scope color, not the branch's own scope.
+	// Parent style for connecting line
 	parentScope := ""
 	if parent := r.getParent(args.branchName); parent != "" {
 		parentScope = r.Annotations[parent].Scope
@@ -494,12 +476,158 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		parentStyle = parentStyle.Foreground(lipgloss.Color("8"))
 	}
 
+	// TRUNK: minimal single line
+	if isTrunk {
+		return []string{prefix + styleObj.Render(symbol) + " " + style.ColorDim(args.branchName)}
+	}
+
+	// MERGED/CLOSED: collapsed single line, dimmed
+	if isDim {
+		dimLine := prefix + styleObj.Render(symbol) + " " + style.ColorDim(args.branchName)
+		if annotation.ExplicitScope != "" {
+			dimLine += " " + style.ColorDim("["+annotation.ExplicitScope+"]")
+		}
+		return []string{
+			dimLine,
+			prefix + parentStyle.Render("│"),
+		}
+	}
+
+	var result []string
+
+	// LINE 1: Symbol + Branch Name (bold if current) + Scope + Actionable Warnings
+	branchName := args.branchName
+	coloredBranchName := style.ColorBranchNameBold(branchName, isCurrent)
+
+	if isSelected {
+		coloredBranchName = lipgloss.NewStyle().
+			Background(lipgloss.Color("236")).
+			Foreground(lipgloss.Color("15")).
+			Bold(true).
+			Render(" " + branchName + " ")
+	}
+
+	// Add explicit scope (colored to match tree)
+	if annotation.ExplicitScope != "" {
+		coloredBranchName += " " + style.ColorScope(annotation.ExplicitScope)
+	}
+
+	// Actionable warnings only
+	if !r.isBranchFixed(branchName) {
+		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
+	}
+	if annotation.IsLocked {
+		coloredBranchName += " " + style.ColorDim("(locked)")
+	}
+
 	result = append(result, prefix+styleObj.Render(symbol)+" "+coloredBranchName)
 
-	// Add trailing line
+	// LINE 2: Summary line with PR# → Review → CI → Stats
+	branchPipe := styleObj.Render("│")
+	summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
+
+	if summaryLine != "" {
+		result = append(result, prefix+branchPipe+"  "+summaryLine)
+	}
+
+	// Trailing spacer line
 	result = append(result, prefix+parentStyle.Render("│"))
 
 	return result
+}
+
+// formatSummaryLine creates line 2: PR# → Review → CI | Stats | Action/Status
+func (r *StackTreeRenderer) formatSummaryLine(annotation BranchAnnotation, isTrunk bool, hideStats bool) string {
+	var prParts []string
+	var statsParts []string
+	var actionParts []string
+
+	// PR number (colored by state)
+	if annotation.PRNumber != nil {
+		prParts = append(prParts, style.ColorPRNumberByState(*annotation.PRNumber, annotation.PRState, annotation.IsDraft))
+
+		// Draft badge
+		if annotation.IsDraft {
+			prParts = append(prParts, style.ColorDim("Draft"))
+		}
+	}
+
+	// Review status icon
+	switch annotation.ReviewStatus {
+	case "Approved":
+		prParts = append(prParts, style.IconReviewApproved())
+	case "Changes Requested":
+		prParts = append(prParts, style.IconReviewChangesRequested())
+		// Omit "In Review", "Commented", etc. - only show actionable states
+	}
+
+	// CI status (colored dot)
+	switch annotation.CheckStatus {
+	case CheckStatusPassing:
+		prParts = append(prParts, style.IconCIPassing())
+	case CheckStatusFailing:
+		prParts = append(prParts, style.IconCIFailing())
+	case CheckStatusPending:
+		prParts = append(prParts, style.IconCIPending())
+	}
+
+	// Stats (contextual, already colored)
+	if !isTrunk && !hideStats {
+		stats := r.formatContextualStats(annotation)
+		if stats != "" {
+			statsParts = append(statsParts, stats)
+		}
+	}
+
+	// PR Action (for submit view: create, update, skip)
+	if annotation.PRAction != "" {
+		actionParts = append(actionParts, style.ColorDim("→ "+annotation.PRAction))
+	}
+
+	// Custom label (for submit status: ✓, ✗, spinner)
+	if annotation.CustomLabel != "" {
+		actionParts = append(actionParts, annotation.CustomLabel)
+	}
+
+	// Join sections with pipe separators
+	var result []string
+	if len(prParts) > 0 {
+		result = append(result, strings.Join(prParts, " "))
+	}
+	if len(statsParts) > 0 {
+		result = append(result, strings.Join(statsParts, " "))
+	}
+	if len(actionParts) > 0 {
+		result = append(result, strings.Join(actionParts, " "))
+	}
+
+	return strings.Join(result, " "+style.ColorDim("|")+" ")
+}
+
+// formatContextualStats shows stats only when meaningful
+// - Commits: only if > 1
+// - Lines: only if non-zero (green for adds, red for deletes)
+func (r *StackTreeRenderer) formatContextualStats(annotation BranchAnnotation) string {
+	var parts []string
+
+	// Only show commit count if > 1
+	if annotation.CommitCount > 1 {
+		parts = append(parts, fmt.Sprintf("%dc", annotation.CommitCount))
+	}
+
+	// Only show lines if non-zero (colored: green for +, red for -)
+	if annotation.LinesAdded > 0 || annotation.LinesDeleted > 0 {
+		var lineParts []string
+		if annotation.LinesAdded > 0 {
+			lineParts = append(lineParts, style.ColorGreen(fmt.Sprintf("+%d", annotation.LinesAdded)))
+		}
+		if annotation.LinesDeleted > 0 {
+			lineParts = append(lineParts, style.ColorRed(fmt.Sprintf("-%d", annotation.LinesDeleted)))
+		}
+		parts = append(parts, strings.Join(lineParts, "/"))
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool) string {
@@ -517,7 +645,7 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 		parts = append(parts, annotation.PRAction)
 	}
 
-	if annotation.CheckStatus != "" && annotation.CheckStatus != "NONE" {
+	if annotation.CheckStatus != "" && annotation.CheckStatus != CheckStatusNone {
 		icon := r.checksIcon(annotation.CheckStatus)
 		parts = append(parts, icon)
 	}
@@ -527,7 +655,7 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 	}
 
 	if annotation.IsLocked {
-		parts = append(parts, "(frozen)")
+		parts = append(parts, "(locked)")
 	}
 
 	if annotation.CustomLabel != "" {
@@ -539,27 +667,6 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 	}
 
 	return " " + strings.Join(parts, " ")
-}
-
-func (r *StackTreeRenderer) formatCompactStats(annotation BranchAnnotation, isTrunk bool, hideStats bool) string {
-	var parts []string
-
-	if annotation.PRNumber != nil {
-		parts = append(parts, fmt.Sprintf("#%d", *annotation.PRNumber))
-	}
-
-	if !isTrunk && !hideStats {
-		parts = append(parts, fmt.Sprintf("%d commits", annotation.CommitCount))
-		if annotation.LinesAdded > 0 || annotation.LinesDeleted > 0 {
-			parts = append(parts, fmt.Sprintf("+%d/-%d", annotation.LinesAdded, annotation.LinesDeleted))
-		}
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-
-	return style.ColorDim("[" + strings.Join(parts, " • ") + "]")
 }
 
 // FormatAnnotationColored returns a colored string representation of a branch annotation
@@ -574,14 +681,14 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 		parts = append(parts, style.ColorDim("→ "+annotation.PRAction))
 	}
 
-	if annotation.CheckStatus != "" && annotation.CheckStatus != "NONE" {
+	if annotation.CheckStatus != "" && annotation.CheckStatus != CheckStatusNone {
 		icon := r.checksIcon(annotation.CheckStatus)
 		switch annotation.CheckStatus {
-		case "PASSING":
+		case CheckStatusPassing:
 			parts = append(parts, style.ColorCyan(icon))
-		case "FAILING":
+		case CheckStatusFailing:
 			parts = append(parts, style.ColorRed(icon))
-		case "PENDING":
+		case CheckStatusPending:
 			parts = append(parts, style.ColorYellow(icon))
 		default:
 			parts = append(parts, icon)
@@ -593,7 +700,7 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 	}
 
 	if annotation.IsLocked {
-		parts = append(parts, style.ColorDim("(frozen)"))
+		parts = append(parts, style.ColorDim("(locked)"))
 	}
 
 	if annotation.PRState == PRStateMerged {
@@ -615,11 +722,11 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 
 func (r *StackTreeRenderer) checksIcon(status string) string {
 	switch status {
-	case "PASSING":
+	case CheckStatusPassing:
 		return "✓"
-	case "FAILING":
+	case CheckStatusFailing:
 		return "✗"
-	case "PENDING":
+	case CheckStatusPending:
 		return "⏳"
 	default:
 		return ""

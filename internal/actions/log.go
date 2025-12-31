@@ -1,12 +1,14 @@
 package actions
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
 	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // LogOptions contains options for the log command
@@ -78,11 +80,11 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 			// CI status (only in FULL mode)
 			if opts.Style == "FULL" && !branchObj.IsTrunk() && ctx.GitHubClient != nil {
 				if status, err := ctx.GitHubClient.GetPRChecksStatus(ctx.Context, bName); err == nil && status != nil {
-					annotation.CheckStatus = "PASSING"
+					annotation.CheckStatus = tree.CheckStatusPassing
 					if status.Pending {
-						annotation.CheckStatus = "PENDING"
+						annotation.CheckStatus = tree.CheckStatusPending
 					} else if !status.Passing {
-						annotation.CheckStatus = "FAILING"
+						annotation.CheckStatus = tree.CheckStatusFailing
 					}
 				}
 			}
@@ -107,6 +109,35 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 		Reverse: opts.Reverse,
 		Steps:   opts.Steps,
 	})
+
+	// Add summary footer
+	branchCount := 0
+	approvedCount := 0
+	inReviewCount := 0
+	for name, ann := range annotations {
+		branch := ctx.Engine.GetBranch(name)
+		if branch.IsTrunk() {
+			continue
+		}
+		branchCount++
+		if ann.ReviewStatus == "Approved" {
+			approvedCount++
+		} else if ann.ReviewStatus == "In Review" {
+			inReviewCount++
+		}
+	}
+
+	if branchCount > 0 {
+		summaryParts := []string{fmt.Sprintf("%d branches", branchCount)}
+		if approvedCount > 0 {
+			summaryParts = append(summaryParts, fmt.Sprintf("%d approved", approvedCount))
+		}
+		if inReviewCount > 0 {
+			summaryParts = append(summaryParts, fmt.Sprintf("%d in review", inReviewCount))
+		}
+		stackLines = append(stackLines, "")
+		stackLines = append(stackLines, style.ColorDim(strings.Join(summaryParts, " · ")))
+	}
 
 	// Add untracked branches if requested
 	if opts.ShowUntracked {

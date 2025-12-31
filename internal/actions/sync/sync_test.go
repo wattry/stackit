@@ -17,7 +17,7 @@ func TestSyncAction(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: false,
-		})
+		}, nil)
 		require.NoError(t, err)
 	})
 
@@ -29,7 +29,7 @@ func TestSyncAction(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: false,
-		})
+		}, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "uncommitted changes")
 	})
@@ -44,7 +44,7 @@ func TestSyncAction(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: true,
-		})
+		}, nil)
 		// Should succeed (even if no restacking needed)
 		require.NoError(t, err)
 	})
@@ -61,7 +61,7 @@ func TestSyncAction(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: true,
-		})
+		}, nil)
 		// Should succeed - branches should be restacked in correct order
 		require.NoError(t, err)
 	})
@@ -80,7 +80,7 @@ func TestSyncAction(t *testing.T) {
 			All:     false,
 			Force:   false,
 			Restack: true,
-		})
+		}, nil)
 		// Should succeed - branches should be restacked with parents before children
 		require.NoError(t, err)
 
@@ -115,7 +115,7 @@ func TestSyncAction(t *testing.T) {
 		err = Action(s.Context, Options{
 			All:     true,
 			Restack: true,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		// Verify all branches are fixed
@@ -160,7 +160,7 @@ func TestSyncAction(t *testing.T) {
 		err = Action(s.Context, Options{
 			All:     true,
 			Restack: true,
-		})
+		}, nil)
 
 		// Should error due to conflict in C2
 		require.Error(t, err)

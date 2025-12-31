@@ -768,7 +768,7 @@ func (m *model) renderDetails() string {
 	// Basic Info
 	sb.WriteString(labelStyle.Render("Status:") + " " + m.getStatusString(m.selectedBranch) + "\n")
 	sb.WriteString(labelStyle.Render("Commits:") + " " + valueStyle.Render(fmt.Sprintf("%d", ann.CommitCount)) + "\n")
-	sb.WriteString(labelStyle.Render("Changes:") + " " + style.ColorCyan(fmt.Sprintf("+%d", ann.LinesAdded)) + " " + style.ColorRed(fmt.Sprintf("-%d", ann.LinesDeleted)) + "\n")
+	sb.WriteString(labelStyle.Render("Changes:") + " " + style.ColorGreen(fmt.Sprintf("+%d", ann.LinesAdded)) + " " + style.ColorRed(fmt.Sprintf("-%d", ann.LinesDeleted)) + "\n")
 
 	scope := m.engine.GetScope(b)
 	sb.WriteString(labelStyle.Render("Scope:") + " " + style.ColorScope(scope.String()) + "\n")
@@ -818,7 +818,7 @@ func (m *model) getStatusString(branchName string) string {
 		return style.ColorDim("Trunk")
 	}
 	if branch.IsLocked() {
-		return style.ColorDim("Frozen")
+		return style.ColorDim("Locked")
 	}
 	if !m.engine.IsUpToDate(branch) {
 		return style.ColorNeedsRestack("Needs Restack")
