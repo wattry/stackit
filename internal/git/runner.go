@@ -161,150 +161,54 @@ type MergeOptions struct {
 
 // Runner defines the interface for git operations used by the engine.
 // This allows the engine to be used with both real git and mock implementations.
+//
+// Runner is a composite interface that embeds smaller, focused interfaces for better
+// modularity and testability. Each embedded interface represents a logical grouping
+// of related git operations.
 type Runner interface {
-	// Repository and Config
-	InitDefaultRepo() error
-	GetRemote() string
-	FetchRemoteShas(remote string) (map[string]string, error)
-	GetRemoteSha(remote, branchName string) (string, error)
-	GetConfig(key string) (string, error)
-	SetConfig(key, value string) error
-	GetConfigAll(key string) ([]string, error)
-	AddConfigValue(key, value string) error
-	GetUserName(ctx context.Context) (string, error)
-	EnsureMetadataRefspecConfigured() error
-	GetRepoRoot() string
-	DiscoverRepoRoot() (string, error)
-	IsInsideRepo() bool
+	// Repository access and configuration
+	RepositoryReader
+	RepositoryWriter
 
-	// Branch Management
-	GetCurrentBranch() (string, error)
-	GetAllBranchNames() ([]string, error)
-	FindRemoteBranch(ctx context.Context, remote string) (string, error)
-	CheckoutBranch(ctx context.Context, branchName string) error
-	CheckoutBranchForce(ctx context.Context, branchName string) error
-	CreateAndCheckoutBranch(ctx context.Context, branchName string) error
-	DeleteBranch(ctx context.Context, branchName string) error
-	RenameBranch(ctx context.Context, oldName, newName string) error
-	CheckoutDetached(ctx context.Context, revision string) error
-	UpdateBranchRef(branchName, revision string) error
-	GetRemoteRevision(branchName string) (string, error)
+	// Remote operations
+	RemoteOperations
 
-	// Commit and Revision Information
-	GetRevision(branchName string) (string, error)
-	GetCurrentRevision(ctx context.Context) (string, error)
-	GetCurrentBranchOrSHA(ctx context.Context) (string, error)
-	BatchGetRevisions(branchNames []string) (map[string]string, []error)
-	GetMergeBase(rev1, rev2 string) (string, error)
-	GetMergeBaseByRef(ref1, ref2 string) (string, error)
-	IsAncestor(ancestor, descendant string) (bool, error)
-	GetCommitDate(branchName string) (time.Time, error)
-	GetCommitAuthor(branchName string) (string, error)
-	GetCommitRange(base, head, format string) ([]string, error)
-	GetCommitRangeSHAs(base, head string) ([]string, error)
-	GetCommitHistorySHAs(branchName string) ([]string, error)
-	GetCommitSHA(branchName string, offset int) (string, error)
+	// Branch operations
+	BranchReader
+	BranchWriter
 
-	// Git Operations
-	PullBranch(ctx context.Context, remote, branchName string) (PullResult, error)
-	PushBranch(ctx context.Context, branchName, remote string, opts PushOptions) error
-	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error)
-	RebaseContinue(ctx context.Context) (RebaseResult, error)
-	RebaseContinueNoEdit(ctx context.Context) (RebaseResult, error)
-	RebaseAbort(ctx context.Context) error
-	InteractiveRebase(ctx context.Context, onto string) error
-	IsMergeInProgress(ctx context.Context) bool
-	MergeAbort(ctx context.Context) error
-	CherryPick(ctx context.Context, commitSHA, onto string) (string, error)
-	CherryPickSimple(ctx context.Context, commitSHA string) error
-	CherryPickAbort(ctx context.Context) error
-	StashPush(ctx context.Context, message string) (string, error)
-	StashPop(ctx context.Context) error
-	Fetch(ctx context.Context, remote, branch string) error
-	CreateBranch(ctx context.Context, branchName, startPoint string) error
-	CreateBranchForce(ctx context.Context, branchName, revision string) error
-	Merge(ctx context.Context, branchName string, opts MergeOptions) error
-	CheckoutPaths(ctx context.Context, branch string, paths []string) error
-	RemovePaths(ctx context.Context, paths []string) error
-	ApplyPatch(ctx context.Context, patchFile string, threeWay bool) error
-	HardReset(ctx context.Context, revision string) error
-	ResetMerge(ctx context.Context, revision string) error
-	SoftReset(ctx context.Context, revision string) error
-	MixedReset(ctx context.Context, revision string) error
-	ListStash(ctx context.Context) (string, error)
-	GetReflog(ctx context.Context, count int, format string) (string, error)
-	CommitWithOptions(opts CommitOptions) error
-	CommitAmendNoEdit(ctx context.Context) error
-	Commit(message string, verbose int, noVerify bool) error
-	StageAll(ctx context.Context) error
-	StagePatch(ctx context.Context) error
-	StageTracked(ctx context.Context) error
-	AddAll(ctx context.Context) error
-	StageChanges(ctx context.Context, opts StagingOptions) error
-	GetRepoInfo(ctx context.Context) (string, string, error)
-	HasStagedChanges(ctx context.Context) (bool, error)
-	HasUnstagedChanges(ctx context.Context) (bool, error)
-	HasUntrackedFiles(ctx context.Context) (bool, error)
-	IsMerged(ctx context.Context, branchName, target string) (bool, error)
-	IsDiffEmpty(ctx context.Context, branchName, base string) (bool, error)
-	GetChangedFiles(ctx context.Context, base, head string) ([]string, error)
-	GetRebaseHead() (string, error)
-	IsRebaseInProgress(ctx context.Context) bool
-	CheckRebaseInProgress(ctx context.Context) error
-	HasUncommittedChanges(ctx context.Context) bool
-	ParseStagedHunks(ctx context.Context) ([]Hunk, error)
-	ShowDiff(ctx context.Context, left, right string, stat bool) (string, error)
-	ShowCommits(ctx context.Context, base, head string, patch, stat bool) (string, error)
-	GetUnmergedFiles(ctx context.Context) ([]string, error)
-	GetStagedDiff(ctx context.Context, files ...string) (string, error)
-	GetUnstagedDiff(ctx context.Context, files ...string) (string, error)
-	GetCommitTemplate(ctx context.Context) (string, error)
-	GetDiffNumstat(base, head string) (string, error)
-	GetCommitLog(sha, format string) (string, error)
-	GetStatusPorcelain(ctx context.Context) (string, error)
+	// Commit and revision access
+	CommitReader
 
-	// Worktree operations
-	AddWorktree(ctx context.Context, path string, branch string, detach bool) error
-	RemoveWorktree(ctx context.Context, path string) error
-	ListWorktrees(ctx context.Context) ([]string, error)
+	// Diff and comparison
+	DiffOperations
 
-	UpdateRefWithLog(ctx context.Context, refName, sha, message string) error
-	VerifyRef(ctx context.Context, refName string) error
+	// Staging area
+	StagingOperations
 
-	// Low-level Commands
-	RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error)
-	RunGitCommandInteractive(args ...string) error
-	RunGHCommandWithContext(ctx context.Context, args ...string) (string, error)
+	// Commit creation
+	CommitWriter
 
-	// Low-level Ref and Object Management
-	GetRef(name string) (string, error)
-	UpdateRef(name, sha string) error
-	DeleteRef(name string) error
-	CreateBlob(content string) (string, error)
-	ReadBlob(sha string) (string, error)
-	CatFile(sha string) (string, error)
-	ListRefs(prefix string) (map[string]string, error)
+	// Advanced git operations
+	RebaseOperations
+	MergeOperations
+	CherryPickOperations
+	StashOperations
+	ResetOperations
+	PathOperations
+	PatchOperations
 
-	// Remote Metadata Ref Operations
-	PushMetadataRefs(branches []string) error
-	FetchMetadataRefs() error
-	DeleteRemoteMetadataRef(branch string) error
-	TestRemoteRefCompatibility() error
+	// Worktree management
+	WorktreeOperations
 
-	// Metadata operations
-	ReadMetadata(branchName string) (*Meta, error)
-	BatchReadMetadata(branchNames []string) (map[string]*Meta, map[string]error)
-	WriteMetadata(branchName string, meta *Meta) error
-	DeleteMetadata(branchName string) error
-	RenameMetadata(oldName, newName string) error
-	ReadLocalMetadata(branchName string) (*LocalMeta, error)
-	BatchReadLocalMetadata(branchNames []string) map[string]*LocalMeta
-	WriteLocalMetadata(branchName string, meta *LocalMeta) error
-	ListMetadata() (map[string]string, error)
+	// Repository status
+	StatusOperations
 
-	// Absorb and Hunks
-	GetParentCommitSHA(commitSHA string) (string, error)
-	CheckCommutation(hunk Hunk, commitSHA, parentSHA string) (bool, error)
+	// Low-level operations
+	RefOperations
+	ObjectOperations
+	MetadataOperations
+	CommandRunner
 }
 
 // NewRunner returns a standard implementation of Runner that uses the current

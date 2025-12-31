@@ -64,6 +64,10 @@ const (
 	LocalMetadataRefPrefix = "refs/stackit/local-metadata/"
 )
 
+// BatchReadMetadata reads metadata for multiple branches in parallel.
+// Returns two maps: one with successfully read metadata and one with errors for failed reads.
+// Branches that don't have metadata will have an empty Meta struct in the results map.
+// Only actual errors (not missing metadata) will be included in the errors map.
 func (r *runner) BatchReadMetadata(branchNames []string) (map[string]*Meta, map[string]error) {
 	results := make(map[string]*Meta)
 	errs := make(map[string]error)
@@ -90,6 +94,9 @@ func (r *runner) BatchReadMetadata(branchNames []string) (map[string]*Meta, map[
 	return results, errs
 }
 
+// BatchReadLocalMetadata reads local metadata for multiple branches in parallel.
+// Returns a map of successfully read metadata. Failures are silently ignored since
+// local metadata is not critical and missing metadata is expected for new branches.
 func (r *runner) BatchReadLocalMetadata(branchNames []string) map[string]*LocalMeta {
 	results := make(map[string]*LocalMeta)
 	resultsMu := sync.Mutex{}

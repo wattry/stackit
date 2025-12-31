@@ -1,9 +1,8 @@
-// Package app provides a context type that holds the engine and logger
-// for use throughout the application. This avoids passing multiple parameters.
 // Package app provides the execution context for stackit commands.
 //
 // It encapsulates shared dependencies and configuration needed by actions,
-// such as the engine instance, logger, and repository root path.
+// such as the engine instance, logger, and repository root path. This avoids
+// passing multiple parameters throughout the application.
 package app
 
 import (
@@ -34,10 +33,11 @@ type Context struct {
 	Quiet       bool
 }
 
-// Git returns the git runner from the engine
+// Git returns the git runner from the engine.
+// Panics if the Engine is nil, which indicates a programming error.
 func (c *Context) Git() git.Runner {
 	if c.Engine == nil {
-		return nil
+		panic("Context.Git() called with nil Engine - this is a programming error")
 	}
 	return c.Engine.Git()
 }
@@ -67,6 +67,10 @@ func NewContext(eng engine.Engine) *Context {
 
 // NewContextWithOptions creates a new context with the given engine and options
 func NewContextWithOptions(eng engine.Engine, opts GlobalOptions) *Context {
+	if eng == nil {
+		panic("NewContextWithOptions called with nil engine")
+	}
+
 	var splog *tui.Splog
 	var err error
 
@@ -103,6 +107,10 @@ func NewContextWithRepoRoot(eng engine.Engine, repoRoot string) *Context {
 
 // NewContextWithRepoRootAndOptions creates a new context with the given engine, repo root and options
 func NewContextWithRepoRootAndOptions(eng engine.Engine, repoRoot string, opts GlobalOptions) *Context {
+	if eng == nil {
+		panic("NewContextWithRepoRootAndOptions called with nil engine")
+	}
+
 	var splog *tui.Splog
 	var err error
 
