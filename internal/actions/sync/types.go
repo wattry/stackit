@@ -54,6 +54,7 @@ func (s *Summary) HasChanges() bool {
 }
 
 // Handler abstracts TTY vs non-TTY output for sync operations
+// It embeds RestackHandler to provide a unified interface for operations that include restacking
 type Handler interface {
 	// Start is called at the beginning of sync with the total operation count
 	Start(totalOps int)
@@ -63,7 +64,36 @@ type Handler interface {
 
 	// Complete is called when sync finishes with the summary
 	Complete(summary Summary)
+
+	// RestackHandler methods are available for restack-specific output
+	// This allows the same handler to be used for standalone restack operations
+	RestackHandler
 }
+
+// RestackHandler abstracts TTY vs non-TTY output for restack operations
+// This is a subset of Handler that can be used independently for the restack command
+type RestackHandler interface {
+	// OnRestackStart is called at the beginning of restack with branch count
+	OnRestackStart(branchCount int)
+
+	// OnRestackBranch is called for each branch during restack
+	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int)
+
+	// OnRestackComplete is called when restack finishes
+	OnRestackComplete(restacked, skipped int, conflicts []string)
+}
+
+// RestackResult represents the outcome of a restack operation for a single branch
+type RestackResult string
+
+const (
+	// RestackDone indicates the branch was successfully restacked
+	RestackDone RestackResult = "done"
+	// RestackUnneeded indicates the branch didn't need restacking
+	RestackUnneeded RestackResult = "unneeded"
+	// RestackConflict indicates the branch had a conflict
+	RestackConflict RestackResult = "conflict"
+)
 
 // NullHandler is a no-op handler for testing or when output is not needed
 type NullHandler struct{}
@@ -76,3 +106,12 @@ func (h *NullHandler) EmitEvent(_ Event) {}
 
 // Complete implements Handler.
 func (h *NullHandler) Complete(_ Summary) {}
+
+// OnRestackStart implements RestackHandler.
+func (h *NullHandler) OnRestackStart(_ int) {}
+
+// OnRestackBranch implements RestackHandler.
+func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int) {}
+
+// OnRestackComplete implements RestackHandler.
+func (h *NullHandler) OnRestackComplete(_, _ int, _ []string) {}

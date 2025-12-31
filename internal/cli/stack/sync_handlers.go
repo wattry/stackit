@@ -180,23 +180,7 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 }
 
 func (h *SimpleSyncHandler) printSummary(summary syncAction.Summary) {
-	parts := []string{}
-
-	if summary.TrunkUpdated {
-		parts = append(parts, "pulled trunk")
-	}
-	if summary.BranchesSynced > 0 {
-		parts = append(parts, fmt.Sprintf("synced %d branch%s", summary.BranchesSynced, pluralS(summary.BranchesSynced)))
-	}
-	if summary.BranchesRestacked > 0 {
-		parts = append(parts, fmt.Sprintf("restacked %d", summary.BranchesRestacked))
-	}
-	if summary.BranchesDeleted > 0 {
-		parts = append(parts, fmt.Sprintf("deleted %d", summary.BranchesDeleted))
-	}
-	if summary.BranchesSkipped > 0 {
-		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", summary.BranchesSkipped))
-	}
+	parts := syncAction.FormatSummaryParts(summary)
 
 	if len(parts) > 0 {
 		h.splog.Info("✅ Summary: %s", strings.Join(parts, ", "))
@@ -209,11 +193,58 @@ func (h *SimpleSyncHandler) printSummary(summary syncAction.Summary) {
 	}
 }
 
-func pluralS(count int) string {
-	if count == 1 {
-		return ""
+// OnRestackStart implements RestackHandler for standalone restack operations
+func (h *SimpleSyncHandler) OnRestackStart(_ int) {
+	// For sync, we use EmitEvent with PhaseRestack instead
+	// This is here for standalone restack command usage
+}
+
+// OnRestackBranch implements RestackHandler for standalone restack operations
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int) {
+	// Convert to Event and use existing printRestackEvent
+	event := syncAction.Event{
+		Phase:       syncAction.PhaseRestack,
+		Branch:      branch,
+		PRNumber:    prNumber,
+		NewRevision: newRev,
 	}
-	return "es"
+
+	switch result {
+	case syncAction.RestackDone, syncAction.RestackUnneeded:
+		event.Type = syncAction.EventCompleted
+	case syncAction.RestackConflict:
+		event.Type = syncAction.EventSkipped
+		event.Conflict = true
+	}
+
+	h.printRestackEvent(event)
+}
+
+// OnRestackComplete implements RestackHandler for standalone restack operations
+func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts []string) {
+	h.splog.Newline()
+
+	if restacked == 0 && skipped == 0 {
+		h.splog.Info("✨ All branches are up to date!")
+		return
+	}
+
+	parts := []string{}
+	if restacked > 0 {
+		parts = append(parts, fmt.Sprintf("restacked %d", restacked))
+	}
+	if skipped > 0 {
+		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", skipped))
+	}
+
+	if len(parts) > 0 {
+		h.splog.Info("✅ Summary: %s", strings.Join(parts, ", "))
+	}
+
+	if len(conflicts) > 0 {
+		h.splog.Info("  Run %s to resolve and continue",
+			style.ColorCyan(fmt.Sprintf("st restack %s", conflicts[0])))
+	}
 }
 
 // InteractiveSyncHandler provides bubbletea TUI for TTY environments
@@ -367,23 +398,7 @@ func (h *InteractiveSyncHandler) formatSummary(summary syncAction.Summary) strin
 		return "✨ Everything is up to date!"
 	}
 
-	parts := []string{}
-
-	if summary.TrunkUpdated {
-		parts = append(parts, "pulled trunk")
-	}
-	if summary.BranchesSynced > 0 {
-		parts = append(parts, fmt.Sprintf("synced %d branch%s", summary.BranchesSynced, pluralS(summary.BranchesSynced)))
-	}
-	if summary.BranchesRestacked > 0 {
-		parts = append(parts, fmt.Sprintf("restacked %d", summary.BranchesRestacked))
-	}
-	if summary.BranchesDeleted > 0 {
-		parts = append(parts, fmt.Sprintf("deleted %d", summary.BranchesDeleted))
-	}
-	if summary.BranchesSkipped > 0 {
-		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", summary.BranchesSkipped))
-	}
+	parts := syncAction.FormatSummaryParts(summary)
 
 	result := ""
 	if len(parts) > 0 {
@@ -393,6 +408,127 @@ func (h *InteractiveSyncHandler) formatSummary(summary syncAction.Summary) strin
 	// Add actionable advice for conflicts
 	if len(summary.ConflictBranches) > 0 {
 		result += fmt.Sprintf("\n   Run 'st restack %s' to resolve and continue", summary.ConflictBranches[0])
+	}
+
+	return result
+}
+
+// OnRestackStart implements RestackHandler for standalone restack operations
+func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.totalOps = branchCount
+	h.completedOps = 0
+
+	// Initialize model for restack (reusing sync model with just restack phase)
+	h.model = syncComponent.NewModel(branchCount)
+
+	// Quiet the splog so it doesn't interfere with the TUI
+	h.splog.SetQuiet(true)
+
+	// Start bubbletea program
+	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+
+	// Run program in background
+	go func() {
+		if _, err := h.program.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error running restack TUI: %v\n", err)
+		}
+	}()
+
+	// Start restack phase
+	h.program.Send(syncComponent.PhaseStartMsg{
+		Phase: syncComponent.Phase(syncAction.PhaseRestack),
+	})
+}
+
+// OnRestackBranch implements RestackHandler for standalone restack operations
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.program == nil {
+		return
+	}
+
+	// Build detail message
+	detail := h.formatRestackDetail(branch, result, newRev, prNumber)
+	if detail != "" {
+		h.program.Send(syncComponent.PhaseDetailMsg{
+			Phase:   syncComponent.Phase(syncAction.PhaseRestack),
+			Message: detail,
+		})
+	}
+
+	// Update progress
+	h.completedOps++
+	h.program.Send(syncComponent.ProgressTickMsg{
+		Completed: h.completedOps,
+		Total:     h.totalOps,
+	})
+}
+
+// formatRestackDetail formats a restack event into a detail string
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int) string {
+	prInfo := ""
+	if prNumber != nil {
+		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)
+	}
+
+	switch result {
+	case syncAction.RestackDone:
+		return fmt.Sprintf("Restacked %s%s -> %s", branch, prInfo, newRev)
+	case syncAction.RestackUnneeded:
+		return fmt.Sprintf("%s%s does not need restacking", branch, prInfo)
+	case syncAction.RestackConflict:
+		return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", branch, prInfo)
+	}
+	return ""
+}
+
+// OnRestackComplete implements RestackHandler for standalone restack operations
+func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, conflicts []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.program == nil {
+		return
+	}
+
+	// Build summary message
+	summaryMsg := h.formatRestackSummary(restacked, skipped, conflicts)
+
+	// Send complete message and wait for program to quit
+	h.program.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
+	h.program.Wait()
+	h.program = nil
+
+	// Restore splog
+	h.splog.SetQuiet(false)
+}
+
+// formatRestackSummary formats the restack summary
+func (h *InteractiveSyncHandler) formatRestackSummary(restacked, skipped int, conflicts []string) string {
+	if restacked == 0 && skipped == 0 {
+		return "✨ All branches are up to date!"
+	}
+
+	parts := []string{}
+	if restacked > 0 {
+		parts = append(parts, fmt.Sprintf("restacked %d", restacked))
+	}
+	if skipped > 0 {
+		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", skipped))
+	}
+
+	result := ""
+	if len(parts) > 0 {
+		result = "✅ Summary: " + strings.Join(parts, ", ")
+	}
+
+	if len(conflicts) > 0 {
+		result += fmt.Sprintf("\n   Run 'st restack %s' to resolve and continue", conflicts[0])
 	}
 
 	return result
