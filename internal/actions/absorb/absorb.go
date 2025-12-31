@@ -13,6 +13,11 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
+const (
+	absorbStashMarker = "stackit-absorb-temp"
+	unknown           = "unknown"
+)
+
 // Options contains options for the absorb command
 type Options struct {
 	All    bool
@@ -284,7 +289,3 @@ func Action(ctx *app.Context, opts Options) error {
 
 	return nil
 }
-
-const (
-	unknown = "unknown"
-)

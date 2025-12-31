@@ -9,10 +9,6 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-const (
-	absorbStashMarker = "stackit-absorb-temp"
-)
-
 // IsAbsorbInProgress checks if there's a failed absorb operation that needs cleanup.
 // This is detected by checking for:
 // 1. Detached HEAD state, OR

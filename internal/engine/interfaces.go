@@ -154,4 +154,6 @@ type Absorber interface {
 }
 
 // AbsorbManager is deprecated. Use Absorber instead.
+//
+// Deprecated: Use Absorber interface directly.
 type AbsorbManager = Absorber
