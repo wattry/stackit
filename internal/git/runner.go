@@ -1112,10 +1112,10 @@ func (r *runner) StageChanges(ctx context.Context, opts StagingOptions) error {
 
 func (r *runner) GetRepoInfo(ctx context.Context) (string, string, error) {
 	// Get remote URL
-	url, err := r.runGitCommandWithContextInternal(ctx, "config", "--get", "remote.origin.url")
-	if err != nil {
-		// Return empty strings and no error if remote.origin.url is not set
-		// This happens in many tests and is not a fatal error for most operations.
+	url, _ := r.runGitCommandWithContextInternal(ctx, "config", "--get", "remote.origin.url")
+	// url will be empty if there's an error (e.g. remote.origin.url not set)
+	// This happens in many tests and is not a fatal error for most operations.
+	if url == "" {
 		return "", "", nil
 	}
 

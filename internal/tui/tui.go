@@ -260,11 +260,14 @@ func RunSubmitTUISimple(items []submit.Item, submitFunc func(idx int) (string, e
 	return nil
 }
 
-// Re-export from utils for backward compatibility
+// IsTTY returns true if we can use a TTY for interactive TUI.
+// Re-export from utils for backward compatibility.
 func IsTTY() bool {
 	return utils.IsTTY()
 }
 
+// SetInteractive sets whether the TUI should be interactive.
+// Re-export from utils for backward compatibility.
 func SetInteractive(interactive bool) {
 	utils.SetInteractive(interactive)
 }

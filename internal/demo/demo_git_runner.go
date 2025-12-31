@@ -449,27 +449,11 @@ func (d *demoGitRunner) StagePatch(_ context.Context) error {
 	return nil
 }
 
-func (d *demoGitRunner) runGitCommandInternal(_ ...string) (string, error) {
-	return "", nil
-}
-
-func (d *demoGitRunner) runGitCommandWithContextInternal(_ context.Context, _ ...string) (string, error) {
-	return "", nil
-}
-
 func (d *demoGitRunner) RunGitCommandWithEnv(_ context.Context, _ []string, _ ...string) (string, error) {
 	return "", nil
 }
 
-func (d *demoGitRunner) runGitCommandRawWithContextInternal(_ context.Context, _ ...string) (string, error) {
-	return "", nil
-}
-
 func (d *demoGitRunner) RunGHCommandWithContext(_ context.Context, _ ...string) (string, error) {
-	return "", nil
-}
-
-func (d *demoGitRunner) runGitCommandWithInputInternal(_ string, _ ...string) (string, error) {
 	return "", nil
 }
 

@@ -1,3 +1,4 @@
+// Package utils provides shared utility functions for the stackit codebase.
 package utils
 
 import (

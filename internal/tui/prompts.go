@@ -15,6 +15,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 type promptKeyMap struct {
@@ -83,7 +84,7 @@ var ErrInteractiveDisabled = fmt.Errorf("interactive prompts are disabled (STACK
 
 // checkInteractiveAllowed returns an error if interactive mode is disabled
 func checkInteractiveAllowed() error {
-	if !interactiveMode {
+	if !utils.IsInteractive() {
 		return ErrInteractiveDisabled
 	}
 	return nil
