@@ -48,4 +48,6 @@ const (
 	StatusError = "error"
 	// StatusPending indicates the branch is waiting to be submitted
 	StatusPending = "pending"
+	// SkipReasonNoChanges indicates the branch was skipped because it has no changes
+	SkipReasonNoChanges = "no changes"
 )

@@ -16,10 +16,16 @@ type Options struct {
 }
 
 // Action performs the sync operation
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *runtime.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
+	summary := &Summary{}
+
+	// Use null handler if none provided
+	if handler == nil {
+		handler = &NullHandler{}
+	}
 
 	// Handle --all flag (stub for now)
 	if opts.All {
@@ -33,26 +39,36 @@ func Action(ctx *runtime.Context, opts Options) error {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
 	}
 
-	// Pull trunk
-	if err := syncTrunk(ctx, &opts); err != nil {
+	// Calculate total operations for progress (rough estimate)
+	totalOps := 1 // trunk sync
+	if opts.Restack {
+		// Estimate based on tracked branches
+		totalOps += len(eng.AllBranches())
+	}
+	handler.Start(totalOps)
+
+	// Phase 1: Pull trunk
+	handler.EmitEvent(Event{Phase: PhaseTrunk, Type: EventStarted})
+	if err := syncTrunk(ctx, &opts, handler, summary); err != nil {
 		return err
 	}
 
 	// Clean branches (delete merged/closed)
 	branchesToRestack := []string{}
 
-	// Sync PR info
-	if err := syncGitHubInfo(ctx, &branchesToRestack); err != nil {
+	// Phase 2: Sync PR info from GitHub
+	handler.EmitEvent(Event{Phase: PhaseGitHub, Type: EventStarted})
+	if err := syncGitHubInfo(ctx, &branchesToRestack, handler, summary); err != nil {
 		return err
 	}
 
-	// Sync remote metadata
+	// Sync remote metadata (internal, not a visible phase unless conflicts)
 	if err := syncRemoteMetadata(ctx, &opts); err != nil {
 		return err
 	}
 
-	// Clean branches (delete merged/closed)
-	cleanResult, err := cleanBranches(ctx, &opts)
+	// Phase 3: Clean branches (delete merged/closed)
+	cleanResult, err := cleanBranches(ctx, &opts, handler, summary)
 	if err != nil {
 		return fmt.Errorf("failed to clean branches: %w", err)
 	}
@@ -70,8 +86,27 @@ func Action(ctx *runtime.Context, opts Options) error {
 	// Restack if requested
 	if !opts.Restack {
 		splog.Tip("Try the --restack flag to automatically restack the current stack.")
+		// Check if everything was up to date
+		if !summary.HasChanges() {
+			summary.UpToDate = true
+		}
+		handler.Complete(*summary)
 		return nil
 	}
 
-	return restackBranches(ctx, branchesToRestack)
+	// Phase 4: Restack branches
+	handler.EmitEvent(Event{Phase: PhaseRestack, Type: EventStarted})
+	if err := restackBranches(ctx, branchesToRestack, handler, summary); err != nil {
+		// Even on error, complete with summary
+		handler.Complete(*summary)
+		return err
+	}
+
+	// Check if everything was up to date
+	if !summary.HasChanges() {
+		summary.UpToDate = true
+	}
+
+	handler.Complete(*summary)
+	return nil
 }

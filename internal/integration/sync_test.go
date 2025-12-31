@@ -52,7 +52,7 @@ func TestSync(t *testing.T) {
 		require.NoError(t, err)
 
 		// 3. Run sync (this should update the local parent to match GitHub)
-		err = sync.Action(sh.Context, sync.Options{})
+		err = sync.Action(sh.Context, sync.Options{}, nil)
 		require.NoError(t, err)
 
 		// 4. Verify local parent of feature-b is now main
@@ -133,7 +133,7 @@ func TestSync(t *testing.T) {
 		require.NoError(t, err)
 
 		// 3. Run sync (which should call clean_branches)
-		err = sync.Action(sh.Context, sync.Options{})
+		err = sync.Action(sh.Context, sync.Options{}, nil)
 		require.NoError(t, err)
 
 		// 4. Verify all merged branches are deleted
@@ -185,7 +185,7 @@ func TestSync(t *testing.T) {
 		_ = eng.WriteMetadataRef(eng.GetBranch("b"), metaB)
 
 		// 1. Run sync
-		err := sync.Action(sh.Context, sync.Options{})
+		err := sync.Action(sh.Context, sync.Options{}, nil)
 		require.NoError(t, err)
 
 		// 2. Verify 'a' is deleted
@@ -237,7 +237,7 @@ func TestSyncDraftPRs(t *testing.T) {
 	require.True(t, prInfo.IsDraft())
 
 	// 3. Run sync
-	err = sync.Action(sh.Context, sync.Options{})
+	err = sync.Action(sh.Context, sync.Options{}, nil)
 	require.NoError(t, err)
 
 	// 4. Verify branch still exists (drafts shouldn't be deleted)
@@ -285,7 +285,7 @@ func TestSyncCleanupDiamond(t *testing.T) {
 	_ = eng.WriteMetadataRef(eng.GetBranch("b"), metaB)
 
 	// Run sync
-	err := sync.Action(sh.Context, sync.Options{})
+	err := sync.Action(sh.Context, sync.Options{}, nil)
 	require.NoError(t, err)
 
 	// Verify 'a' and 'b' are deleted, but 'c' remains (not merged)
@@ -333,7 +333,7 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 	require.True(t, isEmpty)
 
 	// Run sync
-	err := sync.Action(sh.Context, sync.Options{})
+	err := sync.Action(sh.Context, sync.Options{}, nil)
 	require.NoError(t, err)
 
 	// 'a' should be deleted because it's merged and empty
