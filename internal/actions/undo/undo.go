@@ -4,9 +4,9 @@ package undo
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/timeutil"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -18,7 +18,7 @@ type Options struct {
 }
 
 // Action performs the undo operation
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

@@ -17,6 +17,7 @@ type engineImpl struct {
 	childrenMap       map[string][]string // branch -> children
 	scopeMap          map[string]string   // branch -> scope
 	lockedMap         map[string]bool     // branch -> locked
+	frozenMap         map[string]bool     // branch -> frozen (local-only)
 	remoteShas        map[string]string   // branch -> remote SHA (populated by PopulateRemoteShas)
 	remoteMetaCache   map[string]*Meta    // branch -> remote metadata
 	localModified     map[string]bool     // branches with local changes not yet pushed
@@ -56,6 +57,7 @@ func NewEngine(opts Options) (Engine, error) {
 		childrenMap:       make(map[string][]string),
 		scopeMap:          make(map[string]string),
 		lockedMap:         make(map[string]bool),
+		frozenMap:         make(map[string]bool),
 		remoteShas:        make(map[string]string),
 		remoteMetaCache:   make(map[string]*Meta),
 		localModified:     make(map[string]bool),

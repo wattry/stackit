@@ -7,6 +7,14 @@ import (
 	"fmt"
 )
 
+// Standard library error functions wrapped for convenience
+var (
+	Is     = errors.Is
+	As     = errors.As
+	New    = errors.New
+	Unwrap = errors.Unwrap
+)
+
 // Sentinel errors for common conditions
 var (
 	// ErrNotOnBranch indicates that HEAD is not on a branch
@@ -23,6 +31,9 @@ var (
 
 	// ErrTrunkOperation indicates an invalid operation on the trunk branch
 	ErrTrunkOperation = errors.New("invalid operation on trunk branch")
+
+	// ErrBranchModificationRestricted indicates a branch cannot be modified due to its state (locked or frozen)
+	ErrBranchModificationRestricted = errors.New("branch modification restricted")
 )
 
 // BranchNotFoundError represents an error when a branch is not found
@@ -42,6 +53,40 @@ func (e *BranchNotFoundError) Is(target error) bool {
 // NewBranchNotFoundError creates a new BranchNotFoundError
 func NewBranchNotFoundError(branchName string) *BranchNotFoundError {
 	return &BranchNotFoundError{BranchName: branchName}
+}
+
+// BranchModificationError represents an error when a branch cannot be modified
+type BranchModificationError struct {
+	BranchName string
+	IsLocked   bool
+	IsFrozen   bool
+}
+
+func (e *BranchModificationError) Error() string {
+	state := ""
+	switch {
+	case e.IsLocked && e.IsFrozen:
+		state = "locked and frozen"
+	case e.IsLocked:
+		state = "locked"
+	case e.IsFrozen:
+		state = "frozen"
+	}
+	return fmt.Sprintf("branch %s is %s", e.BranchName, state)
+}
+
+// Is returns true if the target error is ErrBranchModificationRestricted
+func (e *BranchModificationError) Is(target error) bool {
+	return target == ErrBranchModificationRestricted
+}
+
+// NewBranchModificationError creates a new BranchModificationError
+func NewBranchModificationError(branchName string, locked, frozen bool) *BranchModificationError {
+	return &BranchModificationError{
+		BranchName: branchName,
+		IsLocked:   locked,
+		IsFrozen:   frozen,
+	}
 }
 
 // RebaseConflictError represents an error when a rebase encounters a conflict

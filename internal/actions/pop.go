@@ -3,8 +3,8 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -15,7 +15,7 @@ type PopOptions struct {
 }
 
 // PopAction deletes the current branch but retains the state of files in the working tree
-func PopAction(ctx *runtime.Context, _ PopOptions) error {
+func PopAction(ctx *app.Context, _ PopOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

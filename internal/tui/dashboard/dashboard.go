@@ -13,9 +13,9 @@ import (
 
 	submitAction "stackit.dev/stackit/internal/actions/submit"
 	syncAction "stackit.dev/stackit/internal/actions/sync"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/operations"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -37,7 +37,7 @@ type Options struct {
 }
 
 type model struct {
-	ctx           *runtime.Context
+	ctx           *app.Context
 	engine        engine.Engine
 	renderer      *tree.StackTreeRenderer
 	width         int
@@ -85,7 +85,7 @@ type operationProgressMsg operations.Progress
 type operationDoneMsg struct{}
 
 // Run starts the interactive dashboard program.
-func Run(ctx *runtime.Context, opts Options) error {
+func Run(ctx *app.Context, opts Options) error {
 	ti := textinput.New()
 	ti.Placeholder = "Enter command (e.g. create -m \"msg\") or 'quit'"
 	ti.Focus()
@@ -181,8 +181,9 @@ func (m *model) refresh() tea.Cmd {
 			count, _ := m.engine.GetCommitCount(b)
 			ann.CommitCount = count
 
-			// Locked status
+			// Locked/Frozen status
 			ann.IsLocked = b.IsLocked()
+			ann.IsFrozen = b.IsFrozen()
 
 			// Scope
 			ann.Scope = m.engine.GetScope(b).String()
@@ -817,8 +818,15 @@ func (m *model) getStatusString(branchName string) string {
 	if m.engine.IsTrunk(branch) {
 		return style.ColorDim("Trunk")
 	}
+	statusParts := []string{}
 	if branch.IsLocked() {
-		return style.ColorDim("Locked")
+		statusParts = append(statusParts, style.IconLocked()+" "+style.ColorDim("(locked)"))
+	}
+	if branch.IsFrozen() {
+		statusParts = append(statusParts, style.IconFrozen()+" "+style.ColorDim("(frozen)"))
+	}
+	if len(statusParts) > 0 {
+		return strings.Join(statusParts, " ")
 	}
 	if !m.engine.IsUpToDate(branch) {
 		return style.ColorNeedsRestack("Needs Restack")

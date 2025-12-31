@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -28,7 +28,7 @@ type Options struct {
 }
 
 // Action creates a new branch stacked on top of the current branch
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -173,7 +173,7 @@ func Action(ctx *runtime.Context, opts Options) error {
 	return nil
 }
 
-func determineBranch(ctx *runtime.Context, opts *Options, commitMessage string, scope string) (engine.Branch, error) {
+func determineBranch(ctx *app.Context, opts *Options, commitMessage string, scope string) (engine.Branch, error) {
 	branchName := opts.BranchName
 	if branchName == "" {
 		// Get pattern from options (always valid, default applied in GetBranchPattern)

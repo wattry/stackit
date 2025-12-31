@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"sync"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // CleanBranchesOptions contains options for cleaning branches
@@ -24,12 +25,12 @@ type CleanBranchesResult struct {
 
 // CleanBranches finds and deletes merged/closed branches
 // Returns branches whose parents have changed (need restacking)
-func CleanBranches(ctx *runtime.Context, opts CleanBranchesOptions) (*CleanBranchesResult, error) {
+func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesResult, error) {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	c := ctx.Context
 
-	// Pre-calculate which branches should be deleted in parallel
+	// Pre-calculate which branches should be deleted in parallel using a worker pool
 	allTrackedBranches := eng.AllBranches()
 	type deleteStatus struct {
 		shouldDelete bool
@@ -37,23 +38,24 @@ func CleanBranches(ctx *runtime.Context, opts CleanBranchesOptions) (*CleanBranc
 	}
 	deleteStatuses := make(map[string]deleteStatus)
 	var mu sync.Mutex
-	var wg sync.WaitGroup
 
+	// Filter out trunk branches before processing
+	branchesToProcessPool := []engine.Branch{}
 	for _, branch := range allTrackedBranches {
-		branchName := branch.GetName()
-		if branch.IsTrunk() {
-			continue
+		if !branch.IsTrunk() {
+			branchesToProcessPool = append(branchesToProcessPool, branch)
 		}
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
+	}
+
+	if len(branchesToProcessPool) > 0 {
+		concurrency.Run(branchesToProcessPool, func(branch engine.Branch) {
+			name := branch.GetName()
 			shouldDelete, reason := ShouldDeleteBranch(c, name, eng, opts.Force)
 			mu.Lock()
 			deleteStatuses[name] = deleteStatus{shouldDelete: shouldDelete, reason: reason}
 			mu.Unlock()
-		}(branchName)
+		})
 	}
-	wg.Wait()
 
 	// Start from trunk children
 	trunk := eng.Trunk()

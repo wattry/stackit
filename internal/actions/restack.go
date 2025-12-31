@@ -1,8 +1,8 @@
 package actions
 
 import (
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // RestackOptions contains options for the restack command
@@ -12,7 +12,7 @@ type RestackOptions struct {
 }
 
 // RestackAction performs the restack operation
-func RestackAction(ctx *runtime.Context, opts RestackOptions) error {
+func RestackAction(ctx *app.Context, opts RestackOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

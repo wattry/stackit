@@ -32,9 +32,11 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	e.childrenMap = make(map[string][]string)
 	e.scopeMap = make(map[string]string)
 	e.lockedMap = make(map[string]bool)
+	e.frozenMap = make(map[string]bool)
 
 	// Load metadata for each branch in parallel
 	allMeta, _ := e.batchReadMetadataRefs(branches)
+	allLocalMeta, _ := e.batchReadLocalMetadataRefs(branches)
 
 	// Collect results and populate maps sequentially to avoid lock contention/races
 	for name, meta := range allMeta {
@@ -48,6 +50,12 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 		}
 		if meta.Locked {
 			e.lockedMap[name] = true
+		}
+	}
+
+	for name, meta := range allLocalMeta {
+		if meta.Frozen {
+			e.frozenMap[name] = true
 		}
 	}
 
@@ -80,7 +88,11 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 		}
 		delete(e.scopeMap, branchName)
 		delete(e.lockedMap, branchName)
+		delete(e.frozenMap, branchName)
 	}
+
+	// Read local metadata too
+	localMeta, _ := e.readLocalMetadataRef(branchName)
 
 	// Get the old parent before updating
 	oldParent := e.parentMap[branchName]
@@ -104,6 +116,13 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 		e.lockedMap[branchName] = true
 	} else {
 		delete(e.lockedMap, branchName)
+	}
+
+	// Update frozen map
+	if localMeta != nil && localMeta.Frozen {
+		e.frozenMap[branchName] = true
+	} else {
+		delete(e.frozenMap, branchName)
 	}
 
 	// Update children map - remove from old parent, add to new parent

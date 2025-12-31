@@ -36,7 +36,6 @@ type Event struct {
 	Message     string    // Human-readable description
 	NewRevision string    // For position changes
 	IsNew       bool      // Is this a new branch?
-	IsLocked    bool      // Is this branch locked?
 	Error       error     // If non-nil, this step had an error
 }
 
@@ -45,9 +44,8 @@ type Summary struct {
 	TargetBranch    string // The branch that was retrieved
 	BranchesCreated int    // Number of branches created
 	BranchesUpdated int    // Number of branches updated
-	BranchesSkipped int    // Number of branches skipped
 	Restacked       int    // Number of branches restacked
-	IsLocked        bool   // Was the target branch locked?
+	IsFrozen        bool   // Was the target branch frozen?
 	UpToDate        bool   // Everything was already current
 }
 

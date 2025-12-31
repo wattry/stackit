@@ -241,6 +241,13 @@ func (e *engineImpl) IsLocked(branch Branch) bool {
 	return e.lockedMap[branch.GetName()]
 }
 
+// IsFrozen checks if a branch is frozen
+func (e *engineImpl) IsFrozen(branch Branch) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.frozenMap[branch.GetName()]
+}
+
 // GetExplicitScope returns the explicit scope set for a branch (no inheritance)
 func (e *engineImpl) GetExplicitScope(branch Branch) Scope {
 	branchName := branch.GetName()

@@ -6,14 +6,14 @@ import (
 	"slices"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
 
 // ReorderAction performs the reorder operation
-func ReorderAction(ctx *runtime.Context) error {
+func ReorderAction(ctx *app.Context) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
@@ -52,8 +52,8 @@ func ReorderAction(ctx *runtime.Context) error {
 	branches := []string{}
 	for _, branch := range stack {
 		if !branch.IsTrunk() && branch.IsTracked() {
-			if branch.IsLocked() {
-				return fmt.Errorf("cannot reorder stack: branch %s is locked", branch.GetName())
+			if err := branch.EnsureCanModify(); err != nil {
+				return fmt.Errorf("cannot reorder stack: %w", err)
 			}
 			branches = append(branches, branch.GetName())
 		}

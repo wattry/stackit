@@ -141,7 +141,17 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	}
 
 	// Delete metadata
-	_ = e.DeleteMetadataRef(branch)
+	if err := e.DeleteMetadataRef(branch); err != nil {
+		splog := fmt.Sprintf("Warning: failed to delete metadata ref for %s: %v", branchName, err)
+		fmt.Println(splog)
+	}
+
+	// Delete local metadata
+	localRefName := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, branchName)
+	if err := e.git.DeleteRef(localRefName); err != nil {
+		splog := fmt.Sprintf("Warning: failed to delete local metadata ref for %s: %v", branchName, err)
+		fmt.Println(splog)
+	}
 
 	// Update children to point to parent
 	for _, child := range children {
@@ -345,6 +355,37 @@ func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
 	return nil
 }
 
+// SetFrozen updates a branch's frozen status
+func (e *engineImpl) SetFrozen(branch Branch, frozen bool) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	branchName := branch.GetName()
+
+	// Read existing local metadata
+	meta, err := e.readLocalMetadataRef(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to read local metadata: %w", err)
+	}
+
+	// Update frozen status
+	meta.Frozen = frozen
+
+	// Write local metadata
+	if err := e.writeLocalMetadataRef(branchName, meta); err != nil {
+		return fmt.Errorf("failed to write local metadata: %w", err)
+	}
+
+	// Update in-memory map
+	if frozen {
+		e.frozenMap[branchName] = true
+	} else {
+		delete(e.frozenMap, branchName)
+	}
+
+	return nil
+}
+
 // RenameBranch renames a branch and its metadata
 func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Branch) error {
 	e.mu.Lock()
@@ -366,6 +407,19 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 	if err := e.RenameMetadataRef(oldBranch, newBranch); err != nil {
 		// Log but continue if metadata rename fails
 		fmt.Printf("Warning: failed to rename metadata ref: %v\n", err)
+	}
+
+	// Rename local metadata ref
+	oldLocalRef := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, oldName)
+	newLocalRef := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, newName)
+	if sha, err := e.git.GetRef(oldLocalRef); err == nil {
+		if err := e.git.UpdateRef(newLocalRef, sha); err == nil {
+			if err := e.git.DeleteRef(oldLocalRef); err != nil {
+				fmt.Printf("Warning: failed to delete old local metadata ref: %v\n", err)
+			}
+		} else {
+			fmt.Printf("Warning: failed to update new local metadata ref: %v\n", err)
+		}
 	}
 
 	// Update children to point to the new branch name

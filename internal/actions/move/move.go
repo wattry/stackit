@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -19,7 +19,7 @@ type Options struct {
 }
 
 // Action performs the move operation
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context

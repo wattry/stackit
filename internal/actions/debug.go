@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // DebugOptions contains options for the debug command
@@ -94,7 +94,7 @@ type RepositoryInfo struct {
 }
 
 // DebugAction collects and outputs debugging information
-func DebugAction(ctx *runtime.Context, opts DebugOptions) error {
+func DebugAction(ctx *app.Context, opts DebugOptions) error {
 	eng := ctx.Engine
 	repoRoot := ctx.RepoRoot
 

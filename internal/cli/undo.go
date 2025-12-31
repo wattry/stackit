@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/undo"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // newUndoCmd creates the undo command
@@ -28,7 +28,7 @@ If you specify a snapshot ID with --snapshot, it will restore to that specific
 state without prompting.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Run undo action
 				return undo.Action(ctx, undo.Options{
 					SnapshotID: snapshotID,

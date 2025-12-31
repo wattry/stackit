@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -24,12 +24,12 @@ type Restacker interface {
 type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool)
 
 // RestackBranches restacks a list of branches using the engine's batch restack method
-func RestackBranches(ctx *runtime.Context, branches []engine.Branch) error {
+func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
 	return RestackBranchesWithHandler(ctx, branches, nil)
 }
 
 // RestackBranchesWithHandler restacks branches with optional progress callback
-func RestackBranchesWithHandler(ctx *runtime.Context, branches []engine.Branch, callback RestackProgressCallback) error {
+func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, callback RestackProgressCallback) error {
 	batchResult, err := ctx.Engine.RestackBranches(ctx.Context, branches)
 	if err != nil {
 		if batchResult.ConflictBranch != "" {
@@ -137,8 +137,12 @@ func RestackBranchesWithHandler(ctx *runtime.Context, branches []engine.Branch, 
 			return fmt.Errorf("unexpected conflict in batch result for branch %s", branchName)
 		case engine.RestackUnneeded:
 			switch {
-			case branch.IsLocked():
-				ctx.Splog.Info("Did not restack branch %s because it is locked.", style.ColorBranchName(branchName, branchName == currentBranchName))
+			case !branch.CanModify():
+				if branch.IsLocked() {
+					ctx.Splog.Info("Did not restack branch %s because it is locked.", style.ColorBranchName(branchName, branchName == currentBranchName))
+				} else {
+					ctx.Splog.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
+				}
 			case branch.IsTrunk():
 				ctx.Splog.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
 			default:

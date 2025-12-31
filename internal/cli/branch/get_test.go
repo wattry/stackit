@@ -93,7 +93,7 @@ func TestGetCommand(t *testing.T) {
 		require.Contains(t, normalized, "Syncing branches", "should show sync phase")
 		require.Contains(t, normalized, "Synced feature-branch", "should show branch synced")
 		require.Contains(t, normalized, "Checked out feature-branch", "should show checkout")
-		require.Contains(t, normalized, "locked", "should show locked mode message")
+		require.Contains(t, normalized, "frozen", "should show frozen mode message")
 	})
 
 	t.Run("get fails with uncommitted changes", func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestGetCommand(t *testing.T) {
 		require.Contains(t, string(output), "uncommitted changes", "should mention uncommitted changes")
 	})
 
-	t.Run("get with --unlocked flag", func(t *testing.T) {
+	t.Run("get with --unfrozen flag", func(t *testing.T) {
 		t.Parallel()
 		remoteDir := t.TempDir()
 		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
@@ -179,8 +179,8 @@ func TestGetCommand(t *testing.T) {
 			return nil
 		})
 
-		// Run get with --unlocked
-		cmd := exec.Command(binaryPath, "get", "feature-branch", "--unlocked", "--no-restack")
+		// Run get with --unfrozen
+		cmd := exec.Command(binaryPath, "get", "feature-branch", "--unfrozen", "--no-restack")
 		cmd.Dir = scene.Dir
 		output, err := cmd.CombinedOutput()
 
@@ -188,7 +188,7 @@ func TestGetCommand(t *testing.T) {
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		require.Contains(t, normalized, "Checked out feature-branch", "should show checkout")
-		// With --unlocked, should NOT show locked message
-		require.NotContains(t, normalized, "locked", "should not show locked mode message when using --unlocked")
+		// With --unfrozen, should NOT show frozen message
+		require.NotContains(t, normalized, "frozen", "should not show frozen mode message when using --unfrozen")
 	})
 }

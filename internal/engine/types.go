@@ -3,6 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"time"
+
+	"stackit.dev/stackit/internal/errors"
 )
 
 // StackRange specifies the range of branches to include in stack operations
@@ -235,6 +237,24 @@ func (b Branch) GetExplicitScope() Scope {
 // IsLocked checks if the branch is locked for modifications
 func (b Branch) IsLocked() bool {
 	return b.reader.IsLocked(b)
+}
+
+// IsFrozen checks if the branch is frozen locally
+func (b Branch) IsFrozen() bool {
+	return b.reader.IsFrozen(b)
+}
+
+// CanModify checks if the branch can be modified (not locked or frozen)
+func (b Branch) CanModify() bool {
+	return !b.IsLocked() && !b.IsFrozen()
+}
+
+// EnsureCanModify checks if the branch can be modified and returns an error if not
+func (b Branch) EnsureCanModify() error {
+	if b.CanModify() {
+		return nil
+	}
+	return errors.NewBranchModificationError(b.name, b.IsLocked(), b.IsFrozen())
 }
 
 // GetPRSubmissionStatus returns the PR submission status for this branch

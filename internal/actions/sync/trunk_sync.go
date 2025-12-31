@@ -3,12 +3,12 @@ package sync
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // syncTrunk handles pulling the trunk and resolving any conflicts
-func syncTrunk(ctx *runtime.Context, opts *Options, handler Handler, summary *Summary) error {
+func syncTrunk(ctx *app.Context, opts *Options, handler Handler, summary *Summary) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context

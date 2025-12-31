@@ -3,8 +3,8 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -20,7 +20,7 @@ type CheckoutOptions struct {
 }
 
 // CheckoutAction performs the checkout operation
-func CheckoutAction(ctx *runtime.Context, opts CheckoutOptions) error {
+func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	context := ctx.Context
@@ -79,7 +79,7 @@ func getUntrackedBranchesForCheckout(eng engine.BranchReader) []engine.Branch {
 }
 
 // buildBranchChoices builds the list of branches to show in the interactive selector
-func buildBranchChoices(ctx *runtime.Context, opts CheckoutOptions) ([]engine.Branch, error) {
+func buildBranchChoices(ctx *app.Context, opts CheckoutOptions) ([]engine.Branch, error) {
 	eng := ctx.Engine
 	currentBranch := eng.CurrentBranch()
 	trunk := eng.Trunk()
@@ -150,7 +150,7 @@ func buildBranchChoices(ctx *runtime.Context, opts CheckoutOptions) ([]engine.Br
 	return branches, nil
 }
 
-func printBranchInfo(ctx *runtime.Context, branch engine.Branch) {
+func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	if branch.IsTrunk() {
 		return
 	}

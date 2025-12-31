@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+
+	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // GetCommitDate returns the commit date for a branch
@@ -159,31 +161,29 @@ func resolveRefHashInternal(repo *Repository, ref string) (plumbing.Hash, error)
 	return plumbing.ZeroHash, fmt.Errorf("failed to resolve ref %s: reference not found", ref)
 }
 
-// BatchGetRevisions returns the SHAs for multiple branches in parallel.
+// BatchGetRevisions returns the SHAs for multiple branches in parallel using a worker pool.
 func BatchGetRevisions(branchNames []string) (map[string]string, []error) {
 	results := make(map[string]string)
 	var errors []error
 	resultsMu := sync.Mutex{}
 	errorsMu := sync.Mutex{}
-	var wg sync.WaitGroup
 
-	for _, branchName := range branchNames {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			sha, err := GetRevision(name)
-			resultsMu.Lock()
-			if err != nil {
-				errorsMu.Lock()
-				errors = append(errors, fmt.Errorf("failed to get revision for %s: %w", name, err))
-				errorsMu.Unlock()
-			} else {
-				results[name] = sha
-			}
-			resultsMu.Unlock()
-		}(branchName)
+	if len(branchNames) == 0 {
+		return results, errors
 	}
 
-	wg.Wait()
+	concurrency.Run(branchNames, func(name string) {
+		sha, err := GetRevision(name)
+		if err != nil {
+			errorsMu.Lock()
+			errors = append(errors, fmt.Errorf("failed to get revision for %s: %w", name, err))
+			errorsMu.Unlock()
+		} else {
+			resultsMu.Lock()
+			results[name] = sha
+			resultsMu.Unlock()
+		}
+	})
+
 	return results, errors
 }

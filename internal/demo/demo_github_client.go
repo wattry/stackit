@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // prCounter is used to generate unique PR numbers
@@ -15,7 +15,7 @@ var prCounter int32 = 100
 
 func init() {
 	// Register the demo GitHub client factory with runtime package
-	runtime.DemoGitHubClientFactory = func() github.Client {
+	app.DemoGitHubClientFactory = func() github.Client {
 		return NewDemoGitHubClient()
 	}
 }

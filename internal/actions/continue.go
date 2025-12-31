@@ -3,10 +3,10 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -16,7 +16,7 @@ type ContinueOptions struct {
 }
 
 // ContinueAction performs the continue operation
-func ContinueAction(ctx *runtime.Context, opts ContinueOptions) error {
+func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

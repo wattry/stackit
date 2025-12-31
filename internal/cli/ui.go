@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/dashboard"
 )
 
@@ -22,7 +22,7 @@ and run commands directly from the dashboard.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts := common.GetGlobalOptions(cmd)
-			ctx, err := runtime.GetContext(cmd.Context(), opts)
+			ctx, err := app.GetContext(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}

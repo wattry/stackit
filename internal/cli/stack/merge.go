@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/merge"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
@@ -39,7 +39,7 @@ If --scope is specified, all branches with that scope will be merged.
 If no flags or arguments are provided, an interactive wizard will guide you through the merge process.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Handle 'stackit merge this'
 				if len(args) > 0 && args[0] == "this" {
 					return runInteractiveMergeWizard(ctx, dryRun, force, "")
@@ -113,12 +113,12 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 }
 
 // runInteractiveMergeWizard runs the interactive merge wizard
-func runInteractiveMergeWizard(ctx *runtime.Context, dryRun bool, forceFlag bool, scope string) error {
+func runInteractiveMergeWizard(ctx *app.Context, dryRun bool, forceFlag bool, scope string) error {
 	return runInteractiveMergeWizardForBranch(ctx, dryRun, forceFlag, scope, "")
 }
 
 // runInteractiveMergeWizardForBranch runs the interactive merge wizard for a specific branch (if scope is empty)
-func runInteractiveMergeWizardForBranch(ctx *runtime.Context, dryRun bool, forceFlag bool, scope string, targetBranchName string) error {
+func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag bool, scope string, targetBranchName string) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -324,7 +324,7 @@ func runInteractiveMergeWizardForBranch(ctx *runtime.Context, dryRun bool, force
 }
 
 // runMergeTypeSelector runs an interactive selector to choose what to merge
-func runMergeTypeSelector(ctx *runtime.Context, dryRun bool, force bool) error {
+func runMergeTypeSelector(ctx *app.Context, dryRun bool, force bool) error {
 	eng := ctx.Engine
 
 	options := []tui.SelectOption{

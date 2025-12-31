@@ -3,12 +3,13 @@ package actions
 import (
 	"fmt"
 	"strings"
-	"sync"
 
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // LogOptions contains options for the log command
@@ -21,7 +22,7 @@ type LogOptions struct {
 }
 
 // LogAction displays the branch tree
-func LogAction(ctx *runtime.Context, opts LogOptions) error {
+func LogAction(ctx *app.Context, opts LogOptions) error {
 	// Populate remote SHAs if needed (only for FULL mode)
 	if opts.Style == "FULL" {
 		if err := ctx.Engine.PopulateRemoteShas(); err != nil {
@@ -33,7 +34,7 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 	renderer := tui.NewStackTreeRenderer(ctx.Engine)
 
 	// Render the stack
-	// First, collect annotations for all branches in the stack
+	// First, collect annotations for all branches in the stack using a worker pool
 	annotations := make(map[string]tree.BranchAnnotation)
 	allBranches := ctx.Engine.AllBranches()
 
@@ -42,61 +43,14 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 		annotation tree.BranchAnnotation
 	}
 	results := make(chan result, len(allBranches))
-	var wg sync.WaitGroup
 
-	for _, branch := range allBranches {
-		wg.Add(1)
-		go func(bName string) {
-			defer wg.Done()
-			branchObj := ctx.Engine.GetBranch(bName)
-			annotation := tree.BranchAnnotation{
-				Scope:         ctx.Engine.GetScope(branchObj).String(),
-				ExplicitScope: branchObj.GetExplicitScope().String(),
-				IsLocked:      branchObj.IsLocked(),
-			}
-
-			// Local stats (always fast enough)
-			if !branchObj.IsTrunk() {
-				if count, err := branchObj.GetCommitCount(); err == nil {
-					annotation.CommitCount = count
-				}
-				if added, deleted, err := branchObj.GetDiffStats(); err == nil {
-					annotation.LinesAdded = added
-					annotation.LinesDeleted = deleted
-				}
-			}
-
-			// PR info (local metadata)
-			if !branchObj.IsTrunk() {
-				branch := ctx.Engine.GetBranch(bName)
-				prInfo, _ := branch.GetPrInfo()
-				if prInfo != nil {
-					annotation.PRNumber = prInfo.Number()
-					annotation.PRState = prInfo.State()
-					annotation.IsDraft = prInfo.IsDraft()
-				}
-			}
-
-			// CI status (only in FULL mode)
-			if opts.Style == "FULL" && !branchObj.IsTrunk() && ctx.GitHubClient != nil {
-				if status, err := ctx.GitHubClient.GetPRChecksStatus(ctx.Context, bName); err == nil && status != nil {
-					annotation.CheckStatus = tree.CheckStatusPassing
-					if status.Pending {
-						annotation.CheckStatus = tree.CheckStatusPending
-					} else if !status.Passing {
-						annotation.CheckStatus = tree.CheckStatusFailing
-					}
-				}
-			}
-
-			results <- result{bName, annotation}
-		}(branch.GetName())
+	if len(allBranches) > 0 {
+		concurrency.Run(allBranches, func(branchObj engine.Branch) {
+			annotation := getBranchAnnotation(ctx, branchObj, opts)
+			results <- result{branchObj.GetName(), annotation}
+		})
 	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
+	close(results)
 
 	for res := range results {
 		annotations[res.branchName] = res.annotation
@@ -156,7 +110,7 @@ func LogAction(ctx *runtime.Context, opts LogOptions) error {
 	return nil
 }
 
-func getUntrackedBranchNames(ctx *runtime.Context) []string {
+func getUntrackedBranchNames(ctx *app.Context) []string {
 	var untracked []string
 	for _, branch := range ctx.Engine.AllBranches() {
 		branchName := branch.GetName()
@@ -165,4 +119,48 @@ func getUntrackedBranchNames(ctx *runtime.Context) []string {
 		}
 	}
 	return untracked
+}
+
+func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOptions) tree.BranchAnnotation {
+	annotation := tree.BranchAnnotation{
+		Scope:         ctx.Engine.GetScope(branchObj).String(),
+		ExplicitScope: branchObj.GetExplicitScope().String(),
+		IsLocked:      branchObj.IsLocked(),
+		IsFrozen:      branchObj.IsFrozen(),
+	}
+
+	// Local stats (always fast enough)
+	if !branchObj.IsTrunk() {
+		if count, err := branchObj.GetCommitCount(); err == nil {
+			annotation.CommitCount = count
+		}
+		if added, deleted, err := branchObj.GetDiffStats(); err == nil {
+			annotation.LinesAdded = added
+			annotation.LinesDeleted = deleted
+		}
+	}
+
+	// PR info (local metadata)
+	if !branchObj.IsTrunk() {
+		prInfo, _ := branchObj.GetPrInfo()
+		if prInfo != nil {
+			annotation.PRNumber = prInfo.Number()
+			annotation.PRState = prInfo.State()
+			annotation.IsDraft = prInfo.IsDraft()
+		}
+	}
+
+	// CI status (only in FULL mode)
+	if opts.Style == "FULL" && !branchObj.IsTrunk() && ctx.GitHubClient != nil {
+		if status, err := ctx.GitHubClient.GetPRChecksStatus(ctx.Context, branchObj.GetName()); err == nil && status != nil {
+			annotation.CheckStatus = tree.CheckStatusPassing
+			if status.Pending {
+				annotation.CheckStatus = tree.CheckStatusPending
+			} else if !status.Passing {
+				annotation.CheckStatus = tree.CheckStatusFailing
+			}
+		}
+	}
+
+	return annotation
 }

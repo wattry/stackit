@@ -40,6 +40,7 @@ type BranchAnnotation struct {
 	ReviewStatus  string // "Approved", "In Review", "Changes Requested", "Commented", ""
 	IsDraft       bool
 	IsLocked      bool
+	IsFrozen      bool
 	NeedsRestack  bool
 	CustomLabel   string // Additional text to display after branch name
 	Scope         string
@@ -517,7 +518,10 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
 	}
 	if annotation.IsLocked {
-		coloredBranchName += " " + style.ColorDim("(locked)")
+		coloredBranchName += " " + style.IconLocked() + " " + style.ColorDim("(locked)")
+	}
+	if annotation.IsFrozen {
+		coloredBranchName += " " + style.IconFrozen() + " " + style.ColorDim("(frozen)")
 	}
 
 	result = append(result, prefix+styleObj.Render(symbol)+" "+coloredBranchName)
@@ -655,7 +659,11 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 	}
 
 	if annotation.IsLocked {
-		parts = append(parts, "(locked)")
+		parts = append(parts, style.IconLocked()+" "+style.ColorDim("(locked)"))
+	}
+
+	if annotation.IsFrozen {
+		parts = append(parts, style.IconFrozen()+" "+style.ColorDim("(frozen)"))
 	}
 
 	if annotation.CustomLabel != "" {
@@ -700,7 +708,10 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 	}
 
 	if annotation.IsLocked {
-		parts = append(parts, style.ColorDim("(locked)"))
+		parts = append(parts, style.IconLocked()+" "+style.ColorDim("(locked)"))
+	}
+	if annotation.IsFrozen {
+		parts = append(parts, style.IconFrozen()+" "+style.ColorDim("(frozen)"))
 	}
 
 	if annotation.PRState == PRStateMerged {

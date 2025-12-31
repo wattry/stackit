@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // newContinueCmd creates the continue command
@@ -19,7 +19,7 @@ func newContinueCmd() *cobra.Command {
 This command will continue the rebase and resume restacking remaining branches.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				return actions.ContinueAction(ctx, actions.ContinueOptions{
 					AddAll: addAll,
 				})

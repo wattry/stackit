@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/google/go-github/v62/github"
 	"golang.org/x/oauth2"
 
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/utils/concurrency"
 )
 
 // SyncPrInfo syncs PR information for branches from GitHub
@@ -47,26 +47,24 @@ func SyncPrInfo(ctx context.Context, branchNames []string, repoOwner, repoName s
 		return nil //nolint:nilerr // Skip if can't create client
 	}
 
-	// Fetch PR info for each branch in parallel
-	var wg sync.WaitGroup
-	for _, branchName := range branchNames {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			pr, err := getPRInfoForBranch(ctx, client, repoOwner, repoName, name)
-			if err != nil {
-				return
-			}
-
-			if pr != nil {
-				info := ToPullRequestInfo(pr)
-				if onUpdate != nil {
-					onUpdate(name, info)
-				}
-			}
-		}(branchName)
+	// Fetch PR info for each branch in parallel using a worker pool
+	if len(branchNames) == 0 {
+		return nil
 	}
-	wg.Wait()
+
+	concurrency.Run(branchNames, func(name string) {
+		pr, err := getPRInfoForBranch(ctx, client, repoOwner, repoName, name)
+		if err != nil {
+			return
+		}
+
+		if pr != nil {
+			info := ToPullRequestInfo(pr)
+			if onUpdate != nil {
+				onUpdate(name, info)
+			}
+		}
+	})
 
 	return nil
 }

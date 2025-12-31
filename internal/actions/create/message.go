@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -26,7 +26,7 @@ func getCommitMessage(ctx context.Context) (string, error) {
 
 // getCommitMessageForBranch gets the commit message needed for branch name generation.
 // If branch name is not provided and commit message is empty, it will prompt for one in interactive mode.
-func getCommitMessageForBranch(ctx *runtime.Context, opts *Options, commitMessage string) (string, error) {
+func getCommitMessageForBranch(ctx *app.Context, opts *Options, commitMessage string) (string, error) {
 	// If branch name is provided, we don't need commit message for branch generation
 	if opts.BranchName != "" {
 		return commitMessage, nil

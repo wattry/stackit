@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
@@ -19,7 +19,7 @@ type TrackOptions struct {
 }
 
 // TrackAction performs the track operation
-func TrackAction(ctx *runtime.Context, opts TrackOptions) error {
+func TrackAction(ctx *app.Context, opts TrackOptions) error {
 	eng := ctx.Engine
 	branchName := opts.BranchName
 
@@ -107,7 +107,7 @@ func TrackAction(ctx *runtime.Context, opts TrackOptions) error {
 }
 
 // trackBranchRecursively interactively tracks a branch and its descendants
-func trackBranchRecursively(ctx *runtime.Context, branchName string) error {
+func trackBranchRecursively(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
 
 	// Check if branch is already tracked
@@ -184,7 +184,7 @@ func trackBranchRecursively(ctx *runtime.Context, branchName string) error {
 }
 
 // selectParentBranch interactively selects a parent branch for tracking
-func selectParentBranch(ctx *runtime.Context, branchName string) (string, error) {
+func selectParentBranch(ctx *app.Context, branchName string) (string, error) {
 	eng := ctx.Engine
 	trunk := eng.Trunk().GetName()
 

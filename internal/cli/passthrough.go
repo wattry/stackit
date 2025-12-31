@@ -105,10 +105,22 @@ func HandlePassthrough(args []string) bool {
 			command := arg
 			gitArgs := args[i:]
 
-			// Check if the command is modifying and the branch is locked
+			// Check if the command is modifying and the branch is locked or frozen
 			if slices.Contains(modifyingGitCommands, command) {
-				if locked, branch := isCurrentBranchLocked(); locked {
-					fmt.Fprintf(os.Stderr, "Error: branch %s is locked. Use 'st unlock' to enable modifications.\n", branch)
+				if locked, frozen, branch := isCurrentBranchLockedOrFrozen(); locked || frozen {
+					var state, cmd string
+					switch {
+					case locked && frozen:
+						state = "locked and frozen"
+						cmd = "st unlock' and 'st unfreeze"
+					case locked:
+						state = "locked"
+						cmd = "st unlock"
+					case frozen:
+						state = "frozen"
+						cmd = "st unfreeze"
+					}
+					fmt.Fprintf(os.Stderr, "Error: branch %s is %s. Use '%s' to enable modifications.\n", branch, state, cmd)
 					os.Exit(1)
 				}
 			}
@@ -153,32 +165,40 @@ func joinArgs(args []string) string {
 	return result
 }
 
-func isCurrentBranchLocked() (bool, string) {
+func isCurrentBranchLockedOrFrozen() (bool, bool, string) {
 	branch, err := git.RunGitCommand("rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return false, ""
+		return false, false, ""
 	}
 	branch = strings.TrimSpace(branch)
 
+	locked := false
 	refName := "refs/stackit/metadata/" + branch
-	sha, err := git.RunGitCommand("rev-parse", "--verify", refName)
-	if err != nil {
-		return false, branch
+	if sha, err := git.RunGitCommand("rev-parse", "--verify", refName); err == nil {
+		if content, err := git.RunGitCommand("cat-file", "-p", sha); err == nil {
+			var meta struct {
+				Locked bool `json:"locked"`
+			}
+			if err := json.Unmarshal([]byte(content), &meta); err == nil {
+				locked = meta.Locked
+			}
+		}
 	}
 
-	content, err := git.RunGitCommand("cat-file", "-p", sha)
-	if err != nil {
-		return false, branch
+	frozen := false
+	localRefName := "refs/stackit/local-metadata/" + branch
+	if sha, err := git.RunGitCommand("rev-parse", "--verify", localRefName); err == nil {
+		if content, err := git.RunGitCommand("cat-file", "-p", sha); err == nil {
+			var meta struct {
+				Frozen bool `json:"frozen"`
+			}
+			if err := json.Unmarshal([]byte(content), &meta); err == nil {
+				frozen = meta.Frozen
+			}
+		}
 	}
 
-	var meta struct {
-		Locked bool `json:"locked"`
-	}
-	if err := json.Unmarshal([]byte(content), &meta); err != nil {
-		return false, branch
-	}
-
-	return meta.Locked, branch
+	return locked, frozen, branch
 }
 
 func newAddCmd() *cobra.Command {

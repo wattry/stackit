@@ -3,8 +3,8 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -15,7 +15,7 @@ type SquashOptions struct {
 }
 
 // SquashAction performs the squash operation
-func SquashAction(ctx *runtime.Context, opts SquashOptions) error {
+func SquashAction(ctx *app.Context, opts SquashOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	context := ctx.Context
@@ -26,8 +26,8 @@ func SquashAction(ctx *runtime.Context, opts SquashOptions) error {
 		return fmt.Errorf("not on a branch")
 	}
 
-	if currentBranch.IsLocked() {
-		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", style.ColorBranchName(currentBranch.GetName(), true))
+	if err := currentBranch.EnsureCanModify(); err != nil {
+		return err
 	}
 
 	// Take snapshot before modifying the repository

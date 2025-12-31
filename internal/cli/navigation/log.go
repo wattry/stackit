@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewLogCmd creates the log command
@@ -61,7 +61,7 @@ func addLogFlags(cmd *cobra.Command, f *logFlags) {
 }
 
 func executeLog(cmd *cobra.Command, f *logFlags, style string) error {
-	return common.Run(cmd, func(ctx *runtime.Context) error {
+	return common.Run(cmd, func(ctx *app.Context) error {
 		eng := ctx.Engine
 
 		// Determine branch name

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // runGit is a helper to run git commands through the engine
-func runGit(ctx *runtime.Context, args ...string) (string, error) {
+func runGit(ctx *app.Context, args ...string) (string, error) {
 	return ctx.Engine.RunGitCommand(args...)
 }
 
@@ -22,7 +22,7 @@ const absorbStashMarker = "stackit-absorb-temp"
 // This is detected by checking for:
 // 1. Detached HEAD state, OR
 // 2. Presence of absorb stash marker
-func IsAbsorbInProgress(ctx *runtime.Context) bool {
+func IsAbsorbInProgress(ctx *app.Context) bool {
 	// Check for absorb stash marker
 	stashList, _ := runGit(ctx, "stash", "list")
 	if strings.Contains(stashList, absorbStashMarker) {
@@ -46,7 +46,7 @@ func IsAbsorbInProgress(ctx *runtime.Context) bool {
 
 // ShowConflict shows information about what absorb would do and helps diagnose conflicts.
 // This is useful when absorb fails and you want to understand what was being attempted.
-func ShowConflict(ctx *runtime.Context) error {
+func ShowConflict(ctx *app.Context) error {
 	splog := ctx.Splog
 	eng := ctx.Engine
 
@@ -144,7 +144,7 @@ func ShowConflict(ctx *runtime.Context) error {
 }
 
 // Abort cleans up from a failed absorb state
-func Abort(ctx *runtime.Context) error {
+func Abort(ctx *app.Context) error {
 	splog := ctx.Splog
 
 	// Check if we're in a detached HEAD state

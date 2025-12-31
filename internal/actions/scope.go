@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -20,7 +20,7 @@ type ScopeOptions struct {
 }
 
 // ScopeAction implements the stackit scope command
-func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
+func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -115,7 +115,7 @@ func ScopeAction(ctx *runtime.Context, opts ScopeOptions) error {
 }
 
 // pushMetadataForSingleBranch is a helper that pushes metadata for a single branch
-func pushMetadataForSingleBranch(ctx *runtime.Context, branchName string) error {
+func pushMetadataForSingleBranch(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

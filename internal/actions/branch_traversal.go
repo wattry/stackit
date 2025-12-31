@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -21,7 +21,7 @@ const (
 )
 
 // SwitchBranchAction switches to a branch based on the given direction
-func SwitchBranchAction(direction Direction, ctx *runtime.Context) error {
+func SwitchBranchAction(direction Direction, ctx *app.Context) error {
 	currentBranch := ctx.Engine.CurrentBranch()
 	if currentBranch == nil {
 		return errors.ErrNotOnBranch
@@ -64,7 +64,7 @@ func SwitchBranchAction(direction Direction, ctx *runtime.Context) error {
 }
 
 // traverseDownward walks down the parent chain to find the first branch from trunk
-func traverseDownward(currentBranch string, ctx *runtime.Context) string {
+func traverseDownward(currentBranch string, ctx *app.Context) string {
 	currentBranchObj := ctx.Engine.GetBranch(currentBranch)
 	if currentBranchObj.IsTrunk() {
 		return currentBranch
@@ -86,7 +86,7 @@ func traverseDownward(currentBranch string, ctx *runtime.Context) string {
 }
 
 // traverseUpward walks up the children chain to find the tip branch
-func traverseUpward(currentBranch string, ctx *runtime.Context) (string, error) {
+func traverseUpward(currentBranch string, ctx *app.Context) (string, error) {
 	currentBranchObj := ctx.Engine.GetBranch(currentBranch)
 	children := currentBranchObj.GetChildren()
 	if len(children) == 0 {

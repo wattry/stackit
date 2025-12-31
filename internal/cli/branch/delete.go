@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/delete"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewDeleteCmd creates the delete command
@@ -32,7 +32,7 @@ close the pull request.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: common.CompleteBranches,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
 				if len(args) > 0 {
 					branchName = args[0]

@@ -5,9 +5,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewPopCmd creates the pop command
@@ -22,7 +22,7 @@ your uncommitted changes. The working tree will remain unchanged after
 the branch is deleted.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Run pop action
 				return actions.PopAction(ctx, actions.PopOptions{})
 			})

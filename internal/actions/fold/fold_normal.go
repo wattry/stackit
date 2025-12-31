@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
-func foldNormal(gctx context.Context, ctx *runtime.Context, currentBranch, parentBranch engine.Branch, eng engine.Engine, splog *tui.Splog, _ Options) error {
+func foldNormal(gctx context.Context, ctx *app.Context, currentBranch, parentBranch engine.Branch, eng engine.Engine, splog *tui.Splog, _ Options) error {
 	// Checkout parent branch
 	if err := eng.CheckoutBranch(gctx, parentBranch); err != nil {
 		return fmt.Errorf("failed to checkout parent branch: %w", err)

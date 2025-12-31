@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
 
-func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeCtx *runtime.Context, opts *Options) error {
+func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeCtx *app.Context, opts *Options) error {
 	currentBranchObj := runtimeCtx.Engine.GetBranch(currentBranch)
 	children := currentBranchObj.GetChildren()
 	siblings := []string{}

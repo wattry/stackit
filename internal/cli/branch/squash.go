@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/runtime"
 )
 
 // NewSquashCmd creates the squash command
@@ -26,7 +26,7 @@ This command combines all commits in the current branch into a single commit. Af
 all upstack branches (children) are automatically restacked.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *runtime.Context) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
 				// Determine noEdit flag: noEdit = argv['no-edit'] || !argv.edit
 				// If --no-edit is set, noEdit = true
 				// If --edit is false, noEdit = true

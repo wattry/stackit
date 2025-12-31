@@ -3,7 +3,7 @@ package merge
 import (
 	"fmt"
 
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -19,7 +19,7 @@ type Options struct {
 }
 
 // Action performs the merge operation using the plan/execute pattern
-func Action(ctx *runtime.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 

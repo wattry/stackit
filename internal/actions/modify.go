@@ -3,8 +3,8 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -29,7 +29,7 @@ type ModifyOptions struct {
 }
 
 // ModifyAction performs the modify operation
-func ModifyAction(ctx *runtime.Context, opts ModifyOptions) error {
+func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context
@@ -45,8 +45,8 @@ func ModifyAction(ctx *runtime.Context, opts ModifyOptions) error {
 		return fmt.Errorf("cannot modify trunk branch %s", currentBranch)
 	}
 
-	if currentBranchObj.IsLocked() {
-		return fmt.Errorf("branch %s is locked. Use 'st unlock' to enable modifications", style.ColorBranchName(currentBranch, true))
+	if err := currentBranchObj.EnsureCanModify(); err != nil {
+		return err
 	}
 
 	// Handle interactive rebase separately
@@ -138,7 +138,7 @@ func ModifyAction(ctx *runtime.Context, opts ModifyOptions) error {
 }
 
 // interactiveRebaseAction performs an interactive rebase on the branch's commits
-func interactiveRebaseAction(ctx *runtime.Context, _ ModifyOptions) error {
+func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	gctx := ctx.Context

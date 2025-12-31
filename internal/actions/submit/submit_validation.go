@@ -6,15 +6,15 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/runtime"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
 
 // ValidateBranchesToSubmit validates that branches are ready to submit
-func ValidateBranchesToSubmit(ctx *runtime.Context, branches []string) error {
+func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 	// Sync PR info first
 	repoOwner, repoName, _ := utils.GetRepoInfo(ctx.Context)
 	if repoOwner != "" && repoName != "" {
@@ -57,7 +57,7 @@ func ValidateBranchesToSubmit(ctx *runtime.Context, branches []string) error {
 // 1. Its parent is trunk, OR
 // 2. We are submitting its parent before it and it does not need restacking, OR
 // 3. Its base matches the existing head for its parent's PR
-func validateBaseRevisions(branches []string, eng engine.Engine, ctx *runtime.Context) error {
+func validateBaseRevisions(branches []string, eng engine.Engine, ctx *app.Context) error {
 	validatedBranches := make(map[string]bool)
 
 	for _, branchName := range branches {
@@ -96,7 +96,7 @@ func validateBaseRevisions(branches []string, eng engine.Engine, ctx *runtime.Co
 }
 
 // validateNoEmptyBranches checks for empty branches and prompts user if found
-func validateNoEmptyBranches(ctx context.Context, branches []string, eng engine.BranchReader, runtimeCtx *runtime.Context) error {
+func validateNoEmptyBranches(ctx context.Context, branches []string, eng engine.BranchReader, runtimeCtx *app.Context) error {
 	emptyBranches := []string{}
 	for _, branchName := range branches {
 		isEmpty, err := eng.IsBranchEmpty(ctx, branchName)
@@ -127,7 +127,7 @@ func validateNoEmptyBranches(ctx context.Context, branches []string, eng engine.
 }
 
 // validateNoMergedOrClosedBranches checks for merged/closed PRs and prompts user if found
-func validateNoMergedOrClosedBranches(branches []string, eng engine.Engine, ctx *runtime.Context) error {
+func validateNoMergedOrClosedBranches(branches []string, eng engine.Engine, ctx *app.Context) error {
 	mergedOrClosedBranches := []string{}
 	for _, branchName := range branches {
 		branch := eng.GetBranch(branchName)

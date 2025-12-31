@@ -3,7 +3,7 @@ package actions
 import (
 	"fmt"
 
-	"stackit.dev/stackit/internal/runtime"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -15,7 +15,7 @@ type UntrackOptions struct {
 }
 
 // UntrackAction performs the untrack operation
-func UntrackAction(ctx *runtime.Context, opts UntrackOptions) error {
+func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
 	eng := ctx.Engine
 	branchName := opts.BranchName
 
