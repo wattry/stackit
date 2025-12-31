@@ -154,7 +154,12 @@ func TestRestackCommand(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 
 		require.NoError(t, err, "restack command failed: %s", string(output))
-		require.Contains(t, string(output), "does not need to be restacked", "branch should not need restacking")
+
+		normalized := testhelpers.NormalizeOutput(string(output))
+		expected := testhelpers.NormalizeOutput(`
+feature (current) does not need to be restacked on main.
+`)
+		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
 
 	t.Run("restack with downstack flag", func(t *testing.T) {
@@ -188,6 +193,13 @@ func TestRestackCommand(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 
 		require.NoError(t, err, "restack command failed: %s", string(output))
+
+		normalized := testhelpers.NormalizeOutput(string(output))
+		expected := testhelpers.NormalizeOutput(`
+branch1 does not need to be restacked on main.
+branch2 (current) does not need to be restacked on branch1.
+`)
+		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
 
 	t.Run("restack with upstack flag", func(t *testing.T) {
@@ -225,6 +237,13 @@ func TestRestackCommand(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 
 		require.NoError(t, err, "restack command failed: %s", string(output))
+
+		normalized := testhelpers.NormalizeOutput(string(output))
+		expected := testhelpers.NormalizeOutput(`
+branch1 (current) does not need to be restacked on main.
+branch2 does not need to be restacked on branch1.
+`)
+		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
 
 	t.Run("restack with --branch flag", func(t *testing.T) {
@@ -253,6 +272,59 @@ func TestRestackCommand(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 
 		require.NoError(t, err, "restack command failed: %s", string(output))
+
+		normalized := testhelpers.NormalizeOutput(string(output))
+		expected := testhelpers.NormalizeOutput(`
+branch1 does not need to be restacked on main.
+`)
+		require.Equal(t, expected, normalized, "output format should match expected structure")
+	})
+
+	t.Run("restack output when branches need restacking", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			// Create initial commit
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			// Create branch1 using create command
+			if err := s.Repo.CreateChange("branch1 change", "test1", false); err != nil {
+				return err
+			}
+			cmd := exec.Command(binaryPath, "create", "branch1", "-m", "branch1 change")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			// Create branch2 on top of branch1 using create command
+			if err := s.Repo.CreateChange("branch2 change", "test2", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "branch2", "-m", "branch2 change")
+			cmd.Dir = s.Dir
+			return cmd.Run()
+		})
+
+		// Make a change to main so branch1 needs restacking
+		err := scene.Repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = scene.Repo.CreateChangeAndCommit("main update", "main-file")
+		require.NoError(t, err)
+
+		// Switch to branch2 and run restack --downstack
+		err = scene.Repo.CheckoutBranch("branch2")
+		require.NoError(t, err)
+
+		cmd := exec.Command(binaryPath, "restack", "--downstack")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "restack command failed: %s", string(output))
+
+		normalized := testhelpers.NormalizeOutput(string(output))
+		// Output should show branches being restacked
+		require.Contains(t, normalized, "Restacked branch1 on main", "should show branch1 restacked")
+		require.Contains(t, normalized, "Restacked branch2 (current) on branch1", "should show branch2 restacked")
 	})
 
 	t.Run("restack errors when multiple scope flags specified", func(t *testing.T) {
