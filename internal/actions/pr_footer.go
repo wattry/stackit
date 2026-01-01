@@ -28,7 +28,7 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	}
 
 	// Add lock message if branch is locked
-	if eng.GetBranch(branch).IsEffectivelyLocked() {
+	if eng.GetBranch(branch).IsLocked() {
 		tree.WriteString("> 🔒 This PR has been locked\n\n")
 	}
 
@@ -106,7 +106,7 @@ func buildLeaf(eng engine.Engine, branchName string, depth int, prBranch string)
 	}
 
 	lockMarker := ""
-	if branch.IsEffectivelyLocked() {
+	if branch.IsLocked() {
 		lockMarker = " 🔒"
 	}
 

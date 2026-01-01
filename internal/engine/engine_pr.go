@@ -121,7 +121,7 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	titleNeedsUpdate := e.prTitleNeedsUpdate(branch, prInfo)
 
 	// Check if lock status changed
-	lockStatusChanged := prInfo.IsLocked() != branch.IsEffectivelyLocked()
+	lockStatusChanged := prInfo.IsLocked() != branch.IsLocked()
 
 	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged
 

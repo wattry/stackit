@@ -319,8 +319,8 @@ func (e *engineImpl) UpdateParentRevision(branchName string, parentRev string) e
 
 	meta.ParentBranchRevision = &parentRev
 
-	// Update effectively locked status
-	meta.EffectivelyLocked = NewBranch(branchName, e).IsEffectivelyLocked()
+	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = e.lockedMap[branchName]
 
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
@@ -350,8 +350,8 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 		meta.Scope = &scopeStr
 	}
 
-	// Update effectively locked status
-	meta.EffectivelyLocked = branch.IsEffectivelyLocked()
+	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = e.lockedMap[branchName]
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
@@ -384,14 +384,15 @@ func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
 	// Update locked status
 	meta.Locked = locked
 
-	// Update in-memory map temporarily to calculate effectively locked status
+	// Update in-memory map
 	if locked {
 		e.lockedMap[branchName] = true
 	} else {
 		delete(e.lockedMap, branchName)
 	}
 
-	meta.EffectivelyLocked = branch.IsEffectivelyLocked()
+	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = locked
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
@@ -474,7 +475,8 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 			continue
 		}
 		childMeta.ParentBranchName = &newName
-		childMeta.EffectivelyLocked = NewBranch(child, e).IsEffectivelyLocked()
+		// EffectivelyLocked equals Locked since we now lock upstack branches explicitly
+		childMeta.EffectivelyLocked = childMeta.Locked
 		if err := e.git.WriteMetadata(child, childMeta); err != nil {
 			continue
 		}
@@ -568,8 +570,8 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 		meta.ParentBranchRevision = &parentRev
 	}
 
-	// Update effectively locked status
-	meta.EffectivelyLocked = NewBranch(branchName, e).IsEffectivelyLocked()
+	// EffectivelyLocked equals Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = e.lockedMap[branchName]
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {

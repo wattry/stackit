@@ -239,18 +239,6 @@ func (b Branch) IsLocked() bool {
 	return b.reader.IsLocked(b)
 }
 
-// IsEffectivelyLocked checks if the branch or any of its ancestors is locked
-func (b Branch) IsEffectivelyLocked() bool {
-	if b.IsLocked() {
-		return true
-	}
-	parent := b.GetParent()
-	if parent != nil && !parent.IsTrunk() {
-		return parent.IsEffectivelyLocked()
-	}
-	return false
-}
-
 // IsFrozen checks if the branch is frozen locally
 func (b Branch) IsFrozen() bool {
 	return b.reader.IsFrozen(b)
