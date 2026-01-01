@@ -33,9 +33,9 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 			branch := eng.GetBranch(name)
 
 			// Try to preserve existing locked status
-			locked := false
+			lockReason := ""
 			if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
-				locked = existing.IsLocked()
+				lockReason = existing.LockReason()
 			}
 
 			_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
@@ -46,7 +46,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 				prInfo.Base,
 				prInfo.HTMLURL,
 				prInfo.Draft,
-			).WithLocked(locked))
+			).WithLockReason(lockReason))
 			prsUpdated++
 		}); err != nil {
 			// GitHub failure aborts sync (per spec)

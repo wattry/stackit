@@ -363,7 +363,7 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 }
 
 // SetLocked updates multiple branches' locked status
-func (e *engineImpl) SetLocked(branches []Branch, reason string) (BatchLockResult, error) {
+func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -383,11 +383,11 @@ func (e *engineImpl) SetLocked(branches []Branch, reason string) (BatchLockResul
 		}
 
 		// Update locked status
-		meta.LockReason = reason
+		meta.LockReason = string(reason)
 
 		// Update in-memory map
-		if reason != "" {
-			e.lockedMap[branchName] = reason
+		if reason != LockReasonNone {
+			e.lockedMap[branchName] = string(reason)
 		} else {
 			delete(e.lockedMap, branchName)
 		}

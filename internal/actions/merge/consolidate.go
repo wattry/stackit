@@ -70,7 +70,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 	splog.Info("✅ Created consolidation branch: %s", consolidationBranch)
 
 	// Lock individual PRs and update them with a notice
-	if err := c.lockAndNotifyIndividualPRs(ctx, pr); err != nil {
+	if err := c.lockAndNotifyIndividualPRs(ctx, consolidationBranch); err != nil {
 		splog.Warn("Failed to lock and notify individual PRs: %v", err)
 	}
 
@@ -306,7 +306,7 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 	}
 }
 
-func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, consolidationPR *github.PullRequestInfo) error {
+func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, consolidationBranch string) error {
 	splog := c.ctx.Splog
 	splog.Info("🔒 Locking individual PRs and updating status...")
 
@@ -321,7 +321,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	}
 
 	if len(branchesToLock) > 0 {
-		if _, err := c.engine.SetLocked(branchesToLock, "consolidating"); err != nil {
+		if _, err := c.engine.SetLocked(branchesToLock, engine.LockReasonConsolidating); err != nil {
 			return fmt.Errorf("failed to lock branches: %w", err)
 		}
 	}
@@ -329,7 +329,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	for _, b := range branchesToLock {
 		prInfo, _ := b.GetPrInfo()
 		if prInfo != nil {
-			_ = c.engine.UpsertPrInfo(b, prInfo.WithConsolidationPR(&consolidationPR.Number))
+			_ = c.engine.UpsertPrInfo(b, prInfo.WithConsolidationBranch(consolidationBranch))
 		}
 	}
 

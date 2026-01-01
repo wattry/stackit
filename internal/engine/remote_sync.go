@@ -95,8 +95,8 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	}
 
 	// Update local metadata maps
-	if remote.Locked {
-		e.lockedMap[branchName] = true
+	if remote.LockReason != "" {
+		e.lockedMap[branchName] = remote.LockReason
 	}
 	if remote.Scope != nil {
 		e.scopeMap[branchName] = *remote.Scope
@@ -109,7 +109,7 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	}
 
 	// Update local with remote values
-	local.Locked = remote.Locked
+	local.LockReason = remote.LockReason
 	local.Scope = remote.Scope
 	local.BranchType = remote.BranchType
 	local.LastModifiedBy = remote.LastModifiedBy
@@ -157,11 +157,11 @@ func (e *engineImpl) ComputeMetadataDiff(branch string) (*MetadataDiff, error) {
 	}
 
 	// Compare syncable fields
-	if local.Locked != remote.Locked {
+	if local.LockReason != remote.LockReason {
 		diff.Differences = append(diff.Differences, FieldDiff{
-			Field:       "locked",
-			LocalValue:  local.Locked,
-			RemoteValue: remote.Locked,
+			Field:       "lockReason",
+			LocalValue:  local.LockReason,
+			RemoteValue: remote.LockReason,
 		})
 	}
 
@@ -248,12 +248,12 @@ func (e *engineImpl) HasLocalModifications(branch string) bool {
 
 // computeMetadataHash calculates a hash of the syncable fields for change detection
 func (e *engineImpl) computeMetadataHash(meta *git.Meta) string {
-	// Hash of locked + scope (fields user can modify locally)
+	// Hash of lockReason + scope (fields user can modify locally)
 	scope := ""
 	if meta.Scope != nil {
 		scope = *meta.Scope
 	}
-	data := fmt.Sprintf("locked:%v,scope:%s", meta.Locked, scope)
+	data := fmt.Sprintf("lockReason:%s,scope:%s", meta.LockReason, scope)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }

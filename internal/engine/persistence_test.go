@@ -18,7 +18,7 @@ func TestMetaSerialization(t *testing.T) {
 	meta := &git.Meta{
 		ParentBranchName: &parent,
 		Scope:            &scope,
-		Locked:           true,
+		LockReason:       "manual",
 		BranchType:       git.BranchTypeUser,
 		LastModifiedBy: &git.ModifiedBy{
 			GitName:  "John Doe",
@@ -38,7 +38,7 @@ func TestMetaSerialization(t *testing.T) {
 
 	assert.Equal(t, meta.ParentBranchName, meta2.ParentBranchName)
 	assert.Equal(t, meta.Scope, meta2.Scope)
-	assert.Equal(t, meta.Locked, meta2.Locked)
+	assert.Equal(t, meta.LockReason, meta2.LockReason)
 	assert.Equal(t, meta.BranchType, meta2.BranchType)
 	assert.Equal(t, meta.LastModifiedBy.GitName, meta2.LastModifiedBy.GitName)
 	assert.Equal(t, meta.LastModifiedBy.GitEmail, meta2.LastModifiedBy.GitEmail)
@@ -64,14 +64,14 @@ func TestLocalMetaSerialization(t *testing.T) {
 
 func TestMetaBackwardCompatibility(t *testing.T) {
 	// Old metadata format (no new fields)
-	jsonData := `{"parentBranchName":"main","locked":true}`
+	jsonData := `{"parentBranchName":"main","lockReason":"locked"}`
 
 	var meta git.Meta
 	err := json.Unmarshal([]byte(jsonData), &meta)
 	assert.NoError(t, err)
 
 	assert.Equal(t, "main", *meta.ParentBranchName)
-	assert.True(t, meta.Locked)
+	assert.Equal(t, "locked", meta.LockReason)
 	assert.Equal(t, git.BranchType(""), meta.BranchType) // Should be empty/default
 	assert.Nil(t, meta.LastModifiedBy)
 	assert.Nil(t, meta.LastModifiedAt)

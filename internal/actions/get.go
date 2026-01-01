@@ -86,7 +86,7 @@ func (h *GetNullHandler) Complete(_ GetSummary) {}
 func (h *GetNullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int, _ bool, _ bool) {
+func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int, _ string, _ bool) {
 }
 
 // OnRestackComplete implements RestackHandler.
@@ -347,19 +347,19 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			// Use RestackHandler for consistent output
 			handler.OnRestackStart(len(sorted))
 
-			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool, locked bool, frozen bool) {
+			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason string, frozen bool) {
 				prNumber := getPRNumber(eng, branchName)
 
 				switch result {
 				case engine.RestackDone:
 					restacked++
-					handler.OnRestackBranch(branchName, handlers.RestackDone, newRev, prNumber, locked, frozen)
+					handler.OnRestackBranch(branchName, handlers.RestackDone, newRev, prNumber, lockReason, frozen)
 				case engine.RestackUnneeded:
-					handler.OnRestackBranch(branchName, handlers.RestackUnneeded, "", prNumber, locked, frozen)
+					handler.OnRestackBranch(branchName, handlers.RestackUnneeded, "", prNumber, lockReason, frozen)
 				case engine.RestackConflict:
 					skipped++
 					conflicts = append(conflicts, branchName)
-					handler.OnRestackBranch(branchName, handlers.RestackConflict, "", prNumber, locked, frozen)
+					handler.OnRestackBranch(branchName, handlers.RestackConflict, "", prNumber, lockReason, frozen)
 				}
 			}); err != nil {
 				handler.OnRestackComplete(restacked, skipped, conflicts)

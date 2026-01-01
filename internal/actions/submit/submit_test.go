@@ -260,7 +260,7 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	// Lock the branch
 	branch := s.Engine.GetBranch("feature")
-	_, err = s.Engine.SetLocked([]engine.Branch{branch}, true)
+	_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
 	require.NoError(t, err)
 	require.True(t, branch.IsLocked())
 
@@ -281,5 +281,5 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	meta, err := s.Engine.Git().ReadMetadata("feature")
 	require.NoError(t, err)
-	require.True(t, meta.Locked, "Metadata Locked field should be true")
+	require.Equal(t, string(engine.LockReasonUser), meta.LockReason, "Metadata LockReason field should be set")
 }

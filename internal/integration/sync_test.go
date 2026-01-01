@@ -358,13 +358,13 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Set local metadata
 		branch := eng.GetBranch("feature-a")
-		_, err := eng.SetLocked([]engine.Branch{branch}, false)
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonNone)
 		require.NoError(t, err)
 
 		// Create remote metadata refs (simulating a successful fetch)
 		remoteMeta := &git.Meta{
-			Locked: true,
-			Scope:  scopePtr("remote-scope"),
+			LockReason: "locked",
+			Scope:      scopePtr("remote-scope"),
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
 
@@ -375,7 +375,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
 		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
-		require.True(t, cache["feature-a"].Locked, "Remote metadata should show locked=true")
+		require.Equal(t, "locked", cache["feature-a"].LockReason, "Remote metadata should show lock reason")
 		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
 	})
 
@@ -390,12 +390,12 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Set local metadata: locked=false
 		branch := eng.GetBranch("feature-b")
-		_, err := eng.SetLocked([]engine.Branch{branch}, false)
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonNone)
 		require.NoError(t, err)
 
 		// Create remote metadata refs: locked=true (conflict)
 		remoteMeta := &git.Meta{
-			Locked: true,
+			LockReason: string(engine.LockReasonUser),
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
 
@@ -411,9 +411,9 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Verify the specific field that differs
 		require.Len(t, diff.Differences, 1)
-		require.Equal(t, "locked", diff.Differences[0].Field)
-		require.Equal(t, false, diff.Differences[0].LocalValue)
-		require.Equal(t, true, diff.Differences[0].RemoteValue)
+		require.Equal(t, "lockReason", diff.Differences[0].Field)
+		require.Equal(t, string(engine.LockReasonNone), diff.Differences[0].LocalValue)
+		require.Equal(t, string(engine.LockReasonUser), diff.Differences[0].RemoteValue)
 	})
 }
 

@@ -75,6 +75,11 @@ func (e *BranchModificationError) Error() string {
 	return fmt.Sprintf("branch %s is %s", e.BranchName, state)
 }
 
+// IsLocked returns true if the branch is locked
+func (e *BranchModificationError) IsLocked() bool {
+	return e.LockReason != ""
+}
+
 // Is returns true if the target error is ErrBranchModificationRestricted
 func (e *BranchModificationError) Is(target error) bool {
 	return target == ErrBranchModificationRestricted

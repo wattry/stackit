@@ -41,11 +41,19 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	// Add notice if present in PrInfo
 	prInfo, _ := eng.GetBranch(branch).GetPrInfo()
 	if prInfo != nil {
-		if prInfo.ConsolidationPR() != nil {
+		if prInfo.ConsolidationBranch() != "" {
 			if prInfo.State() == "MERGED" {
 				tree.WriteString("> 💡 **Notice**: This PR was consolidated and has been merged.\n\n")
 			} else {
-				tree.WriteString(fmt.Sprintf("> 💡 **Notice**: This PR is part of a consolidated stack merge. See PR #%d for details.\n\n", *prInfo.ConsolidationPR()))
+				consolidationBranch := prInfo.ConsolidationBranch()
+				msg := fmt.Sprintf("> 💡 **Notice**: This PR is part of a consolidated stack merge into branch `%s`.\n\n", consolidationBranch)
+
+				// If we can find the PR number for the consolidation branch, show it
+				cBranch := eng.GetBranch(consolidationBranch)
+				if cPrInfo, err := cBranch.GetPrInfo(); err == nil && cPrInfo != nil && cPrInfo.Number() != nil {
+					msg = fmt.Sprintf("> 💡 **Notice**: This PR is part of a consolidated stack merge. See PR #%d for details.\n\n", *cPrInfo.Number())
+				}
+				tree.WriteString(msg)
 			}
 		}
 	}

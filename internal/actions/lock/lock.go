@@ -83,7 +83,7 @@ func Action(ctx *app.Context, branchName string) error {
 	}
 
 	if len(branchesToLock) > 0 {
-		res, err := eng.SetLocked(branchesToLock, "manual")
+		res, err := eng.SetLocked(branchesToLock, engine.LockReasonUser)
 		if err != nil {
 			// Report specific errors if some failed
 			for name, branchErr := range res.Errors {
@@ -166,7 +166,7 @@ func Unlock(ctx *app.Context, branchName string) error {
 	}
 
 	if len(branchesToUnlock) > 0 {
-		res, err := eng.SetLocked(branchesToUnlock, "")
+		res, err := eng.SetLocked(branchesToUnlock, engine.LockReasonNone)
 		if err != nil {
 			// Report specific errors if some failed
 			for name, branchErr := range res.Errors {

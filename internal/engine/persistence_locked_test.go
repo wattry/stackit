@@ -21,13 +21,14 @@ func TestPrInfoLockedPersistence(t *testing.T) {
 	branch := eng.GetBranch("feature")
 
 	// 1. Lock the branch
-	_, err := eng.SetLocked([]engine.Branch{branch}, true)
+	_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
 	require.NoError(t, err)
 	require.True(t, branch.IsLocked())
+	require.Equal(t, string(engine.LockReasonUser), branch.GetLockReason())
 
-	// 2. Upsert PR info with locked=true
+	// 2. Upsert PR info with lockReason="user"
 	prNumber := 123
-	prInfo := engine.NewPrInfo(&prNumber, "Title", "Body", "OPEN", "main", "http://url", false).WithLocked(true)
+	prInfo := engine.NewPrInfo(&prNumber, "Title", "Body", "OPEN", "main", "http://url", false).WithLockReason(string(engine.LockReasonUser))
 	err = eng.UpsertPrInfo(branch, prInfo)
 	require.NoError(t, err)
 

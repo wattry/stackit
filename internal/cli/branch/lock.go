@@ -12,7 +12,7 @@ import (
 
 // NewLockCmd creates the lock command
 func NewLockCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "lock [branch]",
 		Short: "Lock specified branch and its downstack",
 		Long: `Lock specified branch and branches downstack of it.
@@ -45,6 +45,8 @@ This operation can be undone with 'st unlock'.`,
 			})
 		},
 	}
+
+	return cmd
 }
 
 // NewUnlockCmd creates the unlock command

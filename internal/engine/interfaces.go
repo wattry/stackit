@@ -96,7 +96,7 @@ type BranchTracking interface {
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
-	SetLocked(branches []Branch, reason string) (BatchLockResult, error)
+	SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error)
 	SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error)
 }
 

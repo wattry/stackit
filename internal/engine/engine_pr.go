@@ -19,6 +19,8 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		return nil, nil
 	}
 
+	lockReason := getStringValue(meta.PrInfo.LockReason)
+
 	prInfo := NewPrInfoFull(
 		meta.PrInfo.Number,
 		getStringValue(meta.PrInfo.Title),
@@ -27,8 +29,8 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		getStringValue(meta.PrInfo.Base),
 		getStringValue(meta.PrInfo.URL),
 		getBoolValue(meta.PrInfo.IsDraft),
-		getStringValue(meta.PrInfo.LockReason),
-		meta.PrInfo.ConsolidationPR,
+		lockReason,
+		getStringValue(meta.PrInfo.ConsolidationBranch),
 	)
 
 	return prInfo, nil
@@ -86,7 +88,8 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	}
 	lockReason := prInfo.LockReason()
 	meta.PrInfo.LockReason = &lockReason
-	meta.PrInfo.ConsolidationPR = prInfo.ConsolidationPR()
+	consolidationBranch := prInfo.ConsolidationBranch()
+	meta.PrInfo.ConsolidationBranch = &consolidationBranch
 
 	return e.git.WriteMetadata(branch.GetName(), meta)
 }
@@ -132,19 +135,17 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 		}
 	}
 
-	// Check if consolidation PR changed
-	consolidationPRChanged := false
+	// Check if consolidation branch changed
+	consolidationBranchChanged := false
 	if err == nil && meta.PrInfo != nil {
-		oldPR := meta.PrInfo.ConsolidationPR
-		newPR := prInfo.ConsolidationPR()
-		if (oldPR == nil) != (newPR == nil) {
-			consolidationPRChanged = true
-		} else if oldPR != nil && newPR != nil && *oldPR != *newPR {
-			consolidationPRChanged = true
+		oldBranch := getStringValue(meta.PrInfo.ConsolidationBranch)
+		newBranch := prInfo.ConsolidationBranch()
+		if oldBranch != newBranch {
+			consolidationBranchChanged = true
 		}
 	}
 
-	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged || consolidationPRChanged
+	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged || consolidationBranchChanged
 
 	reason := ""
 	if !needsUpdate {

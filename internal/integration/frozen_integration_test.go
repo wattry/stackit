@@ -72,7 +72,7 @@ func TestFrozenIntegration(t *testing.T) {
 
 		// Try to modify
 		s.RunExpectError("modify -m 'updated a'")
-		require.Contains(t, s.lastOutput, "branch a is locked and frozen. Use 'st unlock' and 'st unfreeze' to enable modifications")
+		require.Contains(t, s.lastOutput, "branch a is locked (user) and frozen. Use 'st unlock' and 'st unfreeze' to enable modifications")
 	})
 
 	t.Run("passthrough git commands are blocked", func(t *testing.T) {

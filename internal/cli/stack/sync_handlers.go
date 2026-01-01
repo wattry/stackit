@@ -168,8 +168,8 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 				style.ColorDim(event.NewRevision))
 		} else {
 			reason := reasonNoRestackNeeded
-			if event.Locked {
-				reason = reasonLocked
+			if event.LockReason != "" {
+				reason = fmt.Sprintf("%s: %s", reasonLocked, event.LockReason)
 			} else if event.Frozen {
 				reason = reasonFrozen
 			}
@@ -213,14 +213,14 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) {
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason string, frozen bool) {
 	// Convert to Event and use existing printRestackEvent
 	event := syncAction.Event{
 		Phase:       syncAction.PhaseRestack,
 		Branch:      branch,
 		PRNumber:    prNumber,
 		NewRevision: newRev,
-		Locked:      locked,
+		LockReason:  lockReason,
 		Frozen:      frozen,
 	}
 
@@ -376,8 +376,8 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 				return fmt.Sprintf("Restacked %s%s -> %s", event.Branch, prInfo, event.NewRevision)
 			}
 			reason := reasonNoRestackNeeded
-			if event.Locked {
-				reason = reasonLocked
+			if event.LockReason != "" {
+				reason = fmt.Sprintf("%s: %s", reasonLocked, event.LockReason)
 			} else if event.Frozen {
 				reason = reasonFrozen
 			}
@@ -465,7 +465,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) {
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason string, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -474,7 +474,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 	}
 
 	// Build detail message
-	detail := h.formatRestackDetail(branch, result, newRev, prNumber, locked, frozen)
+	detail := h.formatRestackDetail(branch, result, newRev, prNumber, lockReason, frozen)
 	if detail != "" {
 		h.program.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(syncAction.PhaseRestack),
@@ -491,7 +491,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 }
 
 // formatRestackDetail formats a restack event into a detail string
-func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) string {
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason string, frozen bool) string {
 	prInfo := ""
 	if prNumber != nil {
 		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)
@@ -502,8 +502,8 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 		return fmt.Sprintf("Restacked %s%s -> %s", branch, prInfo, newRev)
 	case syncAction.RestackUnneeded:
 		reason := reasonNoRestackNeeded
-		if locked {
-			reason = reasonLocked
+		if lockReason != "" {
+			reason = fmt.Sprintf("%s: %s", reasonLocked, lockReason)
 		} else if frozen {
 			reason = reasonFrozen
 		}

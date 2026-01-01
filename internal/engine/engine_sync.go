@@ -117,7 +117,7 @@ func (e *engineImpl) restackBranch(
 	}
 
 	if e.IsLocked(branch) {
-		return RestackBranchResult{Result: RestackUnneeded, Locked: true}, nil
+		return RestackBranchResult{Result: RestackUnneeded, LockReason: e.GetLockReason(branch)}, nil
 	}
 
 	if e.IsFrozen(branch) {
