@@ -26,6 +26,7 @@ type Meta struct {
 	PrInfo               *PrInfoPersistence `json:"prInfo,omitempty"`
 	Scope                *string            `json:"scope,omitempty"`
 	Locked               bool               `json:"locked,omitempty"`
+	EffectivelyLocked    bool               `json:"effectivelyLocked,omitempty"`
 
 	// New fields for remote sync
 	BranchType     BranchType  `json:"branchType,omitempty"`     // Type of branch (regular, consolidated)
@@ -55,6 +56,7 @@ type PrInfoPersistence struct {
 	Body    *string `json:"body,omitempty"`
 	State   *string `json:"state,omitempty"`
 	IsDraft *bool   `json:"isDraft,omitempty"`
+	Locked  *bool   `json:"locked,omitempty"`
 }
 
 const (

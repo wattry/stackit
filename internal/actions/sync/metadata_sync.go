@@ -1,13 +1,13 @@
 package sync
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
-	"os"
-	"strings"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -129,7 +129,12 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 
 	accept, err := promptYesNo("Push your local metadata to remote?")
 	if err != nil {
-		return err
+		// In non-interactive mode, PromptConfirm returns (false, ErrInteractiveDisabled)
+		// We default to false (don't push) to avoid hanging in tests
+		if !errors.Is(err, tui.ErrInteractiveDisabled) {
+			return err
+		}
+		// accept is already false when ErrInteractiveDisabled
 	}
 
 	if accept {
@@ -137,7 +142,7 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 		if err := eng.SetLastModifiedBy(info.BranchName); err != nil {
 			splog.Debug("Failed to set last modified by: %v", err)
 		}
-		if err := eng.Git().PushMetadataRefs([]string{info.BranchName}); err != nil {
+		if err := actions.PushMetadataAndSyncPRs(ctx, []string{info.BranchName}); err != nil {
 			splog.Debug("Failed to push metadata: %v", err)
 		} else {
 			splog.Info("Pushed metadata for %s", style.ColorBranchName(info.BranchName, false))
@@ -183,7 +188,12 @@ func promptAndResolveConflict(ctx *app.Context, diff *engine.MetadataDiff) error
 	// Prompt
 	accept, err := promptYesNo("Accept remote metadata?")
 	if err != nil {
-		return err
+		// In non-interactive mode, PromptConfirm returns (false, ErrInteractiveDisabled)
+		// We default to false (reject remote) to avoid hanging in tests
+		if !errors.Is(err, tui.ErrInteractiveDisabled) {
+			return err
+		}
+		// accept is already false when ErrInteractiveDisabled
 	}
 
 	if accept {
@@ -194,13 +204,7 @@ func promptAndResolveConflict(ctx *app.Context, diff *engine.MetadataDiff) error
 }
 
 // promptYesNo prompts the user for a yes/no answer
+// Uses tui.PromptConfirm which respects non-interactive mode
 func promptYesNo(prompt string) (bool, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("%s [y/N]: ", prompt)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false, err
-	}
-	response = strings.TrimSpace(strings.ToLower(response))
-	return response == "y" || response == "yes", nil
+	return tui.PromptConfirm(prompt, false)
 }

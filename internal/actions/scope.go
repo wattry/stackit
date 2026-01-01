@@ -64,8 +64,8 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 		}
 		splog.Info("Unset explicit scope for branch %s. It will now inherit from its parent.", style.ColorBranchName(currentBranch, false))
 
-		// Push metadata changes to remote
-		if err := pushMetadataForSingleBranch(ctx, currentBranch); err != nil {
+		// Push metadata changes to remote and update PRs to trigger CI re-evaluation
+		if err := PushMetadataAndSyncPRs(ctx, []string{currentBranch}); err != nil {
 			splog.Debug("Failed to push metadata changes: %v", err)
 		}
 		return nil
@@ -108,41 +108,9 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 		}
 	}
 
-	// Push metadata changes to remote
-	if err := pushMetadataForSingleBranch(ctx, currentBranch); err != nil {
+	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
+	if err := PushMetadataAndSyncPRs(ctx, []string{currentBranch}); err != nil {
 		splog.Debug("Failed to push metadata changes: %v", err)
-	}
-
-	return nil
-}
-
-// pushMetadataForSingleBranch is a helper that pushes metadata for a single branch
-func pushMetadataForSingleBranch(ctx *app.Context, branchName string) error {
-	eng := ctx.Engine
-	splog := ctx.Splog
-
-	// Update LastModifiedBy
-	if err := eng.SetLastModifiedBy(branchName); err != nil {
-		splog.Debug("Failed to update metadata for %s: %v", branchName, err)
-	}
-
-	// Check if remote sync is enabled; if not, run compatibility test first
-	if !eng.IsRemoteSyncEnabled() {
-		if err := eng.Git().TestRemoteRefCompatibility(); err != nil {
-			splog.Debug("Remote metadata sync not supported: %v", err)
-			return nil // Non-fatal
-		}
-		eng.SetRemoteSyncEnabled(true)
-		// Configure refspec so future git fetch commands also fetch metadata
-		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
-			splog.Debug("Failed to configure metadata refspec: %v", err)
-		}
-	}
-
-	// Push metadata ref
-	if err := eng.Git().PushMetadataRefs([]string{branchName}); err != nil {
-		splog.Debug("Failed to push metadata refs: %v", err)
-		return err
 	}
 
 	return nil

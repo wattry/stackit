@@ -318,6 +318,10 @@ func (e *engineImpl) UpdateParentRevision(branchName string, parentRev string) e
 	}
 
 	meta.ParentBranchRevision = &parentRev
+
+	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = e.lockedMap[branchName]
+
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
@@ -345,6 +349,9 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 		scopeStr := scope.String()
 		meta.Scope = &scopeStr
 	}
+
+	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = e.lockedMap[branchName]
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
@@ -377,16 +384,19 @@ func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
 	// Update locked status
 	meta.Locked = locked
 
-	// Write metadata
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
-		return fmt.Errorf("failed to write metadata: %w", err)
-	}
-
 	// Update in-memory map
 	if locked {
 		e.lockedMap[branchName] = true
 	} else {
 		delete(e.lockedMap, branchName)
+	}
+
+	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = locked
+
+	// Write metadata
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
+		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
 	return nil
@@ -465,6 +475,8 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 			continue
 		}
 		childMeta.ParentBranchName = &newName
+		// EffectivelyLocked equals Locked since we now lock upstack branches explicitly
+		childMeta.EffectivelyLocked = childMeta.Locked
 		if err := e.git.WriteMetadata(child, childMeta); err != nil {
 			continue
 		}
@@ -557,6 +569,9 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 	if shouldUpdateRevision {
 		meta.ParentBranchRevision = &parentRev
 	}
+
+	// EffectivelyLocked equals Locked since we now lock upstack branches explicitly
+	meta.EffectivelyLocked = e.lockedMap[branchName]
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {

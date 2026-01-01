@@ -27,6 +27,11 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 		tree.WriteString(fmt.Sprintf("**Scope**: %s\n\n", scope.String()))
 	}
 
+	// Add lock message if branch is locked
+	if eng.GetBranch(branch).IsLocked() {
+		tree.WriteString("> 🔒 This PR has been locked\n\n")
+	}
+
 	for branchObj, depth := range eng.BranchesDepthFirst(terminalParent) {
 		// Only include branches related to the PR branch
 		if branchObj.GetName() != branch && !isParentOrChild(eng, branchObj.GetName(), branch) {
@@ -100,7 +105,12 @@ func buildLeaf(eng engine.Engine, branchName string, depth int, prBranch string)
 		marker = " 👈"
 	}
 
-	return fmt.Sprintf("\n%s* **PR #%d**%s", indent, *prInfo.Number(), marker)
+	lockMarker := ""
+	if branch.IsLocked() {
+		lockMarker = " 🔒"
+	}
+
+	return fmt.Sprintf("\n%s* **PR #%d**%s%s", indent, *prInfo.Number(), lockMarker, marker)
 }
 
 // isParentOrChild checks if branch1 is a parent or child of branch2
