@@ -123,9 +123,26 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.En
 	shouldEditTitle := opts.EditTitle || (opts.Edit && !opts.NoEditTitle)
 	shouldEditBody := opts.EditDescription || (opts.Edit && !opts.NoEditDescription)
 
+	// If PR exists and local metadata is missing title or body, fetch from GitHub
+	if prInfo != nil && prInfo.Number() != nil && (metadata.Title == "" || metadata.Body == "") && ctx.GitHubClient != nil {
+		repoOwner, repoName := ctx.GitHubClient.GetOwnerRepo()
+		if repoOwner != "" && repoName != "" {
+			currentPR, err := ctx.GitHubClient.GetPullRequest(ctx.Context, repoOwner, repoName, *prInfo.Number())
+			if err == nil && currentPR != nil {
+				if metadata.Title == "" {
+					metadata.Title = currentPR.Title
+				}
+				if metadata.Body == "" {
+					metadata.Body = currentPR.Body
+				}
+			}
+		}
+	}
+
 	scope := eng.GetScope(branch)
 
-	if shouldEditTitle || (prInfo == nil || prInfo.Title() == "") {
+	// Handle Title
+	if shouldEditTitle || metadata.Title == "" {
 		title, err := GetPRTitle(branch, shouldEditTitle, metadata.Title, scope.String())
 		if err != nil {
 			return nil, err
@@ -133,12 +150,13 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.En
 		metadata.Title = title
 	}
 
-	if shouldEditBody || (prInfo == nil || prInfo.Body() == "") {
-		finalBody, err := GetPRBody(branch, shouldEditBody, metadata.Body)
+	// Handle Body
+	if shouldEditBody || metadata.Body == "" {
+		body, err := GetPRBody(branch, shouldEditBody, metadata.Body)
 		if err != nil {
 			return nil, err
 		}
-		metadata.Body = finalBody
+		metadata.Body = body
 	}
 
 	switch {

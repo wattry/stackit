@@ -10,6 +10,32 @@ import (
 // OpenEditor opens the user's preferred editor with the given initial content.
 // It returns the edited content or an error.
 func OpenEditor(initialContent, filenamePattern string) (string, error) {
+	// Get editor from environment first
+	// Precedence: GIT_EDITOR > EDITOR
+	editor := os.Getenv("GIT_EDITOR")
+	if editor == "" {
+		editor = os.Getenv("EDITOR")
+	}
+
+	// If no editor is explicitly set in the environment, we check if we're allowed
+	// to proceed with interactive defaults. This prevents hangs in non-interactive
+	// environments (like CI) while allowing tests to provide a non-interactive editor script.
+	if editor == "" {
+		if err := checkInteractiveAllowed(); err != nil {
+			return "", err
+		}
+
+		// Try to get from git config
+		output, err := exec.Command("git", "config", "--get", "core.editor").Output()
+		if err == nil && len(output) > 0 {
+			editor = strings.TrimSpace(string(output))
+		}
+	}
+
+	if editor == "" {
+		editor = "vi" // Default to vi
+	}
+
 	// Create temporary file
 	tmpFile, err := os.CreateTemp("", filenamePattern)
 	if err != nil {
@@ -23,24 +49,6 @@ func OpenEditor(initialContent, filenamePattern string) (string, error) {
 	}
 	if err := tmpFile.Close(); err != nil {
 		return "", fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	// Get editor from environment and git config
-	// Precedence: GIT_EDITOR > EDITOR > core.editor > default (vi)
-	// Note: We prioritize environment variables over git config to allow test override
-	editor := os.Getenv("GIT_EDITOR")
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
-		// Try to get from git config only if env vars are not set
-		output, err := exec.Command("git", "config", "--get", "core.editor").Output()
-		if err == nil && len(output) > 0 {
-			editor = strings.TrimSpace(string(output))
-		}
-	}
-	if editor == "" {
-		editor = "vi" // Default to vi
 	}
 
 	// Open editor
