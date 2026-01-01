@@ -19,10 +19,11 @@ import (
 // TestShell wraps a test scene and provides a fluent interface for running
 // commands. Tests using this read like a series of terminal commands.
 type TestShell struct {
-	t          *testing.T
-	scene      *testhelpers.Scene
-	binaryPath string
-	lastOutput string
+	t            *testing.T
+	scene        *testhelpers.Scene
+	binaryPath   string
+	lastOutput   string
+	inProcessCLI *InProcessCLI // if set, use in-process execution
 }
 
 // NewTestShell creates a shell-like test environment with an initialized repo.
@@ -34,9 +35,37 @@ func NewTestShell(t *testing.T, binaryPath string) *TestShell {
 	return &TestShell{t: t, scene: scene, binaryPath: binaryPath}
 }
 
+// NewTestShellInProcess creates a shell-like test environment that uses in-process
+// CLI execution for faster tests. This avoids the overhead of spawning a new process
+// for each command (~8ms per command savings).
+func NewTestShellInProcess(t *testing.T) *TestShell {
+	t.Helper()
+	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial", "init")
+	})
+	return &TestShell{
+		t:            t,
+		scene:        scene,
+		inProcessCLI: NewInProcessCLI(),
+	}
+}
+
 // NewTestShellWithRemote creates a shell-like test environment with a local bare repo as "origin".
 // This is useful for testing sync workflows that require a remote.
 func NewTestShellWithRemote(t *testing.T, binaryPath string) *TestShell {
+	t.Helper()
+	return newTestShellWithRemote(t, binaryPath, nil)
+}
+
+// NewTestShellWithRemoteInProcess creates a shell-like test environment with a local bare repo
+// as "origin", using in-process CLI execution for faster tests.
+func NewTestShellWithRemoteInProcess(t *testing.T) *TestShell {
+	t.Helper()
+	return newTestShellWithRemote(t, "", NewInProcessCLI())
+}
+
+// newTestShellWithRemote is the shared implementation for creating shells with remotes.
+func newTestShellWithRemote(t *testing.T, binaryPath string, inProcessCLI *InProcessCLI) *TestShell {
 	t.Helper()
 
 	// Create a bare repository to act as the remote
@@ -65,7 +94,7 @@ func NewTestShellWithRemote(t *testing.T, binaryPath string) *TestShell {
 		}
 		return nil
 	})
-	return &TestShell{t: t, scene: scene, binaryPath: binaryPath}
+	return &TestShell{t: t, scene: scene, binaryPath: binaryPath, inProcessCLI: inProcessCLI}
 }
 
 // Scene returns the underlying test scene for direct access when needed.
@@ -86,6 +115,16 @@ func (s *TestShell) Dir() string {
 func (s *TestShell) Run(args string) *TestShell {
 	s.t.Helper()
 	parts := splitArgs(args)
+
+	// Use in-process execution if available (faster)
+	if s.inProcessCLI != nil {
+		result := s.inProcessCLI.Run(s.scene.Dir, parts...)
+		s.lastOutput = result.Output
+		require.NoError(s.t, result.Err, "$ stackit %s\n%s", args, s.lastOutput)
+		return s
+	}
+
+	// Fall back to process-based execution
 	// Always run with --no-interactive in tests
 	fullArgs := append([]string{"--no-interactive"}, parts...)
 	cmd := exec.Command(s.binaryPath, fullArgs...)
@@ -100,6 +139,16 @@ func (s *TestShell) Run(args string) *TestShell {
 func (s *TestShell) RunExpectError(args string) *TestShell {
 	s.t.Helper()
 	parts := splitArgs(args)
+
+	// Use in-process execution if available (faster)
+	if s.inProcessCLI != nil {
+		result := s.inProcessCLI.Run(s.scene.Dir, parts...)
+		s.lastOutput = result.Output
+		require.Error(s.t, result.Err, "$ stackit %s (expected error)\n%s", args, s.lastOutput)
+		return s
+	}
+
+	// Fall back to process-based execution
 	// Always run with --no-interactive in tests
 	fullArgs := append([]string{"--no-interactive"}, parts...)
 	cmd := exec.Command(s.binaryPath, fullArgs...)
