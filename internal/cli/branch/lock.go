@@ -40,7 +40,7 @@ This operation can be undone with 'st unlock'.`,
 					branchName = current.GetName()
 				}
 
-				return lock.LockAction(ctx, branchName)
+				return lock.Action(ctx, branchName)
 			})
 		},
 	}
@@ -72,7 +72,7 @@ to enable modifications.`,
 					branchName = current.GetName()
 				}
 
-				return lock.UnlockAction(ctx, branchName)
+				return lock.Unlock(ctx, branchName)
 			})
 		},
 	}

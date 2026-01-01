@@ -83,4 +83,43 @@ func TestCreatePRBodyFooter(t *testing.T) {
 		footer := CreatePRBodyFooter("feature-a", s.Engine)
 		assert.NotContains(t, footer, "🔒 This PR has been locked")
 	})
+
+	t.Run("includes lock icon in tree when branches are locked", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			CreateBranch("feature-b").
+			Commit("b1").
+			TrackBranch("feature-a", "main").
+			TrackBranch("feature-b", "feature-a")
+
+		// Mock PR numbers
+		pr1 := 1
+		pr2 := 2
+		require.NoError(t, s.Engine.UpsertPrInfo(s.Engine.GetBranch("feature-a"), testhelpers.NewTestPrInfo(pr1)))
+		require.NoError(t, s.Engine.UpsertPrInfo(s.Engine.GetBranch("feature-b"), testhelpers.NewTestPrInfo(pr2)))
+
+		// Lock feature-a
+		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
+
+		footer := CreatePRBodyFooter("feature-b", s.Engine)
+
+		// Check that feature-a has a lock icon and feature-b (unlocked) does not
+		lines := strings.Split(footer, "\n")
+		foundA := false
+		foundB := false
+		for _, line := range lines {
+			if strings.Contains(line, "PR #1") {
+				assert.Contains(t, line, "🔒")
+				foundA = true
+			}
+			if strings.Contains(line, "PR #2") {
+				assert.NotContains(t, line, "🔒")
+				foundB = true
+			}
+		}
+		assert.True(t, foundA, "did not find PR #1 in footer")
+		assert.True(t, foundB, "did not find PR #2 in footer")
+	})
 }

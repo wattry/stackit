@@ -1,3 +1,4 @@
+// Package lock provides functionality for locking and unlocking branches in a stack.
 package lock
 
 import (
@@ -12,8 +13,8 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
-// LockAction locks the specified branch and all branches downstack of it
-func LockAction(ctx *app.Context, branchName string) error {
+// Action locks the specified branch and all branches downstack of it
+func Action(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -92,8 +93,8 @@ func LockAction(ctx *app.Context, branchName string) error {
 	return nil
 }
 
-// UnlockAction unlocks the specified branch and all branches upstack of it
-func UnlockAction(ctx *app.Context, branchName string) error {
+// Unlock unlocks the specified branch and all branches upstack of it
+func Unlock(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -167,8 +168,7 @@ type lockSubmitHandler struct {
 }
 
 func (h *lockSubmitHandler) OnEvent(e submit.Event) {
-	switch ev := e.(type) {
-	case submit.BranchProgressEvent:
+	if ev, ok := e.(submit.BranchProgressEvent); ok {
 		if ev.Status == submit.StatusDone {
 			h.splog.Info("  ✓ %s submitted → %s", ev.BranchName, ev.URL)
 		} else if ev.Status == submit.StatusError {

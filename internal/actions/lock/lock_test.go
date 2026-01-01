@@ -23,7 +23,7 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-a", "main").
 			TrackBranch("feature-b", "feature-a")
 
-		err := lock.LockAction(s.Context, "feature-b")
+		err := lock.Action(s.Context, "feature-b")
 		require.NoError(t, err)
 
 		require.True(t, s.Engine.GetBranch("feature-b").IsLocked())
@@ -44,7 +44,7 @@ func TestLockUnlockAction(t *testing.T) {
 		var buf bytes.Buffer
 		s.Context.Splog = tui.NewSplogToWriter(&buf)
 
-		err := lock.LockAction(s.Context, "feature-a")
+		err := lock.Action(s.Context, "feature-a")
 		require.NoError(t, err)
 
 		output := buf.String()
@@ -66,7 +66,7 @@ func TestLockUnlockAction(t *testing.T) {
 		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
 		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-b"), true))
 
-		err := lock.UnlockAction(s.Context, "feature-a")
+		err := lock.Unlock(s.Context, "feature-a")
 		require.NoError(t, err)
 
 		require.False(t, s.Engine.GetBranch("feature-a").IsLocked())
@@ -85,7 +85,7 @@ func TestLockUnlockAction(t *testing.T) {
 		var buf bytes.Buffer
 		s.Context.Splog = tui.NewSplogToWriter(&buf)
 
-		err := lock.UnlockAction(s.Context, "feature-a")
+		err := lock.Unlock(s.Context, "feature-a")
 		require.NoError(t, err)
 
 		output := buf.String()
@@ -98,7 +98,7 @@ func TestLockUnlockAction(t *testing.T) {
 		s.WithInitialCommit().
 			CreateBranchQuiet("untracked")
 
-		err := lock.LockAction(s.Context, "untracked")
+		err := lock.Action(s.Context, "untracked")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not tracked")
 	})
@@ -107,7 +107,7 @@ func TestLockUnlockAction(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit()
 
-		err := lock.LockAction(s.Context, "main")
+		err := lock.Action(s.Context, "main")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "cannot lock trunk")
 	})
@@ -136,7 +136,7 @@ func TestLockUnlockAction(t *testing.T) {
 
 		s.Context.Interactive = false // Ensure non-interactive
 
-		err = lock.LockAction(s.Context, "feature-a")
+		err = lock.Action(s.Context, "feature-a")
 		require.NoError(t, err)
 		require.True(t, s.Engine.GetBranch("feature-a").IsLocked())
 	})
@@ -158,13 +158,13 @@ func TestLockUnlockAction(t *testing.T) {
 		// Mock PromptConfirm to return true
 		oldPrompt := tui.PromptConfirm
 		defer func() { tui.PromptConfirm = oldPrompt }()
-		tui.PromptConfirm = func(prompt string, defaultValue bool) (bool, error) {
+		tui.PromptConfirm = func(prompt string, _ bool) (bool, error) {
 			require.Contains(t, prompt, "unlock the downstack branch feature-a")
 			return true, nil
 		}
 
 		s.Context.Interactive = true
-		err := lock.UnlockAction(s.Context, "feature-b")
+		err := lock.Unlock(s.Context, "feature-b")
 		require.NoError(t, err)
 
 		require.False(t, s.Engine.GetBranch("feature-b").IsLocked())
@@ -188,13 +188,13 @@ func TestLockUnlockAction(t *testing.T) {
 		// Mock PromptConfirm to return false
 		oldPrompt := tui.PromptConfirm
 		defer func() { tui.PromptConfirm = oldPrompt }()
-		tui.PromptConfirm = func(prompt string, defaultValue bool) (bool, error) {
+		tui.PromptConfirm = func(prompt string, _ bool) (bool, error) {
 			require.Contains(t, prompt, "unlock the downstack branch feature-a")
 			return false, nil
 		}
 
 		s.Context.Interactive = true
-		err := lock.UnlockAction(s.Context, "feature-b")
+		err := lock.Unlock(s.Context, "feature-b")
 		require.NoError(t, err)
 
 		require.False(t, s.Engine.GetBranch("feature-b").IsLocked())
