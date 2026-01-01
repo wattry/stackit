@@ -53,13 +53,9 @@ func PrecommitInstallAction(ctx *app.Context) error {
 		ctx.Splog.Info("Appended Stackit verification to existing pre-commit hook.")
 	} else {
 		// Create new hook
-		if err := os.WriteFile(hookPath, []byte(precommitHookTemplate), 0600); err != nil {
+		// #nosec G306 - Git hooks need to be executable
+		if err := os.WriteFile(hookPath, []byte(precommitHookTemplate), 0750); err != nil {
 			return fmt.Errorf("failed to write pre-commit hook: %w", err)
-		}
-		// Make the hook executable
-		// #nosec G302 - Git hooks need to be executable
-		if err := os.Chmod(hookPath, 0750); err != nil {
-			return fmt.Errorf("failed to make pre-commit hook executable: %w", err)
 		}
 		ctx.Splog.Info("Installed Stackit pre-commit hook.")
 	}
@@ -107,7 +103,7 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 		if strings.Contains(line, "stackit precommit verify") {
 			removed = true
 			// Check if previous line was our comment or if it's the "# Added by Stackit" comment
-			if i > 0 && (strings.Contains(lines[i-1], "Installed by Stackit") || strings.Contains(lines[i-1], "Added by Stackit")) {
+			if i > 0 && len(newLines) > 0 && (strings.Contains(lines[i-1], "Installed by Stackit") || strings.Contains(lines[i-1], "Added by Stackit")) {
 				newLines = newLines[:len(newLines)-1]
 			}
 			continue
@@ -141,13 +137,9 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 		newContent := strings.Join(newLines, "\n")
 		// Clean up trailing/leading newlines that might have been left behind
 		newContent = strings.TrimSpace(newContent) + "\n"
-		if err := os.WriteFile(hookPath, []byte(newContent), 0600); err != nil {
+		// #nosec G306 - Git hooks need to be executable
+		if err := os.WriteFile(hookPath, []byte(newContent), 0750); err != nil {
 			return fmt.Errorf("failed to write pre-commit hook: %w", err)
-		}
-		// Make the hook executable
-		// #nosec G302 - Git hooks need to be executable
-		if err := os.Chmod(hookPath, 0750); err != nil {
-			return fmt.Errorf("failed to make pre-commit hook executable: %w", err)
 		}
 		ctx.Splog.Info("Removed Stackit verification from existing pre-commit hook.")
 	}
