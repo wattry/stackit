@@ -122,6 +122,7 @@ func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Ru
 	// Note: We don't set update.Draft here because the REST API doesn't support it
 
 	_, _, err := client.PullRequests.Edit(ctx, owner, repo, prNumber, update)
+
 	if err != nil {
 		return fmt.Errorf("failed to update pull request: %w", err)
 	}

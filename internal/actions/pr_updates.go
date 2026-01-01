@@ -31,8 +31,20 @@ func updatePRMetadata(ctx *app.Context, name string, repoOwner, repoName string)
 		return
 	}
 
+	prNumber := *prInfo.Number()
+
+	// 1. Fetch latest PR state from GitHub (Option 1)
+	latestPR, err := ctx.GitHubClient.GetPullRequest(ctx.Context, repoOwner, repoName, prNumber)
+	if err != nil {
+		return
+	}
+
+	// 2. Calculate updates
 	scope := ctx.Engine.GetScope(branch)
-	updatedTitle := prInfo.Title()
+	currentTitle := latestPR.Title
+	currentBody := latestPR.Body
+
+	updatedTitle := currentTitle
 	if !scope.IsEmpty() {
 		if scopeRegex.MatchString(updatedTitle) {
 			if !strings.HasPrefix(strings.ToUpper(updatedTitle), "["+strings.ToUpper(scope.String())+"]") {
@@ -44,21 +56,28 @@ func updatePRMetadata(ctx *app.Context, name string, repoOwner, repoName string)
 	}
 
 	footer := CreatePRBodyFooter(name, ctx.Engine)
-	updatedBody := UpdatePRBodyFooter(prInfo.Body(), footer)
+	updatedBody := UpdatePRBodyFooter(currentBody, footer)
 
-	if updatedTitle != prInfo.Title() || updatedBody != prInfo.Body() {
+	// 3. Apply updates if needed (Option 2)
+	// Don't update body if:
+	// - It would become empty (preserve existing body instead)
+	// Allow footer to be added even when body is empty (user expects stack information)
+	shouldUpdateBody := updatedBody != currentBody && updatedBody != ""
+	if updatedTitle != currentTitle || shouldUpdateBody {
 		updateOpts := github.UpdatePROptions{}
-		if updatedTitle != prInfo.Title() {
+		if updatedTitle != currentTitle {
 			updateOpts.Title = &updatedTitle
 		}
-		if updatedBody != prInfo.Body() {
+		if shouldUpdateBody {
 			updateOpts.Body = &updatedBody
 		}
 
-		if err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *prInfo.Number(), updateOpts); err != nil {
+		err = ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, prNumber, updateOpts)
+		if err != nil {
 			return
 		}
 
+		// Successfully updated, update local engine state
 		_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody))
 	}
 }

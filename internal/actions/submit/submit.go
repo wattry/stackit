@@ -295,9 +295,18 @@ func pushBranchIfNeeded(ctx *app.Context, submissionInfo Info, opts Options, rem
 
 // createPullRequestQuiet creates a new pull request without logging
 func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, repoName string) (string, error) {
+	// If body is empty, try to generate one from commits
+	bodyToCreate := submissionInfo.Metadata.Body
+	if bodyToCreate == "" {
+		branch := ctx.Engine.GetBranch(submissionInfo.BranchName)
+		generatedBody, genErr := GetPRBody(branch, false, "")
+		if genErr == nil && generatedBody != "" {
+			bodyToCreate = generatedBody
+		}
+	}
 	createOpts := github.CreatePROptions{
 		Title:         submissionInfo.Metadata.Title,
-		Body:          submissionInfo.Metadata.Body,
+		Body:          bodyToCreate,
 		Head:          submissionInfo.Head,
 		Base:          submissionInfo.Base,
 		Draft:         submissionInfo.Metadata.IsDraft,
@@ -313,10 +322,12 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 	prNumber := pr.Number
 	prURL := pr.HTMLURL
 	branch := ctx.Engine.GetBranch(submissionInfo.BranchName)
+	// Use bodyToCreate (the body that was actually sent) instead of submissionInfo.Metadata.Body
+	// This ensures local state matches what's on GitHub
 	_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
 		&prNumber,
 		submissionInfo.Metadata.Title,
-		submissionInfo.Metadata.Body,
+		bodyToCreate,
 		"OPEN",
 		submissionInfo.Base,
 		prURL,
@@ -338,11 +349,15 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 
 	updateOpts := github.UpdatePROptions{
 		Title:           &submissionInfo.Metadata.Title,
-		Body:            &submissionInfo.Metadata.Body,
 		Reviewers:       submissionInfo.Metadata.Reviewers,
 		TeamReviewers:   submissionInfo.Metadata.TeamReviewers,
 		MergeWhenReady:  &opts.MergeWhenReady,
 		RerequestReview: opts.RerequestReview,
+	}
+
+	// Only update body if it's not empty. GitHub will preserve the existing body if omitted.
+	if submissionInfo.Metadata.Body != "" {
+		updateOpts.Body = &submissionInfo.Metadata.Body
 	}
 
 	// Only update draft status if it's explicitly set via flags

@@ -50,7 +50,7 @@ func (c *MockGitHubClient) CreatePullRequest(ctx context.Context, owner, repo st
 		return nil, err
 	}
 
-	return toPullRequestInfo(createdPR), nil
+	return githubpkg.ToPullRequestInfo(createdPR), nil
 }
 
 // UpdatePullRequest updates an existing pull request
@@ -90,7 +90,7 @@ func (c *MockGitHubClient) GetPullRequestByBranch(ctx context.Context, owner, re
 		return nil, nil
 	}
 
-	return toPullRequestInfo(prs[0]), nil
+	return githubpkg.ToPullRequestInfo(prs[0]), nil
 }
 
 // GetPullRequest gets a pull request by number
@@ -100,7 +100,7 @@ func (c *MockGitHubClient) GetPullRequest(ctx context.Context, owner, repo strin
 		return nil, err
 	}
 
-	return toPullRequestInfo(pr), nil
+	return githubpkg.ToPullRequestInfo(pr), nil
 }
 
 // MergePullRequest merges a pull request
@@ -119,43 +119,4 @@ func (c *MockGitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*gith
 			{Name: "Mock Check", Status: "COMPLETED", Conclusion: "SUCCESS"},
 		},
 	}, nil
-}
-
-// toPullRequestInfo converts a github.PullRequest to githubpkg.PullRequestInfo
-func toPullRequestInfo(pr *github.PullRequest) *githubpkg.PullRequestInfo {
-	if pr == nil {
-		return nil
-	}
-
-	info := &githubpkg.PullRequestInfo{}
-
-	if pr.Number != nil {
-		info.Number = *pr.Number
-	}
-	if pr.NodeID != nil {
-		info.NodeID = *pr.NodeID
-	}
-	if pr.HTMLURL != nil {
-		info.HTMLURL = *pr.HTMLURL
-	}
-	if pr.Title != nil {
-		info.Title = *pr.Title
-	}
-	if pr.Body != nil {
-		info.Body = *pr.Body
-	}
-	if pr.State != nil {
-		info.State = *pr.State
-	}
-	if pr.Draft != nil {
-		info.Draft = *pr.Draft
-	}
-	if pr.Base != nil && pr.Base.Ref != nil {
-		info.Base = *pr.Base.Ref
-	}
-	if pr.Head != nil && pr.Head.Ref != nil {
-		info.Head = *pr.Head.Ref
-	}
-
-	return info
 }
