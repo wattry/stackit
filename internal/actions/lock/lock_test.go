@@ -141,6 +141,31 @@ func TestLockUnlockAction(t *testing.T) {
 		require.True(t, s.Engine.GetBranch("feature-a").IsLocked())
 	})
 
+	t.Run("LockAction prompts for new branch not on remote", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("new-feature").
+			Commit("new change").
+			TrackBranch("new-feature", "main")
+
+		// Create a bare remote but don't push new-feature
+		_, err := s.Scene.Repo.CreateBareRemote("origin")
+		require.NoError(t, err)
+
+		// Mock PromptConfirm to return false (don't submit)
+		oldPrompt := tui.PromptConfirm
+		defer func() { tui.PromptConfirm = oldPrompt }()
+		tui.PromptConfirm = func(prompt string, _ bool) (bool, error) {
+			require.Contains(t, prompt, "Would you like to submit these changes before locking?")
+			return false, nil
+		}
+
+		s.Context.Interactive = true
+		err = lock.Action(s.Context, "new-feature")
+		require.NoError(t, err)
+		require.True(t, s.Engine.GetBranch("new-feature").IsLocked())
+	})
+
 	t.Run("UnlockAction prompts for downstack and unlocks it if confirmed", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit().
