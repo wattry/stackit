@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
@@ -130,7 +131,7 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 	if err != nil {
 		// In non-interactive mode, PromptConfirm returns (false, ErrInteractiveDisabled)
 		// We default to false (don't push) to avoid hanging in tests
-		if err != tui.ErrInteractiveDisabled {
+		if !errors.Is(err, tui.ErrInteractiveDisabled) {
 			return err
 		}
 		// accept is already false when ErrInteractiveDisabled
@@ -189,7 +190,7 @@ func promptAndResolveConflict(ctx *app.Context, diff *engine.MetadataDiff) error
 	if err != nil {
 		// In non-interactive mode, PromptConfirm returns (false, ErrInteractiveDisabled)
 		// We default to false (reject remote) to avoid hanging in tests
-		if err != tui.ErrInteractiveDisabled {
+		if !errors.Is(err, tui.ErrInteractiveDisabled) {
 			return err
 		}
 		// accept is already false when ErrInteractiveDisabled
