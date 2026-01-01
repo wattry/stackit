@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions/sync"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
@@ -357,7 +358,8 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Set local metadata
 		branch := eng.GetBranch("feature-a")
-		require.NoError(t, eng.SetLocked(branch, false))
+		_, err := eng.SetLocked([]engine.Branch{branch}, false)
+		require.NoError(t, err)
 
 		// Create remote metadata refs (simulating a successful fetch)
 		remoteMeta := &git.Meta{
@@ -367,7 +369,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
 
 		// Load remote metadata cache (this is what sync does after fetching)
-		err := eng.LoadRemoteMetadataCache()
+		err = eng.LoadRemoteMetadataCache()
 		require.NoError(t, err)
 
 		// Verify remote metadata cache was loaded
@@ -388,7 +390,8 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Set local metadata: locked=false
 		branch := eng.GetBranch("feature-b")
-		require.NoError(t, eng.SetLocked(branch, false))
+		_, err := eng.SetLocked([]engine.Branch{branch}, false)
+		require.NoError(t, err)
 
 		// Create remote metadata refs: locked=true (conflict)
 		remoteMeta := &git.Meta{
@@ -397,7 +400,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
 
 		// Load remote metadata cache
-		err := eng.LoadRemoteMetadataCache()
+		err = eng.LoadRemoteMetadataCache()
 		require.NoError(t, err)
 
 		// Compute diff to verify conflict detection

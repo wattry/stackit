@@ -20,7 +20,7 @@ type RestackHandler interface {
 	OnRestackStart(branchCount int)
 
 	// OnRestackBranch is called for each branch during restack
-	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int)
+	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, locked bool, frozen bool)
 
 	// OnRestackComplete is called when restack finishes
 	OnRestackComplete(restacked, skipped int, conflicts []string)
@@ -33,7 +33,8 @@ type NullRestackHandler struct{}
 func (h *NullRestackHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullRestackHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int) {}
+func (h *NullRestackHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ bool, _ bool) {
+}
 
 // OnRestackComplete implements RestackHandler.
 func (h *NullRestackHandler) OnRestackComplete(_, _ int, _ []string) {}

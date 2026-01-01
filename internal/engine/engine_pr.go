@@ -85,7 +85,6 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	}
 	locked := prInfo.IsLocked()
 	meta.PrInfo.Locked = &locked
-	meta.EffectivelyLocked = locked
 
 	return e.git.WriteMetadata(branch.GetName(), meta)
 }

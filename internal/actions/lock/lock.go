@@ -70,6 +70,7 @@ func Action(ctx *app.Context, branchName string) error {
 	}
 
 	affectedBranches := []string{}
+	branchesToLock := []engine.Branch{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
@@ -78,11 +79,23 @@ func Action(ctx *app.Context, branchName string) error {
 			splog.Info("Branch %s is already locked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
 			continue
 		}
-		if err := eng.SetLocked(b, true); err != nil {
-			return fmt.Errorf("failed to lock branch %s: %w", b.GetName(), err)
+		branchesToLock = append(branchesToLock, b)
+	}
+
+	if len(branchesToLock) > 0 {
+		res, err := eng.SetLocked(branchesToLock, true)
+		if err != nil {
+			// Report specific errors if some failed
+			for name, branchErr := range res.Errors {
+				splog.Warn("Failed to lock %s: %v", name, branchErr)
+			}
+			return fmt.Errorf("failed to lock branches: %w", err)
 		}
-		splog.Info("Locked %s.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
-		affectedBranches = append(affectedBranches, b.GetName())
+
+		for _, name := range res.AffectedBranches {
+			splog.Info("Locked %s.", style.ColorBranchName(name, name == branchName))
+			affectedBranches = append(affectedBranches, name)
+		}
 	}
 
 	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
@@ -140,6 +153,7 @@ func Unlock(ctx *app.Context, branchName string) error {
 	}
 
 	affectedBranches := []string{}
+	branchesToUnlock := []engine.Branch{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
@@ -148,11 +162,23 @@ func Unlock(ctx *app.Context, branchName string) error {
 			splog.Info("Branch %s is already unlocked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
 			continue
 		}
-		if err := eng.SetLocked(b, false); err != nil {
-			return fmt.Errorf("failed to unlock branch %s: %w", b.GetName(), err)
+		branchesToUnlock = append(branchesToUnlock, b)
+	}
+
+	if len(branchesToUnlock) > 0 {
+		res, err := eng.SetLocked(branchesToUnlock, false)
+		if err != nil {
+			// Report specific errors if some failed
+			for name, branchErr := range res.Errors {
+				splog.Warn("Failed to unlock %s: %v", name, branchErr)
+			}
+			return fmt.Errorf("failed to unlock branches: %w", err)
 		}
-		splog.Info("Unlocked %s.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
-		affectedBranches = append(affectedBranches, b.GetName())
+
+		for _, name := range res.AffectedBranches {
+			splog.Info("Unlocked %s.", style.ColorBranchName(name, name == branchName))
+			affectedBranches = append(affectedBranches, name)
+		}
 	}
 
 	// Push metadata changes to remote and update PRs to trigger CI re-evaluation

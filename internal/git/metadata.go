@@ -26,9 +26,8 @@ type Meta struct {
 	PrInfo               *PrInfoPersistence `json:"prInfo,omitempty"`
 	Scope                *string            `json:"scope,omitempty"`
 	Locked               bool               `json:"locked,omitempty"`
-	EffectivelyLocked    bool               `json:"effectivelyLocked,omitempty"`
 
-	// New fields for remote sync
+	// Fields for remote sync
 	BranchType     BranchType  `json:"branchType,omitempty"`     // Type of branch (regular, consolidated)
 	LastModifiedBy *ModifiedBy `json:"lastModifiedBy,omitempty"` // Who last changed this metadata
 	LastModifiedAt *time.Time  `json:"lastModifiedAt,omitempty"` // When metadata was last changed

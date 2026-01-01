@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions/lock"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
@@ -39,12 +40,13 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-a", "main")
 
 		// Pre-lock
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
+		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, true)
+		require.NoError(t, err)
 
 		var buf bytes.Buffer
 		s.Context.Splog = tui.NewSplogToWriter(&buf)
 
-		err := lock.Action(s.Context, "feature-a")
+		err = lock.Action(s.Context, "feature-a")
 		require.NoError(t, err)
 
 		output := buf.String()
@@ -63,10 +65,12 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-b", "feature-a")
 
 		// Pre-lock
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-b"), true))
+		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, true)
+		require.NoError(t, err)
+		_, err = s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-b")}, true)
+		require.NoError(t, err)
 
-		err := lock.Unlock(s.Context, "feature-a")
+		err = lock.Unlock(s.Context, "feature-a")
 		require.NoError(t, err)
 
 		require.False(t, s.Engine.GetBranch("feature-a").IsLocked())
@@ -177,8 +181,10 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-b", "feature-a")
 
 		// Pre-lock both
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-b"), true))
+		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, true)
+		require.NoError(t, err)
+		_, err = s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-b")}, true)
+		require.NoError(t, err)
 
 		// Mock PromptConfirm to return true
 		oldPrompt := tui.PromptConfirm
@@ -189,7 +195,7 @@ func TestLockUnlockAction(t *testing.T) {
 		}
 
 		s.Context.Interactive = true
-		err := lock.Unlock(s.Context, "feature-b")
+		err = lock.Unlock(s.Context, "feature-b")
 		require.NoError(t, err)
 
 		require.False(t, s.Engine.GetBranch("feature-b").IsLocked())
@@ -207,8 +213,10 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-b", "feature-a")
 
 		// Pre-lock both
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
-		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-b"), true))
+		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, true)
+		require.NoError(t, err)
+		_, err = s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-b")}, true)
+		require.NoError(t, err)
 
 		// Mock PromptConfirm to return false
 		oldPrompt := tui.PromptConfirm
@@ -219,7 +227,7 @@ func TestLockUnlockAction(t *testing.T) {
 		}
 
 		s.Context.Interactive = true
-		err := lock.Unlock(s.Context, "feature-b")
+		err = lock.Unlock(s.Context, "feature-b")
 		require.NoError(t, err)
 
 		require.False(t, s.Engine.GetBranch("feature-b").IsLocked())

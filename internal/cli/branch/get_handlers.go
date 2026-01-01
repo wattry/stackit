@@ -171,7 +171,7 @@ func (h *SimpleGetHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for restack phase
-func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int) {
+func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -184,9 +184,16 @@ func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.Restac
 			prInfo,
 			style.ColorDim(newRev))
 	case handlers.RestackUnneeded:
-		h.splog.Info("  %s%s does not need restacking",
+		reason := "does not need restacking"
+		if locked {
+			reason = "is locked"
+		} else if frozen {
+			reason = "is frozen"
+		}
+		h.splog.Info("  %s%s %s",
 			style.ColorBranchName(branch, false),
-			prInfo)
+			prInfo,
+			reason)
 	case handlers.RestackConflict:
 		h.splog.Warn("  Skipped %s%s (conflict)",
 			style.ColorBranchName(branch, false),

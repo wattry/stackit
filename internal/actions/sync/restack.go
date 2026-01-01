@@ -50,7 +50,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 
 	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
-		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool) {
+		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, locked bool, frozen bool) {
 			prNumber := getPRNumber(eng, branchName)
 
 			switch result {
@@ -62,6 +62,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					Branch:      branchName,
 					PRNumber:    prNumber,
 					NewRevision: newRev,
+					Locked:      locked,
+					Frozen:      frozen,
 				})
 			case engine.RestackUnneeded:
 				handler.EmitEvent(Event{
@@ -69,6 +71,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					Type:     EventCompleted,
 					Branch:   branchName,
 					PRNumber: prNumber,
+					Locked:   locked,
+					Frozen:   frozen,
 				})
 			case engine.RestackConflict:
 				summary.BranchesSkipped++
@@ -79,6 +83,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					Branch:   branchName,
 					PRNumber: prNumber,
 					Conflict: true,
+					Locked:   locked,
+					Frozen:   frozen,
 				})
 			}
 		}); err != nil {

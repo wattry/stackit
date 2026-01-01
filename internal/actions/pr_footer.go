@@ -105,12 +105,7 @@ func buildLeaf(eng engine.Engine, branchName string, depth int, prBranch string)
 		marker = " 👈"
 	}
 
-	lockMarker := ""
-	if branch.IsLocked() {
-		lockMarker = " 🔒"
-	}
-
-	return fmt.Sprintf("\n%s* **PR #%d**%s%s", indent, *prInfo.Number(), lockMarker, marker)
+	return fmt.Sprintf("\n%s* **PR #%d**%s", indent, *prInfo.Number(), marker)
 }
 
 // isParentOrChild checks if branch1 is a parent or child of branch2

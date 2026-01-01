@@ -28,14 +28,26 @@ func FreezeAction(ctx *app.Context, branchName string) error {
 		IncludeCurrent:   true,
 	})
 
+	branchesToFreeze := []engine.Branch{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
 		}
-		if err := eng.SetFrozen(b, true); err != nil {
-			return fmt.Errorf("failed to freeze branch %s: %w", b.GetName(), err)
+		branchesToFreeze = append(branchesToFreeze, b)
+	}
+
+	if len(branchesToFreeze) > 0 {
+		res, err := eng.SetFrozen(branchesToFreeze, true)
+		if err != nil {
+			for name, branchErr := range res.Errors {
+				splog.Warn("Failed to freeze %s: %v", name, branchErr)
+			}
+			return fmt.Errorf("failed to freeze branches: %w", err)
 		}
-		splog.Info("Frozen %s locally.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+
+		for _, name := range res.AffectedBranches {
+			splog.Info("Frozen %s locally.", style.ColorBranchName(name, name == branchName))
+		}
 	}
 
 	return nil

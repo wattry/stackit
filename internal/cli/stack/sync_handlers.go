@@ -14,6 +14,12 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
+const (
+	reasonNoRestackNeeded = "does not need restacking"
+	reasonLocked          = "is locked"
+	reasonFrozen          = "is frozen"
+)
+
 // NewSyncHandler creates the appropriate handler based on TTY availability
 func NewSyncHandler(splog *tui.Splog) syncAction.Handler {
 	if tui.IsTTY() {
@@ -161,9 +167,16 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 				prInfo,
 				style.ColorDim(event.NewRevision))
 		} else {
-			h.splog.Info("  %s%s does not need restacking",
+			reason := reasonNoRestackNeeded
+			if event.Locked {
+				reason = reasonLocked
+			} else if event.Frozen {
+				reason = reasonFrozen
+			}
+			h.splog.Info("  %s%s %s",
 				style.ColorBranchName(event.Branch, false),
-				prInfo)
+				prInfo,
+				reason)
 		}
 	case syncAction.EventSkipped:
 		if event.Conflict {
@@ -200,13 +213,15 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int) {
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) {
 	// Convert to Event and use existing printRestackEvent
 	event := syncAction.Event{
 		Phase:       syncAction.PhaseRestack,
 		Branch:      branch,
 		PRNumber:    prNumber,
 		NewRevision: newRev,
+		Locked:      locked,
+		Frozen:      frozen,
 	}
 
 	switch result {
@@ -360,7 +375,13 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 			if event.NewRevision != "" {
 				return fmt.Sprintf("Restacked %s%s -> %s", event.Branch, prInfo, event.NewRevision)
 			}
-			return fmt.Sprintf("%s%s does not need restacking", event.Branch, prInfo)
+			reason := reasonNoRestackNeeded
+			if event.Locked {
+				reason = reasonLocked
+			} else if event.Frozen {
+				reason = reasonFrozen
+			}
+			return fmt.Sprintf("%s%s %s", event.Branch, prInfo, reason)
 		case syncAction.EventSkipped:
 			if event.Conflict {
 				return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", event.Branch, prInfo)
@@ -444,7 +465,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int) {
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -453,7 +474,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 	}
 
 	// Build detail message
-	detail := h.formatRestackDetail(branch, result, newRev, prNumber)
+	detail := h.formatRestackDetail(branch, result, newRev, prNumber, locked, frozen)
 	if detail != "" {
 		h.program.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(syncAction.PhaseRestack),
@@ -470,7 +491,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 }
 
 // formatRestackDetail formats a restack event into a detail string
-func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int) string {
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) string {
 	prInfo := ""
 	if prNumber != nil {
 		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)
@@ -480,7 +501,13 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 	case syncAction.RestackDone:
 		return fmt.Sprintf("Restacked %s%s -> %s", branch, prInfo, newRev)
 	case syncAction.RestackUnneeded:
-		return fmt.Sprintf("%s%s does not need restacking", branch, prInfo)
+		reason := reasonNoRestackNeeded
+		if locked {
+			reason = reasonLocked
+		} else if frozen {
+			reason = reasonFrozen
+		}
+		return fmt.Sprintf("%s%s %s", branch, prInfo, reason)
 	case syncAction.RestackConflict:
 		return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", branch, prInfo)
 	}
