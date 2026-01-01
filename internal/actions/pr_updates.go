@@ -81,3 +81,50 @@ func updatePRMetadata(ctx *app.Context, name string, repoOwner, repoName string)
 	// Successfully updated (or already up to date), update local engine state
 	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLocked(branch.IsEffectivelyLocked()))
 }
+
+// PushMetadataAndSyncPRs pushes metadata for the given branches to remote and updates their PRs on GitHub
+func PushMetadataAndSyncPRs(ctx *app.Context, branchNames []string) error {
+	if len(branchNames) == 0 {
+		return nil
+	}
+
+	eng := ctx.Engine
+	splog := ctx.Splog
+
+	// Update LastModifiedBy for each branch
+	for _, branchName := range branchNames {
+		if err := eng.SetLastModifiedBy(branchName); err != nil {
+			splog.Debug("Failed to update metadata for %s: %v", branchName, err)
+			continue
+		}
+	}
+
+	// Check if remote sync is enabled; if not, run compatibility test first
+	if !eng.IsRemoteSyncEnabled() {
+		if err := eng.Git().TestRemoteRefCompatibility(); err != nil {
+			splog.Debug("Remote metadata sync not supported: %v", err)
+			return nil // Non-fatal
+		}
+		eng.SetRemoteSyncEnabled(true)
+		// Configure refspec so future git fetch commands also fetch metadata
+		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
+			splog.Debug("Failed to configure metadata refspec: %v", err)
+		}
+	}
+
+	// Push metadata refs
+	if err := eng.Git().PushMetadataRefs(branchNames); err != nil {
+		splog.Debug("Failed to push metadata refs: %v", err)
+		return err
+	}
+
+	// If GitHub client is available, update PRs to trigger CI checks (and update footers/titles)
+	if ctx.GitHubClient != nil {
+		owner, repo := ctx.GitHubClient.GetOwnerRepo()
+		if owner != "" && repo != "" {
+			UpdateStackPRMetadata(ctx, branchNames, owner, repo)
+		}
+	}
+
+	return nil
+}

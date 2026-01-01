@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
@@ -137,7 +138,7 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 		if err := eng.SetLastModifiedBy(info.BranchName); err != nil {
 			splog.Debug("Failed to set last modified by: %v", err)
 		}
-		if err := eng.Git().PushMetadataRefs([]string{info.BranchName}); err != nil {
+		if err := actions.PushMetadataAndSyncPRs(ctx, []string{info.BranchName}); err != nil {
 			splog.Debug("Failed to push metadata: %v", err)
 		} else {
 			splog.Info("Pushed metadata for %s", style.ColorBranchName(info.BranchName, false))
