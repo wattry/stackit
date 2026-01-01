@@ -28,19 +28,19 @@ to understand how to use stackit commands for managing stacked branches.`,
 		SilenceUsage: true,
 	}
 
-	cmd.AddCommand(newAgentInitCmd())
+	cmd.AddCommand(newAgentInstallCmd())
 
 	return cmd
 }
 
-// newAgentInitCmd creates the agent init command
-func newAgentInitCmd() *cobra.Command {
+// newAgentInstallCmd creates the agent install command
+func newAgentInstallCmd() *cobra.Command {
 	var local bool
 	var force bool
 
 	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize agent integration files",
+		Use:   "install",
+		Short: "Install agent integration files",
 		Long: `Install agent integration files for AI assistants.
 
 By default, files are installed globally in ~/.claude/ and work across all repositories.
@@ -56,7 +56,7 @@ to manage stacked branches, create commits, submit PRs, and more.`,
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			runner := git.NewRunner()
-			return runAgentInit(runner, local, force)
+			return runAgentInstall(runner, local, force)
 		},
 	}
 
@@ -66,7 +66,7 @@ to manage stacked branches, create commits, submit PRs, and more.`,
 	return cmd
 }
 
-func runAgentInit(runner git.Runner, local, force bool) error {
+func runAgentInstall(runner git.Runner, local, force bool) error {
 	var baseDir string
 	var err error
 
@@ -282,7 +282,7 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 
 	if !local {
 		fmt.Println()
-		fmt.Println("Tip: Use 'stackit agent init --local' to install files in a specific repository")
+		fmt.Println("Tip: Use 'stackit agent install --local' to install files in a specific repository")
 	}
 
 	return nil

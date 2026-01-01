@@ -10,6 +10,7 @@ import (
 
 	"stackit.dev/stackit/internal/cli/agent"
 	"stackit.dev/stackit/internal/cli/branch"
+	"stackit.dev/stackit/internal/cli/github"
 	"stackit.dev/stackit/internal/cli/navigation"
 	"stackit.dev/stackit/internal/cli/stack"
 )
@@ -97,6 +98,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(branch.NewGetCmd())
 	rootCmd.AddCommand(newInfoCmd())
 	rootCmd.AddCommand(newInitCmd())
+	rootCmd.AddCommand(github.NewGithubCmd())
 	rootCmd.AddCommand(branch.NewLockCmd())
 	rootCmd.AddCommand(navigation.NewLogCmd())
 	rootCmd.AddCommand(stack.NewMergeCmd())

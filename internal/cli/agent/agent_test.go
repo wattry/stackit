@@ -12,7 +12,7 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-func TestAgentInit_Local(t *testing.T) {
+func TestAgentInstall_Local(t *testing.T) {
 	// Create temp directory
 	tempDir := t.TempDir()
 
@@ -28,10 +28,10 @@ func TestAgentInit_Local(t *testing.T) {
 	// Set version for testing
 	TemplateVersion = "1.0.0"
 
-	// Run agent init --local
+	// Run agent install --local
 	runner := git.NewRunner()
-	err = runAgentInit(runner, true, false)
-	require.NoError(t, err, "agent init should succeed")
+	err = runAgentInstall(runner, true, false)
+	require.NoError(t, err, "agent install should succeed")
 
 	// Verify directory structure
 	t.Run("directories created", func(t *testing.T) {
@@ -116,7 +116,7 @@ func TestAgentInit_Local(t *testing.T) {
 	})
 }
 
-func TestAgentInit_VersionCheck(t *testing.T) {
+func TestAgentInstall_VersionCheck(t *testing.T) {
 	tempDir := t.TempDir()
 
 	err := os.Chdir(tempDir)
@@ -132,7 +132,7 @@ func TestAgentInit_VersionCheck(t *testing.T) {
 
 	// First installation
 	runner := git.NewRunner()
-	err = runAgentInit(runner, true, false)
+	err = runAgentInstall(runner, true, false)
 	require.NoError(t, err, "first install should succeed")
 
 	// Modify version to simulate older version
@@ -145,12 +145,12 @@ func TestAgentInit_VersionCheck(t *testing.T) {
 	require.NoError(t, err, "should write modified SKILL.md")
 
 	// Try to install again without force
-	err = runAgentInit(runner, true, false)
+	err = runAgentInstall(runner, true, false)
 	require.Error(t, err, "should fail without force flag")
 	require.Contains(t, err.Error(), "existing installation found")
 
 	// Install with force flag
-	err = runAgentInit(runner, true, true)
+	err = runAgentInstall(runner, true, true)
 	require.NoError(t, err, "should succeed with force flag")
 
 	// Verify version was updated
@@ -160,15 +160,15 @@ func TestAgentInit_VersionCheck(t *testing.T) {
 	require.NotContains(t, string(content), "version: 0.9.0", "should not have old version")
 }
 
-func TestAgentInit_NotGitRepo(t *testing.T) {
+func TestAgentInstall_NotGitRepo(t *testing.T) {
 	tempDir := t.TempDir()
 
 	err := os.Chdir(tempDir)
 	require.NoError(t, err, "should change to temp directory")
 
-	// Try to run agent init --local without git repo
+	// Try to run agent install --local without git repo
 	runner := git.NewRunner()
-	err = runAgentInit(runner, true, false)
+	err = runAgentInstall(runner, true, false)
 	require.Error(t, err, "should fail when not in git repo")
 	require.Contains(t, err.Error(), "not a git repository")
 }
