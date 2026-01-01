@@ -204,6 +204,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit agent install` | Setup integration files for Cursor and Claude Code |
 | `stackit github install` | Install GitHub Action CI checks for branch locking |
 | `stackit precommit install` | Install git pre-commit hook for branch state validation |
+| `stackit precommit uninstall` | Remove the git pre-commit hook |
 
 ### Utilities & System
 | Command | Description |

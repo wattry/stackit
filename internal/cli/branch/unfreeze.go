@@ -19,7 +19,8 @@ func NewUnfreezeCmd() *cobra.Command {
 
 Unfreezing a branch re-enables local modifications and restacking. This only 
 affects the local frozen status and does not affect shared locks.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""

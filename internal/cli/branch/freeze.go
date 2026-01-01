@@ -26,7 +26,8 @@ accidentally modifying them or affecting their metadata. Frozen branches are
 automatically updated from remote via 'st sync' or 'st get' using hard-resets.
 
 This operation can be undone with 'st unfreeze'.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""

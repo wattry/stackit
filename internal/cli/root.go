@@ -27,10 +27,11 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	)
 
 	rootCmd := &cobra.Command{
-		Use:     "stackit",
-		Aliases: []string{"st"},
-		Short:   "Stackit is a command line tool that makes working with stacked changes fast & intuitive",
-		Version: version,
+		Use:          "stackit",
+		Aliases:      []string{"st"},
+		Short:        "Stackit is a command line tool that makes working with stacked changes fast & intuitive",
+		Version:      version,
+		SilenceUsage: true,
 		Long: `Stackit is a command line tool that makes working with stacked changes fast & intuitive.
 
 https://github.com/getstackit/stackit

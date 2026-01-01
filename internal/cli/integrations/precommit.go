@@ -4,18 +4,20 @@ import (
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/integrations"
-	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 )
 
+// NewPrecommitCmd creates a new cobra command for managing pre-commit hooks.
 func NewPrecommitCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "precommit",
-		Short: "Manage and run pre-commit hooks",
-		Long:  `Manage and run git pre-commit hooks that validate Stackit state.`,
+		Use:          "precommit",
+		Short:        "Manage and run pre-commit hooks",
+		Long:         `Manage and run git pre-commit hooks that validate Stackit state.`,
+		SilenceUsage: true,
 	}
 
 	cmd.AddCommand(newPrecommitInstallCmd())
+	cmd.AddCommand(newPrecommitUninstallCmd())
 	cmd.AddCommand(newPrecommitVerifyCmd())
 
 	return cmd
@@ -23,13 +25,24 @@ func NewPrecommitCmd() *cobra.Command {
 
 func newPrecommitInstallCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "install",
-		Short: "Install the pre-commit hook into the current repository",
-		Args:  cobra.NoArgs,
+		Use:          "install",
+		Short:        "Install the pre-commit hook into the current repository",
+		SilenceUsage: true,
+		Args:         cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *app.Context) error {
-				return integrations.PrecommitInstallAction(ctx)
-			})
+			return common.Run(cmd, integrations.PrecommitInstallAction)
+		},
+	}
+}
+
+func newPrecommitUninstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:          "uninstall",
+		Short:        "Uninstall the pre-commit hook from the current repository",
+		SilenceUsage: true,
+		Args:         cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return common.Run(cmd, integrations.PrecommitUninstallAction)
 		},
 	}
 }
@@ -40,11 +53,10 @@ func newPrecommitVerifyCmd() *cobra.Command {
 		Short: "Verify that the current branch is not locked or frozen",
 		Long: `Verify that the current branch is not locked or frozen.
 Exits with a non-zero exit code if the branch is restricted.`,
-		Args: cobra.NoArgs,
+		SilenceUsage: true,
+		Args:         cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return common.Run(cmd, func(ctx *app.Context) error {
-				return integrations.PrecommitVerifyAction(ctx)
-			})
+			return common.Run(cmd, integrations.PrecommitVerifyAction)
 		},
 	}
 }

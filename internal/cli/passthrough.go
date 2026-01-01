@@ -208,6 +208,7 @@ func newAddCmd() *cobra.Command {
 		Short:              "git add passthrough",
 		Long:               "arguments [args] (optional) git add arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
@@ -220,6 +221,7 @@ func newCherryPickCmd() *cobra.Command {
 		Short:              "git cherry-pick passthrough",
 		Long:               "arguments [args] (optional) git cherry-pick arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
@@ -232,6 +234,7 @@ func newRebaseCmd() *cobra.Command {
 		Short:              "git rebase passthrough",
 		Long:               "arguments [args] (optional) git rebase arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
@@ -244,6 +247,7 @@ func newResetCmd() *cobra.Command {
 		Short:              "git reset passthrough",
 		Long:               "arguments [args] (optional) git reset arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
