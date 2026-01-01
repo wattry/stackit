@@ -19,7 +19,7 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		return nil, nil
 	}
 
-	prInfo := NewPrInfoWithLocked(
+	prInfo := NewPrInfoFull(
 		meta.PrInfo.Number,
 		getStringValue(meta.PrInfo.Title),
 		getStringValue(meta.PrInfo.Body),
@@ -27,7 +27,8 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		getStringValue(meta.PrInfo.Base),
 		getStringValue(meta.PrInfo.URL),
 		getBoolValue(meta.PrInfo.IsDraft),
-		getBoolValue(meta.PrInfo.Locked),
+		getStringValue(meta.PrInfo.LockReason),
+		meta.PrInfo.ConsolidationPR,
 	)
 
 	return prInfo, nil
@@ -83,8 +84,9 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 		url := prInfo.URL()
 		meta.PrInfo.URL = &url
 	}
-	locked := prInfo.IsLocked()
-	meta.PrInfo.Locked = &locked
+	lockReason := prInfo.LockReason()
+	meta.PrInfo.LockReason = &lockReason
+	meta.PrInfo.ConsolidationPR = prInfo.ConsolidationPR()
 
 	return e.git.WriteMetadata(branch.GetName(), meta)
 }
@@ -120,9 +122,29 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	titleNeedsUpdate := e.prTitleNeedsUpdate(branch, prInfo)
 
 	// Check if lock status changed
-	lockStatusChanged := prInfo.IsLocked() != branch.IsLocked()
+	lockStatusChanged := false
+	meta, err := e.git.ReadMetadata(branch.GetName())
+	if err == nil {
+		if meta.LockReason != prInfo.LockReason() {
+			lockStatusChanged = true
+		} else if meta.PrInfo != nil && getStringValue(meta.PrInfo.LockReason) != prInfo.LockReason() {
+			lockStatusChanged = true
+		}
+	}
 
-	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged
+	// Check if consolidation PR changed
+	consolidationPRChanged := false
+	if err == nil && meta.PrInfo != nil {
+		oldPR := meta.PrInfo.ConsolidationPR
+		newPR := prInfo.ConsolidationPR()
+		if (oldPR == nil) != (newPR == nil) {
+			consolidationPRChanged = true
+		} else if oldPR != nil && newPR != nil && *oldPR != *newPR {
+			consolidationPRChanged = true
+		}
+	}
+
+	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged || consolidationPRChanged
 
 	reason := ""
 	if !needsUpdate {

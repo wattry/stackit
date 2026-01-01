@@ -58,17 +58,17 @@ func NewBranchNotFoundError(branchName string) *BranchNotFoundError {
 // BranchModificationError represents an error when a branch cannot be modified
 type BranchModificationError struct {
 	BranchName string
-	IsLocked   bool
+	LockReason string
 	IsFrozen   bool
 }
 
 func (e *BranchModificationError) Error() string {
 	state := ""
 	switch {
-	case e.IsLocked && e.IsFrozen:
-		state = "locked and frozen"
-	case e.IsLocked:
-		state = "locked"
+	case e.LockReason != "" && e.IsFrozen:
+		state = fmt.Sprintf("locked (%s) and frozen", e.LockReason)
+	case e.LockReason != "":
+		state = fmt.Sprintf("locked (%s)", e.LockReason)
 	case e.IsFrozen:
 		state = "frozen"
 	}
@@ -81,10 +81,10 @@ func (e *BranchModificationError) Is(target error) bool {
 }
 
 // NewBranchModificationError creates a new BranchModificationError
-func NewBranchModificationError(branchName string, locked, frozen bool) *BranchModificationError {
+func NewBranchModificationError(branchName string, lockReason string, frozen bool) *BranchModificationError {
 	return &BranchModificationError{
 		BranchName: branchName,
-		IsLocked:   locked,
+		LockReason: lockReason,
 		IsFrozen:   frozen,
 	}
 }

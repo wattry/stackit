@@ -28,8 +28,26 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	}
 
 	// Add lock message if branch is locked
-	if eng.GetBranch(branch).IsLocked() {
-		tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
+	branchObj := eng.GetBranch(branch)
+	if branchObj.IsLocked() {
+		reason := branchObj.GetLockReason()
+		if reason == "manual" || reason == "" {
+			tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
+		} else {
+			tree.WriteString(fmt.Sprintf("> 🔒 This PR has been locked (%s). To unlock it, run `st unlock`.\n\n", reason))
+		}
+	}
+
+	// Add notice if present in PrInfo
+	prInfo, _ := eng.GetBranch(branch).GetPrInfo()
+	if prInfo != nil {
+		if prInfo.ConsolidationPR() != nil {
+			if prInfo.State() == "MERGED" {
+				tree.WriteString("> 💡 **Notice**: This PR was consolidated and has been merged.\n\n")
+			} else {
+				tree.WriteString(fmt.Sprintf("> 💡 **Notice**: This PR is part of a consolidated stack merge. See PR #%d for details.\n\n", *prInfo.ConsolidationPR()))
+			}
+		}
 	}
 
 	for branchObj, depth := range eng.BranchesDepthFirst(terminalParent) {

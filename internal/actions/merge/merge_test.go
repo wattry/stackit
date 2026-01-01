@@ -218,7 +218,7 @@ func TestAction(t *testing.T) {
 		s.Checkout("branch-a")
 
 		// Execute the merge plan
-		err = merge.Execute(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, s.Context.RepoRoot, merge.ExecuteOptions{
+		err = merge.Execute(s.Context, s.Engine, merge.ExecuteOptions{
 			Plan:  plan,
 			Force: true,
 		})

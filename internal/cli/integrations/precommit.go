@@ -7,7 +7,7 @@ import (
 	"stackit.dev/stackit/internal/cli/common"
 )
 
-// NewPrecommitCmd creates a new cobra command for managing pre-commit hooks.
+// NewPrecommitCmd creates the precommit command
 func NewPrecommitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "precommit",

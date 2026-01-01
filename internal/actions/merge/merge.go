@@ -119,11 +119,11 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	if opts.UseWorktree {
-		if err := ExecuteInWorktree(ctx.Context, eng, splog, ctx.GitHubClient, ctx.RepoRoot, executeOpts); err != nil {
+		if err := ExecuteInWorktree(ctx, eng, executeOpts); err != nil {
 			return fmt.Errorf("merge execution in worktree failed: %w", err)
 		}
 	} else {
-		if err := Execute(ctx.Context, eng, splog, ctx.GitHubClient, ctx.RepoRoot, executeOpts); err != nil {
+		if err := Execute(ctx, eng, executeOpts); err != nil {
 			return fmt.Errorf("merge execution failed: %w", err)
 		}
 	}
