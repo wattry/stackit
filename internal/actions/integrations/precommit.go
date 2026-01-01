@@ -1,4 +1,4 @@
-// Package integrations provides functionality for integrating Stackit with external tools.
+// Package integrations provides functionality for integrating Stackit with external tools and hooks.
 package integrations
 
 import (
@@ -22,7 +22,7 @@ func PrecommitInstallAction(ctx *app.Context) error {
 	hookPath := filepath.Join(hooksDir, "pre-commit")
 
 	// Ensure hooks directory exists
-	if err := os.MkdirAll(hooksDir, 0700); err != nil {
+	if err := os.MkdirAll(hooksDir, 0750); err != nil {
 		return fmt.Errorf("failed to create hooks directory: %w", err)
 	}
 
@@ -36,12 +36,15 @@ func PrecommitInstallAction(ctx *app.Context) error {
 
 		// If it exists but doesn't have our command, we should probably append or warn.
 		// For simplicity, let's append.
-		f, err := os.OpenFile(hookPath, os.O_APPEND|os.O_WRONLY, 0700) //nolint:gosec
+		f, err := os.OpenFile(hookPath, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open existing pre-commit hook: %w", err)
 		}
 		defer func() {
-			_ = f.Close()
+			if closeErr := f.Close(); closeErr != nil {
+				// Log but don't fail if close fails
+				ctx.Splog.Debug(fmt.Sprintf("failed to close file: %v", closeErr))
+			}
 		}()
 
 		if _, err := f.WriteString("\n# Added by Stackit\nstackit precommit verify\n"); err != nil {
