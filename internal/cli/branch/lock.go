@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/lock"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 )
@@ -40,7 +40,7 @@ This operation can be undone with 'st unlock'.`,
 					branchName = current.GetName()
 				}
 
-				return actions.LockAction(ctx, branchName)
+				return lock.LockAction(ctx, branchName)
 			})
 		},
 	}
@@ -72,7 +72,7 @@ to enable modifications.`,
 					branchName = current.GetName()
 				}
 
-				return actions.UnlockAction(ctx, branchName)
+				return lock.UnlockAction(ctx, branchName)
 			})
 		},
 	}

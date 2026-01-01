@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"stackit.dev/stackit/testhelpers"
+	"stackit.dev/stackit/testhelpers/scenario"
 )
 
 func TestUpdatePRBodyFooter(t *testing.T) {
@@ -49,5 +53,34 @@ func TestUpdatePRBodyFooter(t *testing.T) {
 		// The footer constant already has 3 newlines.
 		// UpdatePRBodyFooter should find the block start and replace it.
 		assert.Equal(t, "Description"+footer, result)
+	})
+}
+
+func TestCreatePRBodyFooter(t *testing.T) {
+	t.Run("includes lock instructions when branch is locked", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		// Lock the branch
+		err := s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true)
+		require.NoError(t, err)
+
+		footer := CreatePRBodyFooter("feature-a", s.Engine)
+		assert.Contains(t, footer, "🔒 This PR has been locked. To unlock it, run `st unlock`.")
+	})
+
+	t.Run("does not include lock banner when branch is unlocked", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		// Unlocked by default
+		footer := CreatePRBodyFooter("feature-a", s.Engine)
+		assert.NotContains(t, footer, "🔒 This PR has been locked")
 	})
 }

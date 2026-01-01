@@ -29,7 +29,7 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 
 	// Add lock message if branch is locked
 	if eng.GetBranch(branch).IsLocked() {
-		tree.WriteString("> 🔒 This PR has been locked\n\n")
+		tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
 	}
 
 	for branchObj, depth := range eng.BranchesDepthFirst(terminalParent) {
