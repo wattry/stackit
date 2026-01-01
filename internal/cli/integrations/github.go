@@ -1,5 +1,5 @@
-// Package github provides commands for managing GitHub integration
-package github
+// Package integrations provides commands for managing various integrations
+package integrations
 
 import (
 	"embed"
@@ -12,8 +12,8 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-//go:embed templates/*.yml
-var templates embed.FS
+//go:embed github/templates/*.yml
+var githubTemplates embed.FS
 
 // NewGithubCmd creates the github command
 func NewGithubCmd() *cobra.Command {
@@ -67,7 +67,7 @@ func runGithubInstall(runner git.Runner, force bool) error {
 		return fmt.Errorf("file already exists: %s. Use --force to overwrite", workflowPath)
 	}
 
-	content, err := templates.ReadFile("templates/stackit-lock-check.yml")
+	content, err := githubTemplates.ReadFile("github/templates/stackit-lock-check.yml")
 	if err != nil {
 		return fmt.Errorf("failed to read template: %w", err)
 	}

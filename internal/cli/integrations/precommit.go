@@ -1,14 +1,14 @@
-package cli
+package integrations
 
 import (
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/integrations"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 )
 
-func newPrecommitCmd() *cobra.Command {
+func NewPrecommitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "precommit",
 		Short: "Manage and run pre-commit hooks",
@@ -28,7 +28,7 @@ func newPrecommitInstallCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				return actions.PrecommitInstallAction(ctx)
+				return integrations.PrecommitInstallAction(ctx)
 			})
 		},
 	}
@@ -43,7 +43,7 @@ Exits with a non-zero exit code if the branch is restricted.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				return actions.PrecommitVerifyAction(ctx)
+				return integrations.PrecommitVerifyAction(ctx)
 			})
 		},
 	}
