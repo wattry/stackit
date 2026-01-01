@@ -111,6 +111,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(stack.NewReorderCmd())
 	rootCmd.AddCommand(newResetCmd())
 	rootCmd.AddCommand(stack.NewRestackCmd())
+	rootCmd.AddCommand(newPrecommitCmd())
 	rootCmd.AddCommand(branch.NewSplitCmd())
 	rootCmd.AddCommand(branch.NewSquashCmd())
 	rootCmd.AddCommand(newScopeCmd())
