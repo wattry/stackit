@@ -1,11 +1,13 @@
 package actions_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -29,6 +31,27 @@ func TestLockUnlockAction(t *testing.T) {
 		require.False(t, s.Engine.GetBranch("main").IsLocked())
 	})
 
+	t.Run("LockAction indicates already locked branches", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		// Pre-lock
+		require.NoError(t, s.Engine.SetLocked(s.Engine.GetBranch("feature-a"), true))
+
+		var buf bytes.Buffer
+		s.Context.Splog = tui.NewSplogToWriter(&buf)
+
+		err := actions.LockAction(s.Context, "feature-a")
+		require.NoError(t, err)
+
+		output := buf.String()
+		require.Contains(t, output, "feature-a")
+		require.Contains(t, output, "already locked")
+	})
+
 	t.Run("UnlockAction unlocks branch and descendants", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit().
@@ -48,6 +71,26 @@ func TestLockUnlockAction(t *testing.T) {
 
 		require.False(t, s.Engine.GetBranch("feature-a").IsLocked())
 		require.False(t, s.Engine.GetBranch("feature-b").IsLocked())
+	})
+
+	t.Run("UnlockAction indicates already unlocked branches", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		// Already unlocked by default
+
+		var buf bytes.Buffer
+		s.Context.Splog = tui.NewSplogToWriter(&buf)
+
+		err := actions.UnlockAction(s.Context, "feature-a")
+		require.NoError(t, err)
+
+		output := buf.String()
+		require.Contains(t, output, "feature-a")
+		require.Contains(t, output, "already unlocked")
 	})
 
 	t.Run("LockAction fails on untracked branch", func(t *testing.T) {

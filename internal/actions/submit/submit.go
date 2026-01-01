@@ -332,7 +332,7 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 		submissionInfo.Base,
 		prURL,
 		submissionInfo.Metadata.IsDraft,
-	))
+	).WithLocked(branch.IsEffectivelyLocked()))
 
 	return prURL, nil
 }
@@ -416,7 +416,7 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		baseToStore,
 		prURL,
 		submissionInfo.Metadata.IsDraft,
-	))
+	).WithLocked(branch.IsEffectivelyLocked()))
 
 	return prURL, nil
 }

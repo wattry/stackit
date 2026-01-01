@@ -33,6 +33,10 @@ func LockAction(ctx *app.Context, branchName string) error {
 		if b.IsTrunk() {
 			continue
 		}
+		if b.IsLocked() {
+			splog.Info("Branch %s is already locked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+			continue
+		}
 		if err := eng.SetLocked(b, true); err != nil {
 			return fmt.Errorf("failed to lock branch %s: %w", b.GetName(), err)
 		}
@@ -67,6 +71,10 @@ func UnlockAction(ctx *app.Context, branchName string) error {
 	affectedBranches := []string{}
 	for _, b := range branches {
 		if b.IsTrunk() {
+			continue
+		}
+		if !b.IsLocked() {
+			splog.Info("Branch %s is already unlocked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
 			continue
 		}
 		if err := eng.SetLocked(b, false); err != nil {

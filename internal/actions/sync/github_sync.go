@@ -31,6 +31,13 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 		prsUpdated := 0
 		if err := github.SyncPrInfo(gctx, ctx.Git(), branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
 			branch := eng.GetBranch(name)
+
+			// Try to preserve existing locked status
+			locked := false
+			if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
+				locked = existing.IsLocked()
+			}
+
 			_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
 				&prInfo.Number,
 				prInfo.Title,
@@ -39,7 +46,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 				prInfo.Base,
 				prInfo.HTMLURL,
 				prInfo.Draft,
-			))
+			).WithLocked(locked))
 			prsUpdated++
 		}); err != nil {
 			// GitHub failure aborts sync (per spec)

@@ -19,7 +19,7 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		return nil, nil
 	}
 
-	prInfo := NewPrInfo(
+	prInfo := NewPrInfoWithLocked(
 		meta.PrInfo.Number,
 		getStringValue(meta.PrInfo.Title),
 		getStringValue(meta.PrInfo.Body),
@@ -27,6 +27,7 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		getStringValue(meta.PrInfo.Base),
 		getStringValue(meta.PrInfo.URL),
 		getBoolValue(meta.PrInfo.IsDraft),
+		getBoolValue(meta.PrInfo.Locked),
 	)
 
 	return prInfo, nil
@@ -82,6 +83,8 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 		url := prInfo.URL()
 		meta.PrInfo.URL = &url
 	}
+	locked := prInfo.IsLocked()
+	meta.PrInfo.Locked = &locked
 
 	return e.git.WriteMetadata(branch.GetName(), meta)
 }
@@ -116,7 +119,10 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	// Check if PR title needs update due to scope changes
 	titleNeedsUpdate := e.prTitleNeedsUpdate(branch, prInfo)
 
-	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate
+	// Check if lock status changed
+	lockStatusChanged := prInfo.IsLocked() != branch.IsEffectivelyLocked()
+
+	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged
 
 	reason := ""
 	if !needsUpdate {

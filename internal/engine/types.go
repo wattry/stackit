@@ -239,6 +239,18 @@ func (b Branch) IsLocked() bool {
 	return b.reader.IsLocked(b)
 }
 
+// IsEffectivelyLocked checks if the branch or any of its ancestors is locked
+func (b Branch) IsEffectivelyLocked() bool {
+	if b.IsLocked() {
+		return true
+	}
+	parent := b.GetParent()
+	if parent != nil && !parent.IsTrunk() {
+		return parent.IsEffectivelyLocked()
+	}
+	return false
+}
+
 // IsFrozen checks if the branch is frozen locally
 func (b Branch) IsFrozen() bool {
 	return b.reader.IsFrozen(b)
@@ -272,6 +284,7 @@ type PrInfo struct {
 	state   string // MERGED, CLOSED, OPEN
 	base    string // Base branch name
 	url     string // PR URL
+	locked  bool   // Whether the PR footer shows it as locked
 }
 
 // NewPrInfo creates a new PrInfo instance
@@ -284,6 +297,24 @@ func NewPrInfo(number *int, title, body, state, base, url string, isDraft bool) 
 		state:   state,
 		base:    base,
 		url:     url,
+		// Default to false or current state?
+		// Actually, NewPrInfo is often used when we just got info from GitHub.
+		// GitHub doesn't know about our lock status.
+		// But when we UPSERT it, we want to record that THIS PR BODY reflects THIS lock status.
+	}
+}
+
+// NewPrInfoWithLocked creates a new PrInfo instance including locked status
+func NewPrInfoWithLocked(number *int, title, body, state, base, url string, isDraft bool, locked bool) *PrInfo {
+	return &PrInfo{
+		number:  number,
+		title:   title,
+		body:    body,
+		isDraft: isDraft,
+		state:   state,
+		base:    base,
+		url:     url,
+		locked:  locked,
 	}
 }
 
@@ -322,6 +353,11 @@ func (p *PrInfo) URL() string {
 	return p.url
 }
 
+// IsLocked returns whether the PR footer shows it as locked
+func (p *PrInfo) IsLocked() bool {
+	return p.locked
+}
+
 // MarshalJSON implements json.Marshaler for PrInfo
 func (p *PrInfo) MarshalJSON() ([]byte, error) {
 	type Alias struct {
@@ -354,6 +390,7 @@ func (p *PrInfo) WithNumber(number *int) *PrInfo {
 		state:   p.state,
 		base:    p.base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -367,6 +404,7 @@ func (p *PrInfo) WithTitle(title string) *PrInfo {
 		state:   p.state,
 		base:    p.base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -380,6 +418,7 @@ func (p *PrInfo) WithBody(body string) *PrInfo {
 		state:   p.state,
 		base:    p.base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -394,6 +433,7 @@ func (p *PrInfo) WithTitleAndBody(title, body string) *PrInfo {
 		state:   p.state,
 		base:    p.base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -407,6 +447,7 @@ func (p *PrInfo) WithIsDraft(isDraft bool) *PrInfo {
 		state:   p.state,
 		base:    p.base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -420,6 +461,7 @@ func (p *PrInfo) WithState(state string) *PrInfo {
 		state:   state,
 		base:    p.base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -433,6 +475,7 @@ func (p *PrInfo) WithBase(base string) *PrInfo {
 		state:   p.state,
 		base:    base,
 		url:     p.url,
+		locked:  p.locked,
 	}
 }
 
@@ -446,6 +489,21 @@ func (p *PrInfo) WithURL(url string) *PrInfo {
 		state:   p.state,
 		base:    p.base,
 		url:     url,
+		locked:  p.locked,
+	}
+}
+
+// WithLocked returns a new PrInfo with the locked field updated
+func (p *PrInfo) WithLocked(locked bool) *PrInfo {
+	return &PrInfo{
+		number:  p.number,
+		title:   p.title,
+		body:    p.body,
+		isDraft: p.isDraft,
+		state:   p.state,
+		base:    p.base,
+		url:     p.url,
+		locked:  locked,
 	}
 }
 

@@ -76,8 +76,8 @@ func updatePRMetadata(ctx *app.Context, name string, repoOwner, repoName string)
 		if err != nil {
 			return
 		}
-
-		// Successfully updated, update local engine state
-		_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody))
 	}
+
+	// Successfully updated (or already up to date), update local engine state
+	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLocked(branch.IsEffectivelyLocked()))
 }

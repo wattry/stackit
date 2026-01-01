@@ -55,6 +55,7 @@ type PrInfoPersistence struct {
 	Body    *string `json:"body,omitempty"`
 	State   *string `json:"state,omitempty"`
 	IsDraft *bool   `json:"isDraft,omitempty"`
+	Locked  *bool   `json:"locked,omitempty"`
 }
 
 const (
