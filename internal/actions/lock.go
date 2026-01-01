@@ -28,7 +28,6 @@ func LockAction(ctx *app.Context, branchName string) error {
 		IncludeCurrent:   true,
 	})
 
-	affectedBranches := []string{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
@@ -41,11 +40,19 @@ func LockAction(ctx *app.Context, branchName string) error {
 			return fmt.Errorf("failed to lock branch %s: %w", b.GetName(), err)
 		}
 		splog.Info("Locked %s.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
-		affectedBranches = append(affectedBranches, b.GetName())
 	}
 
-	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
-	if err := PushMetadataAndSyncPRs(ctx, affectedBranches); err != nil {
+	// Push metadata changes for the entire stack to ensure effective lock status
+	// is updated on GitHub for all related PRs.
+	fullStack := branch.GetFullStack()
+	syncBranches := []string{}
+	for _, b := range fullStack {
+		if !b.IsTrunk() {
+			syncBranches = append(syncBranches, b.GetName())
+		}
+	}
+
+	if err := PushMetadataAndSyncPRs(ctx, syncBranches); err != nil {
 		splog.Debug("Failed to push metadata changes: %v", err)
 	}
 
@@ -68,7 +75,6 @@ func UnlockAction(ctx *app.Context, branchName string) error {
 		RecursiveChildren: true,
 	})
 
-	affectedBranches := []string{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
@@ -81,11 +87,19 @@ func UnlockAction(ctx *app.Context, branchName string) error {
 			return fmt.Errorf("failed to unlock branch %s: %w", b.GetName(), err)
 		}
 		splog.Info("Unlocked %s.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
-		affectedBranches = append(affectedBranches, b.GetName())
 	}
 
-	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
-	if err := PushMetadataAndSyncPRs(ctx, affectedBranches); err != nil {
+	// Push metadata changes for the entire stack to ensure effective lock status
+	// is updated on GitHub for all related PRs.
+	fullStack := branch.GetFullStack()
+	syncBranches := []string{}
+	for _, b := range fullStack {
+		if !b.IsTrunk() {
+			syncBranches = append(syncBranches, b.GetName())
+		}
+	}
+
+	if err := PushMetadataAndSyncPRs(ctx, syncBranches); err != nil {
 		splog.Debug("Failed to push metadata changes: %v", err)
 	}
 

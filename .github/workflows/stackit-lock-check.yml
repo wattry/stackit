@@ -1,4 +1,4 @@
-name: Stackit Lock Check
+name: Stackit
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   check-lock:
-    name: Check Stackit Lock Status
+    name: Check Lock Status
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,34 +17,36 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch Stackit Metadata
+        # We fetch the specific metadata ref for this branch.
+        # If the branch wasn't created/tracked by Stackit, this ref won't exist.
+        # We use || true to ensure the job doesn't fail if the ref is missing.
         run: |
-          # Fetch specifically the metadata ref for the PR branch
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          echo "Fetching metadata for branch: $BRANCH_NAME"
-          git fetch origin "+refs/stackit/metadata/$BRANCH_NAME:refs/stackit/metadata/$BRANCH_NAME" || {
-            echo "No metadata ref found on remote for $BRANCH_NAME."
-          }
+          echo "Attempting to fetch Stackit metadata for: $BRANCH_NAME"
+          git fetch origin "+refs/stackit/metadata/$BRANCH_NAME:refs/stackit/metadata/$BRANCH_NAME" || echo "No Stackit metadata ref found for this branch."
 
       - name: Verify Lock Status
+        # If the metadata ref is missing, we default to success (unlocked).
+        # This allows non-Stackit PRs to pass this check.
         run: |
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           REF="refs/stackit/metadata/$BRANCH_NAME"
           
-          if git show-ref --quiet "$REF"; then
-            METADATA=$(git show "$REF")
-            echo "Metadata found for $BRANCH_NAME"
-            
-            # Check for direct lock (.locked) or PR-level lock record (.prInfo.locked)
-            # Stackit's 'st lock' sets .locked=true
-            # Ancestor locks can be detected via .prInfo.locked if the PR was submitted/updated while locked
-            IS_LOCKED=$(echo "$METADATA" | jq -r '.locked // false')
-            IS_PR_LOCKED=$(echo "$METADATA" | jq -r '.prInfo.locked // false')
-            
-            if [ "$IS_LOCKED" = "true" ] || [ "$IS_PR_LOCKED" = "true" ]; then
-              echo "::error::This PR is locked by Stackit. Merging is blocked until it is unlocked with 'st unlock'."
-              exit 1
-            fi
-            echo "Branch is not locked."
-          else
-            echo "No Stackit metadata found for this branch. Proceeding..."
+          if ! git show-ref --quiet "$REF"; then
+            echo "No Stackit metadata found for '$BRANCH_NAME'. Defaulting to SUCCESS."
+            exit 0
           fi
+
+          METADATA=$(git show "$REF")
+          echo "Stackit metadata found for '$BRANCH_NAME'. Checking lock status..."
+          
+          # Check for effective lock status.
+          # This field is the authoritative source for CI and is populated by Stackit.
+          IS_LOCKED=$(echo "$METADATA" | jq -r '.effectivelyLocked // false')
+          
+          if [ "$IS_LOCKED" = "true" ]; then
+            echo "::error::This PR is locked by Stackit. Merging is blocked until it is unlocked with 'st unlock'."
+            exit 1
+          fi
+
+          echo "Branch is not locked. Proceeding."
