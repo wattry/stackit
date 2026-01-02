@@ -385,6 +385,7 @@ func executeSteps(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions)
 
 		// 2. Execute the step (with progress reporting for wait steps)
 		if err := executeStepWithProgress(ctx, step, i, eng, opts); err != nil {
+			ctx.Splog.Debug("Step %d (%s) failed: %v", i+1, step.Description, err)
 			if opts.Reporter != nil {
 				opts.Reporter.StepFailed(i, err)
 			}
@@ -499,13 +500,17 @@ func executeStep(ctx *app.Context, step PlanStep, eng mergeExecuteEngine, opts E
 		if githubClient == nil {
 			return fmt.Errorf("GitHub client not available")
 		}
+		splog.Debug("Executing StepMergePR for branch %s", step.BranchName)
 		if err := githubClient.MergePullRequest(ctx.Context, step.BranchName); err != nil {
+			splog.Debug("StepMergePR for branch %s failed: %v", step.BranchName, err)
 			return fmt.Errorf("failed to merge PR: %w", err)
 		}
 
 	case StepPullTrunk:
+		splog.Debug("Executing StepPullTrunk")
 		pullResult, err := eng.PullTrunk(ctx.Context)
 		if err != nil {
+			splog.Debug("StepPullTrunk failed: %v", err)
 			return fmt.Errorf("failed to pull trunk: %w", err)
 		}
 		switch pullResult {
@@ -527,9 +532,11 @@ func executeStep(ctx *app.Context, step PlanStep, eng mergeExecuteEngine, opts E
 		// Restack the branch - RestackBranches will automatically handle reparenting
 		// if the parent has been merged/deleted
 		branch := eng.GetBranch(step.BranchName)
+		splog.Debug("Executing StepRestack for branch %s", step.BranchName)
 		batchResult, err := eng.RestackBranches(ctx.Context, []engine.Branch{branch})
 		result := batchResult.Results[step.BranchName]
 		if err != nil {
+			splog.Debug("StepRestack for branch %s failed: %v", step.BranchName, err)
 			return fmt.Errorf("failed to restack: %w", err)
 		}
 
@@ -606,14 +613,18 @@ func executeStep(ctx *app.Context, step PlanStep, eng mergeExecuteEngine, opts E
 
 	case StepUpdatePRBase:
 		// For top-down strategy: rebase branch onto trunk and update PR base
+		splog.Debug("Executing StepUpdatePRBase for branch %s", step.BranchName)
 		if err := executeUpdatePRBase(ctx, eng, step); err != nil {
+			splog.Debug("StepUpdatePRBase for branch %s failed: %v", step.BranchName, err)
 			return err
 		}
 
 	case StepConsolidate:
 		// Execute stack consolidation
+		splog.Debug("Executing StepConsolidate")
 		result, err := executeConsolidation(ctx, eng, opts)
 		if err != nil {
+			splog.Debug("StepConsolidate failed: %v", err)
 			return err
 		}
 		// Notify caller of consolidation result
@@ -675,6 +686,7 @@ func executeUpdatePRBase(ctx *app.Context, eng mergeExecuteEngine, step PlanStep
 		currentRev, _ = eng.GetCurrentRevision(ctx.Context)
 	}
 
+	ctx.Splog.Debug("Rebasing %s onto trunk %s (old base %s)", step.BranchName, trunkName, oldParentRev)
 	gitResult, err := eng.Rebase(ctx.Context, step.BranchName, trunkName, oldParentRev)
 
 	// Restore original branch state
@@ -685,7 +697,8 @@ func executeUpdatePRBase(ctx *app.Context, eng mergeExecuteEngine, step PlanStep
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to rebase: %w", err)
+		ctx.Splog.Debug("Rebase of %s onto %s failed: %v", step.BranchName, trunkName, err)
+		return fmt.Errorf("failed to rebase %s onto %s: %w", step.BranchName, trunkName, err)
 	}
 
 	if gitResult == engine.RestackConflict {

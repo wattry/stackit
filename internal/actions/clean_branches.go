@@ -19,6 +19,7 @@ type CleanBranchesOptions struct {
 
 // CleanBranchesResult contains the result of cleaning branches
 type CleanBranchesResult struct {
+	DeletedBranches        map[string]string // name -> reason
 	BranchesWithNewParents []string
 }
 
@@ -73,12 +74,19 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 		return nil, err
 	}
 
+	// Capture deleted branches before they are removed from the plan
+	deletedBranches := make(map[string]string)
+	for name, info := range plan.branches {
+		deletedBranches[name] = info.reason
+	}
+
 	// Phase 3: Execute deletions
 	if err := executeDeletions(ctx, plan); err != nil {
 		return nil, err
 	}
 
 	return &CleanBranchesResult{
+		DeletedBranches:        deletedBranches,
 		BranchesWithNewParents: branchesWithNewParents,
 	}, nil
 }
@@ -149,16 +157,15 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 
 	plan := newDeletionPlan()
 	branchesWithNewParents := []string{}
+	visited := make(map[string]bool)
 
-	// Start DFS from trunk children
+	// Start DFS from trunk children to handle the tracked hierarchy
 	trunk := eng.Trunk()
 	trunkChildren := trunk.GetChildren()
 	branchesToProcess := make([]string, len(trunkChildren))
 	for i, child := range trunkChildren {
 		branchesToProcess[i] = child.GetName()
 	}
-
-	visited := make(map[string]bool)
 
 	for len(branchesToProcess) > 0 {
 		branchName := branchesToProcess[len(branchesToProcess)-1]
@@ -195,6 +202,16 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 			if newParentName != "" {
 				branchesWithNewParents = append(branchesWithNewParents, branchName)
 			}
+		}
+	}
+
+	// NEW: Handle "orphan" branches (untracked branches identified for deletion)
+	for branchName, reason := range deleteReasons {
+		if !visited[branchName] {
+			// This branch is disconnected from the trunk hierarchy but should still be deleted
+			plan.add(branchName, reason, make(map[string]bool))
+			visited[branchName] = true
+			splog.Debug("Marked orphan branch %s for deletion. Reason: %s", branchName, reason)
 		}
 	}
 

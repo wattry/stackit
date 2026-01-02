@@ -148,7 +148,7 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	newTip = strings.TrimSpace(newTip)
 
 	// Update branch to point to new tip
-	if err := e.git.UpdateBranchRef(branchName, newTip); err != nil {
+	if err := e.git.UpdateBranchRef(ctx, branchName, newTip); err != nil {
 		return fmt.Errorf("failed to update branch %s: %w", branchName, err)
 	}
 

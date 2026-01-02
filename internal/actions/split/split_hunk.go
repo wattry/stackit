@@ -155,7 +155,7 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 	// to resolve commit SHAs using GetCommitSHA(branchToSplit, offset).
 	// Since we've been creating commits in detached HEAD on top of the parent,
 	// we need the original branch name to now point to the tip of our new commits.
-	if err := eng.UpdateBranchRef(branchToSplit.GetName(), "HEAD"); err != nil {
+	if err := eng.UpdateBranchRef(ctx, branchToSplit.GetName(), "HEAD"); err != nil {
 		return nil, fmt.Errorf("failed to update branch reference: %w", err)
 	}
 

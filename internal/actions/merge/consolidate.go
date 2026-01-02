@@ -143,9 +143,11 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 	// Merge all stack branches with --no-ff to preserve branch structure and enable auto-closing
 	for i, branchInfo := range c.plan.BranchesToMerge {
 		splog.Info("  Merging %s (%d/%d)...", branchInfo.BranchName, i+1, len(c.plan.BranchesToMerge))
+		splog.Debug("Consolidation merge: merging %s", branchInfo.BranchName)
 
 		commitMsg := fmt.Sprintf("Consolidate %s: %s", branchInfo.BranchName, c.getBranchTitle(branchInfo))
 		if err := c.engine.Merge(ctx, branchInfo.BranchName, engine.MergeOptions{NoFF: true, Message: commitMsg}); err != nil {
+			splog.Debug("Consolidation merge failed for %s: %v", branchInfo.BranchName, err)
 			return "", fmt.Errorf("failed to merge %s: %w", branchInfo.BranchName, err)
 		}
 	}

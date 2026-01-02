@@ -6,7 +6,7 @@ import (
 )
 
 // cleanBranches handles cleaning merged/closed branches
-func cleanBranches(ctx *app.Context, opts *Options, handler Handler, _ *Summary) (*actions.CleanBranchesResult, error) {
+func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Summary) (*actions.CleanBranchesResult, error) {
 	// Only emit phase start if we have branches that might need cleaning
 	allBranches := ctx.Engine.AllBranches()
 	hasBranchesToCheck := false
@@ -29,9 +29,16 @@ func cleanBranches(ctx *app.Context, opts *Options, handler Handler, _ *Summary)
 		return result, err
 	}
 
-	// The CleanBranches function already logs deletions via splog
-	// For now, we just update the summary with reparent info
-	// TODO: Enhance CleanBranches to return detailed deletion info for events
+	// Emit events for each deleted branch
+	for name, reason := range result.DeletedBranches {
+		handler.EmitEvent(Event{
+			Phase:   PhaseClean,
+			Type:    EventCompleted,
+			Branch:  name,
+			Message: reason,
+		})
+		summary.BranchesDeleted++
+	}
 
 	return result, nil
 }

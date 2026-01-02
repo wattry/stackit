@@ -138,7 +138,7 @@ func TestApplySplitToCommits(t *testing.T) {
 		c2SHA, _ := repo.GetCurrentSHA()
 
 		// Update feature ref to point to the new tip (the fix!)
-		err = eng.Git().UpdateBranchRef("feature", c2SHA)
+		err = eng.Git().UpdateBranchRef(context.Background(), "feature", c2SHA)
 		require.NoError(t, err)
 
 		// Apply split

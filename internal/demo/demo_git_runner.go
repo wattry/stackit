@@ -135,7 +135,7 @@ func (d *demoGitRunner) CheckoutDetached(_ context.Context, _ string) error {
 	return nil
 }
 
-func (d *demoGitRunner) UpdateBranchRef(_, _ string) error {
+func (d *demoGitRunner) UpdateBranchRef(_ context.Context, _, _ string) error {
 	return nil
 }
 
