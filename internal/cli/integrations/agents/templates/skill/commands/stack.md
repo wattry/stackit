@@ -12,6 +12,7 @@ Commands for managing the entire stack or multiple branches.
 | `stackit sync --no-interactive` | Pull trunk, delete merged branches, restack |
 | `stackit info --stack --json --no-interactive` | Export full stack metadata as JSON for analysis |
 | `stackit merge` | Merge approved PRs and cleanup |
+| `stackit fold --no-interactive` | Fold current branch into its parent |
 
 ## Bulk Operations
 
