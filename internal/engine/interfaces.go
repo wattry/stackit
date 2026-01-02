@@ -16,6 +16,9 @@ type StackNavigator interface {
 	GetBranch(branchName string) Branch
 	GetChildren(branch Branch) []Branch
 	GetRelativeStack(branch Branch, rng StackRange) []Branch
+	GetRelativeStackUpstack(branch Branch) []Branch
+	GetRelativeStackDownstack(branch Branch) []Branch
+	GetFullStack(branch Branch) []Branch
 	BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, int]
 	SortBranchesTopologically(branches []Branch) []Branch
 	FindBranchForCommit(commitSHA string) (string, error)
@@ -34,6 +37,7 @@ type BranchStatus interface {
 	IsLocked(branch Branch) bool
 	GetLockReason(branch Branch) LockReason
 	IsFrozen(branch Branch) bool
+	GetPrInfo(branch Branch) (*PrInfo, error)
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string
 	GetRemoteURL(ctx context.Context) (string, error)

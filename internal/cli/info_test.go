@@ -362,4 +362,43 @@ func TestInfoCommand(t *testing.T) {
 		require.Error(t, err, "info should fail when stackit not initialized")
 		require.Contains(t, string(output), "not initialized", "should mention not initialized")
 	})
+
+	t.Run("info with --stack --json shows JSON output", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			// Create initial commit
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			// Create branch A
+			if err := s.Repo.CreateChange("a change", "a", false); err != nil {
+				return err
+			}
+			cmd := exec.Command(binaryPath, "create", "a", "-m", "a change")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			// Create branch B on top of A
+			if err := s.Repo.CreateChange("b change", "b", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "b", "-m", "b change")
+			cmd.Dir = s.Dir
+			return cmd.Run()
+		})
+
+		// Run info --stack --json
+		cmd := exec.Command(binaryPath, "info", "--stack", "--json")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "info command failed: %s", string(output))
+		outputStr := string(output)
+		// Should be valid JSON and contain branch names
+		require.Contains(t, outputStr, "\"name\": \"a\"")
+		require.Contains(t, outputStr, "\"name\": \"b\"")
+		require.Contains(t, outputStr, "\"parent\": \"main\"")
+		require.Contains(t, outputStr, "\"parent\": \"a\"")
+	})
 }

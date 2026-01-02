@@ -7,7 +7,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -29,11 +28,18 @@ func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
 
 	// Show combined commit messages
 	splog.Info("%s", style.ColorCyan("Proposed Commit History:"))
-	parentCommits, _ := parent.GetAllCommits(engine.CommitFormatReadable)
+	parentCommits, err := parent.GetAllCommits(engine.CommitFormatReadable)
+	if err != nil {
+		splog.Debug("Failed to get parent commits for %s: %v", parent.GetName(), err)
+	}
 	for _, commit := range parentCommits {
 		splog.Info("  %s", style.ColorDim(commit))
 	}
-	currentCommits, _ := current.GetAllCommits(engine.CommitFormatReadable)
+
+	currentCommits, err := current.GetAllCommits(engine.CommitFormatReadable)
+	if err != nil {
+		splog.Debug("Failed to get current commits for %s: %v", current.GetName(), err)
+	}
 	for _, commit := range currentCommits {
 		splog.Info("  %s", commit)
 	}
@@ -45,14 +51,26 @@ func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
 	grandparentName := parent.GetParentPrecondition()
 	baseRev, err := eng.GetRevision(eng.GetBranch(grandparentName))
 	if err != nil {
-		baseRev, _ = eng.GetMergeBase(eng.Trunk().GetName(), parent.GetName())
+		splog.Debug("Failed to get revision for grandparent %s: %v", grandparentName, err)
+		var mbErr error
+		baseRev, mbErr = eng.GetMergeBase(eng.Trunk().GetName(), parent.GetName())
+		if mbErr != nil {
+			splog.Debug("Failed to get merge base for %s: %v", parent.GetName(), mbErr)
+		}
 	}
 
-	headRev, _ := current.GetRevision()
+	headRev, err := current.GetRevision()
+	if err != nil {
+		splog.Debug("Failed to get revision for current branch %s: %v", current.GetName(), err)
+	}
+
 	diffStat, err := eng.ShowDiff(ctx.Context, baseRev, headRev, true)
 	if err == nil && diffStat != "" {
 		splog.Info("%s", diffStat)
 	} else {
+		if err != nil {
+			splog.Debug("Failed to get diff stat: %v", err)
+		}
 		splog.Info("  (No changes or error retrieving diff)")
 	}
 
@@ -116,23 +134,13 @@ func Action(ctx *app.Context, opts Options) error {
 
 	parentBranch := eng.GetBranch(parentName)
 
-	if opts.DryRun {
-		return showDryRun(ctx, currentBranchObj, parentBranch)
-	}
-
 	// Prohibit folding if current or parent is locked or frozen
-	if !currentBranchObj.CanModify() {
-		return &errors.BranchModificationError{
-			BranchName: currentBranch,
-			IsFrozen:   currentBranchObj.IsFrozen(),
-			LockReason: currentBranchObj.GetLockReason(),
-		}
+	if err := currentBranchObj.EnsureCanModify(); err != nil {
+		return err
 	}
-	if !parentBranch.IsTrunk() && !parentBranch.CanModify() {
-		return &errors.BranchModificationError{
-			BranchName: parentName,
-			IsFrozen:   parentBranch.IsFrozen(),
-			LockReason: parentBranch.GetLockReason(),
+	if !parentBranch.IsTrunk() {
+		if err := parentBranch.EnsureCanModify(); err != nil {
+			return err
 		}
 	}
 
@@ -143,6 +151,10 @@ func Action(ctx *app.Context, opts Options) error {
 		if !currentScope.Equal(parentScope) {
 			return fmt.Errorf("cannot fold branches with different scopes (current: [%s], parent: [%s])", currentScope.String(), parentScope.String())
 		}
+	}
+
+	if opts.DryRun {
+		return showDryRun(ctx, currentBranchObj, parentBranch)
 	}
 
 	if opts.Keep {

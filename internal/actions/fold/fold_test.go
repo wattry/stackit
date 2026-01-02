@@ -433,4 +433,50 @@ func TestFoldAction(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "branch branch2 is frozen")
 	})
+
+	t.Run("dry-run does not modify repository", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		s.Checkout("branch2")
+
+		// Perform dry-run fold
+		err := Action(s.Context, Options{DryRun: true})
+		require.NoError(t, err)
+
+		// Verify branch2 still exists
+		branches, err := s.Engine.Git().GetAllBranchNames()
+		require.NoError(t, err)
+		require.Contains(t, branches, "branch2")
+
+		// Verify we're still on branch2
+		currentBranch, err := s.Scene.Repo.CurrentBranchName()
+		require.NoError(t, err)
+		require.Equal(t, "branch2", currentBranch)
+
+		// Verify branch1 parent is still main
+		branch1 := s.Engine.GetBranch("branch1")
+		require.Equal(t, "main", branch1.GetParent().GetName())
+	})
+
+	t.Run("dry-run fails if branch is locked", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		s.Checkout("branch2")
+		branch2 := s.Engine.GetBranch("branch2")
+		_, err := s.Engine.SetLocked([]engine.Branch{branch2}, engine.LockReasonUser)
+		require.NoError(t, err)
+
+		// Dry-run should fail because branch is locked
+		err = Action(s.Context, Options{DryRun: true})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "branch branch2 is locked")
+	})
 }

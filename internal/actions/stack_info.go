@@ -6,6 +6,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // StackBranchInfo represents JSON-serializable info for a single branch in a stack
@@ -26,29 +27,35 @@ type DiffStats struct {
 	Deletions    int `json:"deletions"`
 }
 
-// StackInfoOptions contains options for the stack info command
+// StackInfoOptions contains options for the stack info logic
 type StackInfoOptions struct {
 	JSON bool
 }
 
-// StackInfoAction retrieves information about all branches in the current stack
+// StackInfoAction retrieves information about branches in the current stack
 func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 	eng := ctx.Engine
 
-	allBranches := eng.AllBranches()
-	var result []StackBranchInfo
+	currentBranch := eng.CurrentBranch()
+	if currentBranch == nil {
+		return fmt.Errorf("not on a branch")
+	}
 
-	for _, branch := range allBranches {
+	stackBranches := eng.GetFullStack(*currentBranch)
+	result := make([]StackBranchInfo, 0, len(stackBranches))
+
+	for _, branch := range stackBranches {
 		if branch.IsTrunk() {
 			continue
 		}
 
 		info := StackBranchInfo{
-			Name:     branch.GetName(),
-			Parent:   branch.GetParentPrecondition(),
-			IsLocked: branch.IsLocked(),
-			IsFrozen: branch.IsFrozen(),
-			Scope:    branch.GetScope().String(),
+			Name:           branch.GetName(),
+			Parent:         branch.GetParentPrecondition(),
+			IsLocked:       branch.IsLocked(),
+			IsFrozen:       branch.IsFrozen(),
+			Scope:          branch.GetScope().String(),
+			CommitMessages: []string{},
 		}
 
 		// Commit messages
@@ -87,9 +94,33 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		}
 		fmt.Println(string(data))
 	} else {
-		// Non-JSON output not specified in plan, but let's provide a simple one or just fail
-		// For now, let's just support JSON as requested.
-		return fmt.Errorf("only --json is supported for stack info")
+		currentBranchName := ""
+		if currentBranch != nil {
+			currentBranchName = currentBranch.GetName()
+		}
+
+		for i, info := range result {
+			coloredName := style.ColorBranchName(info.Name, info.Name == currentBranchName)
+			fmt.Printf("%s\n", coloredName)
+			fmt.Printf("  %s %s\n", style.ColorCyan("Parent:"), info.Parent)
+
+			if info.IsLocked {
+				fmt.Printf("  %s %s\n", style.IconLocked(), style.ColorDim("(locked)"))
+			}
+			if info.IsFrozen {
+				fmt.Printf("  %s %s\n", style.IconFrozen(), style.ColorDim("(frozen)"))
+			}
+			if info.Scope != "" {
+				fmt.Printf("  %s %s\n", style.ColorCyan("Scope:"), style.ColorScope(info.Scope))
+			}
+
+			fmt.Printf("  %s %d\n", style.ColorCyan("Commits:"), len(info.CommitMessages))
+			fmt.Printf("  %s +%d -%d in %d files\n", style.ColorCyan("Changes:"), info.DiffStats.Additions, info.DiffStats.Deletions, info.DiffStats.FilesChanged)
+
+			if i < len(result)-1 {
+				fmt.Println()
+			}
+		}
 	}
 
 	return nil

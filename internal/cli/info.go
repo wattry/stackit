@@ -15,16 +15,19 @@ func newInfoCmd() *cobra.Command {
 		diff  bool
 		patch bool
 		stat  bool
+		stack bool
+		json  bool
 	)
 
 	cmd := &cobra.Command{
 		Use:     "info [branch]",
-		Short:   "Display information about the current branch",
+		Short:   "Display information about the current branch or stack",
 		Aliases: []string{"i"},
 		Long: `Display information about a branch, including branch relationships,
 PR status, and optionally diffs or patches.
 
-If no branch is specified, displays information about the current branch.`,
+If --stack is provided, displays information about all branches in the current stack.
+If no branch is specified and --stack is not provided, displays information about the current branch.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: common.CompleteBranches,
 		SilenceUsage:      true,
@@ -41,6 +44,8 @@ If no branch is specified, displays information about the current branch.`,
 					Diff:       diff,
 					Patch:      patch,
 					Stat:       stat,
+					Stack:      stack,
+					JSON:       json,
 				})
 			})
 		},
@@ -50,6 +55,8 @@ If no branch is specified, displays information about the current branch.`,
 	cmd.Flags().BoolVarP(&diff, "diff", "d", false, "Show the diff between this branch and its parent. Takes precedence over patch")
 	cmd.Flags().BoolVarP(&patch, "patch", "p", false, "Show the changes made by each commit")
 	cmd.Flags().BoolVarP(&stat, "stat", "s", false, "Show a diffstat instead of a full diff. Modifies either --patch or --diff. If neither is passed, implies --diff")
+	cmd.Flags().BoolVar(&stack, "stack", false, "Show information about the entire stack")
+	cmd.Flags().BoolVar(&json, "json", false, "Output in JSON format (requires --stack)")
 
 	return cmd
 }
