@@ -56,7 +56,7 @@ func foldNormal(gctx context.Context, ctx *app.Context, currentBranch, parentBra
 		}
 
 		// Get updated descendants list (current branch's children are now children of parent)
-		// parentBranch is immutable, so we can reuse it - the engine's state has been updated by Rebuild
+		// parentBranch object remains valid and will reflect the updated engine state after the Rebuild() call.
 		updatedDescendants := parentBranch.GetRelativeStack(engine.StackRange{
 			RecursiveChildren: true,
 			IncludeCurrent:    false,

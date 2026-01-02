@@ -29,11 +29,18 @@ func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
 
 	// Show combined commit messages
 	splog.Info("%s", style.ColorCyan("Proposed Commit History:"))
-	parentCommits, _ := parent.GetAllCommits(engine.CommitFormatReadable)
+	parentCommits, err := parent.GetAllCommits(engine.CommitFormatReadable)
+	if err != nil {
+		splog.Debug("Failed to get parent commits: %v", err)
+	}
 	for _, commit := range parentCommits {
 		splog.Info("  %s", style.ColorDim(commit))
 	}
-	currentCommits, _ := current.GetAllCommits(engine.CommitFormatReadable)
+
+	currentCommits, err := current.GetAllCommits(engine.CommitFormatReadable)
+	if err != nil {
+		splog.Debug("Failed to get current commits: %v", err)
+	}
 	for _, commit := range currentCommits {
 		splog.Info("  %s", commit)
 	}

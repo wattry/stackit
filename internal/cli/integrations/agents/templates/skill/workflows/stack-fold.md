@@ -12,7 +12,7 @@ This workflow guides the LLM through analyzing a branch stack and recommending b
 ### 1. Gather Context
 Fetch the complete metadata for the current stack:
 ```bash
-stackit stack info --json --no-interactive
+stackit info --stack --json --no-interactive
 ```
 
 ### 2. Identify Candidates

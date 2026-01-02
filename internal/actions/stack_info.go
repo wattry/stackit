@@ -26,7 +26,7 @@ type DiffStats struct {
 	Deletions    int `json:"deletions"`
 }
 
-// StackInfoOptions contains options for the stack info command
+// StackInfoOptions contains options for the stack info logic
 type StackInfoOptions struct {
 	JSON bool
 }
@@ -36,7 +36,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 	eng := ctx.Engine
 
 	allBranches := eng.AllBranches()
-	var result []StackBranchInfo
+	result := make([]StackBranchInfo, 0, len(allBranches))
 
 	for _, branch := range allBranches {
 		if branch.IsTrunk() {
@@ -89,7 +89,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 	} else {
 		// Non-JSON output not specified in plan, but let's provide a simple one or just fail
 		// For now, let's just support JSON as requested.
-		return fmt.Errorf("only --json is supported for stack info")
+		return fmt.Errorf("only --json is supported for --stack info")
 	}
 
 	return nil

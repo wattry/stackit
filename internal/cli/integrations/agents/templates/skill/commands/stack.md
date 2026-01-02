@@ -10,7 +10,7 @@ Commands for managing the entire stack or multiple branches.
 |---------|-------------|
 | `stackit restack --no-interactive` | Rebase all branches to ensure proper ancestry |
 | `stackit sync --no-interactive` | Pull trunk, delete merged branches, restack |
-| `stackit stack info --json --no-interactive` | Export full stack metadata as JSON for analysis |
+| `stackit info --stack --json --no-interactive` | Export full stack metadata as JSON for analysis |
 | `stackit merge` | Merge approved PRs and cleanup |
 
 ## Bulk Operations
