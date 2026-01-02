@@ -885,7 +885,17 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 				// CI checks failed
 				return fmt.Errorf("CI checks failed on PR #%d (%s)", prNumber, step.BranchName)
 			}
-			if !status.Pending {
+
+			// If we expect checks but none have appeared yet, treat as pending
+			isReallyPending := status.Pending
+			if step.ExpectChecks && len(status.Checks) == 0 {
+				isReallyPending = true
+				if now.Sub(startTime) > 5*time.Second {
+					splog.Debug("No checks found yet for PR #%d, still waiting...", prNumber)
+				}
+			}
+
+			if !isReallyPending {
 				// All checks passed and none are pending
 				elapsed := time.Since(startTime)
 
