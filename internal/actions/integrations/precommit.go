@@ -41,10 +41,10 @@ func PrecommitInstallAction(ctx *app.Context) error {
 			return fmt.Errorf("failed to open existing pre-commit hook: %w", err)
 		}
 		defer func() {
-			if closeErr := f.Close(); closeErr != nil {
-				// Log but don't fail if close fails
-				ctx.Splog.Debug("failed to close file: %v", closeErr)
-			}
+			// Close errors are typically non-critical for write operations that have already succeeded.
+			// We ignore the error here since the write operation has completed and we don't want
+			// to fail the installation if the close fails (which is rare).
+			_ = f.Close()
 		}()
 
 		if _, err := f.WriteString("\n# Added by Stackit\nstackit precommit verify\n"); err != nil {

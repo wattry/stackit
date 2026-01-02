@@ -57,24 +57,24 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 	splog.Info("  📦 Consolidated PR")
 	splog.Newline()
 
-	mergeBranch, err := c.createMergeBranch(ctx)
+	consolidationBranch, err := c.createMergeBranch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create merge branch: %w", err)
+		return nil, fmt.Errorf("failed to create consolidation branch: %w", err)
 	}
 
-	pr, err := c.createConsolidationPR(ctx, mergeBranch)
+	pr, err := c.createConsolidationPR(ctx, consolidationBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consolidation PR: %w", err)
 	}
 
-	splog.Info("✅ Created merge branch: %s", mergeBranch)
+	splog.Info("✅ Created consolidation branch: %s", consolidationBranch)
 
 	// Lock individual PRs and update them with a notice
-	if err := c.lockAndNotifyIndividualPRs(ctx, mergeBranch); err != nil {
+	if err := c.lockAndNotifyIndividualPRs(ctx, consolidationBranch); err != nil {
 		splog.Warn("Failed to lock and notify individual PRs: %v", err)
 	}
 
-	if err := c.waitForConsolidationMerge(ctx, mergeBranch, pr); err != nil {
+	if err := c.waitForConsolidationMerge(ctx, consolidationBranch, pr); err != nil {
 		return nil, fmt.Errorf("consolidation merge failed: %w", err)
 	}
 
@@ -85,7 +85,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 	splog.Info("🎉 Stack consolidation merge completed successfully!")
 
 	result := &ConsolidationResult{
-		BranchName: mergeBranch,
+		BranchName: consolidationBranch,
 		PRNumber:   pr.Number,
 		PRURL:      pr.HTMLURL,
 	}
@@ -306,7 +306,7 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 	}
 }
 
-func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, mergeBranch string) error {
+func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, consolidationBranch string) error {
 	splog := c.ctx.Splog
 	splog.Info("🔒 Locking individual PRs and updating status...")
 
@@ -329,7 +329,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	for _, b := range branchesToLock {
 		prInfo, _ := b.GetPrInfo()
 		if prInfo != nil {
-			_ = c.engine.UpsertPrInfo(b, prInfo.WithMergeBranch(mergeBranch))
+			_ = c.engine.UpsertPrInfo(b, prInfo.WithMergeBranch(consolidationBranch))
 		}
 	}
 
