@@ -37,6 +37,7 @@ type RemoteOperations interface {
 	PushMetadataRefs(branches []string) error
 	FetchMetadataRefs() error
 	DeleteRemoteMetadataRef(branch string) error
+	BatchDeleteRemoteMetadataRefs(branches []string) error
 	TestRemoteRefCompatibility() error
 }
 
@@ -82,6 +83,7 @@ type DiffOperations interface {
 	GetMergeBaseByRef(ref1, ref2 string) (string, error)
 	IsAncestor(ancestor, descendant string) (bool, error)
 	IsMerged(ctx context.Context, branchName, target string) (bool, error)
+	GetMergedBranches(ctx context.Context, target string) (map[string]bool, error)
 	IsDiffEmpty(ctx context.Context, branchName, base string) (bool, error)
 	GetChangedFiles(ctx context.Context, base, head string) ([]string, error)
 	ShowDiff(ctx context.Context, left, right string, stat bool) (string, error)

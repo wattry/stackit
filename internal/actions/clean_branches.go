@@ -22,126 +22,60 @@ type CleanBranchesResult struct {
 	BranchesWithNewParents []string
 }
 
-// CleanBranches finds and deletes merged/closed branches
-// Returns branches whose parents have changed (need restacking)
+// branchDeletionInfo stores information about a branch marked for deletion
+type branchDeletionInfo struct {
+	reason   string
+	blockers map[string]bool
+}
+
+// deletionPlan manages the state of branches being deleted
+type deletionPlan struct {
+	branches map[string]*branchDeletionInfo
+}
+
+func newDeletionPlan() *deletionPlan {
+	return &deletionPlan{
+		branches: make(map[string]*branchDeletionInfo),
+	}
+}
+
+func (p *deletionPlan) add(name, reason string, blockers map[string]bool) {
+	p.branches[name] = &branchDeletionInfo{
+		reason:   reason,
+		blockers: blockers,
+	}
+}
+
+func (p *deletionPlan) isDeleting(name string) bool {
+	_, ok := p.branches[name]
+	return ok
+}
+
+func (p *deletionPlan) removeBlocker(branchName, blockerName string) {
+	if info, ok := p.branches[branchName]; ok {
+		delete(info.blockers, blockerName)
+	}
+}
+
+// CleanBranches finds and deletes merged/closed branches.
+// It follows a multi-phase approach:
+// 1. Identify which branches SHOULD be deleted (parallel pre-calculation).
+// 2. Build a deletion plan by traversing the stack (DFS).
+// 3. Reparent branches that are NOT being deleted but whose parents ARE.
+// 4. Execute the deletions in batches (greedy iterative approach).
 func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesResult, error) {
-	eng := ctx.Engine
-	splog := ctx.Splog
-	c := ctx.Context
+	// Phase 1: Identify candidates for deletion
+	deleteStatuses := identifyBranchesToDelete(ctx, opts)
 
-	// Pre-calculate which branches should be deleted in parallel using a worker pool
-	allTrackedBranches := eng.AllBranches()
-	type deleteStatus struct {
-		shouldDelete bool
-		reason       string
-	}
-	deleteStatuses := make(map[string]deleteStatus)
-	var mu sync.Mutex
-
-	// Filter out trunk branches before processing
-	branchesToProcessPool := []engine.Branch{}
-	for _, branch := range allTrackedBranches {
-		if !branch.IsTrunk() {
-			branchesToProcessPool = append(branchesToProcessPool, branch)
-		}
+	// Phase 2: Build deletion plan
+	plan, branchesWithNewParents, err := buildDeletionPlanAndReparent(ctx, deleteStatuses)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(branchesToProcessPool) > 0 {
-		utils.Run(branchesToProcessPool, func(branch engine.Branch) {
-			name := branch.GetName()
-			shouldDelete, reason := ShouldDeleteBranch(c, name, eng, opts.Force)
-			mu.Lock()
-			deleteStatuses[name] = deleteStatus{shouldDelete: shouldDelete, reason: reason}
-			mu.Unlock()
-		})
-	}
-
-	// Start from trunk children
-	trunk := eng.Trunk()
-	trunkChildren := trunk.GetChildren()
-	branchesToProcess := make([]string, len(trunkChildren))
-	for i, c := range trunkChildren {
-		branchesToProcess[i] = c.GetName()
-	}
-	branchesToDelete := make(map[string]map[string]bool) // branch -> set of blocking children
-	branchesWithNewParents := []string{}
-
-	// DFS traversal
-	for len(branchesToProcess) > 0 {
-		// Pop from stack
-		branchName := branchesToProcess[len(branchesToProcess)-1]
-		branchesToProcess = branchesToProcess[:len(branchesToProcess)-1]
-
-		// Skip if already marked for deletion
-		if _, ok := branchesToDelete[branchName]; ok {
-			continue
-		}
-
-		// Use pre-calculated status
-		status := deleteStatuses[branchName]
-		if status.shouldDelete {
-			branch := eng.GetBranch(branchName)
-			children := branch.GetChildren()
-			// Add children to process (DFS)
-			for _, child := range children {
-				branchesToProcess = append(branchesToProcess, child.GetName())
-			}
-
-			// Mark for deletion with blockers
-			blockers := make(map[string]bool)
-			for _, child := range children {
-				blockers[child.GetName()] = true
-			}
-			branchesToDelete[branchName] = blockers
-
-			splog.Debug("Marked %s for deletion. Reason: %s. Blockers: %v", branchName, status.reason, children)
-		} else {
-			// Branch is not being deleted
-			// If its parent IS being deleted, update parent
-			branch := eng.GetBranch(branchName)
-			parent := branch.GetParent()
-			parentName := ""
-			if parent == nil {
-				parentName = eng.Trunk().GetName()
-			} else {
-				parentName = parent.GetName()
-			}
-
-			// Find nearest ancestor that isn't being deleted
-			newParentName := parentName
-			for {
-				if _, isDeleting := branchesToDelete[newParentName]; !isDeleting {
-					break
-				}
-				newParentBranch := eng.GetBranch(newParentName)
-				ancestor := newParentBranch.GetParent()
-				if ancestor == nil {
-					newParentName = eng.Trunk().GetName()
-					break
-				}
-				newParentName = ancestor.GetName()
-			}
-
-			// If parent changed, update it
-			if newParentName != parentName {
-				if err := eng.SetParent(c, branch, eng.GetBranch(newParentName)); err != nil {
-					return nil, fmt.Errorf("failed to set parent for %s: %w", branchName, err)
-				}
-				splog.Info("Set parent of %s to %s.",
-					style.ColorBranchName(branchName, false),
-					style.ColorBranchName(newParentName, false))
-				branchesWithNewParents = append(branchesWithNewParents, branchName)
-
-				// Remove this branch as a blocker for its old parent
-				if blockers, ok := branchesToDelete[parentName]; ok {
-					delete(blockers, branchName)
-					branchesToDelete[parentName] = blockers
-				}
-			}
-		}
-
-		// Greedily delete unblocked branches
-		greedilyDeleteUnblockedBranches(c, branchesToDelete, eng, splog)
+	// Phase 3: Execute deletions
+	if err := executeDeletions(ctx, plan); err != nil {
+		return nil, err
 	}
 
 	return &CleanBranchesResult{
@@ -149,44 +83,221 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 	}, nil
 }
 
-// greedilyDeleteUnblockedBranches deletes branches that have no blockers
-func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[string]map[string]bool, eng engine.Engine, splog *tui.Splog) {
-	for branchName, blockers := range branchesToDelete {
-		if len(blockers) == 0 {
-			// No blockers, safe to delete
-			branch := eng.GetBranch(branchName)
+// identifyBranchesToDelete pre-calculates deletion status for all tracked branches in parallel.
+func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[string]string {
+	eng := ctx.Engine
+	c := ctx.Context
+	splog := ctx.Splog
+
+	allTrackedBranches := eng.AllBranches()
+	branchesToProcessPool := []engine.Branch{}
+	branchNames := []string{}
+	allRevisionsToFetch := []string{eng.Trunk().GetName()}
+
+	for _, branch := range allTrackedBranches {
+		name := branch.GetName()
+		allRevisionsToFetch = append(allRevisionsToFetch, name)
+		if !branch.IsTrunk() {
+			branchesToProcessPool = append(branchesToProcessPool, branch)
+			branchNames = append(branchNames, name)
+
 			parent := branch.GetParent()
-			parentName := ""
-			if parent == nil {
-				parentName = eng.Trunk().GetName()
-			} else {
-				parentName = parent.GetName()
+			if parent != nil {
+				allRevisionsToFetch = append(allRevisionsToFetch, parent.GetName())
 			}
-
-			// Delete the branch
-			if err := eng.DeleteBranch(ctx, branch); err != nil {
-				splog.Debug("Failed to delete %s: %v", branchName, err)
-				continue
-			}
-
-			// Delete remote metadata ref (best effort, don't fail if it doesn't exist)
-			if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
-				splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
-			}
-
-			splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
-
-			// Remove from deletion map
-			delete(branchesToDelete, branchName)
-
-			// Remove this branch as a blocker for its parent
-			if parentBlockers, ok := branchesToDelete[parentName]; ok {
-				delete(parentBlockers, branchName)
-				branchesToDelete[parentName] = parentBlockers
-			}
-
-			// Recursively check if parent is now unblocked
-			greedilyDeleteUnblockedBranches(ctx, branchesToDelete, eng, splog)
 		}
 	}
+
+	metadataMap, metaErrs := eng.Git().BatchReadMetadata(branchNames)
+	if len(metaErrs) > 0 {
+		splog.Debug("Failed to read metadata for some branches: %v", metaErrs)
+	}
+
+	revisionsMap, revErrs := eng.Git().BatchGetRevisions(allRevisionsToFetch)
+	if len(revErrs) > 0 {
+		splog.Debug("Failed to get revisions for some branches: %v", revErrs)
+	}
+
+	mergedBranches, err := eng.Git().GetMergedBranches(c, eng.Trunk().GetName())
+	if err != nil {
+		splog.Debug("Failed to get merged branches: %v", err)
+	}
+
+	deleteStatuses := make(map[string]string) // name -> reason
+	var mu sync.Mutex
+
+	if len(branchesToProcessPool) > 0 {
+		utils.Run(branchesToProcessPool, func(branch engine.Branch) {
+			name := branch.GetName()
+			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, metadataMap[name], revisionsMap, mergedBranches)
+			if shouldDelete {
+				mu.Lock()
+				deleteStatuses[name] = reason
+				mu.Unlock()
+			}
+		})
+	}
+
+	return deleteStatuses
+}
+
+// buildDeletionPlanAndReparent constructs the deletion hierarchy and updates parents of surviving branches.
+func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]string) (*deletionPlan, []string, error) {
+	eng := ctx.Engine
+	splog := ctx.Splog
+	c := ctx.Context
+
+	plan := newDeletionPlan()
+	branchesWithNewParents := []string{}
+
+	// Start DFS from trunk children
+	trunk := eng.Trunk()
+	trunkChildren := trunk.GetChildren()
+	branchesToProcess := make([]string, len(trunkChildren))
+	for i, child := range trunkChildren {
+		branchesToProcess[i] = child.GetName()
+	}
+
+	visited := make(map[string]bool)
+
+	for len(branchesToProcess) > 0 {
+		branchName := branchesToProcess[len(branchesToProcess)-1]
+		branchesToProcess = branchesToProcess[:len(branchesToProcess)-1]
+
+		if visited[branchName] {
+			continue
+		}
+		visited[branchName] = true
+
+		reason, shouldDelete := deleteReasons[branchName]
+		branch := eng.GetBranch(branchName)
+		children := branch.GetChildren()
+
+		// Add children to DFS stack
+		for _, child := range children {
+			branchesToProcess = append(branchesToProcess, child.GetName())
+		}
+
+		if shouldDelete {
+			// Add to plan with its children as initial blockers
+			blockers := make(map[string]bool)
+			for _, child := range children {
+				blockers[child.GetName()] = true
+			}
+			plan.add(branchName, reason, blockers)
+			splog.Debug("Marked %s for deletion. Reason: %s. Blockers: %v", branchName, reason, blockers)
+		} else {
+			// Branch is NOT being deleted. Check if it needs a new parent.
+			newParentName, err := reparentBranchIfNecessary(c, branch, plan, eng, splog)
+			if err != nil {
+				return nil, nil, err
+			}
+			if newParentName != "" {
+				branchesWithNewParents = append(branchesWithNewParents, branchName)
+			}
+		}
+	}
+
+	return plan, branchesWithNewParents, nil
+}
+
+// executeDeletions greedily deletes unblocked branches from the plan.
+func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
+	eng := ctx.Engine
+	splog := ctx.Splog
+	c := ctx.Context
+
+	for {
+		var batchNames []string
+		for name, info := range plan.branches {
+			if len(info.blockers) == 0 {
+				batchNames = append(batchNames, name)
+			}
+		}
+
+		if len(batchNames) == 0 {
+			break
+		}
+
+		// Prepare engine branches and track parents
+		branches := make([]engine.Branch, len(batchNames))
+		parents := make(map[string]string)
+		for i, name := range batchNames {
+			branch := eng.GetBranch(name)
+			branches[i] = branch
+			parents[name] = getParentName(branch, eng)
+		}
+
+		// Batch delete from engine
+		if _, err := eng.DeleteBranches(c, branches); err != nil {
+			return fmt.Errorf("failed to delete some branches: %w", err)
+		}
+
+		// Batch delete remote metadata
+		if err := eng.Git().BatchDeleteRemoteMetadataRefs(batchNames); err != nil {
+			splog.Debug("Failed to batch delete remote metadata: %v", err)
+		}
+
+		// Cleanup plan and update parent blockers
+		for _, name := range batchNames {
+			splog.Info("Deleted branch %s", style.ColorBranchName(name, false))
+			delete(plan.branches, name)
+
+			parentName := parents[name]
+			plan.removeBlocker(parentName, name)
+		}
+	}
+
+	return nil
+}
+
+// getParentName returns the name of the parent branch or trunk if no parent exists
+func getParentName(branch engine.Branch, eng engine.Engine) string {
+	parent := branch.GetParent()
+	if parent == nil {
+		return eng.Trunk().GetName()
+	}
+	return parent.GetName()
+}
+
+// findNonDeletingAncestor finds the nearest ancestor that is not marked for deletion
+func findNonDeletingAncestor(startParent string, plan *deletionPlan, eng engine.Engine) string {
+	current := startParent
+	for {
+		if !plan.isDeleting(current) {
+			return current
+		}
+		branch := eng.GetBranch(current)
+		parent := branch.GetParent()
+		if parent == nil {
+			return eng.Trunk().GetName()
+		}
+		current = parent.GetName()
+	}
+}
+
+// reparentBranchIfNecessary updates a branch's parent if its current parent is being deleted.
+// Returns the name of the new parent if changed, or empty string if not changed.
+func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *deletionPlan, eng engine.Engine, splog *tui.Splog) (string, error) {
+	branchName := branch.GetName()
+	parentName := getParentName(branch, eng)
+
+	// Find nearest ancestor that isn't being deleted
+	newParentName := findNonDeletingAncestor(parentName, plan, eng)
+
+	// If parent changed, update it
+	if newParentName != parentName {
+		if err := eng.SetParent(ctx, branch, eng.GetBranch(newParentName)); err != nil {
+			return "", fmt.Errorf("failed to set parent for %s: %w", branchName, err)
+		}
+		splog.Info("Set parent of %s to %s.",
+			style.ColorBranchName(branchName, false),
+			style.ColorBranchName(newParentName, false))
+
+		// Remove this branch as a blocker for its old parent in the plan
+		plan.removeBlocker(parentName, branchName)
+		return newParentName, nil
+	}
+
+	return "", nil
 }

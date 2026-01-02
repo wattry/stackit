@@ -1127,6 +1127,27 @@ func (r *runner) IsMerged(ctx context.Context, branchName, target string) (bool,
 	return true, nil
 }
 
+func (r *runner) GetMergedBranches(ctx context.Context, target string) (map[string]bool, error) {
+	out, err := r.runGitCommandWithContextInternal(ctx, "branch", "--merged", target)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get merged branches: %w", err)
+	}
+
+	merged := make(map[string]bool)
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Remove current branch indicator '*' if present
+		line = strings.TrimPrefix(line, "*")
+		line = strings.TrimSpace(line)
+		merged[line] = true
+	}
+	return merged, nil
+}
+
 func (r *runner) IsDiffEmpty(ctx context.Context, branchName, base string) (bool, error) {
 	branchRev, err := r.GetRevision(branchName)
 	if err != nil {
@@ -1368,6 +1389,19 @@ func (r *runner) FetchMetadataRefs() error {
 func (r *runner) DeleteRemoteMetadataRef(branch string) error {
 	// git push origin --delete refs/stackit/metadata/<branch>
 	_, err := r.runGitCommandInternal("push", "origin", "--delete", fmt.Sprintf("refs/stackit/metadata/%s", branch))
+	return err
+}
+
+func (r *runner) BatchDeleteRemoteMetadataRefs(branches []string) error {
+	if len(branches) == 0 {
+		return nil
+	}
+	// git push origin --delete refs/stackit/metadata/branch1 refs/stackit/metadata/branch2 ...
+	args := []string{"push", "origin", "--delete"}
+	for _, branch := range branches {
+		args = append(args, fmt.Sprintf("refs/stackit/metadata/%s", branch))
+	}
+	_, err := r.runGitCommandInternal(args...)
 	return err
 }
 
