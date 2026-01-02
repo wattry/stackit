@@ -187,12 +187,11 @@ func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[s
 		}
 
 		// Post-deletion updates
-		for _, branchName := range batchNames {
-			// Delete remote metadata ref (best effort, individual for now - Phase 4 will batch this)
-			if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
-				splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
-			}
+		if err := eng.Git().BatchDeleteRemoteMetadataRefs(batchNames); err != nil {
+			splog.Debug("Failed to batch delete remote metadata: %v", err)
+		}
 
+		for _, branchName := range batchNames {
 			splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
 
 			// Remove from deletion map
