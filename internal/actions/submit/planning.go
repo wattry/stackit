@@ -123,24 +123,16 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 		branchName = currentBranch.GetName()
 	}
 
-	var allBranches []string
-	if opts.Stack {
-		// Include descendants and ancestors
-		branch := ctx.Engine.GetBranch(branchName)
-		stackBranches := branch.GetFullStack()
-		allBranches = make([]string, len(stackBranches))
-		for i, b := range stackBranches {
-			allBranches[i] = b.GetName()
-		}
-	} else {
-		// Just ancestors (including current branch)
-		branch := ctx.Engine.GetBranch(branchName)
-		downstackBranches := branch.GetRelativeStackDownstack()
-		allBranches = make([]string, len(downstackBranches)+1)
-		for i, b := range downstackBranches {
-			allBranches[i] = b.GetName()
-		}
-		allBranches[len(downstackBranches)] = branchName
+	branch := ctx.Engine.GetBranch(branchName)
+	stackRange := opts.StackRange
+	// Default to downstack if StackRange is zero value (all fields false)
+	if !stackRange.RecursiveParents && !stackRange.IncludeCurrent && !stackRange.RecursiveChildren {
+		stackRange = StackRangeDownstack()
+	}
+	stackBranches := ctx.Engine.GetRelativeStack(branch, stackRange)
+	allBranches := make([]string, len(stackBranches))
+	for i, b := range stackBranches {
+		allBranches[i] = b.GetName()
 	}
 
 	// Remove duplicates and trunk
