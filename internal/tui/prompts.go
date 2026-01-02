@@ -79,8 +79,8 @@ func (k confirmKeyMap) FullHelp() [][]key.Binding {
 // ErrInteractiveDisabled is returned when interactive prompts are disabled via STACKIT_TEST_NO_INTERACTIVE
 var ErrInteractiveDisabled = fmt.Errorf("interactive prompts are disabled (STACKIT_TEST_NO_INTERACTIVE is set)")
 
-// checkInteractiveAllowed returns an error if interactive mode is disabled
-func checkInteractiveAllowed() error {
+// CheckInteractiveAllowed returns an error if interactive mode is disabled
+func CheckInteractiveAllowed() error {
 	if !utils.IsInteractive() {
 		return ErrInteractiveDisabled
 	}
@@ -210,7 +210,7 @@ func NewConfirmModel(prompt string, defaultValue bool) tea.Model {
 
 // PromptTextInput prompts the user for text input
 func PromptTextInput(prompt, defaultValue string) (string, error) {
-	if err := checkInteractiveAllowed(); err != nil {
+	if err := CheckInteractiveAllowed(); err != nil {
 		return "", err
 	}
 
@@ -234,7 +234,7 @@ func PromptTextInput(prompt, defaultValue string) (string, error) {
 
 // PromptConfirm prompts the user for yes/no confirmation
 var PromptConfirm = func(prompt string, defaultValue bool) (bool, error) {
-	if err := checkInteractiveAllowed(); err != nil {
+	if err := CheckInteractiveAllowed(); err != nil {
 		return false, err
 	}
 
@@ -361,7 +361,7 @@ func NewBranchSelectModel(message string, choices []BranchChoice, initialIndex i
 
 // PromptSelect prompts the user to select from a list of options
 func PromptSelect(title string, options []SelectOption, defaultIndex int) (string, error) {
-	if err := checkInteractiveAllowed(); err != nil {
+	if err := CheckInteractiveAllowed(); err != nil {
 		return "", err
 	}
 

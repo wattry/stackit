@@ -19,6 +19,7 @@ import (
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 const (
@@ -87,6 +88,9 @@ type operationDoneMsg struct{}
 
 // Run starts the interactive dashboard program.
 func Run(ctx *app.Context, opts Options) error {
+	if !utils.IsInteractive() {
+		return fmt.Errorf("dashboard requires an interactive terminal")
+	}
 	ti := textinput.New()
 	ti.Placeholder = "Enter command (e.g. create -m \"msg\") or 'quit'"
 	ti.Focus()

@@ -10,6 +10,7 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // Style specifies the split mode
@@ -88,6 +89,9 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 
 		if len(commits) > 1 {
+			if !utils.IsInteractive() {
+				return fmt.Errorf("split style must be specified in non-interactive mode")
+			}
 			// Prompt for style
 			var styleStr string
 			prompt := &survey.Select{

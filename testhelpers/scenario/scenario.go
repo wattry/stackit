@@ -53,7 +53,12 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 	})
 	require.NoError(t, err)
 
-	ctx := app.NewContext(eng)
+	ctx := app.NewContextWithOptions(eng, app.GlobalOptions{
+		Interactive: false,
+		Verify:      true,
+		Debug:       os.Getenv("DEBUG") != "",
+		Quiet:       true,
+	})
 	ctx.RepoRoot = scene.Dir
 
 	return &Scenario{

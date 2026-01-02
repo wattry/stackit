@@ -150,14 +150,14 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			return m, tea.Quit
-		case KeyUp, "k":
+		case KeyUp:
 			if m.selectedIndex > 0 {
 				m.selectedIndex--
 				m.selectedBranch = m.branches[m.selectedIndex].Name
 				m.renderTree()
 				m.ensureVisible()
 			}
-		case KeyDown, "j":
+		case KeyDown:
 			if m.selectedIndex < len(m.branches)-1 {
 				m.selectedIndex++
 				m.selectedBranch = m.branches[m.selectedIndex].Name
@@ -280,10 +280,10 @@ func (m *LogModel) View() string {
 	}
 
 	title := "Stackit Log"
-	help := "'q' to quit, 'enter' to expand/collapse, 'j/k' to scroll"
+	help := "'q' to quit, 'enter' to expand/collapse, 'up/down' to scroll"
 	if m.mode == LogModeSelect {
 		title = "Select Branch"
-		help = "'esc' to cancel, 'enter' to select, 'space' to expand/collapse, 'j/k' to scroll"
+		help = "'esc' to cancel, 'enter' to select, 'space' to expand/collapse, 'up/down' to scroll"
 	}
 
 	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.engine.AllBranches()), help))
@@ -297,6 +297,10 @@ func (m *LogModel) View() string {
 
 // PromptLogSelect runs the interactive log in selection mode and returns the selected branch name
 func PromptLogSelect(ctx context.Context, eng engine.Engine, ghClient github.Client, opts LogOptions) (string, error) {
+	if err := CheckInteractiveAllowed(); err != nil {
+		return "", err
+	}
+
 	m := newLogSelectModel(ctx, eng, ghClient, opts)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
