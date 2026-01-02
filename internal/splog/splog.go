@@ -124,7 +124,7 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 type Splog struct {
 	logger     *slog.Logger
 	fileLogger *slog.Logger // Separate logger for file output
-	writer     *os.File
+	writer     io.Writer
 	logWriter  io.WriteCloser // Lumberjack logger for file logging
 	quiet      bool           // When true, suppresses all output (used during TUI mode)
 }
@@ -139,7 +139,7 @@ func NewSplog() *Splog {
 // This is useful for testing.
 func NewSplogToWriter(w io.Writer) *Splog {
 	splog := &Splog{
-		writer: nil, // Not used when writing to custom writer
+		writer: w,
 		quiet:  false,
 	}
 
@@ -160,7 +160,7 @@ func NewSplogWithConfig(logFilePath string, _ string) (*Splog, error) {
 
 // NewSplogWithFlags creates a new splog instance with the given flags
 func NewSplogWithFlags(logFilePath string, debugMode, quiet bool) (*Splog, error) {
-	writer := os.Stdout
+	var writer io.Writer = os.Stdout
 	splog := &Splog{
 		writer: writer,
 		quiet:  quiet,
@@ -242,11 +242,17 @@ func (s *Splog) Info(format string, args ...interface{}) {
 
 // Page writes output that should be paged (for now, just print)
 func (s *Splog) Page(content string) {
+	if s.quiet {
+		return
+	}
 	_, _ = fmt.Fprint(s.writer, content)
 }
 
 // Newline writes a newline
 func (s *Splog) Newline() {
+	if s.quiet {
+		return
+	}
 	_, _ = fmt.Fprintln(s.writer)
 }
 
