@@ -249,11 +249,49 @@ func (m MergeTUIModel) View() string {
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Merge Progress:"))
+
+	// Calculate overall progress
+	completedGroups := 0
+	totalGroups := len(m.groups)
+	currentGroupIdx := -1
+	for i, group := range m.groups {
+		allDone := true
+		for _, idx := range group.StepIndices {
+			if m.steps[idx].Status != mergeStatusDone {
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			completedGroups++
+		} else if currentGroupIdx == -1 {
+			currentGroupIdx = i
+		}
+	}
+
+	// Header with progress indicator
+	header := lipgloss.NewStyle().Bold(true).Render("Merge Progress")
+	progressIndicator := m.styles.dimStyle.Render(fmt.Sprintf("  Step %d of %d", completedGroups+1, totalGroups))
+	if m.done {
+		progressIndicator = m.styles.doneStyle.Render(fmt.Sprintf("  %d of %d complete", completedGroups, totalGroups))
+	}
+	b.WriteString(header + progressIndicator)
 	b.WriteString("\n\n")
 
+	// Categorize groups by status
+	type groupInfo struct {
+		index      int
+		status     string
+		activeStep *MergeStepItem
+		failedStep *MergeStepItem
+	}
+
+	var completedGroupInfos []groupInfo
+	var runningGroupInfo *groupInfo
+	var pendingGroupInfos []groupInfo
+
 	for i, group := range m.groups {
-		var groupStatus string
+		var status string
 		var activeStep *MergeStepItem
 		var failedStep *MergeStepItem
 
@@ -264,7 +302,7 @@ func (m MergeTUIModel) View() string {
 			step := &m.steps[idx]
 			if step.Status == mergeStatusError {
 				failedStep = step
-				groupStatus = mergeStatusError
+				status = mergeStatusError
 				break
 			}
 			if step.Status != mergeStatusDone {
@@ -278,85 +316,110 @@ func (m MergeTUIModel) View() string {
 			}
 		}
 
-		if groupStatus != mergeStatusError {
+		if status != mergeStatusError {
 			switch {
 			case allDone:
-				groupStatus = mergeStatusDone
+				status = mergeStatusDone
 			case allPending:
-				groupStatus = mergeStatusPending
+				status = mergeStatusPending
 			default:
-				groupStatus = mergeStatusRunning
+				status = mergeStatusRunning
 			}
 		}
 
-		// Don't show completed groups if they are not the last one or have errors
-		// (optional: can be enabled for ultra-compact mode)
-
-		var line strings.Builder
-		var icon string
-		var labelStyle lipgloss.Style
-
-		switch groupStatus {
-		case mergeStatusPending:
-			icon = m.styles.dimStyle.Render("○")
-			labelStyle = m.styles.dimStyle
-		case mergeStatusRunning:
-			icon = m.spinner.View()
-			labelStyle = lipgloss.NewStyle().Bold(true)
+		info := groupInfo{index: i, status: status, activeStep: activeStep, failedStep: failedStep}
+		switch status {
 		case mergeStatusDone:
-			icon = m.styles.doneStyle.Render("✓")
-			labelStyle = m.styles.doneStyle
-		case mergeStatusError:
-			icon = m.styles.errorStyle.Render("✗")
-			labelStyle = m.styles.errorStyle
+			completedGroupInfos = append(completedGroupInfos, info)
+		case mergeStatusRunning, mergeStatusError:
+			runningGroupInfo = &info
+		case mergeStatusPending:
+			pendingGroupInfos = append(pendingGroupInfos, info)
 		}
+	}
 
-		line.WriteString(fmt.Sprintf("  %s %s ", icon, labelStyle.Render(group.Label)))
+	// Render with compact view: show last 2 completed, current, next 2 pending
+	const maxCompletedToShow = 2
+	const maxPendingToShow = 2
 
-		if groupStatus == mergeStatusRunning && activeStep != nil {
-			if activeStep.Status == mergeStatusWaiting {
-				elapsed := activeStep.WaitElapsed.Round(time.Second)
+	// Show ellipsis if we're hiding completed groups
+	if len(completedGroupInfos) > maxCompletedToShow {
+		b.WriteString(m.styles.dimStyle.Render(fmt.Sprintf("  ... %d completed\n", len(completedGroupInfos)-maxCompletedToShow)))
+	}
 
-				// Show check indicators
-				if len(activeStep.Checks) > 0 {
-					line.WriteString(m.renderCheckIndicators(activeStep.Checks))
-					line.WriteString(" ")
-				}
+	// Show last N completed groups
+	startIdx := 0
+	if len(completedGroupInfos) > maxCompletedToShow {
+		startIdx = len(completedGroupInfos) - maxCompletedToShow
+	}
+	for _, info := range completedGroupInfos[startIdx:] {
+		group := m.groups[info.index]
+		b.WriteString(fmt.Sprintf("  %s %s\n", m.styles.doneStyle.Render("✓"), m.styles.doneStyle.Render(group.Label)))
+	}
 
-				// Show progress bar if we have an estimate
-				if m.estimatedDuration > 0 {
-					line.WriteString(m.renderProgressBar(elapsed, m.estimatedDuration))
-					line.WriteString(" ")
-				}
+	// Show current running/error group with full details
+	if runningGroupInfo != nil {
+		group := m.groups[runningGroupInfo.index]
+		var line strings.Builder
 
-				line.WriteString(m.styles.timeStyle.Render(fmt.Sprintf("%v elapsed", elapsed)))
-
-				// Show detailed check status on next line if waiting
-				line.WriteString("\n")
-				line.WriteString(m.renderDetailedChecks(activeStep.Checks))
-			} else {
-				desc := activeStep.Description
-				// Simplify common descriptions
-				switch {
-				case strings.HasPrefix(desc, "Merge PR"):
-					desc = "merging"
-				case strings.HasPrefix(desc, "Delete local branch"):
-					desc = "deleting"
-				case strings.HasPrefix(desc, "Restack"):
-					desc = "restacking"
-				case strings.HasPrefix(desc, "Consolidate"):
-					desc = "consolidating"
-				}
-				line.WriteString(m.styles.spinnerStyle.Render("[" + desc + "]"))
+		if runningGroupInfo.status == mergeStatusError {
+			line.WriteString(fmt.Sprintf("  %s %s ", m.styles.errorStyle.Render("✗"), m.styles.errorStyle.Render(group.Label)))
+			if runningGroupInfo.failedStep != nil && runningGroupInfo.failedStep.Error != nil {
+				line.WriteString(m.styles.errorStyle.Render("→ " + runningGroupInfo.failedStep.Error.Error()))
 			}
-		} else if groupStatus == mergeStatusError && failedStep != nil && failedStep.Error != nil {
-			line.WriteString(m.styles.errorStyle.Render("→ " + failedStep.Error.Error()))
-		}
+		} else {
+			line.WriteString(fmt.Sprintf("  %s %s ", m.spinner.View(), lipgloss.NewStyle().Bold(true).Render(group.Label)))
 
-		b.WriteString(line.String())
-		if i < len(m.groups)-1 {
-			b.WriteString("\n")
+			if runningGroupInfo.activeStep != nil {
+				if runningGroupInfo.activeStep.Status == mergeStatusWaiting {
+					elapsed := runningGroupInfo.activeStep.WaitElapsed.Round(time.Second)
+
+					if len(runningGroupInfo.activeStep.Checks) > 0 {
+						line.WriteString(m.renderCheckIndicators(runningGroupInfo.activeStep.Checks))
+						line.WriteString(" ")
+					}
+
+					if m.estimatedDuration > 0 {
+						line.WriteString(m.renderProgressBar(elapsed, m.estimatedDuration))
+						line.WriteString(" ")
+					}
+
+					line.WriteString(m.styles.timeStyle.Render(fmt.Sprintf("%v elapsed", elapsed)))
+					line.WriteString("\n")
+					line.WriteString(m.renderDetailedChecks(runningGroupInfo.activeStep.Checks))
+				} else {
+					desc := runningGroupInfo.activeStep.Description
+					switch {
+					case strings.HasPrefix(desc, "Merge PR"):
+						desc = "merging"
+					case strings.HasPrefix(desc, "Delete local branch"):
+						desc = "deleting"
+					case strings.HasPrefix(desc, "Restack"):
+						desc = "restacking"
+					case strings.HasPrefix(desc, "Consolidate"):
+						desc = "consolidating"
+					}
+					line.WriteString(m.styles.spinnerStyle.Render("[" + desc + "]"))
+				}
+			}
 		}
+		b.WriteString(line.String())
+		b.WriteString("\n")
+	}
+
+	// Show next N pending groups
+	pendingToShow := pendingGroupInfos
+	if len(pendingToShow) > maxPendingToShow {
+		pendingToShow = pendingToShow[:maxPendingToShow]
+	}
+	for _, info := range pendingToShow {
+		group := m.groups[info.index]
+		b.WriteString(fmt.Sprintf("  %s %s\n", m.styles.dimStyle.Render("○"), m.styles.dimStyle.Render(group.Label)))
+	}
+
+	// Show ellipsis if we're hiding pending groups
+	if len(pendingGroupInfos) > maxPendingToShow {
+		b.WriteString(m.styles.dimStyle.Render(fmt.Sprintf("  ... %d more\n", len(pendingGroupInfos)-maxPendingToShow)))
 	}
 
 	if m.done {
