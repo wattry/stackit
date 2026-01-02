@@ -195,7 +195,7 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, eng engine.En
 		"",
 		"",
 		metadata.IsDraft,
-	)); err != nil {
+	).WithLocked(branch.IsLocked())); err != nil {
 		ctx.Splog.Debug("Failed to save PR metadata: %v", err)
 	}
 
