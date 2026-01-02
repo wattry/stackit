@@ -207,7 +207,7 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, b
 		status, err := githubClient.GetPRChecksStatus(ctx, branchName)
 		if err != nil {
 			splog.Debug("Error checking CI status: %v", err)
-		} else {
+		} else if status != nil {
 			if !status.Passing {
 				return fmt.Errorf("CI checks failed on consolidation PR #%d", prNumber)
 			}
