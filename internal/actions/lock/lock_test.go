@@ -29,7 +29,7 @@ func TestLockUnlockAction(t *testing.T) {
 
 		require.True(t, s.Engine.GetBranch("feature-b").IsLocked())
 		require.True(t, s.Engine.GetBranch("feature-a").IsLocked())
-		require.Equal(t, string(engine.LockReasonUser), s.Engine.GetBranch("feature-b").GetLockReason())
+		require.Equal(t, engine.LockReasonUser, s.Engine.GetBranch("feature-b").GetLockReason())
 		require.False(t, s.Engine.GetBranch("main").IsLocked())
 	})
 

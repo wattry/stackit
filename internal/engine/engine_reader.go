@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -223,14 +224,14 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 func (e *engineImpl) IsLocked(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.lockedMap[branch.GetName()] != ""
+	return errors.LockReason(e.lockedMap[branch.GetName()]).IsLocked()
 }
 
 // GetLockReason returns the reason why a branch is locked
-func (e *engineImpl) GetLockReason(branch Branch) string {
+func (e *engineImpl) GetLockReason(branch Branch) errors.LockReason {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.lockedMap[branch.GetName()]
+	return errors.LockReason(e.lockedMap[branch.GetName()])
 }
 
 // IsFrozen checks if a branch is frozen

@@ -7,6 +7,15 @@ import (
 	"stackit.dev/stackit/internal/errors"
 )
 
+// Re-export LockReason from errors package
+type LockReason = errors.LockReason
+
+const (
+	LockReasonNone          LockReason = errors.LockReasonNone
+	LockReasonUser          LockReason = errors.LockReasonUser
+	LockReasonConsolidating LockReason = errors.LockReasonConsolidating
+)
+
 // StackRange specifies the range of branches to include in stack operations
 type StackRange struct {
 	RecursiveParents  bool
@@ -26,18 +35,6 @@ const (
 	CommitFormatMessage CommitFormat = "MESSAGE" // Full commit message
 	// CommitFormatSubject is the first line of the commit message
 	CommitFormatSubject CommitFormat = "SUBJECT" // First line of commit message
-)
-
-// LockReason is an enum for the reason why a branch is locked
-type LockReason string
-
-const (
-	// LockReasonNone indicates the branch is not locked
-	LockReasonNone LockReason = ""
-	// LockReasonUser indicates the branch was manually locked by the user
-	LockReasonUser LockReason = "user"
-	// LockReasonConsolidating indicates the branch is being consolidated
-	LockReasonConsolidating LockReason = "consolidating"
 )
 
 // Scope represents a branch scope that can be empty, a regular scope, or an inheritance breaker
@@ -252,7 +249,7 @@ func (b Branch) IsLocked() bool {
 }
 
 // GetLockReason returns why the branch is locked
-func (b Branch) GetLockReason() string {
+func (b Branch) GetLockReason() errors.LockReason {
 	return b.reader.GetLockReason(b)
 }
 
@@ -286,11 +283,11 @@ type PrInfo struct {
 	title               string
 	body                string
 	isDraft             bool
-	state               string // MERGED, CLOSED, OPEN
-	base                string // Base branch name
-	url                 string // PR URL
-	lockReason          string // Why the PR is locked (empty if not locked)
-	consolidationBranch string // Name of the consolidated branch this PR is part of
+	state               string            // MERGED, CLOSED, OPEN
+	base                string            // Base branch name
+	url                 string            // PR URL
+	lockReason          errors.LockReason // Why the PR is locked (empty if not locked)
+	consolidationBranch string            // Name of the consolidated branch this PR is part of
 }
 
 // NewPrInfo creates a new PrInfo instance
@@ -307,7 +304,7 @@ func NewPrInfo(number *int, title, body, state, base, url string, isDraft bool) 
 }
 
 // NewPrInfoWithLockReason creates a new PrInfo instance including lock reason
-func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, isDraft bool, lockReason string) *PrInfo {
+func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, isDraft bool, lockReason errors.LockReason) *PrInfo {
 	return &PrInfo{
 		number:     number,
 		title:      title,
@@ -321,7 +318,7 @@ func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, 
 }
 
 // NewPrInfoFull creates a new PrInfo instance with all fields
-func NewPrInfoFull(number *int, title, body, state, base, url string, isDraft bool, lockReason string, consolidationBranch string) *PrInfo {
+func NewPrInfoFull(number *int, title, body, state, base, url string, isDraft bool, lockReason errors.LockReason, consolidationBranch string) *PrInfo {
 	return &PrInfo{
 		number:              number,
 		title:               title,
@@ -372,11 +369,11 @@ func (p *PrInfo) URL() string {
 
 // IsLocked returns whether the PR footer shows it as locked
 func (p *PrInfo) IsLocked() bool {
-	return p.lockReason != ""
+	return p.lockReason.IsLocked()
 }
 
 // LockReason returns the reason why the PR is locked
-func (p *PrInfo) LockReason() string {
+func (p *PrInfo) LockReason() errors.LockReason {
 	return p.lockReason
 }
 
@@ -406,7 +403,7 @@ func (p *PrInfo) MarshalJSON() ([]byte, error) {
 		Body:                p.body,
 		State:               p.state,
 		IsDraft:             p.isDraft,
-		LockReason:          p.lockReason,
+		LockReason:          string(p.lockReason),
 		ConsolidationBranch: p.consolidationBranch,
 	})
 }
@@ -525,7 +522,7 @@ func (p *PrInfo) WithURL(url string) *PrInfo {
 }
 
 // WithLockReason returns a new PrInfo with the lockReason field updated
-func (p *PrInfo) WithLockReason(reason string) *PrInfo {
+func (p *PrInfo) WithLockReason(reason errors.LockReason) *PrInfo {
 	return &PrInfo{
 		number:              p.number,
 		title:               p.title,
@@ -597,12 +594,17 @@ const (
 // RestackBranchResult represents the result of restacking a branch, including the rebased branch base
 type RestackBranchResult struct {
 	Result            RestackResult
-	RebasedBranchBase string // The new parent revision after successful rebase (only set if Result is RestackDone or RestackConflict)
-	Reparented        bool   // True if the branch was reparented due to merged/deleted parent
-	OldParent         string // The old parent branch name (only set if Reparented is true)
-	NewParent         string // The new parent branch name (only set if Reparented is true)
-	LockReason        string // Reason why the branch is locked
-	Frozen            bool   // True if the branch is frozen
+	RebasedBranchBase string            // The new parent revision after successful rebase (only set if Result is RestackDone or RestackConflict)
+	Reparented        bool              // True if the branch was reparented due to merged/deleted parent
+	OldParent         string            // The old parent branch name (only set if Reparented is true)
+	NewParent         string            // The new parent branch name (only set if Reparented is true)
+	LockReason        errors.LockReason // Reason why the branch is locked
+	Frozen            bool              // True if the branch is frozen
+}
+
+// IsLocked returns true if the branch is locked
+func (r RestackBranchResult) IsLocked() bool {
+	return r.LockReason.IsLocked()
 }
 
 // RestackBatchResult represents the result of restacking multiple branches

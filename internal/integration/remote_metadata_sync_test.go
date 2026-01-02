@@ -172,7 +172,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
 		remoteMeta := &git.Meta{
-			LockReason: "locked",
+			LockReason: string(engine.LockReasonUser),
 			Scope:      strPtr("remote-scope"),
 		}
 		createRemoteMetadataRef(t, sh, "non-existent-branch", remoteMeta)

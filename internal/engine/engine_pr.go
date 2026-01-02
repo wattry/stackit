@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -29,7 +30,7 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		getStringValue(meta.PrInfo.Base),
 		getStringValue(meta.PrInfo.URL),
 		getBoolValue(meta.PrInfo.IsDraft),
-		lockReason,
+		errors.LockReason(lockReason),
 		getStringValue(meta.PrInfo.ConsolidationBranch),
 	)
 
@@ -86,7 +87,7 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 		url := prInfo.URL()
 		meta.PrInfo.URL = &url
 	}
-	lockReason := prInfo.LockReason()
+	lockReason := string(prInfo.LockReason())
 	meta.PrInfo.LockReason = &lockReason
 	consolidationBranch := prInfo.ConsolidationBranch()
 	meta.PrInfo.ConsolidationBranch = &consolidationBranch
@@ -128,9 +129,9 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	lockStatusChanged := false
 	meta, err := e.git.ReadMetadata(branch.GetName())
 	if err == nil {
-		if meta.LockReason != prInfo.LockReason() {
+		if meta.LockReason != string(prInfo.LockReason()) {
 			lockStatusChanged = true
-		} else if meta.PrInfo != nil && getStringValue(meta.PrInfo.LockReason) != prInfo.LockReason() {
+		} else if meta.PrInfo != nil && getStringValue(meta.PrInfo.LockReason) != string(prInfo.LockReason()) {
 			lockStatusChanged = true
 		}
 	}

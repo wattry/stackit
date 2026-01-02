@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -18,7 +19,7 @@ func TestMetaSerialization(t *testing.T) {
 	meta := &git.Meta{
 		ParentBranchName: &parent,
 		Scope:            &scope,
-		LockReason:       "manual",
+		LockReason:       string(errors.LockReasonUser),
 		BranchType:       git.BranchTypeUser,
 		LastModifiedBy: &git.ModifiedBy{
 			GitName:  "John Doe",

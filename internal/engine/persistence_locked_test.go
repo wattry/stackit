@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -21,14 +22,14 @@ func TestPrInfoLockedPersistence(t *testing.T) {
 	branch := eng.GetBranch("feature")
 
 	// 1. Lock the branch
-	_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+	_, err := eng.SetLocked([]engine.Branch{branch}, errors.LockReasonUser)
 	require.NoError(t, err)
 	require.True(t, branch.IsLocked())
-	require.Equal(t, string(engine.LockReasonUser), branch.GetLockReason())
+	require.Equal(t, string(errors.LockReasonUser), string(branch.GetLockReason()))
 
 	// 2. Upsert PR info with lockReason="user"
 	prNumber := 123
-	prInfo := engine.NewPrInfo(&prNumber, "Title", "Body", "OPEN", "main", "http://url", false).WithLockReason(string(engine.LockReasonUser))
+	prInfo := engine.NewPrInfo(&prNumber, "Title", "Body", "OPEN", "main", "http://url", false).WithLockReason(errors.LockReasonUser)
 	err = eng.UpsertPrInfo(branch, prInfo)
 	require.NoError(t, err)
 

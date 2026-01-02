@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -363,7 +364,7 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 }
 
 // SetLocked updates multiple branches' locked status
-func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error) {
+func (e *engineImpl) SetLocked(branches []Branch, reason errors.LockReason) (BatchLockResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -386,7 +387,7 @@ func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockR
 		meta.LockReason = string(reason)
 
 		// Update in-memory map
-		if reason != LockReasonNone {
+		if reason.IsLocked() {
 			e.lockedMap[branchName] = string(reason)
 		} else {
 			delete(e.lockedMap, branchName)

@@ -33,7 +33,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 			branch := eng.GetBranch(name)
 
 			// Try to preserve existing locked status
-			lockReason := ""
+			lockReason := engine.LockReasonNone
 			if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
 				lockReason = existing.LockReason()
 			}

@@ -6,6 +6,7 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // restackBranches handles restacking branches after sync operations
@@ -50,7 +51,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 
 	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
-		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason string, frozen bool) {
+		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason errors.LockReason, frozen bool) {
 			prNumber := getPRNumber(eng, branchName)
 
 			switch result {

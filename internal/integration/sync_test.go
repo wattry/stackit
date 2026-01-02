@@ -363,7 +363,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Create remote metadata refs (simulating a successful fetch)
 		remoteMeta := &git.Meta{
-			LockReason: "locked",
+			LockReason: string(engine.LockReasonUser),
 			Scope:      scopePtr("remote-scope"),
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
@@ -375,7 +375,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
 		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
-		require.Equal(t, "locked", cache["feature-a"].LockReason, "Remote metadata should show lock reason")
+		require.Equal(t, string(engine.LockReasonUser), cache["feature-a"].LockReason, "Remote metadata should show lock reason")
 		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
 	})
 

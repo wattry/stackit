@@ -6,6 +6,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/handlers"
 )
 
@@ -86,7 +87,7 @@ func (h *GetNullHandler) Complete(_ GetSummary) {}
 func (h *GetNullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int, _ string, _ bool) {
+func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int, _ errors.LockReason, _ bool) {
 }
 
 // OnRestackComplete implements RestackHandler.
@@ -347,7 +348,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			// Use RestackHandler for consistent output
 			handler.OnRestackStart(len(sorted))
 
-			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason string, frozen bool) {
+			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason errors.LockReason, frozen bool) {
 				prNumber := getPRNumber(eng, branchName)
 
 				switch result {

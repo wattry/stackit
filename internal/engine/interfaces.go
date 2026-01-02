@@ -5,6 +5,7 @@ import (
 	"iter"
 	"time"
 
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -32,7 +33,7 @@ type BranchStatus interface {
 	GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error)
 	GetScope(branch Branch) Scope
 	IsLocked(branch Branch) bool
-	GetLockReason(branch Branch) string
+	GetLockReason(branch Branch) errors.LockReason
 	IsFrozen(branch Branch) bool
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string
@@ -96,7 +97,7 @@ type BranchTracking interface {
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
-	SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error)
+	SetLocked(branches []Branch, reason errors.LockReason) (BatchLockResult, error)
 	SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error)
 }
 

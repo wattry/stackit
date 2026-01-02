@@ -7,6 +7,23 @@ import (
 	"fmt"
 )
 
+// LockReason is an enum for the reason why a branch is locked
+type LockReason string
+
+const (
+	// LockReasonNone indicates the branch is not locked
+	LockReasonNone LockReason = ""
+	// LockReasonUser indicates the branch was manually locked by the user
+	LockReasonUser LockReason = "user"
+	// LockReasonConsolidating indicates the branch is being consolidated
+	LockReasonConsolidating LockReason = "consolidating"
+)
+
+// IsLocked returns true if the reason indicates a locked state
+func (r LockReason) IsLocked() bool {
+	return r != LockReasonNone
+}
+
 // Standard library error functions wrapped for convenience
 var (
 	Is     = errors.Is
@@ -58,16 +75,16 @@ func NewBranchNotFoundError(branchName string) *BranchNotFoundError {
 // BranchModificationError represents an error when a branch cannot be modified
 type BranchModificationError struct {
 	BranchName string
-	LockReason string
+	LockReason LockReason
 	IsFrozen   bool
 }
 
 func (e *BranchModificationError) Error() string {
 	state := ""
 	switch {
-	case e.LockReason != "" && e.IsFrozen:
+	case e.IsLocked() && e.IsFrozen:
 		state = fmt.Sprintf("locked (%s) and frozen", e.LockReason)
-	case e.LockReason != "":
+	case e.IsLocked():
 		state = fmt.Sprintf("locked (%s)", e.LockReason)
 	case e.IsFrozen:
 		state = "frozen"
@@ -77,7 +94,7 @@ func (e *BranchModificationError) Error() string {
 
 // IsLocked returns true if the branch is locked
 func (e *BranchModificationError) IsLocked() bool {
-	return e.LockReason != ""
+	return e.LockReason.IsLocked()
 }
 
 // Is returns true if the target error is ErrBranchModificationRestricted
@@ -86,7 +103,7 @@ func (e *BranchModificationError) Is(target error) bool {
 }
 
 // NewBranchModificationError creates a new BranchModificationError
-func NewBranchModificationError(branchName string, lockReason string, frozen bool) *BranchModificationError {
+func NewBranchModificationError(branchName string, lockReason LockReason, frozen bool) *BranchModificationError {
 	return &BranchModificationError{
 		BranchName: branchName,
 		LockReason: lockReason,

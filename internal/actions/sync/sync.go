@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/handlers"
 )
 
@@ -150,17 +151,22 @@ const (
 
 // Event represents a progress update during sync
 type Event struct {
-	Phase       Phase     // Current phase
-	Type        EventType // Event type
-	Branch      string    // Branch name (if applicable)
-	PRNumber    *int      // PR number (if applicable)
-	Message     string    // Human-readable description
-	OldRevision string    // For position changes
-	NewRevision string    // For position changes
-	Conflict    bool      // Is this a conflict?
-	LockReason  string    // Why the branch is locked (empty if not locked)
-	Frozen      bool      // Is the branch frozen?
-	Error       error     // If non-nil, this step had an error
+	Phase       Phase             // Current phase
+	Type        EventType         // Event type
+	Branch      string            // Branch name (if applicable)
+	PRNumber    *int              // PR number (if applicable)
+	Message     string            // Human-readable description
+	OldRevision string            // For position changes
+	NewRevision string            // For position changes
+	Conflict    bool              // Is this a conflict?
+	LockReason  errors.LockReason // Why the branch is locked (empty if not locked)
+	Frozen      bool              // Is the branch frozen?
+	Error       error             // If non-nil, this step had an error
+}
+
+// IsLocked returns true if the event associated branch is locked
+func (e Event) IsLocked() bool {
+	return e.LockReason.IsLocked()
 }
 
 // Summary holds aggregate results from a sync operation
@@ -214,7 +220,7 @@ func (h *NullHandler) Complete(_ Summary) {}
 func (h *NullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ string, _ bool) {
+func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ errors.LockReason, _ bool) {
 }
 
 // OnRestackComplete implements RestackHandler.
