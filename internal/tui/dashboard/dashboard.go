@@ -16,6 +16,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/operations"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -164,31 +165,7 @@ func (m *model) refresh() tea.Cmd {
 		// Populate annotations
 		allBranches := m.engine.AllBranches()
 		for _, b := range allBranches {
-			ann := tree.BranchAnnotation{}
-
-			// PR Info
-			if pr, _ := b.GetPrInfo(); pr != nil {
-				ann.PRNumber = pr.Number()
-				ann.PRState = pr.State()
-				ann.IsDraft = pr.IsDraft()
-			}
-
-			// Stats
-			added, deleted, _ := m.engine.GetDiffStats(b)
-			ann.LinesAdded = added
-			ann.LinesDeleted = deleted
-
-			count, _ := m.engine.GetCommitCount(b)
-			ann.CommitCount = count
-
-			// Locked/Frozen status
-			ann.IsLocked = b.IsLocked()
-			ann.IsFrozen = b.IsFrozen()
-
-			// Scope
-			ann.Scope = m.engine.GetScope(b).String()
-			ann.ExplicitScope = b.GetExplicitScope().String()
-
+			ann := tui.GetBranchAnnotation(m.engine, b)
 			renderer.SetAnnotation(b.GetName(), ann)
 		}
 

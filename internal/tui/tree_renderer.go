@@ -41,3 +41,33 @@ func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
 		},
 	)
 }
+
+// GetBranchAnnotation returns a tree.BranchAnnotation populated with standard branch metadata.
+func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.BranchAnnotation {
+	ann := tree.BranchAnnotation{
+		IsLocked:      branch.IsLocked(),
+		IsFrozen:      branch.IsFrozen(),
+		Scope:         eng.GetScope(branch).String(),
+		ExplicitScope: branch.GetExplicitScope().String(),
+	}
+
+	if !branch.IsTrunk() {
+		// PR info (local metadata)
+		if prInfo, _ := branch.GetPrInfo(); prInfo != nil {
+			ann.PRNumber = prInfo.Number()
+			ann.PRState = prInfo.State()
+			ann.IsDraft = prInfo.IsDraft()
+		}
+
+		// Local stats
+		if count, err := branch.GetCommitCount(); err == nil {
+			ann.CommitCount = count
+		}
+		if added, deleted, err := branch.GetDiffStats(); err == nil {
+			ann.LinesAdded = added
+			ann.LinesDeleted = deleted
+		}
+	}
+
+	return ann
+}
