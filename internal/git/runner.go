@@ -1371,6 +1371,19 @@ func (r *runner) DeleteRemoteMetadataRef(branch string) error {
 	return err
 }
 
+func (r *runner) BatchDeleteRemoteMetadataRefs(branches []string) error {
+	if len(branches) == 0 {
+		return nil
+	}
+	// git push origin --delete refs/stackit/metadata/branch1 refs/stackit/metadata/branch2 ...
+	args := []string{"push", "origin", "--delete"}
+	for _, branch := range branches {
+		args = append(args, fmt.Sprintf("refs/stackit/metadata/%s", branch))
+	}
+	_, err := r.runGitCommandInternal(args...)
+	return err
+}
+
 func (r *runner) TestRemoteRefCompatibility() error {
 	testRef := "refs/stackit/metadata/stackit-compat-test"
 	testContent := fmt.Sprintf(`{"test":true,"timestamp":%d}`, time.Now().Unix())

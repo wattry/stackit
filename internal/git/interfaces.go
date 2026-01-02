@@ -37,6 +37,7 @@ type RemoteOperations interface {
 	PushMetadataRefs(branches []string) error
 	FetchMetadataRefs() error
 	DeleteRemoteMetadataRef(branch string) error
+	BatchDeleteRemoteMetadataRefs(branches []string) error
 	TestRemoteRefCompatibility() error
 }
 
