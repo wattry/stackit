@@ -351,6 +351,13 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 
 	// Short format
 	if args.short {
+		// Selection cursor prefix
+		isSelected := args.branchName == args.selectedBranch
+		cursorPrefix := style.SelectionPadding
+		if isSelected {
+			cursorPrefix = style.SelectionCursorStyle().Render(style.SelectionCursor)
+		}
+
 		line := strings.Repeat("│ ", args.indentLevel)
 
 		// Add branching characters
@@ -386,7 +393,7 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 			line += " (needs restack)"
 		}
 
-		return []string{line}
+		return []string{cursorPrefix + line}
 	}
 
 	// Full format
@@ -461,7 +468,7 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, inde
 	}
 	branchingChars += last
 
-	line := prefix + styleObj.Render(branchingChars)
+	line := style.SelectionPadding + prefix + styleObj.Render(branchingChars)
 
 	return line
 }

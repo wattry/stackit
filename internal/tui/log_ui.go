@@ -201,15 +201,23 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateSearchMatches()
 			m.renderTree()
 		case key.Matches(msg, m.logKeys.Up):
-			if m.selectedIndex > 0 {
-				m.selectedIndex--
+			if len(m.branches) > 0 {
+				if m.selectedIndex > 0 {
+					m.selectedIndex--
+				} else {
+					m.selectedIndex = len(m.branches) - 1 // Wrap to last
+				}
 				m.selectedBranch = m.branches[m.selectedIndex].Name
 				m.renderTree()
 				m.ensureVisible()
 			}
 		case key.Matches(msg, m.logKeys.Down):
-			if m.selectedIndex < len(m.branches)-1 {
-				m.selectedIndex++
+			if len(m.branches) > 0 {
+				if m.selectedIndex < len(m.branches)-1 {
+					m.selectedIndex++
+				} else {
+					m.selectedIndex = 0 // Wrap to first
+				}
 				m.selectedBranch = m.branches[m.selectedIndex].Name
 				m.renderTree()
 				m.ensureVisible()

@@ -43,13 +43,21 @@ func (m reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Up):
-			if m.cursor > 0 {
-				m.cursor--
+			if len(m.branches) > 0 {
+				if m.cursor > 0 {
+					m.cursor--
+				} else {
+					m.cursor = len(m.branches) - 1 // Wrap to last
+				}
 			}
 
 		case key.Matches(msg, m.keys.Down):
-			if m.cursor < len(m.branches)-1 {
-				m.cursor++
+			if len(m.branches) > 0 {
+				if m.cursor < len(m.branches)-1 {
+					m.cursor++
+				} else {
+					m.cursor = 0 // Wrap to first
+				}
 			}
 
 		case key.Matches(msg, m.keys.MoveUp):
