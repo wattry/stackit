@@ -24,14 +24,26 @@ func UnfreezeAction(ctx *app.Context, branchName string) error {
 		RecursiveChildren: true,
 	})
 
+	branchesToUnfreeze := []engine.Branch{}
 	for _, b := range branches {
 		if b.IsTrunk() {
 			continue
 		}
-		if err := eng.SetFrozen(b, false); err != nil {
-			return fmt.Errorf("failed to unfreeze branch %s: %w", b.GetName(), err)
+		branchesToUnfreeze = append(branchesToUnfreeze, b)
+	}
+
+	if len(branchesToUnfreeze) > 0 {
+		res, err := eng.SetFrozen(branchesToUnfreeze, false)
+		if err != nil {
+			for name, branchErr := range res.Errors {
+				splog.Warn("Failed to unfreeze %s: %v", name, branchErr)
+			}
+			return fmt.Errorf("failed to unfreeze branches: %w", err)
 		}
-		splog.Info("Unfrozen %s locally.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+
+		for _, name := range res.AffectedBranches {
+			splog.Info("Unfrozen %s locally.", style.ColorBranchName(name, name == branchName))
+		}
 	}
 
 	return nil

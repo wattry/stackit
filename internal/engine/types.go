@@ -542,6 +542,8 @@ type RestackBranchResult struct {
 	Reparented        bool   // True if the branch was reparented due to merged/deleted parent
 	OldParent         string // The old parent branch name (only set if Reparented is true)
 	NewParent         string // The new parent branch name (only set if Reparented is true)
+	Locked            bool   // True if the branch is locked
+	Frozen            bool   // True if the branch is frozen
 }
 
 // RestackBatchResult represents the result of restacking multiple branches
@@ -585,4 +587,16 @@ type MergeOptions struct {
 	NoEdit  bool
 	NoFF    bool
 	Message string
+}
+
+// BatchLockResult represents the result of a batch lock/unlock operation
+type BatchLockResult struct {
+	AffectedBranches []string
+	Errors           map[string]error
+}
+
+// BatchFreezeResult represents the result of a batch freeze/unfreeze operation
+type BatchFreezeResult struct {
+	AffectedBranches []string
+	Errors           map[string]error
 }

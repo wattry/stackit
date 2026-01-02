@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions/submit"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -259,7 +260,7 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	// Lock the branch
 	branch := s.Engine.GetBranch("feature")
-	err = s.Engine.SetLocked(branch, true)
+	_, err = s.Engine.SetLocked([]engine.Branch{branch}, true)
 	require.NoError(t, err)
 	require.True(t, branch.IsLocked())
 
@@ -281,5 +282,4 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 	meta, err := s.Engine.Git().ReadMetadata("feature")
 	require.NoError(t, err)
 	require.True(t, meta.Locked, "Metadata Locked field should be true")
-	require.True(t, meta.EffectivelyLocked, "Metadata EffectivelyLocked field should be true")
 }

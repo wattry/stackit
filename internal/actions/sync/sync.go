@@ -158,6 +158,8 @@ type Event struct {
 	OldRevision string    // For position changes
 	NewRevision string    // For position changes
 	Conflict    bool      // Is this a conflict?
+	Locked      bool      // Is the branch locked?
+	Frozen      bool      // Is the branch frozen?
 	Error       error     // If non-nil, this step had an error
 }
 
@@ -212,7 +214,7 @@ func (h *NullHandler) Complete(_ Summary) {}
 func (h *NullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int) {}
+func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ bool, _ bool) {}
 
 // OnRestackComplete implements RestackHandler.
 func (h *NullHandler) OnRestackComplete(_, _ int, _ []string) {}
