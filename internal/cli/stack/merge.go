@@ -122,6 +122,14 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 	eng := ctx.Engine
 	splog := ctx.Splog
 
+	// Start pulling trunk in background to save time during analysis
+	trunkPullDone := make(chan struct{})
+	var trunkPullErr error
+	go func() {
+		_, trunkPullErr = eng.PullTrunk(ctx.Context)
+		close(trunkPullDone)
+	}()
+
 	splog.Info("🔍 Analyzing stack...")
 	splog.Newline()
 
@@ -293,6 +301,13 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 	if !confirmed {
 		splog.Info("Merge canceled")
 		return nil
+	}
+
+	// Wait for background trunk pull to complete
+	<-trunkPullDone
+	if trunkPullErr != nil {
+		splog.Warn("Background trunk pull failed: %v", trunkPullErr)
+		// We don't fail here because the executor will try again and handle it properly
 	}
 
 	// Ask about worktree if not specified by flag

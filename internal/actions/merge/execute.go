@@ -3,8 +3,6 @@ package merge
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -140,21 +138,13 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		splog.Info("🔨 Creating temporary worktree for merge execution...")
 	}
 
-	// 1. Create temporary directory
-	tmpDir, err := os.MkdirTemp("", "stackit-merge-*")
+	// Create temporary worktree via engine
+	worktreePath, cleanup, err := eng.CreateTemporaryWorktree(ctx.Context, "HEAD", "stackit-merge-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+		return err
 	}
 
-	worktreePath := filepath.Join(tmpDir, "worktree")
 	splog.Debug("📁 Worktree: %s", worktreePath)
-
-	// 2. Add detached worktree
-	// Use HEAD to ensure we have a valid starting point without switching branches in main workspace
-	if err := eng.AddWorktree(ctx.Context, worktreePath, "HEAD", true); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return fmt.Errorf("failed to add worktree: %w", err)
-	}
 
 	trunk := eng.Trunk()
 
@@ -163,10 +153,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	defer func() {
 		if cleanupWorktree {
 			splog.Debug("Cleaning up worktree at %s", worktreePath)
-			if cleanupErr := eng.RemoveWorktree(context.Background(), worktreePath); cleanupErr != nil {
-				splog.Warn("Failed to remove worktree at %s: %v", worktreePath, cleanupErr)
-			}
-			_ = os.RemoveAll(tmpDir)
+			cleanup()
 		}
 
 		// If the merge succeeded, refresh the main workspace state
@@ -260,9 +247,19 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 
 // calculateBaselineEstimate tries to find a branch with successful CI and use its timing as a baseline
 func calculateBaselineEstimate(ctx context.Context, plan *Plan, client github.Client, splog *tui.Splog) time.Duration {
+	branchNames := make([]string, len(plan.BranchesToMerge))
+	for i, b := range plan.BranchesToMerge {
+		branchNames[i] = b.BranchName
+	}
+
+	statuses, err := client.BatchGetPRChecksStatus(ctx, branchNames)
+	if err != nil {
+		return 0
+	}
+
 	for _, branchInfo := range plan.BranchesToMerge {
-		status, err := client.GetPRChecksStatus(ctx, branchInfo.BranchName)
-		if err != nil || !status.Passing || status.Pending {
+		status := statuses[branchInfo.BranchName]
+		if status == nil || !status.Passing || status.Pending {
 			continue
 		}
 
@@ -427,7 +424,7 @@ func validateStepPreconditions(ctx context.Context, step PlanStep, eng mergeExec
 		// Optionally check CI checks haven't changed to failing or pending
 		if !opts.Force && githubClient != nil {
 			status, err := githubClient.GetPRChecksStatus(ctx, step.BranchName)
-			if err == nil {
+			if err == nil && status != nil {
 				if !status.Passing {
 					return fmt.Errorf("PR #%d for branch %s has failing CI checks", *prInfo.Number(), step.BranchName)
 				}
@@ -801,7 +798,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 		// Report progress periodically
 		now := time.Now()
 		status, err := githubClient.GetPRChecksStatus(ctx.Context, step.BranchName)
-		if err == nil && opts.Reporter != nil && now.Sub(lastProgressReport) >= progressInterval {
+		if err == nil && status != nil && opts.Reporter != nil && now.Sub(lastProgressReport) >= progressInterval {
 			elapsed := now.Sub(startTime)
 			opts.Reporter.StepWaiting(stepIndex, elapsed, timeout, status.Checks)
 			lastProgressReport = now
@@ -810,7 +807,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 		if err != nil {
 			// Log error but continue polling (might be transient)
 			splog.Debug("Error checking CI status: %v", err)
-		} else {
+		} else if status != nil {
 			if !status.Passing {
 				// CI checks failed
 				return fmt.Errorf("CI checks failed on PR #%d (%s)", prNumber, step.BranchName)

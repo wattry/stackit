@@ -3,11 +3,13 @@ package demo
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // prCounter is used to generate unique PR numbers
@@ -121,8 +123,8 @@ func (c *GitHubClient) MergePullRequest(_ context.Context, branchName string) er
 	return nil
 }
 
-// GetPRChecksStatus returns simulated check status
-func (c *GitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*github.CheckStatus, error) {
+// getPRChecksStatus returns simulated check status
+func (c *GitHubClient) getPRChecksStatus(_ context.Context, _ string) *github.CheckStatus {
 	// Simulate a small delay
 	time.Sleep(50 * time.Millisecond)
 
@@ -135,5 +137,29 @@ func (c *GitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*github.C
 			{Name: "Test", Status: "COMPLETED", Conclusion: "SUCCESS"},
 			{Name: "Lint", Status: "COMPLETED", Conclusion: "SUCCESS"},
 		},
-	}, nil
+	}
+}
+
+// GetPRChecksStatus returns simulated check status for a single branch
+func (c *GitHubClient) GetPRChecksStatus(ctx context.Context, branchName string) (*github.CheckStatus, error) {
+	statuses, err := c.BatchGetPRChecksStatus(ctx, []string{branchName})
+	if err != nil {
+		return nil, err
+	}
+	return statuses[branchName], nil
+}
+
+// BatchGetPRChecksStatus returns simulated check status for multiple branches
+func (c *GitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*github.CheckStatus, error) {
+	results := make(map[string]*github.CheckStatus)
+	var mu sync.Mutex
+
+	utils.RunWithWorkers(branchNames, github.MaxGitHubConcurrency, func(name string) {
+		status := c.getPRChecksStatus(ctx, name)
+		mu.Lock()
+		results[name] = status
+		mu.Unlock()
+	})
+
+	return results, nil
 }

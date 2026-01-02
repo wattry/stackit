@@ -95,38 +95,21 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 // preValidateStack ensures all PRs are ready for consolidation
 func (c *ConsolidateMergeExecutor) preValidateStack(ctx context.Context, force bool) error {
 	splog := c.ctx.Splog
-	for _, branchInfo := range c.plan.BranchesToMerge {
-		branch := c.engine.GetBranch(branchInfo.BranchName)
-		prInfo, err := branch.GetPrInfo()
-		if err != nil || prInfo == nil || prInfo.Number() == nil {
-			return fmt.Errorf("PR not found for branch %s", branchInfo.BranchName)
-		}
-		if prInfo.State() != prStateOpen {
-			return fmt.Errorf("PR #%d for branch %s is %s (not open)", *prInfo.Number(), branchInfo.BranchName, prInfo.State())
-		}
 
-		matchesRemote, err := c.engine.BranchMatchesRemote(branchInfo.BranchName)
-		if err != nil {
-			return fmt.Errorf("failed to check remote tracking for %s: %w", branchInfo.BranchName, err)
-		}
-		if !matchesRemote {
-			diffInfo, _ := c.engine.GetBranchRemoteDifference(branchInfo.BranchName)
-			if diffInfo != "" {
-				if !force {
-					return fmt.Errorf("branch %s differs from remote: %s, use --force to proceed", branchInfo.BranchName, diffInfo)
-				}
-				splog.Warn("Branch %s differs from remote: %s, but proceeding with consolidation", branchInfo.BranchName, diffInfo)
-			} else {
-				if !force {
-					return fmt.Errorf("branch %s differs from remote, use --force to proceed", branchInfo.BranchName)
-				}
-				splog.Warn("Branch %s differs from remote, but proceeding with consolidation", branchInfo.BranchName)
+	// We trust the plan created by CreateMergePlan for PR status and remote matching
+	// unless --force is used to bypass those checks entirely.
+	// We only re-validate if we're not forced and want to be absolutely sure.
+	if !force {
+		for _, branchInfo := range c.plan.BranchesToMerge {
+			// Quick local checks
+			if !branchInfo.MatchesRemote {
+				return fmt.Errorf("branch %s differs from remote, use --force to proceed", branchInfo.BranchName)
 			}
+			splog.Debug("✅ Branch %s is ready for consolidation (from plan)", branchInfo.BranchName)
 		}
-
-		splog.Debug("✅ Branch %s is ready for consolidation", branchInfo.BranchName)
 	}
 
+	// This is the only "heavy" operation that really needs to happen here
 	pullResult, err := c.engine.PullTrunk(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update trunk: %w", err)
@@ -224,7 +207,7 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, b
 		status, err := githubClient.GetPRChecksStatus(ctx, branchName)
 		if err != nil {
 			splog.Debug("Error checking CI status: %v", err)
-		} else {
+		} else if status != nil {
 			if !status.Passing {
 				return fmt.Errorf("CI checks failed on consolidation PR #%d", prNumber)
 			}

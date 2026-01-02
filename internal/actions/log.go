@@ -6,15 +6,22 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
 
+// LogStyle defines the output style for the log command
+const (
+	LogStyleNormal = "NORMAL"
+	LogStyleFull   = "FULL"
+)
+
 // LogOptions contains options for the log command
 type LogOptions struct {
-	Style         string // "NORMAL" or "FULL"
+	Style         string // LogStyleNormal or LogStyleFull
 	Reverse       bool
 	Steps         *int
 	BranchName    string
@@ -24,7 +31,7 @@ type LogOptions struct {
 // LogAction displays the branch tree
 func LogAction(ctx *app.Context, opts LogOptions) error {
 	// Populate remote SHAs if needed (only for FULL mode)
-	if opts.Style == "FULL" {
+	if opts.Style == LogStyleFull {
 		if err := ctx.Engine.PopulateRemoteShas(); err != nil {
 			ctx.Splog.Debug("Failed to populate remote SHAs: %v", err)
 		}
@@ -38,6 +45,20 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	annotations := make(map[string]tree.BranchAnnotation)
 	allBranches := ctx.Engine.AllBranches()
 
+	// Prefetch CI status in batch if in FULL style
+	var ciStatuses map[string]*github.CheckStatus
+	if opts.Style == LogStyleFull && ctx.GitHubClient != nil {
+		branchNames := make([]string, 0, len(allBranches))
+		for _, b := range allBranches {
+			if !b.IsTrunk() {
+				branchNames = append(branchNames, b.GetName())
+			}
+		}
+		if len(branchNames) > 0 {
+			ciStatuses, _ = ctx.GitHubClient.BatchGetPRChecksStatus(ctx.Context, branchNames)
+		}
+	}
+
 	type result struct {
 		branchName string
 		annotation tree.BranchAnnotation
@@ -46,7 +67,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 
 	if len(allBranches) > 0 {
 		utils.Run(allBranches, func(branchObj engine.Branch) {
-			annotation := getBranchAnnotation(ctx, branchObj, opts)
+			annotation := getBranchAnnotation(ctx, branchObj, opts, ciStatuses)
 			results <- result{branchObj.GetName(), annotation}
 		})
 	}
@@ -121,38 +142,13 @@ func getUntrackedBranchNames(ctx *app.Context) []string {
 	return untracked
 }
 
-func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOptions) tree.BranchAnnotation {
-	annotation := tree.BranchAnnotation{
-		Scope:         ctx.Engine.GetScope(branchObj).String(),
-		ExplicitScope: branchObj.GetExplicitScope().String(),
-		IsLocked:      branchObj.IsLocked(),
-		IsFrozen:      branchObj.IsFrozen(),
-	}
-
-	// Local stats (always fast enough)
-	if !branchObj.IsTrunk() {
-		if count, err := branchObj.GetCommitCount(); err == nil {
-			annotation.CommitCount = count
-		}
-		if added, deleted, err := branchObj.GetDiffStats(); err == nil {
-			annotation.LinesAdded = added
-			annotation.LinesDeleted = deleted
-		}
-	}
-
-	// PR info (local metadata)
-	if !branchObj.IsTrunk() {
-		prInfo, _ := branchObj.GetPrInfo()
-		if prInfo != nil {
-			annotation.PRNumber = prInfo.Number()
-			annotation.PRState = prInfo.State()
-			annotation.IsDraft = prInfo.IsDraft()
-		}
-	}
+func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOptions, ciStatuses map[string]*github.CheckStatus) tree.BranchAnnotation {
+	annotation := tui.GetBranchAnnotation(ctx.Engine, branchObj)
 
 	// CI status (only in FULL mode)
-	if opts.Style == "FULL" && !branchObj.IsTrunk() && ctx.GitHubClient != nil {
-		if status, err := ctx.GitHubClient.GetPRChecksStatus(ctx.Context, branchObj.GetName()); err == nil && status != nil {
+	if opts.Style == LogStyleFull && !branchObj.IsTrunk() {
+		status := ciStatuses[branchObj.GetName()]
+		if status != nil {
 			annotation.CheckStatus = tree.CheckStatusPassing
 			if status.Pending {
 				annotation.CheckStatus = tree.CheckStatusPending

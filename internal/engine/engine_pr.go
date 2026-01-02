@@ -15,8 +15,13 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		return nil, err
 	}
 
-	if meta.PrInfo == nil {
-		return nil, nil
+	return NewPrInfoFromMeta(meta), nil
+}
+
+// NewPrInfoFromMeta creates a PrInfo from git.Meta
+func NewPrInfoFromMeta(meta *git.Meta) *PrInfo {
+	if meta == nil || meta.PrInfo == nil {
+		return nil
 	}
 
 	lockReason := ""
@@ -24,7 +29,7 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		lockReason = string(*meta.PrInfo.LockReason)
 	}
 
-	prInfo := NewPrInfoFull(
+	return NewPrInfoFull(
 		meta.PrInfo.Number,
 		getStringValue(meta.PrInfo.Title),
 		getStringValue(meta.PrInfo.Body),
@@ -35,8 +40,6 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		LockReason(lockReason),
 		getStringValue(meta.PrInfo.MergeBranch),
 	)
-
-	return prInfo, nil
 }
 
 // getPrInfo is an internal method for Branch type

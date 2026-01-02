@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v62/github"
 	"golang.org/x/oauth2"
@@ -267,140 +269,18 @@ func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, b
 	return nil
 }
 
-// GetPRChecksStatus returns the check status for a PR
-func GetPRChecksStatus(ctx context.Context, client *github.Client, owner, repo, branchName string) (*CheckStatus, error) {
-	// First, get the PR for this branch to get the head SHA
-	pr, err := GetPullRequestByBranch(ctx, client, owner, repo, branchName)
-	if err != nil {
-		return &CheckStatus{Passing: true, Pending: false}, nil //nolint:nilerr
-	}
-	if pr == nil || pr.Head == nil || pr.Head.SHA == nil {
-		return &CheckStatus{Passing: true, Pending: false}, nil
-	}
-
-	headSHA := *pr.Head.SHA
-
-	// Get check runs for the head commit
-	checkRuns, _, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, headSHA, &github.ListCheckRunsOptions{
-		ListOptions: github.ListOptions{
-			PerPage: 100,
-		},
-	})
-
-	// Use a map to deduplicate checks by name, preferring check runs over status checks
-	checkMap := make(map[string]CheckDetail)
-	hasPending := false
-	hasFailing := false
-
-	// First, get check runs (more detailed information)
-	if err == nil && checkRuns != nil {
-		for _, run := range checkRuns.CheckRuns {
-			detail := CheckDetail{
-				Name:   run.GetName(),
-				Status: strings.ToUpper(run.GetStatus()),
-			}
-			if run.Conclusion != nil {
-				detail.Conclusion = strings.ToUpper(*run.Conclusion)
-			}
-			if run.StartedAt != nil {
-				detail.StartedAt = run.StartedAt.Time
-			}
-			if run.CompletedAt != nil {
-				detail.FinishedAt = run.CompletedAt.Time
-			}
-			checkMap[detail.Name] = detail
-
-			// Skip the Stackit lock check when evaluating CI status.
-			// This check fails when PRs are locked during consolidation, which is expected.
-			if detail.Name == stackitLockCheckName {
-				continue
-			}
-
-			if detail.Status == "QUEUED" || detail.Status == checkStatusInProgress {
-				hasPending = true
-			}
-			if detail.Conclusion == checkConclusionFailure || detail.Conclusion == checkConclusionCanceled || detail.Conclusion == checkConclusionTimedOut || detail.Conclusion == checkConclusionActionRequired {
-				hasFailing = true
-			}
-		}
-	}
-
-	// Also get combined status, but only add if we don't already have this check from check runs
-	combinedStatus, _, err := client.Repositories.GetCombinedStatus(ctx, owner, repo, headSHA, nil)
-	if err == nil && combinedStatus != nil {
-		for _, status := range combinedStatus.Statuses {
-			name := status.GetContext()
-			// Skip if we already have this check from check runs
-			if _, exists := checkMap[name]; exists {
-				continue
-			}
-
-			detail := CheckDetail{
-				Name:   name,
-				Status: "COMPLETED",
-			}
-			state := strings.ToUpper(status.GetState())
-			switch state {
-			case checkStatePending:
-				detail.Status = checkStatusInProgress
-			case checkStateFailure, checkStateError:
-				detail.Conclusion = checkConclusionFailure
-			case "SUCCESS":
-				detail.Conclusion = "SUCCESS"
-			}
-			// Combined status doesn't give us precise times usually in this struct
-			checkMap[name] = detail
-
-			// Skip the Stackit lock check when evaluating CI status
-			if name == stackitLockCheckName {
-				continue
-			}
-
-			// Update hasPending/hasFailing after adding to map but before continuing
-			if detail.Status == checkStatusInProgress {
-				hasPending = true
-			}
-			if detail.Conclusion == checkConclusionFailure {
-				hasFailing = true
-			}
-		}
-
-		// If no checks at all but combined status shows something, use it for overall status
-		if len(checkMap) == 0 && combinedStatus.State != nil {
-			state := strings.ToUpper(*combinedStatus.State)
-			if state == checkStatePending {
-				hasPending = true
-			} else if state == checkStateFailure || state == checkStateError {
-				hasFailing = true
-			}
-		}
-	}
-
-	// Convert map to slice
-	checks := make([]CheckDetail, 0, len(checkMap))
-	for _, check := range checkMap {
-		checks = append(checks, check)
-	}
-
-	return &CheckStatus{
-		Passing: !hasFailing,
-		Pending: hasPending,
-		Checks:  checks,
-	}, nil
-}
-
-// updatePRDraftStatus updates the draft status of a PR using GitHub's GraphQL API
-func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID string, isDraft bool) error {
+// executeGraphQLQuery executes a GraphQL query and returns the response body
+func executeGraphQLQuery(ctx context.Context, runner git.Runner, query string, variables map[string]interface{}) ([]byte, error) {
 	// Get GitHub token
 	token, err := getGitHubToken(runner)
 	if err != nil {
-		return fmt.Errorf("failed to get GitHub token: %w", err)
+		return nil, fmt.Errorf("failed to get GitHub token: %w", err)
 	}
 
 	// Get repository info to determine hostname
 	repoInfo, err := getRepoInfoWithHostname(ctx, runner)
 	if err != nil {
-		return fmt.Errorf("failed to get repository info: %w", err)
+		return nil, fmt.Errorf("failed to get repository info: %w", err)
 	}
 
 	// Construct GraphQL endpoint URL
@@ -418,6 +298,62 @@ func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID s
 	)
 	httpClient := oauth2.NewClient(ctx, ts)
 
+	// Prepare GraphQL request
+	requestBody := map[string]interface{}{
+		"query":     query,
+		"variables": variables,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal GraphQL request: %w", err)
+	}
+
+	// Make GraphQL request
+	req, err := http.NewRequestWithContext(ctx, "POST", graphqlURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GraphQL request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute GraphQL request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read GraphQL response: %w", err)
+	}
+
+	// Check for errors
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GraphQL request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Check for GraphQL errors
+	var graphqlErrors struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &graphqlErrors); err == nil && len(graphqlErrors.Errors) > 0 {
+		errorMessages := make([]string, len(graphqlErrors.Errors))
+		for i, ge := range graphqlErrors.Errors {
+			errorMessages[i] = ge.Message
+		}
+		return nil, fmt.Errorf("GraphQL error: %s", strings.Join(errorMessages, "; "))
+	}
+
+	return body, nil
+}
+
+// updatePRDraftStatus updates the draft status of a PR using GitHub's GraphQL API
+func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID string, isDraft bool) error {
 	// Determine which mutation to use
 	var mutation string
 	var mutationName string
@@ -443,64 +379,195 @@ func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID s
 		}`
 	}
 
-	// Prepare GraphQL request
-	requestBody := map[string]interface{}{
-		"query": mutation,
-		"variables": map[string]interface{}{
-			"pullRequestId": pullRequestID,
-		},
+	variables := map[string]interface{}{
+		"pullRequestId": pullRequestID,
 	}
 
-	jsonData, err := json.Marshal(requestBody)
+	_, err := executeGraphQLQuery(ctx, runner, mutation, variables)
 	if err != nil {
-		return fmt.Errorf("failed to marshal GraphQL request: %w", err)
-	}
-
-	// Make GraphQL request
-	req, err := http.NewRequestWithContext(ctx, "POST", graphqlURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create GraphQL request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to execute GraphQL request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read GraphQL response: %w", err)
-	}
-
-	// Check for errors
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GraphQL request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Parse response to check for GraphQL errors
-	var graphqlResponse struct {
-		Data   interface{} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-
-	if err := json.Unmarshal(body, &graphqlResponse); err != nil {
-		return fmt.Errorf("failed to parse GraphQL response: %w", err)
-	}
-
-	if len(graphqlResponse.Errors) > 0 {
-		errorMessages := make([]string, len(graphqlResponse.Errors))
-		for i, err := range graphqlResponse.Errors {
-			errorMessages[i] = err.Message
-		}
-		return fmt.Errorf("GraphQL %s mutation failed: %s", mutationName, strings.Join(errorMessages, "; "))
+		return fmt.Errorf("GraphQL %s mutation failed: %w", mutationName, err)
 	}
 
 	return nil
+}
+
+// BatchGetPRChecksStatusGraphQL returns the check status for multiple branches using a single GraphQL query
+func BatchGetPRChecksStatusGraphQL(ctx context.Context, runner git.Runner, owner, repo string, branchNames []string) (map[string]*CheckStatus, error) {
+	if len(branchNames) == 0 {
+		return make(map[string]*CheckStatus), nil
+	}
+
+	// Sanitize branch names for GraphQL aliases
+	aliasMap := make(map[string]string)
+	aliasToBranch := make(map[string]string)
+	re := regexp.MustCompile(`[^a-zA-Z0-9]`)
+	for _, name := range branchNames {
+		alias := "b_" + re.ReplaceAllString(name, "_")
+		// Ensure unique aliases if multiple branches map to same sanitized name
+		baseAlias := alias
+		counter := 1
+		for {
+			if _, exists := aliasToBranch[alias]; !exists {
+				break
+			}
+			alias = fmt.Sprintf("%s_%d", baseAlias, counter)
+			counter++
+		}
+		aliasMap[name] = alias
+		aliasToBranch[alias] = name
+	}
+
+	// Build GraphQL query
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString("query($owner: String!, $repo: String!) {\n")
+	queryBuilder.WriteString("  repository(owner: $owner, name: $repo) {\n")
+	for branch, alias := range aliasMap {
+		fmt.Fprintf(&queryBuilder, "    %s: ref(qualifiedName: \"refs/heads/%s\") {\n", alias, branch)
+		queryBuilder.WriteString("      name\n")
+		queryBuilder.WriteString("      target {\n")
+		queryBuilder.WriteString("        ... on Commit {\n")
+		queryBuilder.WriteString("          oid\n")
+		queryBuilder.WriteString("          statusCheckRollup {\n")
+		queryBuilder.WriteString("            state\n")
+		queryBuilder.WriteString("            contexts(first: 100) {\n")
+		queryBuilder.WriteString("              nodes {\n")
+		queryBuilder.WriteString("                __typename\n")
+		queryBuilder.WriteString("                ... on CheckRun {\n")
+		queryBuilder.WriteString("                  name\n")
+		queryBuilder.WriteString("                  status\n")
+		queryBuilder.WriteString("                  conclusion\n")
+		queryBuilder.WriteString("                  startedAt\n")
+		queryBuilder.WriteString("                  completedAt\n")
+		queryBuilder.WriteString("                }\n")
+		queryBuilder.WriteString("                ... on StatusContext {\n")
+		queryBuilder.WriteString("                  context\n")
+		queryBuilder.WriteString("                  state\n")
+		queryBuilder.WriteString("                  createdAt\n")
+		queryBuilder.WriteString("                }\n")
+		queryBuilder.WriteString("              }\n")
+		queryBuilder.WriteString("            }\n")
+		queryBuilder.WriteString("          }\n")
+		queryBuilder.WriteString("        }\n")
+		queryBuilder.WriteString("      }\n")
+		queryBuilder.WriteString("    }\n")
+	}
+	queryBuilder.WriteString("  }\n")
+	queryBuilder.WriteString("}\n")
+
+	variables := map[string]interface{}{
+		"owner": owner,
+		"repo":  repo,
+	}
+
+	body, err := executeGraphQLQuery(ctx, runner, queryBuilder.String(), variables)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse dynamic response
+	var graphqlResponse struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &graphqlResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse GraphQL response: %w", err)
+	}
+
+	repository, ok := graphqlResponse.Data["repository"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid GraphQL response format: missing repository")
+	}
+
+	results := make(map[string]*CheckStatus)
+	for alias, data := range repository {
+		if data == nil {
+			continue
+		}
+		branchName, ok := aliasToBranch[alias]
+		if !ok {
+			continue
+		}
+
+		refData := data.(map[string]interface{})
+		target, ok := refData["target"].(map[string]interface{})
+		if !ok || target == nil {
+			continue
+		}
+
+		rollup, ok := target["statusCheckRollup"].(map[string]interface{})
+		if !ok || rollup == nil {
+			// No status checks
+			results[branchName] = &CheckStatus{Passing: true, Pending: false}
+			continue
+		}
+
+		hasPending := false
+		hasFailing := false
+		var checks []CheckDetail
+
+		contexts, ok := rollup["contexts"].(map[string]interface{})
+		if ok && contexts != nil {
+			nodes, ok := contexts["nodes"].([]interface{})
+			if ok {
+				for _, node := range nodes {
+					n := node.(map[string]interface{})
+					detail := CheckDetail{}
+					typeName := n["__typename"].(string)
+
+					if typeName == "CheckRun" {
+						detail.Name = n["name"].(string)
+						detail.Status = strings.ToUpper(n["status"].(string))
+						if n["conclusion"] != nil {
+							detail.Conclusion = strings.ToUpper(n["conclusion"].(string))
+						}
+						if n["startedAt"] != nil {
+							t, _ := time.Parse(time.RFC3339, n["startedAt"].(string))
+							detail.StartedAt = t
+						}
+						if n["completedAt"] != nil {
+							t, _ := time.Parse(time.RFC3339, n["completedAt"].(string))
+							detail.FinishedAt = t
+						}
+					} else if typeName == "StatusContext" {
+						detail.Name = n["context"].(string)
+						detail.Status = "COMPLETED"
+						state := strings.ToUpper(n["state"].(string))
+						switch state {
+						case checkStatePending:
+							detail.Status = checkStatusInProgress
+						case checkStateFailure, checkStateError:
+							detail.Conclusion = checkConclusionFailure
+						case "SUCCESS":
+							detail.Conclusion = "SUCCESS"
+						}
+						if n["createdAt"] != nil {
+							t, _ := time.Parse(time.RFC3339, n["createdAt"].(string))
+							detail.StartedAt = t
+							detail.FinishedAt = t
+						}
+					}
+
+					// Skip stackit lock check as in REST implementation
+					if detail.Name == stackitLockCheckName {
+						continue
+					}
+
+					if detail.Status == "QUEUED" || detail.Status == checkStatusInProgress {
+						hasPending = true
+					}
+					if detail.Conclusion == checkConclusionFailure || detail.Conclusion == checkConclusionCanceled || detail.Conclusion == checkConclusionTimedOut || detail.Conclusion == checkConclusionActionRequired {
+						hasFailing = true
+					}
+					checks = append(checks, detail)
+				}
+			}
+		}
+
+		results[branchName] = &CheckStatus{
+			Passing: !hasFailing,
+			Pending: hasPending,
+			Checks:  checks,
+		}
+	}
+
+	return results, nil
 }
