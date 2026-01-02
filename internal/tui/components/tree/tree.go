@@ -63,6 +63,8 @@ type RenderOptions struct {
 	HideStats         bool
 	SelectedBranch    string
 	Collapsed         map[string]bool
+	SearchQuery       string              // Search query for filtering
+	SearchMatches     map[string]bool     // Branch name -> whether it matches search
 }
 
 // StackTreeRenderer renders branch trees with annotations
@@ -151,6 +153,8 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		selectedBranch:    opts.SelectedBranch,
 		collapsed:         opts.Collapsed,
 		currentBranch:     r.currentBranch,
+		searchQuery:       opts.SearchQuery,
+		searchMatches:     opts.SearchMatches,
 	}
 
 	outputDeep := [][]RenderedBranch{
@@ -191,6 +195,8 @@ type treeRenderArgs struct {
 	selectedBranch    string
 	collapsed         map[string]bool
 	currentBranch     string
+	searchQuery       string
+	searchMatches     map[string]bool
 }
 
 func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []RenderedBranch {
@@ -244,6 +250,8 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 			selectedBranch:    args.selectedBranch,
 			collapsed:         args.collapsed,
 			currentBranch:     args.currentBranch,
+			searchQuery:       args.searchQuery,
+			searchMatches:     args.searchMatches,
 		})
 		result = append(result, childBranches...)
 	}
@@ -305,9 +313,11 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 			parentScopes:      args.parentScopes,
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
-			selectedBranch:    args.selectedBranch,
+			selectedBranch:     args.selectedBranch,
 			collapsed:         args.collapsed,
 			currentBranch:     args.currentBranch,
+			searchQuery:       args.searchQuery,
+			searchMatches:     args.searchMatches,
 		})
 		result = append(result, branchData...)
 	}
@@ -465,6 +475,16 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	isClosed := annotation.PRState == PRStateClosed
 	isDim := isMerged || isClosed
 
+	// Check if branch matches search (if search is active)
+	matchesSearch := true
+	if args.searchMatches != nil {
+		if match, ok := args.searchMatches[args.branchName]; ok {
+			matchesSearch = match
+		}
+	}
+	// Note: We don't set isDim for non-matching search results because we want
+	// them to render in single-line mode, not the merged/closed 2-line format
+
 	// Build prefix for indentation
 	var prefixBuilder strings.Builder
 	for i := 0; i < args.indentLevel; i++ {
@@ -514,6 +534,10 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		styleObj = styleObj.Foreground(lipgloss.Color("8"))
 		parentStyle = parentStyle.Foreground(lipgloss.Color("8"))
 	}
+	// Also dim style for non-matching search results
+	if !matchesSearch && args.searchQuery != "" {
+		styleObj = styleObj.Foreground(lipgloss.Color("8"))
+	}
 
 	// TRUNK: minimal single line
 	if isTrunk {
@@ -521,6 +545,8 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		coloredBranchName := style.ColorDim(branchName)
 		if isSelected {
 			coloredBranchName = style.Selection().Render(branchName)
+		} else if !matchesSearch && args.searchQuery != "" {
+			coloredBranchName = style.ColorDim(branchName)
 		}
 		return []string{prefix + styleObj.Render(symbol) + " " + coloredBranchName}
 	}
@@ -530,6 +556,10 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		dimLine := prefix + styleObj.Render(symbol) + " " + style.ColorDim(args.branchName)
 		if annotation.ExplicitScope != "" {
 			dimLine += " " + style.ColorDim("["+annotation.ExplicitScope+"]")
+		}
+		// In single line mode, don't add trailing spacer
+		if args.singleLine {
+			return []string{dimLine}
 		}
 		return []string{
 			dimLine,
@@ -545,6 +575,9 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	if isSelected {
 		coloredBranchName = style.Selection().Render(branchName)
+	} else if !matchesSearch && args.searchQuery != "" {
+		// Gray out non-matching branches
+		coloredBranchName = style.ColorDim(branchName)
 	}
 
 	// Add scope (colored to match tree)
