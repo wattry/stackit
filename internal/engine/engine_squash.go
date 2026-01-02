@@ -48,8 +48,6 @@ func (e *engineImpl) SquashCurrentBranch(ctx context.Context, opts SquashOptions
 		return fmt.Errorf("failed to get commit range: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Squash branch=%s parentRev=%s headRev=%s range=%v\n", branchName, parentBranchRevision, branchRevision, commitSHAs)
-
 	// Check if there are commits to squash
 	if len(commitSHAs) == 0 {
 		return fmt.Errorf("no commits to squash")

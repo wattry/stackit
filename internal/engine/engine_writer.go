@@ -165,7 +165,9 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 
 	// Delete git branch
 	if err := e.git.DeleteBranch(ctx, branch.GetName()); err != nil {
-		return fmt.Errorf("failed to delete branch: %w", err)
+		if !git.IsBranchNotFoundError(err) {
+			return fmt.Errorf("failed to delete branch: %w", err)
+		}
 	}
 
 	// Delete metadata

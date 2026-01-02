@@ -217,7 +217,7 @@ func ShouldDeleteBranch(ctx context.Context, branchName string, eng engine.Engin
 }
 
 // ShouldDeleteBranchCached checks if a branch should be deleted using pre-fetched metadata and revisions
-func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng engine.Engine, force bool, meta *git.Meta, revisions map[string]string) (bool, string) {
+func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng engine.Engine, force bool, meta *git.Meta, revisions map[string]string, mergedBranches map[string]bool) (bool, string) {
 	// 1. Check PR info from cached metadata
 	if meta != nil && meta.PrInfo != nil {
 		const (
@@ -243,8 +243,7 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng engine
 
 	// 2. Check if merged into trunk
 	trunkName := eng.Trunk().GetName()
-	merged, err := eng.Git().IsMerged(ctx, branchName, trunkName)
-	if err == nil && merged {
+	if mergedBranches != nil && mergedBranches[branchName] {
 		return true, fmt.Sprintf("%s is merged into %s", branchName, trunkName)
 	}
 

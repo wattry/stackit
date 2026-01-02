@@ -1,7 +1,9 @@
 package git
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 )
 
 // CommandError represents an error from a git command execution
@@ -43,4 +45,16 @@ func NewCommandError(command string, args []string, stdout, stderr string, err e
 		Stderr:  stderr,
 		Err:     err,
 	}
+}
+
+// IsBranchNotFoundError returns true if the error indicates that a branch was not found
+func IsBranchNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ce *CommandError
+	if errors.As(err, &ce) {
+		return strings.Contains(ce.Stderr, "not found") || strings.Contains(ce.Stderr, "does not exist")
+	}
+	return false
 }
