@@ -50,6 +50,11 @@ type LogModel struct {
 	collapsed      map[string]bool
 	canceled       bool
 
+	// Search state
+	searchQuery   string
+	inSearchMode  bool
+	searchMatches map[string]bool // Branch name -> whether it matches search
+
 	// Options
 	style         string
 	reverse       bool
@@ -68,6 +73,7 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		showUntracked: opts.ShowUntracked,
 		exclude:       opts.Exclude,
 		collapsed:     make(map[string]bool),
+		searchMatches: make(map[string]bool),
 		mode:          LogModeView,
 	}
 
@@ -140,6 +146,39 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle search mode input
+		if m.inSearchMode {
+			switch msg.String() {
+			case KeyEsc:
+				// Exit search mode
+				m.inSearchMode = false
+				m.searchQuery = ""
+				m.updateSearchMatches()
+				m.renderTree()
+			case "backspace":
+				if len(m.searchQuery) > 0 {
+					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					m.updateSearchMatches()
+					m.renderTree()
+					m.moveToFirstMatch()
+				}
+			case KeyEnter:
+				// Exit search mode on enter (but don't select)
+				m.inSearchMode = false
+				m.renderTree()
+			default:
+				// Handle regular character input
+				if len(msg.Runes) > 0 {
+					m.searchQuery += string(msg.Runes)
+					m.updateSearchMatches()
+					m.renderTree()
+					m.moveToFirstMatch()
+				}
+			}
+			return m, tea.Batch(cmds...)
+		}
+
+		// Normal mode key handling
 		switch msg.String() {
 		case KeyQuit, KeyCtrlC:
 			m.canceled = true
@@ -150,6 +189,14 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			return m, tea.Quit
+		case "/":
+			// Enter search mode (only in select mode)
+			if m.mode == LogModeSelect {
+				m.inSearchMode = true
+				m.searchQuery = ""
+				m.updateSearchMatches()
+				m.renderTree()
+			}
 		case KeyUp:
 			if m.selectedIndex > 0 {
 				m.selectedIndex--
@@ -201,6 +248,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.renderer = NewStackTreeRendererWithStrategy(m.engine, engine.SortStrategySmart, filter)
 		m.renderer.SetAnnotations(msg.annotations)
+		m.updateSearchMatches()
 		m.renderTree()
 
 		// Initial selection
@@ -241,6 +289,8 @@ func (m *LogModel) renderTree() {
 		SelectedBranch: m.selectedBranch,
 		Collapsed:      m.collapsed,
 		SingleLine:     m.mode == LogModeSelect,
+		SearchQuery:    m.searchQuery,
+		SearchMatches:  m.searchMatches,
 	}
 	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
 
@@ -273,6 +323,42 @@ func (m *LogModel) ensureVisible() {
 	}
 }
 
+// updateSearchMatches updates the searchMatches map based on current searchQuery
+func (m *LogModel) updateSearchMatches() {
+	m.searchMatches = make(map[string]bool)
+	if m.searchQuery == "" {
+		// All branches match when search is empty - populate from engine
+		allBranches := m.engine.AllBranches()
+		for _, b := range allBranches {
+			m.searchMatches[b.GetName()] = true
+		}
+		return
+	}
+
+	query := strings.ToLower(m.searchQuery)
+	allBranches := m.engine.AllBranches()
+	for _, b := range allBranches {
+		branchName := strings.ToLower(b.GetName())
+		m.searchMatches[b.GetName()] = strings.Contains(branchName, query)
+	}
+}
+
+// moveToFirstMatch moves selection to the first matching branch
+func (m *LogModel) moveToFirstMatch() {
+	if m.searchQuery == "" {
+		return
+	}
+
+	for i, b := range m.branches {
+		if m.searchMatches[b.Name] {
+			m.selectedIndex = i
+			m.selectedBranch = b.Name
+			m.ensureVisible()
+			return
+		}
+	}
+}
+
 // View renders the bubbletea model
 func (m *LogModel) View() string {
 	if !m.ready || m.renderer == nil {
@@ -284,7 +370,11 @@ func (m *LogModel) View() string {
 	help := "'q' to quit, 'enter' to expand/collapse, 'up/down' to scroll"
 	if m.mode == LogModeSelect {
 		title = "Select Branch"
-		help = "'esc' to cancel, 'enter' to select, 'space' to expand/collapse, 'up/down' to scroll"
+		if m.inSearchMode {
+			help = fmt.Sprintf("Search: /%s (esc to exit, enter to confirm)", m.searchQuery)
+		} else {
+			help = "'/' to search, 'esc' to cancel, 'enter' to select, 'space' to expand/collapse, 'up/down' to scroll"
+		}
 	}
 
 	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.engine.AllBranches()), help))
