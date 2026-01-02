@@ -40,6 +40,8 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	}
 
 	// Add notice if present in PrInfo
+	// Error is intentionally ignored: if PR info cannot be retrieved, we simply skip
+	// adding the notice section, which is an optional enhancement to the footer.
 	prInfo, _ := eng.GetBranch(branch).GetPrInfo()
 	if prInfo != nil {
 		if prInfo.MergeBranch() != "" {

@@ -59,7 +59,7 @@ func Action(ctx *app.Context, branchName string) error {
 		if err == nil && confirm {
 			submitOpts := submit.Options{
 				Branch:  branchName,
-				Stack:   false, // We only want to submit the downstack we're locking
+				Stack:   false, // Stack: false submits downstack (ancestors + current), matching what we're locking
 				Confirm: false,
 			}
 			handler := &lockSubmitHandler{splog: splog}
