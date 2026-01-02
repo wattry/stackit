@@ -159,9 +159,10 @@ func runAgentInstall(runner git.Runner, local, force bool) error {
 
 	// Write workflow files
 	workflowFiles := []string{
-		"fix-absorb.md",
-		"conflict-resolution.md",
 		"absorb-conflict.md",
+		"conflict-resolution.md",
+		"fix-absorb.md",
+		"stack-fold.md",
 	}
 
 	for _, filename := range workflowFiles {
@@ -210,13 +211,14 @@ func runAgentInstall(runner git.Runner, local, force bool) error {
 
 	// Write slash command files
 	commands := []string{
-		"stack-status.md",
-		"stack-create.md",
-		"stack-submit.md",
 		"stack-absorb.md",
+		"stack-create.md",
 		"stack-fix.md",
-		"stack-sync.md",
+		"stack-fold.md",
 		"stack-restack.md",
+		"stack-status.md",
+		"stack-submit.md",
+		"stack-sync.md",
 	}
 
 	for _, filename := range commands {
@@ -260,24 +262,25 @@ func runAgentInstall(runner git.Runner, local, force bool) error {
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/SKILL.md\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/reference.md\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/commands/ (4 reference files)\n", getDisplayPath(baseDir, local))
-	fmt.Printf("✓ Created %s/.claude/skills/stackit/workflows/ (3 workflow guides)\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/skills/stackit/workflows/ (4 workflow guides)\n", getDisplayPath(baseDir, local))
 	fmt.Printf("✓ Created %s/.claude/skills/stackit/scripts/ (2 utility scripts)\n", getDisplayPath(baseDir, local))
 	fmt.Println()
 	fmt.Println("Slash commands:")
-	fmt.Printf("✓ Created %s/.claude/commands/stack-*.md (7 commands)\n", getDisplayPath(baseDir, local))
+	fmt.Printf("✓ Created %s/.claude/commands/stack-*.md (8 commands)\n", getDisplayPath(baseDir, local))
 	fmt.Println()
 	fmt.Println("Cursor integration:")
 	fmt.Printf("✓ Created %s/.cursor/rules/stackit.md\n", getDisplayPath(baseDir, local))
 
 	fmt.Println()
 	fmt.Println("Available Claude Code commands:")
-	fmt.Println("  /stack-status  - View stack state and health")
-	fmt.Println("  /stack-create  - Create branch with auto-naming")
-	fmt.Println("  /stack-submit  - Submit PRs with generated descriptions")
 	fmt.Println("  /stack-absorb  - Intelligently absorb changes into commits")
+	fmt.Println("  /stack-create  - Create branch with auto-naming")
 	fmt.Println("  /stack-fix     - Diagnose and fix stack issues")
-	fmt.Println("  /stack-sync    - Sync with trunk and cleanup")
+	fmt.Println("  /stack-fold    - Fold granular branches into parents")
 	fmt.Println("  /stack-restack - Rebase all branches in stack")
+	fmt.Println("  /stack-status  - View stack state and health")
+	fmt.Println("  /stack-submit  - Submit PRs with generated descriptions")
+	fmt.Println("  /stack-sync    - Sync with trunk and cleanup")
 
 	if !local {
 		fmt.Println()

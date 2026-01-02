@@ -17,10 +17,18 @@ type InfoOptions struct {
 	Diff       bool
 	Patch      bool
 	Stat       bool
+	Stack      bool
+	JSON       bool
 }
 
-// InfoAction displays information about a branch
+// InfoAction displays information about a branch or the entire stack
 func InfoAction(ctx *app.Context, opts InfoOptions) error {
+	if opts.Stack {
+		return StackInfoAction(ctx, StackInfoOptions{
+			JSON: opts.JSON,
+		})
+	}
+
 	eng := ctx.Engine
 	splog := ctx.Splog
 
@@ -78,6 +86,11 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	if !isTrunk && !branch.IsBranchUpToDate() {
 		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
 	}
+
+	if scope := branch.GetScope(); !scope.IsNone() {
+		coloredBranchName += " " + style.ColorScope(scope.String())
+	}
+
 	outputLines = append(outputLines, coloredBranchName)
 
 	commitDate, err := branch.GetCommitDate()
