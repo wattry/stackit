@@ -113,44 +113,12 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 			// Branch is not being deleted
 			// If its parent IS being deleted, update parent
 			branch := eng.GetBranch(branchName)
-			parent := branch.GetParent()
-			parentName := ""
-			if parent == nil {
-				parentName = eng.Trunk().GetName()
-			} else {
-				parentName = parent.GetName()
+			newParentName, err := reparentBranchIfNecessary(c, branch, branchesToDelete, eng, splog)
+			if err != nil {
+				return nil, err
 			}
-
-			// Find nearest ancestor that isn't being deleted
-			newParentName := parentName
-			for {
-				if _, isDeleting := branchesToDelete[newParentName]; !isDeleting {
-					break
-				}
-				newParentBranch := eng.GetBranch(newParentName)
-				ancestor := newParentBranch.GetParent()
-				if ancestor == nil {
-					newParentName = eng.Trunk().GetName()
-					break
-				}
-				newParentName = ancestor.GetName()
-			}
-
-			// If parent changed, update it
-			if newParentName != parentName {
-				if err := eng.SetParent(c, branch, eng.GetBranch(newParentName)); err != nil {
-					return nil, fmt.Errorf("failed to set parent for %s: %w", branchName, err)
-				}
-				splog.Info("Set parent of %s to %s.",
-					style.ColorBranchName(branchName, false),
-					style.ColorBranchName(newParentName, false))
+			if newParentName != "" {
 				branchesWithNewParents = append(branchesWithNewParents, branchName)
-
-				// Remove this branch as a blocker for its old parent
-				if blockers, ok := branchesToDelete[parentName]; ok {
-					delete(blockers, branchName)
-					branchesToDelete[parentName] = blockers
-				}
 			}
 		}
 
@@ -161,6 +129,60 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 	return &CleanBranchesResult{
 		BranchesWithNewParents: branchesWithNewParents,
 	}, nil
+}
+
+// reparentBranchIfNecessary updates a branch's parent if its current parent is being deleted.
+// Returns the name of the new parent if changed, or empty string if not changed.
+func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, branchesToDelete map[string]map[string]bool, eng engine.Engine, splog *tui.Splog) (string, error) {
+	branchName := branch.GetName()
+	parentName := getParentName(branch, eng)
+
+	// Find nearest ancestor that isn't being deleted
+	newParentName := findNonDeletingAncestor(parentName, branchesToDelete, eng)
+
+	// If parent changed, update it
+	if newParentName != parentName {
+		if err := eng.SetParent(ctx, branch, eng.GetBranch(newParentName)); err != nil {
+			return "", fmt.Errorf("failed to set parent for %s: %w", branchName, err)
+		}
+		splog.Info("Set parent of %s to %s.",
+			style.ColorBranchName(branchName, false),
+			style.ColorBranchName(newParentName, false))
+
+		// Remove this branch as a blocker for its old parent
+		if blockers, ok := branchesToDelete[parentName]; ok {
+			delete(blockers, branchName)
+			branchesToDelete[parentName] = blockers
+		}
+		return newParentName, nil
+	}
+
+	return "", nil
+}
+
+// getParentName returns the name of the parent branch or trunk if no parent exists
+func getParentName(branch engine.Branch, eng engine.Engine) string {
+	parent := branch.GetParent()
+	if parent == nil {
+		return eng.Trunk().GetName()
+	}
+	return parent.GetName()
+}
+
+// findNonDeletingAncestor finds the nearest ancestor that is not marked for deletion
+func findNonDeletingAncestor(startParent string, branchesToDelete map[string]map[string]bool, eng engine.Engine) string {
+	current := startParent
+	for {
+		if _, isDeleting := branchesToDelete[current]; !isDeleting {
+			return current
+		}
+		branch := eng.GetBranch(current)
+		parent := branch.GetParent()
+		if parent == nil {
+			return eng.Trunk().GetName()
+		}
+		current = parent.GetName()
+	}
 }
 
 // greedilyDeleteUnblockedBranches deletes branches that have no blockers
@@ -184,13 +206,7 @@ func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[s
 		for i, name := range batchNames {
 			branch := eng.GetBranch(name)
 			branches[i] = branch
-
-			parent := branch.GetParent()
-			if parent == nil {
-				parents[name] = eng.Trunk().GetName()
-			} else {
-				parents[name] = parent.GetName()
-			}
+			parents[name] = getParentName(branch, eng)
 		}
 
 		// Batch delete branches from engine
