@@ -453,8 +453,8 @@ func (r *runner) CheckoutDetached(ctx context.Context, revision string) error {
 	return nil
 }
 
-func (r *runner) UpdateBranchRef(branchName, revision string) error {
-	_, err := r.runGitCommandWithContextInternal(context.Background(), "update-ref", "refs/heads/"+branchName, revision)
+func (r *runner) UpdateBranchRef(ctx context.Context, branchName, revision string) error {
+	_, err := r.runGitCommandWithContextInternal(ctx, "update-ref", "refs/heads/"+branchName, revision)
 	if err != nil {
 		return fmt.Errorf("failed to update branch ref: %w", err)
 	}
@@ -725,8 +725,8 @@ func (r *runner) PushBranch(ctx context.Context, branchName, remote string, opts
 
 func (r *runner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error) {
 	// Use detached HEAD to avoid "already used by worktree" errors
-	// git rebase --onto <upstream> <oldUpstream> <branchName>
-	_, err := r.runGitCommandWithContextInternal(ctx, "rebase", "--onto", upstream, oldUpstream, branchName)
+	// We use branchName~0 to force a detached checkout of the branch tip
+	_, err := r.runGitCommandWithContextInternal(ctx, "rebase", "--onto", upstream, oldUpstream, branchName+"~0")
 	if err != nil {
 		if r.IsRebaseInProgress(ctx) {
 			return RebaseConflict, nil
@@ -734,7 +734,17 @@ func (r *runner) Rebase(ctx context.Context, branchName, upstream, oldUpstream s
 		// Abort rebase if it failed for other reasons
 		_, _ = r.runGitCommandWithContextInternal(ctx, "rebase", "--abort")
 
-		return RebaseConflict, nil
+		return RebaseConflict, err
+	}
+
+	// Since we rebased in detached HEAD, we must manually update the branch ref
+	newRev, err := r.GetCurrentRevision(ctx)
+	if err != nil {
+		return RebaseConflict, fmt.Errorf("failed to get revision after rebase: %w", err)
+	}
+
+	if err := r.UpdateBranchRef(ctx, branchName, newRev); err != nil {
+		return RebaseConflict, fmt.Errorf("failed to update branch ref %s: %w", branchName, err)
 	}
 
 	return RebaseDone, nil
@@ -743,7 +753,7 @@ func (r *runner) Rebase(ctx context.Context, branchName, upstream, oldUpstream s
 func (r *runner) RebaseContinueNoEdit(ctx context.Context) (RebaseResult, error) {
 	_, err := r.RunGitCommandWithEnv(ctx, []string{"GIT_EDITOR=true"}, "rebase", "--continue")
 	if err != nil {
-		if strings.Contains(err.Error(), "conflict") || strings.Contains(err.Error(), "patch failed") {
+		if r.IsRebaseInProgress(ctx) {
 			return RebaseConflict, nil
 		}
 		return RebaseConflict, err

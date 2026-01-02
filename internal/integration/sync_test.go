@@ -109,15 +109,6 @@ func TestSync(t *testing.T) {
 			CreateBranch(mergeBranch).
 			CommitChange("merge-file", "merged content")
 
-		// Track the merge branch (normally merge branches aren't tracked,
-		// but for the test to work with current clean_branches logic, we need to track it)
-		// TODO: Fix clean_branches to handle untracked branches that should be deleted
-		parentName := mainBranchName
-		err := eng.Git().WriteMetadata(mergeBranch, &git.Meta{
-			ParentBranchName: &parentName,
-		})
-		require.NoError(t, err)
-
 		// Mark merge branch as merged
 		meta, err := eng.Git().ReadMetadata(mergeBranch)
 		require.NoError(t, err)

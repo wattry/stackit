@@ -112,7 +112,7 @@ type BranchMutations interface {
 	DeleteBranches(ctx context.Context, branches []Branch) ([]string, error)
 	CheckoutBranch(ctx context.Context, branch Branch) error
 	CreateAndCheckoutBranch(ctx context.Context, branch Branch) error
-	UpdateBranchRef(branchName, revision string) error
+	UpdateBranchRef(ctx context.Context, branchName, revision string) error
 	CreateBranch(ctx context.Context, branchName string, startPoint string) error
 	ResetHard(ctx context.Context, revision string) error
 	ResetMerge(ctx context.Context, revision string) error

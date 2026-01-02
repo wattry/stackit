@@ -5,6 +5,7 @@ package scenario
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
@@ -59,6 +60,7 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 		Debug:       os.Getenv("DEBUG") != "",
 		Quiet:       true,
 	})
+	ctx.Splog = tui.NewSplogToWriter(io.Discard)
 	ctx.RepoRoot = scene.Dir
 
 	return &Scenario{

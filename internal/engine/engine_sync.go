@@ -137,7 +137,7 @@ func (e *engineImpl) restackBranch(
 		}
 		if localSha != remoteSha {
 			// Update the branch reference to match remote
-			if err := e.git.UpdateBranchRef(branchName, remoteSha); err != nil {
+			if err := e.git.UpdateBranchRef(ctx, branchName, remoteSha); err != nil {
 				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to update branch ref for frozen branch %s: %w", branchName, err)
 			}
 
@@ -293,7 +293,7 @@ func (e *engineImpl) restackBranch(
 			Reparented:        reparented,
 			OldParent:         oldParent,
 			NewParent:         parent,
-		}, err
+		}, fmt.Errorf("rebase failed for %s onto %s (old base %s): %w", branchName, parent, oldParentRev, err)
 	}
 
 	if gitResult == git.RebaseConflict {
@@ -319,7 +319,7 @@ func (e *engineImpl) restackBranch(
 	}
 
 	// Update the branch reference to the new rebased commit
-	err = e.git.UpdateBranchRef(branchName, newRev)
+	err = e.git.UpdateBranchRef(ctx, branchName, newRev)
 	if err != nil {
 		return RestackBranchResult{
 			Result:            RestackConflict,
@@ -509,7 +509,7 @@ func (e *engineImpl) ContinueRebase(ctx context.Context, branchName string, reba
 	}
 
 	// Update the branch reference to the new rebased commit
-	err = e.git.UpdateBranchRef(branchName, newRev)
+	err = e.git.UpdateBranchRef(ctx, branchName, newRev)
 	if err != nil {
 		return ContinueRebaseResult{BranchName: branchName}, fmt.Errorf("failed to update branch reference %s: %w", branchName, err)
 	}

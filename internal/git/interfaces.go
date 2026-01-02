@@ -58,7 +58,7 @@ type BranchWriter interface {
 	CreateBranchForce(ctx context.Context, branchName, revision string) error
 	DeleteBranch(ctx context.Context, branchName string) error
 	RenameBranch(ctx context.Context, oldName, newName string) error
-	UpdateBranchRef(branchName, revision string) error
+	UpdateBranchRef(ctx context.Context, branchName, revision string) error
 }
 
 // CommitReader provides read access to commit and revision information.

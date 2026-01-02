@@ -270,8 +270,8 @@ func (e *engineImpl) CheckoutBranch(ctx context.Context, branch Branch) error {
 }
 
 // UpdateBranchRef updates a branch reference to point to a new revision
-func (e *engineImpl) UpdateBranchRef(branchName, revision string) error {
-	return e.git.UpdateBranchRef(branchName, revision)
+func (e *engineImpl) UpdateBranchRef(ctx context.Context, branchName, revision string) error {
+	return e.git.UpdateBranchRef(ctx, branchName, revision)
 }
 
 // CreateAndCheckoutBranch creates and checks out a new branch
