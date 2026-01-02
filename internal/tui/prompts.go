@@ -3,18 +3,15 @@ package tui
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	lipgloss "github.com/charmbracelet/lipgloss"
 
-	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui/components/tree"
-	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -113,7 +110,7 @@ func (m textInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.done = true
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Cancel):
-			m.err = fmt.Errorf("canceled")
+			m.err = errors.ErrCanceled
 			m.done = true
 			return m, tea.Quit
 		}
@@ -152,7 +149,7 @@ func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.done = true
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Cancel):
-			m.err = fmt.Errorf("canceled")
+			m.err = errors.ErrCanceled
 			m.done = true
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Yes):
@@ -294,7 +291,7 @@ func (m promptListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
-			m.err = fmt.Errorf("canceled")
+			m.err = errors.ErrCanceled
 			return m, tea.Quit
 		}
 		if msg.String() == "enter" {
@@ -409,140 +406,4 @@ func PromptSelect(title string, options []SelectOption, defaultIndex int) (strin
 type BranchChoice struct {
 	Display string // What to show (may include tree visualization)
 	Value   string // Actual branch name
-}
-
-// PromptBranchSelection prompts the user to select a branch
-func PromptBranchSelection(message string, choices []BranchChoice, initialIndex int) (string, error) {
-	if err := checkInteractiveAllowed(); err != nil {
-		return "", err
-	}
-
-	items := make([]list.Item, len(choices))
-	for i, choice := range choices {
-		items[i] = listItem{title: choice.Display, value: choice.Value}
-	}
-
-	// Use a custom delegate that doesn't add padding/styling that might break tree visualization
-	d := list.NewDefaultDelegate()
-	d.ShowDescription = false
-	d.SetHeight(1)
-	d.SetSpacing(0)
-
-	l := list.New(items, d, 0, 0)
-	l.Title = message
-	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(true)
-	l.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-
-	if initialIndex >= 0 && initialIndex < len(choices) {
-		l.Select(initialIndex)
-	}
-
-	m := promptListModel{list: l}
-
-	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
-	model, err := p.Run()
-	if err != nil {
-		return "", err
-	}
-
-	if finalModel, ok := model.(promptListModel); ok {
-		if finalModel.err != nil {
-			return "", finalModel.err
-		}
-		return finalModel.selected, nil
-	}
-
-	return "", fmt.Errorf("unexpected model type")
-}
-
-// PromptBranchCheckout shows an interactive branch selector for checkout.
-// It takes a list of branches and the engine context, formats them using tree rendering,
-// and presents them for selection.
-func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (string, error) {
-	if len(branches) == 0 {
-		return "", fmt.Errorf("no branches available to checkout")
-	}
-
-	// Create tree renderer
-	currentBranch := eng.CurrentBranch()
-	trunk := eng.Trunk()
-	renderer := NewStackTreeRenderer(eng)
-
-	// Add annotations for all branches
-	annotations := make(map[string]tree.BranchAnnotation)
-	for _, branch := range branches {
-		annotations[branch.GetName()] = GetBranchAnnotation(eng, branch)
-	}
-	renderer.SetAnnotations(annotations)
-
-	// Calculate depth for each branch to create proper tree indentation
-	branchDepth := make(map[string]int)
-	branchDepth[trunk.GetName()] = 0
-
-	// Build depth map by traversing from trunk
-	var calculateDepth func(branchName string, depth int)
-	calculateDepth = func(branchName string, depth int) {
-		branch := eng.GetBranch(branchName)
-		children := branch.GetChildren()
-		for _, child := range children {
-			branchDepth[child.GetName()] = depth + 1
-			calculateDepth(child.GetName(), depth+1)
-		}
-	}
-	calculateDepth(trunk.GetName(), 0)
-
-	choices := make([]BranchChoice, 0, len(branches))
-	initialIndex := -1
-
-	for i, branch := range branches {
-		isCurrent := currentBranch != nil && branch.GetName() == currentBranch.GetName()
-		if isCurrent {
-			initialIndex = i
-		}
-
-		// Get depth for indentation
-		depth := branchDepth[branch.GetName()]
-
-		// Create tree line with proper indentation
-		indent := strings.Repeat("  ", depth)
-		var symbol string
-		if isCurrent {
-			symbol = tree.CurrentBranchSymbol
-		} else {
-			symbol = tree.BranchSymbol
-		}
-
-		// Get colored branch name
-		coloredBranchName := style.ColorBranchName(branch.GetName(), isCurrent)
-
-		// Add annotation
-		annotation := annotations[branch.GetName()]
-		coloredBranchName += renderer.FormatAnnotationColored(annotation)
-
-		// Add restack indicator if needed
-		if !eng.IsUpToDate(branch) {
-			coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
-		}
-
-		display := indent + symbol + " " + coloredBranchName
-
-		choices = append(choices, BranchChoice{
-			Display: display,
-			Value:   branch.GetName(),
-		})
-	}
-
-	// Set initial index if not found
-	if initialIndex < 0 {
-		initialIndex = len(choices) - 1
-	}
-
-	// Show interactive selector
-	selected, err := PromptBranchSelection("Checkout a branch (arrow keys to navigate, type to filter)", choices, initialIndex)
-	if err != nil {
-		return "", err
-	}
-
-	return selected, nil
 }

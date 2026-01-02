@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
@@ -18,6 +19,16 @@ import (
 
 const (
 	logStyleFull = "FULL"
+)
+
+// LogMode defines how the log is used
+type LogMode int
+
+const (
+	// LogModeView is the default view mode for browsing the log
+	LogModeView LogMode = iota
+	// LogModeSelect is the selection mode for choosing a branch
+	LogModeSelect
 )
 
 // LogModel is the bubbletea model for the interactive log
@@ -32,15 +43,18 @@ type LogModel struct {
 	ready        bool
 
 	// State
+	mode           LogMode
 	branches       []tree.RenderedBranch // Visible branches with their lines
 	selectedIndex  int
 	selectedBranch string
 	collapsed      map[string]bool
+	canceled       bool
 
 	// Options
 	style         string
 	reverse       bool
 	showUntracked bool
+	exclude       map[string]bool
 }
 
 // NewLogModel creates a new LogModel
@@ -52,37 +66,19 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		style:         opts.Style,
 		reverse:       opts.Reverse,
 		showUntracked: opts.ShowUntracked,
+		exclude:       opts.Exclude,
 		collapsed:     make(map[string]bool),
+		mode:          LogModeView,
 	}
-
-	// Default collapsing: collapse everything that is NOT on the path to current branch
-	m.initDefaultCollapsing()
 
 	return m
 }
 
-func (m *LogModel) initDefaultCollapsing() {
-	current := m.engine.CurrentBranch()
-	if current == nil {
-		return
-	}
-
-	// Build a map of branches on the path to trunk
-	onPath := make(map[string]bool)
-	curr := current
-	for curr != nil {
-		onPath[curr.GetName()] = true
-		curr = curr.GetParent()
-	}
-	onPath[m.engine.Trunk().GetName()] = true
-
-	// Collapse all branches that have children and are not on the path
-	for _, b := range m.engine.AllBranches() {
-		children := m.engine.GetChildren(b)
-		if len(children) > 0 && !onPath[b.GetName()] {
-			m.collapsed[b.GetName()] = true
-		}
-	}
+// newLogSelectModel creates a new LogModel in selection mode
+func newLogSelectModel(ctx context.Context, eng engine.Engine, ghClient github.Client, opts LogOptions) *LogModel {
+	m := NewLogModel(ctx, eng, ghClient, opts)
+	m.mode = LogModeSelect
+	return m
 }
 
 // Init initializes the bubbletea model
@@ -145,7 +141,14 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case KeyQuit, KeyCtrlC, KeyEsc:
+		case KeyQuit, KeyCtrlC:
+			m.canceled = true
+			return m, tea.Quit
+		case KeyEsc:
+			if m.mode == LogModeSelect {
+				m.canceled = true
+				return m, tea.Quit
+			}
 			return m, tea.Quit
 		case KeyUp, "k":
 			if m.selectedIndex > 0 {
@@ -161,7 +164,15 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renderTree()
 				m.ensureVisible()
 			}
-		case KeyEnter, " ":
+		case KeyEnter:
+			if m.mode == LogModeSelect {
+				return m, tea.Quit
+			}
+			if m.selectedBranch != "" {
+				m.collapsed[m.selectedBranch] = !m.collapsed[m.selectedBranch]
+				m.renderTree()
+			}
+		case " ":
 			if m.selectedBranch != "" {
 				m.collapsed[m.selectedBranch] = !m.collapsed[m.selectedBranch]
 				m.renderTree()
@@ -182,7 +193,13 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case refreshLogMsg:
 		trunk := m.engine.Trunk()
-		m.renderer = NewStackTreeRenderer(m.engine)
+		var filter func(string) bool
+		if len(m.exclude) > 0 {
+			filter = func(name string) bool {
+				return !m.exclude[name]
+			}
+		}
+		m.renderer = NewStackTreeRendererWithStrategy(m.engine, engine.SortStrategySmart, filter)
 		m.renderer.SetAnnotations(msg.annotations)
 		m.renderTree()
 
@@ -223,6 +240,7 @@ func (m *LogModel) renderTree() {
 		Reverse:        m.reverse,
 		SelectedBranch: m.selectedBranch,
 		Collapsed:      m.collapsed,
+		SingleLine:     m.mode == LogModeSelect,
 	}
 	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
 
@@ -261,12 +279,37 @@ func (m *LogModel) View() string {
 		return "Loading..."
 	}
 
-	header := style.ColorDim(fmt.Sprintf(" Stackit Log | %d branches | 'q' to quit, 'enter' to toggle, 'j/k' to scroll", len(m.engine.AllBranches())))
+	title := "Stackit Log"
+	help := "'q' to quit, 'enter' to expand/collapse, 'j/k' to scroll"
+	if m.mode == LogModeSelect {
+		title = "Select Branch"
+		help = "'esc' to cancel, 'enter' to select, 'space' to expand/collapse, 'j/k' to scroll"
+	}
+
+	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.engine.AllBranches()), help))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
+		"",
 		m.viewport.View(),
 	)
+}
+
+// PromptLogSelect runs the interactive log in selection mode and returns the selected branch name
+func PromptLogSelect(ctx context.Context, eng engine.Engine, ghClient github.Client, opts LogOptions) (string, error) {
+	m := newLogSelectModel(ctx, eng, ghClient, opts)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+
+	res := finalModel.(*LogModel)
+	if res.canceled {
+		return "", errors.ErrCanceled
+	}
+
+	return res.selectedBranch, nil
 }
 
 // LogOptions repeated here to avoid circular dependency if needed,
@@ -275,4 +318,5 @@ type LogOptions struct {
 	Style         string
 	Reverse       bool
 	ShowUntracked bool
+	Exclude       map[string]bool // Branches to exclude from selection
 }

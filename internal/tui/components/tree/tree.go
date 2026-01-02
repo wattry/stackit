@@ -56,6 +56,7 @@ type BranchAnnotation struct {
 type RenderOptions struct {
 	Reverse           bool
 	Short             bool
+	SingleLine        bool
 	Steps             *int
 	OmitCurrentBranch bool
 	NoStyleBranchName bool
@@ -137,6 +138,7 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 	overallIndent := 0
 	args := treeRenderArgs{
 		short:             opts.Short,
+		singleLine:        opts.SingleLine,
 		reverse:           opts.Reverse,
 		branchName:        branchName,
 		indentLevel:       0,
@@ -175,6 +177,7 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 
 type treeRenderArgs struct {
 	short             bool
+	singleLine        bool
 	reverse           bool
 	branchName        string
 	indentLevel       int
@@ -228,6 +231,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 
 		childBranches := r.getUpstackInclusiveRendered(treeRenderArgs{
 			short:             args.short,
+			singleLine:        args.singleLine,
 			reverse:           args.reverse,
 			branchName:        child,
 			indentLevel:       childIndent,
@@ -294,6 +298,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 	for _, branchName := range fullStack {
 		branchData := r.getBranchRendered(treeRenderArgs{
 			short:             args.short,
+			singleLine:        args.singleLine,
 			reverse:           args.reverse,
 			branchName:        branchName,
 			indentLevel:       args.indentLevel,
@@ -487,8 +492,6 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	if len(children) > 0 {
 		if args.collapsed != nil && args.collapsed[args.branchName] {
 			symbol = "+"
-		} else {
-			symbol = "-"
 		}
 	}
 
@@ -514,7 +517,12 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	// TRUNK: minimal single line
 	if isTrunk {
-		return []string{prefix + styleObj.Render(symbol) + " " + style.ColorDim(args.branchName)}
+		branchName := args.branchName
+		coloredBranchName := style.ColorDim(branchName)
+		if isSelected {
+			coloredBranchName = style.Selection().Render(branchName)
+		}
+		return []string{prefix + styleObj.Render(symbol) + " " + coloredBranchName}
 	}
 
 	// MERGED/CLOSED: collapsed single line, dimmed
@@ -536,7 +544,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	coloredBranchName := style.ColorBranchNameBold(branchName, isCurrent)
 
 	if isSelected {
-		coloredBranchName = style.Selection().Render(" " + branchName + " ")
+		coloredBranchName = style.Selection().Render(branchName)
 	}
 
 	// Add scope (colored to match tree)
@@ -556,6 +564,10 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	}
 
 	result = append(result, prefix+styleObj.Render(symbol)+" "+coloredBranchName)
+
+	if args.singleLine {
+		return result
+	}
 
 	// LINE 2: Summary line with PR# → Review → CI → Stats
 	branchPipe := styleObj.Render("│")
