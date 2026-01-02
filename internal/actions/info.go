@@ -78,6 +78,11 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	if !isTrunk && !branch.IsBranchUpToDate() {
 		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
 	}
+
+	if scope := branch.GetScope(); !scope.IsNone() {
+		coloredBranchName += " " + style.ColorScope(scope.String())
+	}
+
 	outputLines = append(outputLines, coloredBranchName)
 
 	commitDate, err := branch.GetCommitDate()

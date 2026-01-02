@@ -508,9 +508,9 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 			Render(" " + branchName + " ")
 	}
 
-	// Add explicit scope (colored to match tree)
-	if annotation.ExplicitScope != "" {
-		coloredBranchName += " " + style.ColorScope(annotation.ExplicitScope)
+	// Add scope (colored to match tree)
+	if annotation.Scope != "" {
+		coloredBranchName += " " + style.ColorScope(annotation.Scope)
 	}
 
 	// Actionable warnings only
@@ -681,8 +681,8 @@ func (r *StackTreeRenderer) formatAnnotation(annotation BranchAnnotation, _ bool
 func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation) string {
 	var parts []string
 
-	if annotation.ExplicitScope != "" {
-		parts = append(parts, style.ColorScope(annotation.ExplicitScope))
+	if annotation.Scope != "" {
+		parts = append(parts, style.ColorScope(annotation.Scope))
 	}
 
 	if annotation.PRAction != "" {
