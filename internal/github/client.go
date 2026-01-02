@@ -62,7 +62,7 @@ type Client interface {
 	// MergePullRequest merges a pull request
 	MergePullRequest(ctx context.Context, branchName string) error
 
-	// GetPRChecksStatus returns the check status for a PR
+	// GetPRChecksStatus returns the check status for a single branch
 	GetPRChecksStatus(ctx context.Context, branchName string) (*CheckStatus, error)
 
 	// BatchGetPRChecksStatus returns the check status for multiple branches

@@ -111,8 +111,8 @@ func (c *MockGitHubClient) MergePullRequest(_ context.Context, _ string) error {
 	return nil
 }
 
-// GetPRChecksStatus returns the check status for a PR
-func (c *MockGitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*githubpkg.CheckStatus, error) {
+// getPRChecksStatus returns the check status for a PR
+func (c *MockGitHubClient) getPRChecksStatus(_ context.Context, _ string) *githubpkg.CheckStatus {
 	// In tests, always return passing
 	return &githubpkg.CheckStatus{
 		Passing: true,
@@ -120,30 +120,29 @@ func (c *MockGitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*gith
 		Checks: []githubpkg.CheckDetail{
 			{Name: "Mock Check", Status: "COMPLETED", Conclusion: "SUCCESS"},
 		},
-	}, nil
+	}
+}
+
+// GetPRChecksStatus returns the check status for a PR
+func (c *MockGitHubClient) GetPRChecksStatus(ctx context.Context, branchName string) (*githubpkg.CheckStatus, error) {
+	statuses, err := c.BatchGetPRChecksStatus(ctx, []string{branchName})
+	if err != nil {
+		return nil, err
+	}
+	return statuses[branchName], nil
 }
 
 // BatchGetPRChecksStatus returns the check status for multiple branches
 func (c *MockGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*githubpkg.CheckStatus, error) {
 	results := make(map[string]*githubpkg.CheckStatus)
 	var mu sync.Mutex
-	var firstErr error
-	var errMu sync.Mutex
 
 	utils.RunWithWorkers(branchNames, githubpkg.MaxGitHubConcurrency, func(name string) {
-		status, err := c.GetPRChecksStatus(ctx, name)
-		if err != nil {
-			errMu.Lock()
-			if firstErr == nil {
-				firstErr = err
-			}
-			errMu.Unlock()
-			return
-		}
+		status := c.getPRChecksStatus(ctx, name)
 		mu.Lock()
 		results[name] = status
 		mu.Unlock()
 	})
 
-	return results, firstErr
+	return results, nil
 }

@@ -424,7 +424,7 @@ func validateStepPreconditions(ctx context.Context, step PlanStep, eng mergeExec
 		// Optionally check CI checks haven't changed to failing or pending
 		if !opts.Force && githubClient != nil {
 			status, err := githubClient.GetPRChecksStatus(ctx, step.BranchName)
-			if err == nil {
+			if err == nil && status != nil {
 				if !status.Passing {
 					return fmt.Errorf("PR #%d for branch %s has failing CI checks", *prInfo.Number(), step.BranchName)
 				}
@@ -798,7 +798,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 		// Report progress periodically
 		now := time.Now()
 		status, err := githubClient.GetPRChecksStatus(ctx.Context, step.BranchName)
-		if err == nil && opts.Reporter != nil && now.Sub(lastProgressReport) >= progressInterval {
+		if err == nil && status != nil && opts.Reporter != nil && now.Sub(lastProgressReport) >= progressInterval {
 			elapsed := now.Sub(startTime)
 			opts.Reporter.StepWaiting(stepIndex, elapsed, timeout, status.Checks)
 			lastProgressReport = now
@@ -807,7 +807,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 		if err != nil {
 			// Log error but continue polling (might be transient)
 			splog.Debug("Error checking CI status: %v", err)
-		} else {
+		} else if status != nil {
 			if !status.Passing {
 				// CI checks failed
 				return fmt.Errorf("CI checks failed on PR #%d (%s)", prNumber, step.BranchName)
