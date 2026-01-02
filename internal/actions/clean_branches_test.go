@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -102,5 +103,40 @@ func TestCleanBranches(t *testing.T) {
 		// Branch should still exist
 		require.True(t, s.Engine.GetBranch("branch1").IsTracked())
 		require.Empty(t, result.BranchesWithNewParents)
+	})
+
+	t.Run("deletes locked branch when merged", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Merge branch1 into main
+		s.Checkout("main").
+			RunGit("merge", "branch1")
+
+		// Rebuild to see changes
+		err := s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		// Lock the branch (simulating consolidation)
+		branch := s.Engine.GetBranch("branch1")
+		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonConsolidating)
+		require.NoError(t, err)
+		require.True(t, branch.IsLocked(), "branch should be locked")
+
+		// Mark branch1 as merged via PR info
+		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
+		err = s.Engine.UpsertPrInfo(branch, prInfo)
+		require.NoError(t, err)
+
+		// Clean should delete the locked branch
+		_, err = actions.CleanBranches(s.Context, actions.CleanBranchesOptions{
+			Force: true,
+		})
+		require.NoError(t, err)
+
+		// branch1 should be deleted despite being locked
+		require.False(t, s.Engine.GetBranch("branch1").IsTracked())
 	})
 }

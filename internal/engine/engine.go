@@ -123,7 +123,7 @@ type Engine interface {
 	SyncManager
 	SquashManager
 	SplitManager
-	AbsorbManager
+	Absorber
 	UndoManager
 	RemoteMetadataManager
 	Git() git.Runner
