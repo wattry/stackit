@@ -3,8 +3,10 @@ package stack
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	stdsync "sync"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -272,6 +274,7 @@ type InteractiveSyncHandler struct {
 	totalOps     int
 	completedOps int
 	currentPhase syncAction.Phase
+	cleanupDone  bool
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
@@ -288,6 +291,7 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 
 	h.totalOps = totalOps
 	h.completedOps = 0
+	h.cleanupDone = false
 
 	// Initialize model
 	h.model = syncComponent.NewModel(totalOps)
@@ -298,11 +302,24 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 	// Start bubbletea program
 	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 
+	// Set up signal handler to ensure terminal is restored on interrupt
+	// Use a buffered channel and only register if not already registered
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		h.Cleanup()
+		// Re-raise the signal so the process can exit properly
+		signal.Stop(sigChan)
+	}()
+
 	// Run program in background
 	go func() {
 		if _, err := h.program.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running sync TUI: %v\n", err)
 		}
+		// Ensure cleanup happens when program exits
+		h.Cleanup()
 	}()
 }
 
@@ -412,6 +429,7 @@ func (h *InteractiveSyncHandler) Complete(summary syncAction.Summary) {
 
 	// Restore splog
 	h.splog.SetQuiet(false)
+	h.cleanupDone = true
 }
 
 // formatSummary formats the sync summary
@@ -442,6 +460,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 
 	h.totalOps = branchCount
 	h.completedOps = 0
+	h.cleanupDone = false
 
 	// Initialize model for restack (reusing sync model with just restack phase)
 	h.model = syncComponent.NewModel(branchCount)
@@ -452,11 +471,24 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 	// Start bubbletea program
 	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 
+	// Set up signal handler to ensure terminal is restored on interrupt
+	// Use a buffered channel and only register if not already registered
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		h.Cleanup()
+		// Re-raise the signal so the process can exit properly
+		signal.Stop(sigChan)
+	}()
+
 	// Run program in background
 	go func() {
 		if _, err := h.program.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running restack TUI: %v\n", err)
 		}
+		// Ensure cleanup happens when program exits
+		h.Cleanup()
 	}()
 
 	// Start restack phase
@@ -534,6 +566,28 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 
 	// Restore splog
 	h.splog.SetQuiet(false)
+	h.cleanupDone = true
+}
+
+// Cleanup ensures the terminal is restored to normal mode
+// This should be called on interrupt or error to prevent leaving the terminal in raw mode
+func (h *InteractiveSyncHandler) Cleanup() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.cleanupDone {
+		return
+	}
+
+	if h.program != nil {
+		// Quit the program to restore terminal state
+		h.program.Quit()
+		h.program = nil
+	}
+
+	// Restore splog
+	h.splog.SetQuiet(false)
+	h.cleanupDone = true
 }
 
 // formatRestackSummary formats the restack summary
