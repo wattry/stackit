@@ -126,9 +126,23 @@ func Action(ctx *app.Context, opts Options) error {
 		oldParentName = oldParent.GetName()
 	}
 
+	// Capture old divergence point to preserve it after reparenting
+	// This ensures we only move the commits that belong to this branch.
+	var oldParentRev string
+	if meta, err := eng.Git().ReadMetadata(source); err == nil && meta.ParentBranchRevision != nil {
+		oldParentRev = *meta.ParentBranchRevision
+	}
+
 	// Update parent in engine
 	if err := eng.SetParent(gctx, sourceBranch, ontoBranch); err != nil {
 		return fmt.Errorf("failed to set parent: %w", err)
+	}
+
+	// Restore old divergence point if it's still a valid ancestor
+	if oldParentRev != "" {
+		if isAncestor, _ := eng.Git().IsAncestor(oldParentRev, source); isAncestor {
+			_ = eng.UpdateParentRevision(source, oldParentRev)
+		}
 	}
 
 	splog.Info("Moved %s from %s to %s.",

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -329,5 +330,38 @@ func TestMoveAction(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "onto branch must be specified")
+	})
+
+	t.Run("moves branch downstack without pulling along intermediate commits", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a clean stack: main -> branch1 -> branch2
+		s.Checkout("main").CreateBranch("branch1").Commit("commit in branch1")
+		branch1Commit, _ := s.Scene.Repo.GetRevision("HEAD")
+		s.TrackBranch("branch1", "main")
+
+		s.Checkout("branch1").CreateBranch("branch2").Commit("commit in branch2")
+		s.TrackBranch("branch2", "branch1")
+
+		// Move branch2 from branch1 to main
+		err := Action(s.Context, Options{
+			Source: "branch2",
+			Onto:   "main",
+		})
+		require.NoError(t, err)
+
+		// Verify branch2 only has its own commit relative to main
+		// branch1's commit should NOT be in branch2's history anymore
+		branch2Commits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branch2"), engine.CommitFormatSHA)
+		require.NoError(t, err)
+
+		// branch2 should only have 1 commit (the one we added to it)
+		require.Equal(t, 1, len(branch2Commits), "branch2 should only have 1 commit after move")
+		require.NotEqual(t, branch1Commit, branch2Commits[0], "branch1's commit should not be in branch2")
+
+		// Verify the commit message matches
+		branch2Messages, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branch2"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, "commit in branch2", branch2Messages[0])
 	})
 }
