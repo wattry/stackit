@@ -327,13 +327,28 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 		return fmt.Errorf("validation failed")
 	}
 
-	// If dry-run, stop here
-	if dryRun {
-		splog.Info("📋 Merge Plan:")
+	// Show plan preview
+	splog.Info("📋 Merge Plan:")
+	if mergeStrategy == merge.StrategyConsolidate {
+		// For consolidate, show a clear summary of what will happen
+		splog.Info("  1. Lock all %d branches to prevent changes", len(plan.BranchesToMerge))
+		splog.Info("  2. Create consolidation branch with all commits merged")
+		splog.Info("  3. Create consolidation PR and wait for CI")
+		splog.Info("  4. Auto-merge consolidation PR")
+		splog.Info("  5. Update original PRs with consolidation reference")
+		if len(plan.UpstackBranches) > 0 {
+			splog.Info("  6. Restack %d upstack branches onto trunk", len(plan.UpstackBranches))
+		}
+	} else {
+		// For other strategies, show step-by-step
 		for i, step := range plan.Steps {
 			splog.Info("  %d. %s", i+1, step.Description)
 		}
-		splog.Newline()
+	}
+	splog.Newline()
+
+	// If dry-run, stop here
+	if dryRun {
 		splog.Info("Dry-run mode: plan displayed above. Use without --dry-run to execute.")
 		return nil
 	}
