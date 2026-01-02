@@ -25,6 +25,12 @@ const (
 	checkStateFailure             = "FAILURE"
 	checkStateError               = "ERROR"
 	checkStatePending             = "PENDING"
+	checkStatusInProgress         = "IN_PROGRESS"
+
+	// Stackit lock check name - this check is excluded from CI status evaluation
+	// because locking PRs is part of the consolidation workflow and expected to fail
+	// during merge operations.
+	stackitLockCheckName = "Check Lock Status"
 )
 
 // CreatePROptions contains options for creating a pull request
@@ -304,7 +310,13 @@ func GetPRChecksStatus(ctx context.Context, client *github.Client, owner, repo, 
 			}
 			checkMap[detail.Name] = detail
 
-			if detail.Status == "QUEUED" || detail.Status == "IN_PROGRESS" {
+			// Skip the Stackit lock check when evaluating CI status.
+			// This check fails when PRs are locked during consolidation, which is expected.
+			if detail.Name == stackitLockCheckName {
+				continue
+			}
+
+			if detail.Status == "QUEUED" || detail.Status == checkStatusInProgress {
 				hasPending = true
 			}
 			if detail.Conclusion == checkConclusionFailure || detail.Conclusion == checkConclusionCanceled || detail.Conclusion == checkConclusionTimedOut || detail.Conclusion == checkConclusionActionRequired {
@@ -330,16 +342,27 @@ func GetPRChecksStatus(ctx context.Context, client *github.Client, owner, repo, 
 			state := strings.ToUpper(status.GetState())
 			switch state {
 			case checkStatePending:
-				detail.Status = "IN_PROGRESS"
-				hasPending = true
+				detail.Status = checkStatusInProgress
 			case checkStateFailure, checkStateError:
 				detail.Conclusion = checkConclusionFailure
-				hasFailing = true
 			case "SUCCESS":
 				detail.Conclusion = "SUCCESS"
 			}
 			// Combined status doesn't give us precise times usually in this struct
 			checkMap[name] = detail
+
+			// Skip the Stackit lock check when evaluating CI status
+			if name == stackitLockCheckName {
+				continue
+			}
+
+			// Update hasPending/hasFailing after adding to map but before continuing
+			if detail.Status == checkStatusInProgress {
+				hasPending = true
+			}
+			if detail.Conclusion == checkConclusionFailure {
+				hasFailing = true
+			}
 		}
 
 		// If no checks at all but combined status shows something, use it for overall status
