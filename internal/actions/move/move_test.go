@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -329,5 +330,128 @@ func TestMoveAction(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "onto branch must be specified")
+	})
+
+	t.Run("moves branch downstack without pulling along intermediate commits", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a clean stack: main -> branch1 -> branch2
+		s.Checkout("main").CreateBranch("branch1").Commit("commit in branch1")
+		branch1Commit, _ := s.Scene.Repo.GetRevision("HEAD")
+		s.TrackBranch("branch1", "main")
+
+		s.Checkout("branch1").CreateBranch("branch2").Commit("commit in branch2")
+		s.TrackBranch("branch2", "branch1")
+
+		// Move branch2 from branch1 to main
+		err := Action(s.Context, Options{
+			Source: "branch2",
+			Onto:   "main",
+		})
+		require.NoError(t, err)
+
+		// Verify branch2 only has its own commit relative to main
+		// branch1's commit should NOT be in branch2's history anymore
+		branch2Commits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branch2"), engine.CommitFormatSHA)
+		require.NoError(t, err)
+
+		// branch2 should only have 1 commit (the one we added to it)
+		require.Equal(t, 1, len(branch2Commits), "branch2 should only have 1 commit after move")
+		require.NotEqual(t, branch1Commit, branch2Commits[0], "branch1's commit should not be in branch2")
+
+		// Verify the commit message matches
+		branch2Messages, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branch2"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, "commit in branch2", branch2Messages[0])
+	})
+
+	t.Run("preserves PR information after move", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		// Add PR info to branch2
+		branch2 := s.Engine.GetBranch("branch2")
+		prNumber := 123
+		prInfo := engine.NewPrInfo(&prNumber, "Test PR", "Test Body", "OPEN", "branch1", "https://github.com/owner/repo/pull/123", false)
+		err := s.Engine.UpsertPrInfo(branch2, prInfo)
+		require.NoError(t, err)
+
+		// Move branch2 to main
+		err = Action(s.Context, Options{
+			Source: "branch2",
+			Onto:   "main",
+		})
+		require.NoError(t, err)
+
+		// Verify PR info is preserved
+		movedBranch2 := s.Engine.GetBranch("branch2")
+		newPrInfo, err := movedBranch2.GetPrInfo()
+		require.NoError(t, err)
+		require.NotNil(t, newPrInfo)
+		require.Equal(t, 123, *newPrInfo.Number())
+		require.Equal(t, "Test PR", newPrInfo.Title())
+	})
+
+	t.Run("moves branch after it has been amended", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		// Amend branch2
+		s.Checkout("branch2").RunGit("commit", "--amend", "--no-edit", "-m", "amended commit")
+
+		// Move branch2 to main
+		err := Action(s.Context, Options{
+			Source: "branch2",
+			Onto:   "main",
+		})
+		require.NoError(t, err)
+
+		// Verify branch2 still has 1 commit relative to main (the amended one)
+		branch2Commits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branch2"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(branch2Commits))
+		require.Equal(t, "amended commit", branch2Commits[0])
+	})
+
+	t.Run("moves branch across stacks without pulling old parent's commits", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Stack 1: main -> branchA1 -> branchA2
+		s.Checkout("main").CreateBranch("branchA1").Commit("commit A1")
+		branchA1Commit, _ := s.Scene.Repo.GetRevision("HEAD")
+		s.TrackBranch("branchA1", "main")
+
+		s.Checkout("branchA1").CreateBranch("branchA2").Commit("commit A2")
+		s.TrackBranch("branchA2", "branchA1")
+
+		// Stack 2: main -> branchB1
+		s.Checkout("main").CreateBranch("branchB1").Commit("commit B1")
+		s.TrackBranch("branchB1", "main")
+
+		// Move branchA2 from branchA1 to branchB1
+		err := Action(s.Context, Options{
+			Source: "branchA2",
+			Onto:   "branchB1",
+		})
+		require.NoError(t, err)
+
+		// Verify branchA2 only has its own commit relative to branchB1
+		// branchA1's commit should NOT be in branchA2's history relative to branchB1
+		branchA2Commits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branchA2"), engine.CommitFormatSHA)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, len(branchA2Commits), "branchA2 should only have 1 commit after move")
+		require.NotEqual(t, branchA1Commit, branchA2Commits[0], "branchA1's commit should not be in branchA2")
+
+		// Verify the commit message matches
+		branchA2Messages, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branchA2"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, "commit A2", branchA2Messages[0])
 	})
 }
