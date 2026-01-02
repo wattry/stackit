@@ -29,6 +29,7 @@ func RegisterStory(story Story) {
 
 func init() {
 	registerTreeStories()
+	registerLargeTreeStories()
 	registerSubmitStories()
 	registerMergeStories()
 	registerPromptStories()

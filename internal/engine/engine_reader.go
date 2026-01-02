@@ -166,6 +166,8 @@ func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
 	// Add ancestors if RecursiveParents is true (excluding trunk)
 	if rng.RecursiveParents {
 		current := branch.GetName()
+		// Build ancestors in reverse order (append to end) for O(n) performance
+		// Then reverse at the end to get correct order
 		ancestors := []Branch{}
 		for {
 			if current == e.trunk {
@@ -175,8 +177,12 @@ func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
 			if !ok || parent == e.trunk {
 				break
 			}
-			ancestors = append([]Branch{NewBranch(parent, e)}, ancestors...)
+			ancestors = append(ancestors, NewBranch(parent, e))
 			current = parent
+		}
+		// Reverse to get correct order (trunk -> branch)
+		for i, j := 0, len(ancestors)-1; i < j; i, j = i+1, j-1 {
+			ancestors[i], ancestors[j] = ancestors[j], ancestors[i]
 		}
 		result = append(result, ancestors...)
 	}

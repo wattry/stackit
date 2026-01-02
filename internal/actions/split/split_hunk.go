@@ -104,14 +104,19 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 		// Commit with message
 		commitMessage := defaultCommitMessage
 		var editMessage bool
-		prompt := &survey.Confirm{
-			Message: "Edit commit message?",
-			Default: true,
-		}
-		if err := survey.AskOne(prompt, &editMessage); err != nil {
-			// If user cancels, restore branch
-			_ = eng.ForceCheckoutBranch(ctx, branchToSplit)
-			return nil, fmt.Errorf("canceled")
+		if !utils.IsInteractive() {
+			// In non-interactive mode, use default message
+			editMessage = false
+		} else {
+			prompt := &survey.Confirm{
+				Message: "Edit commit message?",
+				Default: true,
+			}
+			if err := survey.AskOne(prompt, &editMessage); err != nil {
+				// If user cancels, restore branch
+				_ = eng.ForceCheckoutBranch(ctx, branchToSplit)
+				return nil, fmt.Errorf("canceled")
+			}
 		}
 
 		if editMessage {

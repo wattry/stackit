@@ -21,7 +21,7 @@ func OpenEditor(initialContent, filenamePattern string) (string, error) {
 	// to proceed with interactive defaults. This prevents hangs in non-interactive
 	// environments (like CI) while allowing tests to provide a non-interactive editor script.
 	if editor == "" {
-		if err := checkInteractiveAllowed(); err != nil {
+		if err := CheckInteractiveAllowed(); err != nil {
 			return "", err
 		}
 

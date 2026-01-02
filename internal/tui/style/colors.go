@@ -44,3 +44,11 @@ func ColorGreen(text string) string {
 		Foreground(lipgloss.Color("2")).
 		Render(text)
 }
+
+// Selection returns a style for selected items
+func Selection() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color("6")). // Cyan background
+		Foreground(lipgloss.Color("0")). // Black foreground
+		Bold(true)
+}

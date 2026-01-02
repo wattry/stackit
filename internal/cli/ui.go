@@ -7,7 +7,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/tui/dashboard"
+	"stackit.dev/stackit/internal/cli/dashboard"
 )
 
 // newUICmd creates the ui command

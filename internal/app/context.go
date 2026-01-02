@@ -75,7 +75,7 @@ func NewContextWithOptions(eng engine.Engine, opts GlobalOptions) *Context {
 	var err error
 
 	// Update global TUI interactivity
-	tui.SetInteractive(opts.Interactive)
+	utils.SetInteractive(opts.Interactive)
 
 	// Skip file logging when STACKIT_NO_LOGGING is set (e.g., during tests or CI)
 	if os.Getenv("STACKIT_NO_LOGGING") != "" {
@@ -115,7 +115,7 @@ func NewContextWithRepoRootAndOptions(eng engine.Engine, repoRoot string, opts G
 	var err error
 
 	// Update global TUI interactivity
-	tui.SetInteractive(opts.Interactive)
+	utils.SetInteractive(opts.Interactive)
 
 	// Skip file logging when STACKIT_NO_LOGGING is set (e.g., during tests or CI)
 	if os.Getenv("STACKIT_NO_LOGGING") != "" {

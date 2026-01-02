@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // splitByFileEngine is a minimal interface needed for splitting by file
@@ -112,6 +113,9 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 
 // promptForFiles shows an interactive file selector for split --by-file
 func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog *tui.Splog) ([]string, error) {
+	if !utils.IsInteractive() {
+		return nil, fmt.Errorf("file selection must be specified via pathspecs in non-interactive mode")
+	}
 	// Get the parent branch to compare against
 	parentBranchName := branchToSplit.GetParentPrecondition()
 
