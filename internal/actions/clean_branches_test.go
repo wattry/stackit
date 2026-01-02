@@ -139,4 +139,28 @@ func TestCleanBranches(t *testing.T) {
 		// branch1 should be deleted despite being locked
 		require.False(t, s.Engine.GetBranch("branch1").IsTracked())
 	})
+
+	t.Run("deletes merged child even if parent is NOT merged", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		// branch1: NOT merged
+		// branch2: IS merged
+		prInfo := testhelpers.NewTestPrInfoMerged(2, "branch1")
+		branch2 := s.Engine.GetBranch("branch2")
+		err := s.Engine.UpsertPrInfo(branch2, prInfo)
+		require.NoError(t, err)
+
+		_, err = actions.CleanBranches(s.Context, actions.CleanBranchesOptions{
+			Force: true,
+		})
+		require.NoError(t, err)
+
+		// branch2 should be deleted even though we didn't "visit" it via a deleted branch1
+		require.False(t, s.Engine.GetBranch("branch2").IsTracked())
+		require.True(t, s.Engine.GetBranch("branch1").IsTracked())
+	})
 }
