@@ -59,6 +59,9 @@ type Client interface {
 	// GetPRChecksStatus returns the check status for a PR
 	GetPRChecksStatus(ctx context.Context, branchName string) (*CheckStatus, error)
 
+	// BatchGetPRChecksStatus returns the check status for multiple branches
+	BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*CheckStatus, error)
+
 	// GetOwnerRepo returns the repository owner and name
 	GetOwnerRepo() (owner, repo string)
 }

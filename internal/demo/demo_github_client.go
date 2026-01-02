@@ -137,3 +137,16 @@ func (c *GitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*github.C
 		},
 	}, nil
 }
+
+// BatchGetPRChecksStatus returns simulated check status for multiple branches
+func (c *GitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*github.CheckStatus, error) {
+	results := make(map[string]*github.CheckStatus)
+	for _, name := range branchNames {
+		status, err := c.GetPRChecksStatus(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		results[name] = status
+	}
+	return results, nil
+}
