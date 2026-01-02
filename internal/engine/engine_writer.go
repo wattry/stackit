@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -545,6 +547,29 @@ func (e *engineImpl) AddWorktree(ctx context.Context, path string, branch string
 // RemoveWorktree removes a worktree
 func (e *engineImpl) RemoveWorktree(ctx context.Context, path string) error {
 	return e.git.RemoveWorktree(ctx, path)
+}
+
+// CreateTemporaryWorktree creates a temporary directory and adds a detached worktree
+func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (string, func(), error) {
+	tmpDir, err := os.MkdirTemp("", prefix)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+
+	worktreePath := filepath.Join(tmpDir, "worktree")
+
+	if err := e.AddWorktree(ctx, worktreePath, branch, true); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", nil, fmt.Errorf("failed to add worktree: %w", err)
+	}
+
+	cleanup := func() {
+		// Use context.Background for cleanup to ensure it runs even if ctx is canceled
+		_ = e.RemoveWorktree(context.Background(), worktreePath)
+		_ = os.RemoveAll(tmpDir)
+	}
+
+	return worktreePath, cleanup, nil
 }
 
 // setParentInternal updates parent without locking (caller must hold lock)

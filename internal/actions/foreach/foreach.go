@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	stdruntime "runtime"
 	"strings"
 	"sync"
@@ -349,28 +348,12 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	}{branchName: branch.GetName()}
 
 	// Create a temporary directory for the worktree
-	tmpDir, err := os.MkdirTemp("", "stackit-foreach-*")
+	worktreePath, cleanup, err := appCtx.Engine.CreateTemporaryWorktree(ctx, branch.GetName(), "stackit-foreach-*")
 	if err != nil {
-		res.err = fmt.Errorf("failed to create temporary directory: %w", err)
+		res.err = err
 		return res
 	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-	}()
-
-	worktreePath := filepath.Join(tmpDir, "worktree")
-
-	// Add detached worktree
-	if err := appCtx.Engine.AddWorktree(ctx, worktreePath, branch.GetName(), true); err != nil {
-		res.err = fmt.Errorf("failed to add worktree: %w", err)
-		return res
-	}
-	defer func() {
-		// Use context.Background for cleanup to ensure it runs even if ctx is canceled
-		if cleanupErr := appCtx.Engine.RemoveWorktree(context.Background(), worktreePath); cleanupErr != nil {
-			appCtx.Splog.Debug("Failed to remove worktree at %s: %v", worktreePath, cleanupErr)
-		}
-	}()
+	defer cleanup()
 
 	var output strings.Builder
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", fullCommand)

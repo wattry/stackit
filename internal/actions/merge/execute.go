@@ -3,8 +3,6 @@ package merge
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -140,21 +138,13 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		splog.Info("🔨 Creating temporary worktree for merge execution...")
 	}
 
-	// 1. Create temporary directory
-	tmpDir, err := os.MkdirTemp("", "stackit-merge-*")
+	// Create temporary worktree via engine
+	worktreePath, cleanup, err := eng.CreateTemporaryWorktree(ctx.Context, "HEAD", "stackit-merge-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+		return err
 	}
 
-	worktreePath := filepath.Join(tmpDir, "worktree")
 	splog.Debug("📁 Worktree: %s", worktreePath)
-
-	// 2. Add detached worktree
-	// Use HEAD to ensure we have a valid starting point without switching branches in main workspace
-	if err := eng.AddWorktree(ctx.Context, worktreePath, "HEAD", true); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return fmt.Errorf("failed to add worktree: %w", err)
-	}
 
 	trunk := eng.Trunk()
 
@@ -163,10 +153,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	defer func() {
 		if cleanupWorktree {
 			splog.Debug("Cleaning up worktree at %s", worktreePath)
-			if cleanupErr := eng.RemoveWorktree(context.Background(), worktreePath); cleanupErr != nil {
-				splog.Warn("Failed to remove worktree at %s: %v", worktreePath, cleanupErr)
-			}
-			_ = os.RemoveAll(tmpDir)
+			cleanup()
 		}
 
 		// If the merge succeeded, refresh the main workspace state
