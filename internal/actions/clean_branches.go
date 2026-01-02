@@ -151,42 +151,57 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 
 // greedilyDeleteUnblockedBranches deletes branches that have no blockers
 func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[string]map[string]bool, eng engine.Engine, splog *tui.Splog) {
+	// Find all initially unblocked branches
+	queue := make([]string, 0)
 	for branchName, blockers := range branchesToDelete {
 		if len(blockers) == 0 {
-			// No blockers, safe to delete
-			branch := eng.GetBranch(branchName)
-			parent := branch.GetParent()
-			parentName := ""
-			if parent == nil {
-				parentName = eng.Trunk().GetName()
-			} else {
-				parentName = parent.GetName()
+			queue = append(queue, branchName)
+		}
+	}
+
+	// Process queue iteratively
+	for len(queue) > 0 {
+		branchName := queue[0]
+		queue = queue[1:]
+
+		// Skip if already removed from deletion map
+		if _, ok := branchesToDelete[branchName]; !ok {
+			continue
+		}
+
+		branch := eng.GetBranch(branchName)
+		parent := branch.GetParent()
+		parentName := ""
+		if parent == nil {
+			parentName = eng.Trunk().GetName()
+		} else {
+			parentName = parent.GetName()
+		}
+
+		// Delete the branch
+		if err := eng.DeleteBranch(ctx, branch); err != nil {
+			splog.Debug("Failed to delete %s: %v", branchName, err)
+			// Even if deletion fails, we remove it from the map to avoid infinite loops
+			// and to allow parent deletion if appropriate (same as old behavior)
+		}
+
+		// Delete remote metadata ref (best effort, don't fail if it doesn't exist)
+		if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
+			splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
+		}
+
+		splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
+
+		// Remove from deletion map
+		delete(branchesToDelete, branchName)
+
+		// Remove this branch as a blocker for its parent
+		if parentBlockers, ok := branchesToDelete[parentName]; ok {
+			delete(parentBlockers, branchName)
+			// If parent is now unblocked, add to queue
+			if len(parentBlockers) == 0 {
+				queue = append(queue, parentName)
 			}
-
-			// Delete the branch
-			if err := eng.DeleteBranch(ctx, branch); err != nil {
-				splog.Debug("Failed to delete %s: %v", branchName, err)
-				continue
-			}
-
-			// Delete remote metadata ref (best effort, don't fail if it doesn't exist)
-			if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
-				splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
-			}
-
-			splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
-
-			// Remove from deletion map
-			delete(branchesToDelete, branchName)
-
-			// Remove this branch as a blocker for its parent
-			if parentBlockers, ok := branchesToDelete[parentName]; ok {
-				delete(parentBlockers, branchName)
-				branchesToDelete[parentName] = parentBlockers
-			}
-
-			// Recursively check if parent is now unblocked
-			greedilyDeleteUnblockedBranches(ctx, branchesToDelete, eng, splog)
 		}
 	}
 }
