@@ -32,7 +32,7 @@ type LogModel struct {
 	ready        bool
 
 	// State
-	branches       []string // Flattened list of visible branches
+	branches       []tree.RenderedBranch // Visible branches with their lines
 	selectedIndex  int
 	selectedBranch string
 	collapsed      map[string]bool
@@ -150,13 +150,15 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case KeyUp, "k":
 			if m.selectedIndex > 0 {
 				m.selectedIndex--
-				m.selectedBranch = m.branches[m.selectedIndex]
+				m.selectedBranch = m.branches[m.selectedIndex].Name
+				m.renderTree()
 				m.ensureVisible()
 			}
 		case KeyDown, "j":
 			if m.selectedIndex < len(m.branches)-1 {
 				m.selectedIndex++
-				m.selectedBranch = m.branches[m.selectedIndex]
+				m.selectedBranch = m.branches[m.selectedIndex].Name
+				m.renderTree()
 				m.ensureVisible()
 			}
 		case KeyEnter, " ":
@@ -194,7 +196,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Find index
 			for i, b := range m.branches {
-				if b == m.selectedBranch {
+				if b.Name == m.selectedBranch {
 					m.selectedIndex = i
 					break
 				}
@@ -217,44 +219,39 @@ func (m *LogModel) renderTree() {
 	}
 
 	trunk := m.engine.Trunk().GetName()
-	lines := m.renderer.RenderStack(trunk, tree.RenderOptions{
+	opts := tree.RenderOptions{
 		Reverse:        m.reverse,
 		SelectedBranch: m.selectedBranch,
 		Collapsed:      m.collapsed,
-	})
-
-	// Rebuild the visible branches list for navigation
-	// We need to parse the branch names from the rendered lines or keep track during rendering.
-	// For now, let's just do a simple traversal to find visible branches.
-	m.branches = m.getVisibleBranches(trunk)
-
-	m.viewport.SetContent(strings.Join(lines, "\n"))
-}
-
-func (m *LogModel) getVisibleBranches(root string) []string {
-	var visible []string
-	var traverse func(string)
-	traverse = func(name string) {
-		visible = append(visible, name)
-		if m.collapsed[name] {
-			return
-		}
-		children := m.engine.GetChildren(m.engine.GetBranch(name))
-		for _, child := range children {
-			traverse(child.GetName())
-		}
 	}
-	traverse(root)
+	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
 
-	return visible
+	var allLines []string
+	for _, b := range m.branches {
+		allLines = append(allLines, b.Lines...)
+	}
+
+	m.viewport.SetContent(strings.Join(allLines, "\n"))
 }
 
 func (m *LogModel) ensureVisible() {
-	// Simple viewport scrolling to keep selected index visible
-	if m.selectedIndex < m.viewport.YOffset {
-		m.viewport.YOffset = m.selectedIndex
-	} else if m.selectedIndex >= m.viewport.YOffset+m.viewport.Height {
-		m.viewport.YOffset = m.selectedIndex - m.viewport.Height + 1
+	if m.selectedIndex < 0 || m.selectedIndex >= len(m.branches) {
+		return
+	}
+
+	// Calculate the line offset for the selected branch
+	lineOffset := 0
+	for i := 0; i < m.selectedIndex; i++ {
+		lineOffset += len(m.branches[i].Lines)
+	}
+
+	branchHeight := len(m.branches[m.selectedIndex].Lines)
+
+	// Simple viewport scrolling to keep selected branch visible
+	if lineOffset < m.viewport.YOffset {
+		m.viewport.YOffset = lineOffset
+	} else if lineOffset+branchHeight > m.viewport.YOffset+m.viewport.Height {
+		m.viewport.YOffset = lineOffset + branchHeight - m.viewport.Height
 	}
 }
 
@@ -265,15 +262,10 @@ func (m *LogModel) View() string {
 	}
 
 	header := style.ColorDim(fmt.Sprintf(" Stackit Log | %d branches | 'q' to quit, 'enter' to toggle, 'j/k' to scroll", len(m.engine.AllBranches())))
-	footer := ""
-	if m.selectedBranch != "" {
-		footer = style.ColorDim(fmt.Sprintf(" Selected: %s", m.selectedBranch))
-	}
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		m.viewport.View(),
-		footer,
 	)
 }
 

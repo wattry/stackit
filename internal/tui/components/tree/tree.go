@@ -105,8 +105,35 @@ func (r *StackTreeRenderer) SetAnnotations(annotations map[string]BranchAnnotati
 	r.Annotations = annotations
 }
 
+// RenderedBranch represents a branch and its rendered lines
+type RenderedBranch struct {
+	Name  string
+	Lines []string
+}
+
 // RenderStack renders the full stack tree starting from a branch
 func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) []string {
+	rendered := r.RenderStackDetailed(branchName, opts)
+	var result []string
+	for _, b := range rendered {
+		result = append(result, b.Lines...)
+	}
+
+	// Apply short formatting if needed
+	if opts.Short {
+		return r.formatShortLines(result, treeRenderArgs{
+			short:             opts.Short,
+			noStyleBranchName: opts.NoStyleBranchName,
+			currentBranch:     r.currentBranch,
+			overallIndent:     nil, // formatShortLines will recalculate if needed
+		})
+	}
+
+	return result
+}
+
+// RenderStackDetailed renders the full stack tree and returns detailed branch info
+func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOptions) []RenderedBranch {
 	overallIndent := 0
 	args := treeRenderArgs{
 		short:             opts.Short,
@@ -124,10 +151,10 @@ func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) [
 		currentBranch:     r.currentBranch,
 	}
 
-	outputDeep := [][]string{
-		r.getUpstackExclusiveLines(args),
-		r.getBranchLines(args),
-		r.getDownstackExclusiveLines(args),
+	outputDeep := [][]RenderedBranch{
+		r.getUpstackExclusiveRendered(args),
+		r.getBranchRendered(args),
+		r.getDownstackExclusiveRendered(args),
 	}
 
 	// Reverse if needed
@@ -138,14 +165,9 @@ func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) [
 	}
 
 	// Flatten
-	var result []string
+	var result []RenderedBranch
 	for _, section := range outputDeep {
 		result = append(result, section...)
-	}
-
-	// Apply short formatting if needed
-	if opts.Short {
-		return r.formatShortLines(result, args)
 	}
 
 	return result
@@ -168,18 +190,16 @@ type treeRenderArgs struct {
 	currentBranch     string
 }
 
-func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []string {
+func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []RenderedBranch {
 	if args.steps != nil && *args.steps == 0 {
-		return []string{}
+		return []RenderedBranch{}
 	}
 
 	if args.collapsed != nil && args.collapsed[args.branchName] {
-		return []string{}
+		return []RenderedBranch{}
 	}
 
 	children := r.getChildren(args.branchName)
-
-	// Filter out current branch if needed
 	filteredChildren := []string{}
 	for _, child := range children {
 		if !args.omitCurrentBranch || child != r.currentBranch {
@@ -187,9 +207,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []stri
 		}
 	}
 
-	numChildren := len(filteredChildren)
-	var result []string
-
+	var result []RenderedBranch
 	for i, child := range filteredChildren {
 		childSteps := args.steps
 		if childSteps != nil {
@@ -197,23 +215,18 @@ func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []stri
 			childSteps = &nextStep
 		}
 
-		var childIndent int
+		childIndent := args.indentLevel + i
 		if args.reverse {
-			childIndent = args.indentLevel + (numChildren - i - 1)
-		} else {
-			childIndent = args.indentLevel + i
+			childIndent = args.indentLevel + (len(filteredChildren) - i - 1)
 		}
 
 		childParentScopes := append([]string{}, args.parentScopes...)
 		parentScope := r.Annotations[args.branchName].Scope
-
-		// Fill parentScopes up to childIndent with parentScope
-		// This ensures vertical lines for siblings use the parent's scope color
 		for len(childParentScopes) < childIndent {
 			childParentScopes = append(childParentScopes, parentScope)
 		}
 
-		childLines := r.getUpstackInclusiveLines(treeRenderArgs{
+		childBranches := r.getUpstackInclusiveRendered(treeRenderArgs{
 			short:             args.short,
 			reverse:           args.reverse,
 			branchName:        child,
@@ -228,39 +241,35 @@ func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []stri
 			collapsed:         args.collapsed,
 			currentBranch:     args.currentBranch,
 		})
-
-		result = append(result, childLines...)
+		result = append(result, childBranches...)
 	}
 
 	return result
 }
 
-func (r *StackTreeRenderer) getUpstackInclusiveLines(args treeRenderArgs) []string {
-	outputDeep := [][]string{
-		r.getUpstackExclusiveLines(args),
-		r.getBranchLines(args),
-	}
+func (r *StackTreeRenderer) getUpstackInclusiveRendered(args treeRenderArgs) []RenderedBranch {
+	upstack := r.getUpstackExclusiveRendered(args)
+	current := r.getBranchRendered(args)
 
+	outputDeep := [][]RenderedBranch{upstack, current}
 	if args.reverse {
 		for i, j := 0, len(outputDeep)-1; i < j; i, j = i+1, j-1 {
 			outputDeep[i], outputDeep[j] = outputDeep[j], outputDeep[i]
 		}
 	}
 
-	var result []string
+	var result []RenderedBranch
 	for _, section := range outputDeep {
 		result = append(result, section...)
 	}
-
 	return result
 }
 
-func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []string {
+func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) []RenderedBranch {
 	if r.isTrunk(args.branchName) {
-		return []string{}
+		return []RenderedBranch{}
 	}
 
-	// Build stack from current to trunk
 	var fullStack []string
 	current := args.branchName
 	for {
@@ -271,11 +280,8 @@ func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []st
 		fullStack = append([]string{parent}, fullStack...)
 		current = parent
 	}
-
-	// Prepend trunk
 	fullStack = append([]string{r.trunk}, fullStack...)
 
-	// Apply steps limit
 	if args.steps != nil && *args.steps > 0 {
 		start := len(fullStack) - *args.steps
 		if start < 0 {
@@ -284,9 +290,9 @@ func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []st
 		fullStack = fullStack[start:]
 	}
 
-	var result []string
+	var result []RenderedBranch
 	for _, branchName := range fullStack {
-		branchLines := r.getBranchLines(treeRenderArgs{
+		branchData := r.getBranchRendered(treeRenderArgs{
 			short:             args.short,
 			reverse:           args.reverse,
 			branchName:        branchName,
@@ -298,10 +304,9 @@ func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []st
 			collapsed:         args.collapsed,
 			currentBranch:     args.currentBranch,
 		})
-		result = append(result, branchLines...)
+		result = append(result, branchData...)
 	}
 
-	// Reverse if needed (opposite of normal because we got list from trunk upward)
 	if !args.reverse {
 		for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 			result[i], result[j] = result[j], result[i]
@@ -309,6 +314,14 @@ func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []st
 	}
 
 	return result
+}
+
+func (r *StackTreeRenderer) getBranchRendered(args treeRenderArgs) []RenderedBranch {
+	lines := r.getBranchLines(args)
+	return []RenderedBranch{{
+		Name:  args.branchName,
+		Lines: lines,
+	}}
 }
 
 func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
@@ -523,11 +536,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	coloredBranchName := style.ColorBranchNameBold(branchName, isCurrent)
 
 	if isSelected {
-		coloredBranchName = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("15")).
-			Bold(true).
-			Render(" " + branchName + " ")
+		coloredBranchName = style.Selection().Render(" " + branchName + " ")
 	}
 
 	// Add scope (colored to match tree)
