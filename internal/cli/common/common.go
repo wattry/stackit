@@ -43,6 +43,9 @@ func Run(cmd *cobra.Command, fn func(ctx *app.Context) error) error {
 
 // HandleCommandError formats known error types for user display.
 func HandleCommandError(err error) error {
+	if errors.Is(err, errors.ErrCanceled) {
+		return nil
+	}
 	var modErr *errors.BranchModificationError
 	if errors.As(err, &modErr) {
 		return fmt.Errorf("%s", style.FormatBranchModificationError(modErr))

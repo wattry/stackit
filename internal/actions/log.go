@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
@@ -26,10 +28,24 @@ type LogOptions struct {
 	Steps         *int
 	BranchName    string
 	ShowUntracked bool
+	Interactive   bool
 }
 
 // LogAction displays the branch tree
 func LogAction(ctx *app.Context, opts LogOptions) error {
+	// If interactive mode is requested or auto-detected
+	if opts.Interactive || (utils.IsInteractive() && opts.Steps == nil) {
+		// Run interactive TUI
+		m := tui.NewLogModel(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
+			Style:         opts.Style,
+			Reverse:       opts.Reverse,
+			ShowUntracked: opts.ShowUntracked,
+		})
+		p := tea.NewProgram(m, tea.WithAltScreen())
+		_, err := p.Run()
+		return err
+	}
+
 	// Populate remote SHAs if needed (only for FULL mode)
 	if opts.Style == LogStyleFull {
 		if err := ctx.Engine.PopulateRemoteShas(); err != nil {

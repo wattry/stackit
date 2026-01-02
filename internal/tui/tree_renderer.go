@@ -8,11 +8,16 @@ import (
 // NewStackTreeRenderer creates a tree renderer configured for the current engine state
 // using the SMART sorting strategy (active path hoisting + newest first).
 func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
-	return NewStackTreeRendererWithStrategy(eng, engine.SortStrategySmart)
+	return NewStackTreeRendererWithStrategy(eng, engine.SortStrategySmart, nil)
 }
 
-// NewStackTreeRendererWithStrategy creates a tree renderer with a specific sorting strategy
-func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.SortStrategy) *tree.StackTreeRenderer {
+// NewStackTreeRendererWithFilter creates a tree renderer with a filter function
+func NewStackTreeRendererWithFilter(eng engine.BranchReader, filter func(string) bool) *tree.StackTreeRenderer {
+	return NewStackTreeRendererWithStrategy(eng, engine.SortStrategySmart, filter)
+}
+
+// NewStackTreeRendererWithStrategy creates a tree renderer with a specific sorting strategy and optional filter
+func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool) *tree.StackTreeRenderer {
 	currentBranch := eng.CurrentBranch()
 	currentBranchName := ""
 	if currentBranch != nil {
@@ -27,9 +32,13 @@ func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.S
 		func(branchName string) []string {
 			branch := eng.GetBranch(branchName)
 			children := eng.GetChildrenWithStrategy(branch, strategy)
-			childNames := make([]string, len(children))
-			for i, c := range children {
-				childNames[i] = c.GetName()
+			childNames := make([]string, 0, len(children))
+			for _, c := range children {
+				name := c.GetName()
+				if filter != nil && !filter(name) {
+					continue
+				}
+				childNames = append(childNames, name)
 			}
 			return childNames
 		},

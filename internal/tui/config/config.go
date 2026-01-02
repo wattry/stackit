@@ -12,6 +12,9 @@ import (
 
 // TUIAction provides an interactive TUI for editing configuration
 func TUIAction(repoRoot string) error {
+	if err := tui.CheckInteractiveAllowed(); err != nil {
+		return err
+	}
 	splog := tui.NewSplog()
 
 	for {

@@ -36,6 +36,9 @@ var (
 
 	// ErrBranchModificationRestricted indicates a branch cannot be modified due to its state (locked or frozen)
 	ErrBranchModificationRestricted = errors.New("branch modification restricted")
+
+	// ErrCanceled indicates that an interactive operation was canceled by the user
+	ErrCanceled = errors.New("canceled")
 )
 
 // BranchNotFoundError represents an error when a branch is not found

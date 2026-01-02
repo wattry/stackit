@@ -15,6 +15,8 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+
+	"stackit.dev/stackit/internal/utils"
 )
 
 var (
@@ -131,6 +133,9 @@ func (r *runner) RunGHCommandWithContext(ctx context.Context, args ...string) (s
 }
 
 func (r *runner) RunGitCommandInteractive(args ...string) error {
+	if !utils.IsInteractive() {
+		return fmt.Errorf("interactive git command '%v' not allowed in non-interactive mode", args)
+	}
 	cmd := exec.Command("git", args...)
 	if r.repoRoot != "" {
 		cmd.Dir = r.repoRoot
@@ -961,8 +966,12 @@ func (r *runner) CommitWithOptions(opts CommitOptions) error {
 		// Only add -e if explicitly requested (git opens editor by default if no message)
 		args = append(args, "-e")
 	}
-	// If neither NoEdit nor Edit is set, and no message is provided,
-	// git will open the editor by default (no flag needed)
+	// If we're in non-interactive mode, or if we have a message and aren't explicitly editing,
+	// use the non-interactive runner.
+	if !utils.IsInteractive() || (opts.Message != "" && !opts.Edit) || (opts.Amend && opts.NoEdit) {
+		_, err := r.runGitCommandWithContextInternal(context.Background(), args...)
+		return err
+	}
 
 	return r.RunGitCommandInteractive(args...)
 }

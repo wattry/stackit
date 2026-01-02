@@ -397,7 +397,9 @@ func runMergeTypeSelector(ctx *app.Context, dryRun bool, force bool) error {
 		}
 
 		// Use branch selector
-		selectedBranch, err := tui.PromptBranchCheckout(leafBranches, eng)
+		selectedBranch, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
+			Style: "FULL",
+		})
 		if err != nil {
 			return err
 		}

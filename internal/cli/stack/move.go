@@ -11,7 +11,6 @@ import (
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
-	"stackit.dev/stackit/internal/tui/style"
 )
 
 // NewMoveCmd creates the move command
@@ -74,8 +73,6 @@ If no branch is passed in, opens an interactive selector to choose the target br
 // interactiveOntoSelection shows an interactive branch selector for choosing the "onto" branch
 func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, error) {
 	eng := ctx.Engine
-	initialIndex := -1
-	seenBranches := make(map[string]bool)
 
 	// Get descendants of source to exclude them
 	sourceBranchObj := eng.GetBranch(sourceBranch)
@@ -89,93 +86,11 @@ func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, er
 		excludedBranches[d.GetName()] = true
 	}
 
-	// Get branches in stack order: trunk first, then children recursively
-	trunk := eng.Trunk()
-	choices := make([]tui.BranchChoice, 0)
-
-	for branch := range eng.BranchesDepthFirst(trunk) {
-		// Skip source and its descendants
-		if excludedBranches[branch.GetName()] {
-			continue
-		}
-
-		if seenBranches[branch.GetName()] {
-			continue
-		}
-		seenBranches[branch.GetName()] = true
-
-		currentBranch := eng.CurrentBranch()
-		isCurrent := branch.GetName() == currentBranch.GetName()
-		display := style.ColorBranchName(branch.GetName(), isCurrent)
-		if isCurrent {
-			initialIndex = len(choices)
-		}
-		choices = append(choices, tui.BranchChoice{
-			Display: display,
-			Value:   branch.GetName(),
-		})
-	}
-
-	// Fallback: if we still have no choices, get all branches directly from engine
-	if len(choices) == 0 {
-		allBranches := eng.AllBranches()
-
-		// Ensure trunk is always included if not excluded
-		if trunk.GetName() != "" && !excludedBranches[trunk.GetName()] && !seenBranches[trunk.GetName()] {
-			currentBranch := eng.CurrentBranch()
-			var display string
-			if trunk.GetName() == currentBranch.GetName() {
-				display = style.ColorBranchName(trunk.GetName(), true)
-				initialIndex = 0
-			} else {
-				display = style.ColorBranchName(trunk.GetName(), false)
-			}
-			choices = append(choices, tui.BranchChoice{
-				Display: display,
-				Value:   trunk.GetName(),
-			})
-			seenBranches[trunk.GetName()] = true
-		}
-
-		// Add all other branches
-		for _, branch := range allBranches {
-			branchName := branch.GetName()
-			if excludedBranches[branchName] {
-				continue
-			}
-			if !seenBranches[branchName] {
-				var display string
-				currentBranch := eng.CurrentBranch()
-				if branchName == currentBranch.GetName() {
-					display = style.ColorBranchName(branchName, true)
-					initialIndex = len(choices)
-				} else {
-					display = style.ColorBranchName(branchName, false)
-				}
-				choices = append(choices, tui.BranchChoice{
-					Display: display,
-					Value:   branchName,
-				})
-				seenBranches[branchName] = true
-			}
-		}
-
-		if len(choices) == 0 {
-			return "", fmt.Errorf("no valid branches available to move onto")
-		}
-	}
-
-	if len(choices) == 0 {
-		return "", fmt.Errorf("no valid branches available to move onto")
-	}
-
-	// Set initial index if not found
-	if initialIndex < 0 {
-		initialIndex = len(choices) - 1
-	}
-
 	// Show interactive selector
-	selected, err := tui.PromptBranchSelection("Move branch onto (arrow keys to navigate, type to filter)", choices, initialIndex)
+	selected, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
+		Style:   "FULL",
+		Exclude: excludedBranches,
+	})
 	if err != nil {
 		return "", err
 	}

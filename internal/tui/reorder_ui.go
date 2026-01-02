@@ -174,6 +174,9 @@ func NewReorderModel(branches []string) tea.Model {
 
 // RunReorderTUI runs the reorder TUI and returns the new order
 func RunReorderTUI(branches []string) ([]string, error) {
+	if !IsTTY() {
+		return nil, fmt.Errorf("RunReorderTUI called in non-interactive mode")
+	}
 	m := newReorderModel(branches)
 	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 

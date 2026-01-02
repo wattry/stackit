@@ -10,6 +10,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // splitByCommitEngine is a minimal interface needed for splitting by commit
@@ -102,6 +103,9 @@ func splitByCommit(ctx context.Context, branchToSplit string, eng splitByCommitE
 
 // getBranchPoints interactively gets branch points from the user
 func getBranchPoints(readableCommits []string, numChildren int, parentBranchName string) ([]int, error) {
+	if !utils.IsInteractive() {
+		return nil, fmt.Errorf("branch points must be specified in non-interactive mode")
+	}
 	// Array where nth index is whether we want a branch pointing to nth commit
 	isBranchPoint := make([]bool, len(readableCommits))
 	isBranchPoint[0] = true // First commit always has a branch

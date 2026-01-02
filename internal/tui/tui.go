@@ -224,6 +224,10 @@ func (m SubmitTUIModel) View() string {
 
 // RunSubmitTUI runs the submit TUI and returns when complete
 func RunSubmitTUI(items []submit.Item, submitFunc func(idx int) tea.Cmd) error {
+	if !utils.IsInteractive() {
+		// This should be handled by the caller using RunSubmitTUISimple
+		return fmt.Errorf("RunSubmitTUI called in non-interactive mode")
+	}
 	m := NewSubmitTUIModel(items, submitFunc)
 	// Use WithInput/WithOutput to avoid TTY requirement in non-interactive environments
 	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))

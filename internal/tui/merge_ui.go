@@ -491,6 +491,9 @@ type ProgressUpdate struct {
 
 // RunMergeTUI runs the merge TUI with channel-based updates
 func RunMergeTUI(groups []MergeGroup, stepDescriptions []string, updates <-chan ProgressUpdate, done chan<- bool) error {
+	if !IsTTY() {
+		return fmt.Errorf("RunMergeTUI called in non-interactive mode")
+	}
 	m := NewMergeTUIModel(groups, stepDescriptions)
 	m.updates = updates
 	m.doneChan = done

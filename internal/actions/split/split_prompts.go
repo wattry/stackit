@@ -7,9 +7,13 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/utils"
 )
 
 func promptBranchName(existingNames []string, originalBranchName string, branchNum int, eng engine.BranchReader) (string, error) {
+	if !utils.IsInteractive() {
+		return "", fmt.Errorf("branch name must be specified in non-interactive mode")
+	}
 	defaultName := originalBranchName
 	if slices.Contains(existingNames, defaultName) {
 		defaultName = originalBranchName + "_split"

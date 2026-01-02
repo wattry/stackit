@@ -2,11 +2,9 @@ package actions
 
 import (
 	"fmt"
-	"strings"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/tui"
-	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -183,96 +181,22 @@ func trackBranchRecursively(ctx *app.Context, branchName string) error {
 // selectParentBranch interactively selects a parent branch for tracking
 func selectParentBranch(ctx *app.Context, branchName string) (string, error) {
 	eng := ctx.Engine
-	trunk := eng.Trunk().GetName()
 
-	// Render the tree to get visual context for each branch
-	renderer := tui.NewStackTreeRenderer(eng)
-
-	// Render the full tree from trunk
-	treeLines := renderer.RenderStack(trunk, tree.RenderOptions{
-		Short:             true,
-		NoStyleBranchName: true, // We'll add our own coloring
+	// Show interactive selector
+	selected, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
+		Style: "FULL",
+		Exclude: map[string]bool{
+			branchName: true,
+		},
 	})
-
-	// Map branch name to its tree display string
-	branchToDisplay := make(map[string]string)
-	for _, line := range treeLines {
-		// Tree line format: "│ ◯▸branchName" (short format from StackTreeRenderer)
-		arrowIdx := strings.Index(line, "▸")
-		if arrowIdx != -1 {
-			name := strings.Fields(line[arrowIdx+1:])[0]
-			branchToDisplay[name] = line
-		}
-	}
-
-	// Build list of candidate parents (trunk + all tracked branches)
-	var choices []tui.BranchChoice
-	initialIndex := -1
-
-	// Add trunk first
-	display := branchToDisplay[trunk]
-	if display == "" {
-		display = style.ColorBranchName(trunk, false) + " (trunk)"
-	} else {
-		display = strings.Replace(display, trunk, style.ColorBranchName(trunk, false)+" (trunk)", 1)
-	}
-	choices = append(choices, tui.BranchChoice{
-		Display: display,
-		Value:   trunk,
-	})
-
-	// Add all tracked branches
-	allBranches := eng.AllBranches()
-	for _, candidateBranch := range allBranches {
-		candidate := candidateBranch.GetName()
-		if candidate == branchName || candidate == trunk {
-			continue
-		}
-
-		candidateBranch := eng.GetBranch(candidate)
-		if candidateBranch.IsTracked() {
-			display := branchToDisplay[candidate]
-			if display == "" {
-				display = style.ColorBranchName(candidate, false)
-			} else {
-				display = strings.Replace(display, candidate, style.ColorBranchName(candidate, false), 1)
-			}
-			choices = append(choices, tui.BranchChoice{
-				Display: display,
-				Value:   candidate,
-			})
-		}
-	}
-
-	if len(choices) == 0 {
-		return "", fmt.Errorf("no tracked branches available (trunk should always be available)")
-	}
-
-	// Try to find a good default (most recent tracked ancestor)
-	ancestors, err := eng.FindMostRecentTrackedAncestors(ctx.Context, branchName)
-	if err == nil && len(ancestors) > 0 {
-		defaultParent := ancestors[0]
-		for i, choice := range choices {
-			if choice.Value == defaultParent {
-				initialIndex = i
-				break
-			}
-		}
-	}
-
-	// If no default found, use trunk
-	if initialIndex < 0 {
-		initialIndex = 0
-	}
-
-	// Prompt user
-	selected, err := tui.PromptBranchSelection(
-		fmt.Sprintf("Select parent for %s:", style.ColorBranchName(branchName, false)),
-		choices,
-		initialIndex,
-	)
 	if err != nil {
 		return "", err
+	}
+
+	// Validate parent is tracked (or is trunk)
+	parentBranch := eng.GetBranch(selected)
+	if !parentBranch.IsTrunk() && !parentBranch.IsTracked() {
+		return "", fmt.Errorf("parent branch %s must be tracked (or be trunk)", selected)
 	}
 
 	return selected, nil
