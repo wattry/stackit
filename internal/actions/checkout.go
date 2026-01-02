@@ -26,10 +26,6 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	splog := ctx.Splog
 	context := ctx.Context
 
-	if err := eng.PopulateRemoteShas(); err != nil {
-		return fmt.Errorf("failed to populate remote SHAs: %w", err)
-	}
-
 	var branchName string
 	var err error
 
@@ -39,6 +35,12 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	case opts.BranchName != "":
 		branchName = opts.BranchName
 	default:
+		// Only populate remote SHAs when entering interactive mode
+		// (the selector may need remote information for display)
+		if err := eng.PopulateRemoteShas(); err != nil {
+			return fmt.Errorf("failed to populate remote SHAs: %w", err)
+		}
+
 		if !utils.IsInteractive() {
 			return fmt.Errorf("interactive branch selection is not available in non-interactive mode; please specify a branch name")
 		}
