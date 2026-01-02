@@ -89,13 +89,17 @@ func Action(ctx *app.Context, opts Options) error {
 		return err
 	}
 
-	// Delete remote metadata for deleted branches
-	for _, b := range toDelete {
-		branchName := b.GetName()
-		if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
-			splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
-		}
-		splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
+	// Batch delete remote metadata for deleted branches
+	branchNames := make([]string, len(toDelete))
+	for i, b := range toDelete {
+		branchNames[i] = b.GetName()
+	}
+	if err := eng.Git().BatchDeleteRemoteMetadataRefs(branchNames); err != nil {
+		splog.Debug("Failed to batch delete remote metadata: %v", err)
+	}
+
+	for _, name := range branchNames {
+		splog.Info("Deleted branch %s", style.ColorBranchName(name, false))
 	}
 
 	// Restack children if any

@@ -3,10 +3,12 @@ package actions
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // GetPhase represents the current phase of the get operation
@@ -211,18 +213,28 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	branchPRInfo := make(map[string]*int)       // branch -> PR number
 	branchFrozenStatus := make(map[string]bool) // branch -> is frozen
 
-	// Fetch PR info for branches if possible
+	// Fetch PR info for branches in parallel if possible
 	if ctx.GitHubClient != nil {
 		owner, repo := ctx.GitHubClient.GetOwnerRepo()
+		trunkName := eng.Trunk().GetName()
+
+		// Filter out trunk before parallel fetch
+		branchesToFetch := make([]string, 0, len(branchesToSync))
 		for _, branchName := range branchesToSync {
-			if branchName == eng.Trunk().GetName() {
-				continue
-			}
-			if pr, err := ctx.GitHubClient.GetPullRequestByBranch(gctx, owner, repo, branchName); err == nil && pr != nil {
-				prNum := pr.Number
-				branchPRInfo[branchName] = &prNum
+			if branchName != trunkName {
+				branchesToFetch = append(branchesToFetch, branchName)
 			}
 		}
+
+		var mu sync.Mutex
+		utils.Run(branchesToFetch, func(branchName string) {
+			if pr, err := ctx.GitHubClient.GetPullRequestByBranch(gctx, owner, repo, branchName); err == nil && pr != nil {
+				prNum := pr.Number
+				mu.Lock()
+				branchPRInfo[branchName] = &prNum
+				mu.Unlock()
+			}
+		})
 	}
 
 	// Sync each branch
