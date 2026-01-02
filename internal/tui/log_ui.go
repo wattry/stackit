@@ -276,7 +276,8 @@ func (m *LogModel) ensureVisible() {
 // View renders the bubbletea model
 func (m *LogModel) View() string {
 	if !m.ready || m.renderer == nil {
-		return "Loading..."
+		// Skip loading indicator - initialization is fast enough now
+		return ""
 	}
 
 	title := "Stackit Log"
