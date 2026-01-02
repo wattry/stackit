@@ -642,6 +642,7 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 	}
 	if !found {
 		e.childrenMap[parentBranchName] = append(e.childrenMap[parentBranchName], branchName)
+		e.sortChildren(e.childrenMap[parentBranchName])
 	}
 
 	return nil

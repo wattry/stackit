@@ -70,10 +70,56 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 		}
 	}
 
-	// Sort children by name for deterministic traversal
+	// Sort children by name descending (newest first) and hoist active path
 	for _, children := range e.childrenMap {
-		slices.Sort(children)
+		e.sortChildren(children)
 	}
+}
+
+// sortChildren sorts a list of sibling branches:
+// 1. Branches on the path from current branch to trunk are hoisted to the top.
+// 2. Other branches are sorted by name descending (newest first).
+func (e *engineImpl) sortChildren(children []string) {
+	if len(children) <= 1 {
+		return
+	}
+
+	// Calculate active path from current branch to trunk
+	activePath := make(map[string]bool)
+	if e.currentBranch != "" {
+		activePath[e.currentBranch] = true
+		curr := e.currentBranch
+		for {
+			parent, ok := e.parentMap[curr]
+			if !ok || parent == "" || parent == e.trunk {
+				break
+			}
+			activePath[parent] = true
+			curr = parent
+		}
+	}
+
+	slices.SortFunc(children, func(a, b string) int {
+		// First, check if either is on the active path
+		aOnPath := activePath[a]
+		bOnPath := activePath[b]
+
+		if aOnPath && !bOnPath {
+			return -1 // a comes first
+		}
+		if bOnPath && !aOnPath {
+			return 1 // b comes first
+		}
+
+		// Otherwise sort by name descending
+		if a < b {
+			return 1
+		}
+		if a > b {
+			return -1
+		}
+		return 0
+	})
 }
 
 // updateBranchInCache updates the cache for a specific branch after restack/metadata changes
@@ -156,8 +202,8 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 	// Add to new parent's children if it has a parent
 	if newParent != "" {
 		e.childrenMap[newParent] = append(e.childrenMap[newParent], branchName)
-		// Sort for deterministic traversal
-		slices.Sort(e.childrenMap[newParent])
+		// Sort with active path hoisting
+		e.sortChildren(e.childrenMap[newParent])
 	}
 }
 
