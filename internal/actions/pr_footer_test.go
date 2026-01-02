@@ -66,7 +66,7 @@ func TestCreatePRBodyFooter(t *testing.T) {
 			TrackBranch("feature-a", "main")
 
 		// Lock the branch
-		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, true)
+		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		footer := CreatePRBodyFooter("feature-a", s.Engine)

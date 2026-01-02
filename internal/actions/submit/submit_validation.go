@@ -24,9 +24,9 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 			branch := ctx.Engine.GetBranch(name)
 
 			// Preserve existing locked status
-			locked := false
+			lockReason := engine.LockReasonNone
 			if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
-				locked = existing.IsLocked()
+				lockReason = existing.LockReason()
 			}
 
 			_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
@@ -37,7 +37,7 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 				prInfo.Base,
 				prInfo.HTMLURL,
 				prInfo.Draft,
-			).WithLocked(locked))
+			).WithLockReason(lockReason))
 		}); err != nil {
 			// Non-fatal, continue
 			ctx.Splog.Debug("Failed to sync PR info: %v", err)

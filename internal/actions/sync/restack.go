@@ -50,7 +50,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 
 	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
-		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, locked bool, frozen bool) {
+		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool) {
 			prNumber := getPRNumber(eng, branchName)
 
 			switch result {
@@ -62,29 +62,29 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					Branch:      branchName,
 					PRNumber:    prNumber,
 					NewRevision: newRev,
-					Locked:      locked,
+					LockReason:  lockReason,
 					Frozen:      frozen,
 				})
 			case engine.RestackUnneeded:
 				handler.EmitEvent(Event{
-					Phase:    PhaseRestack,
-					Type:     EventCompleted,
-					Branch:   branchName,
-					PRNumber: prNumber,
-					Locked:   locked,
-					Frozen:   frozen,
+					Phase:      PhaseRestack,
+					Type:       EventCompleted,
+					Branch:     branchName,
+					PRNumber:   prNumber,
+					LockReason: lockReason,
+					Frozen:     frozen,
 				})
 			case engine.RestackConflict:
 				summary.BranchesSkipped++
 				summary.ConflictBranches = append(summary.ConflictBranches, branchName)
 				handler.EmitEvent(Event{
-					Phase:    PhaseRestack,
-					Type:     EventSkipped,
-					Branch:   branchName,
-					PRNumber: prNumber,
-					Conflict: true,
-					Locked:   locked,
-					Frozen:   frozen,
+					Phase:      PhaseRestack,
+					Type:       EventSkipped,
+					Branch:     branchName,
+					PRNumber:   prNumber,
+					Conflict:   true,
+					LockReason: lockReason,
+					Frozen:     frozen,
 				})
 			}
 		}); err != nil {

@@ -79,7 +79,7 @@ func updatePRMetadata(ctx *app.Context, name string, repoOwner, repoName string)
 	}
 
 	// Successfully updated (or already up to date), update local engine state
-	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLocked(branch.IsLocked()))
+	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLockReason(branch.GetLockReason()))
 }
 
 // PushMetadataAndSyncPRs pushes metadata for the given branches to remote and updates their PRs on GitHub

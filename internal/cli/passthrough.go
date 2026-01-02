@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -178,10 +179,10 @@ func isCurrentBranchLockedOrFrozen(runner git.Runner) (bool, bool, string) {
 	if sha, err := runner.GetRef(refName); err == nil {
 		if content, err := runner.CatFile(sha); err == nil {
 			var meta struct {
-				Locked bool `json:"locked"`
+				LockReason engine.LockReason `json:"lockReason"`
 			}
 			if err := json.Unmarshal([]byte(content), &meta); err == nil {
-				locked = meta.Locked
+				locked = meta.LockReason.IsLocked()
 			}
 		}
 	}

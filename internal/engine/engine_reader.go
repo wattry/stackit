@@ -223,7 +223,14 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 func (e *engineImpl) IsLocked(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.lockedMap[branch.GetName()]
+	return LockReason(e.lockedMap[branch.GetName()]).IsLocked()
+}
+
+// GetLockReason returns the reason why a branch is locked
+func (e *engineImpl) GetLockReason(branch Branch) LockReason {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return LockReason(e.lockedMap[branch.GetName()])
 }
 
 // IsFrozen checks if a branch is frozen

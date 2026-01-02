@@ -1272,7 +1272,7 @@ func TestFrozenBranches(t *testing.T) {
 		// Test locked
 		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, false)
 		require.NoError(t, err)
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 		require.False(t, s.Engine.GetBranch("feature").CanModify())
 	})
@@ -1309,7 +1309,7 @@ func TestFrozenBranches(t *testing.T) {
 		var modErr *errors.BranchModificationError
 		require.ErrorAs(t, err, &modErr)
 		require.Equal(t, "feature", modErr.BranchName)
-		require.False(t, modErr.IsLocked)
+		require.False(t, modErr.IsLocked())
 		require.True(t, modErr.IsFrozen)
 	})
 
@@ -1326,7 +1326,7 @@ func TestFrozenBranches(t *testing.T) {
 		branch := s.Engine.GetBranch("feature")
 
 		// Lock the branch
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Now EnsureCanModify should return an error
@@ -1341,7 +1341,7 @@ func TestFrozenBranches(t *testing.T) {
 		var modErr *errors.BranchModificationError
 		require.ErrorAs(t, err, &modErr)
 		require.Equal(t, "feature", modErr.BranchName)
-		require.True(t, modErr.IsLocked)
+		require.True(t, modErr.IsLocked())
 		require.False(t, modErr.IsFrozen)
 	})
 
@@ -1358,7 +1358,7 @@ func TestFrozenBranches(t *testing.T) {
 		branch := s.Engine.GetBranch("feature")
 
 		// Lock and freeze the branch
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, true)
 		require.NoError(t, err)
@@ -1372,11 +1372,11 @@ func TestFrozenBranches(t *testing.T) {
 		var modErr *errors.BranchModificationError
 		require.ErrorAs(t, err, &modErr)
 		require.Equal(t, "feature", modErr.BranchName)
-		require.True(t, modErr.IsLocked)
+		require.True(t, modErr.IsLocked())
 		require.True(t, modErr.IsFrozen)
 
 		// Error message should mention both states
-		require.Contains(t, err.Error(), "locked and frozen")
+		require.Contains(t, err.Error(), "locked (user) and frozen")
 	})
 
 	t.Run("frozen status persists after engine rebuild", func(t *testing.T) {

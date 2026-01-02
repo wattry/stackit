@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 )
 
 const (
@@ -28,8 +29,36 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	}
 
 	// Add lock message if branch is locked
-	if eng.GetBranch(branch).IsLocked() {
-		tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
+	branchObj := eng.GetBranch(branch)
+	if branchObj.IsLocked() {
+		reason := branchObj.GetLockReason()
+		if reason == git.LockReasonUser {
+			tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
+		} else {
+			tree.WriteString(fmt.Sprintf("> 🔒 This PR has been locked (%s). To unlock it, run `st unlock`.\n\n", reason))
+		}
+	}
+
+	// Add notice if present in PrInfo
+	// Error is intentionally ignored: if PR info cannot be retrieved, we simply skip
+	// adding the notice section, which is an optional enhancement to the footer.
+	prInfo, _ := eng.GetBranch(branch).GetPrInfo()
+	if prInfo != nil {
+		if prInfo.MergeBranch() != "" {
+			if prInfo.State() == "MERGED" {
+				tree.WriteString("> 💡 **Notice**: This PR was merged via a merge branch.\n\n")
+			} else {
+				mergeBranch := prInfo.MergeBranch()
+				msg := fmt.Sprintf("> 💡 **Notice**: This PR is part of a stack merge into branch `%s`.\n\n", mergeBranch)
+
+				// If we can find the PR number for the merge branch, show it
+				mBranch := eng.GetBranch(mergeBranch)
+				if mPrInfo, err := mBranch.GetPrInfo(); err == nil && mPrInfo != nil && mPrInfo.Number() != nil {
+					msg = fmt.Sprintf("> 💡 **Notice**: This PR is part of a stack merge. See PR #%d for details.\n\n", *mPrInfo.Number())
+				}
+				tree.WriteString(msg)
+			}
+		}
 	}
 
 	for branchObj, depth := range eng.BranchesDepthFirst(terminalParent) {

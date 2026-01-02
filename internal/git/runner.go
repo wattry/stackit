@@ -15,8 +15,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-
-	stackiterrors "stackit.dev/stackit/internal/errors"
 )
 
 var (
@@ -87,7 +85,7 @@ func (r *runner) runGitInternal(ctx context.Context, input string, env []string,
 
 	err := cmd.Run()
 	if err != nil {
-		return "", stackiterrors.NewGitCommandError("git", args, stdout.String(), stderr.String(), err)
+		return "", NewCommandError("git", args, stdout.String(), stderr.String(), err)
 	}
 
 	result := stdout.String()
@@ -125,9 +123,9 @@ func (r *runner) RunGHCommandWithContext(ctx context.Context, args ...string) (s
 	err := cmd.Run()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", stackiterrors.NewGitCommandError("gh", args, stdout.String(), stderr.String(), ctx.Err())
+			return "", NewCommandError("gh", args, stdout.String(), stderr.String(), ctx.Err())
 		}
-		return "", stackiterrors.NewGitCommandError("gh", args, stdout.String(), stderr.String(), err)
+		return "", NewCommandError("gh", args, stdout.String(), stderr.String(), err)
 	}
 	return strings.TrimSpace(stdout.String()), nil
 }

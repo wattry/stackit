@@ -35,9 +35,9 @@ type Restacker interface {
 // result: the restack result (Done, Unneeded, Conflict)
 // newRev: the new revision if restacked (empty if not applicable)
 // conflict: true if this is a conflict
-// locked: true if the branch is locked
+// lockReason: why the branch is locked (empty if not locked)
 // frozen: true if the branch is frozen
-type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, locked bool, frozen bool)
+type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, lockReason engine.LockReason, frozen bool)
 
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
@@ -51,7 +51,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		if batchResult.ConflictBranch != "" {
 			// Report the conflict via callback if provided
 			if callback != nil {
-				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, false, false)
+				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false)
 			}
 
 			continuation := &config.ContinuationState{
@@ -75,7 +75,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	if batchResult.ConflictBranch != "" {
 		// Report the conflict via callback if provided
 		if callback != nil {
-			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, false, false)
+			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false)
 		}
 
 		continuation := &config.ContinuationState{
@@ -122,7 +122,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 		// Report via callback if provided
 		if callback != nil {
-			callback(branchName, result.Result, newRev, false, result.Locked, result.Frozen)
+			callback(branchName, result.Result, newRev, false, result.LockReason, result.Frozen)
 			continue // Skip splog output when using callback handler
 		}
 
@@ -155,7 +155,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 			switch {
 			case !branch.CanModify():
 				if branch.IsLocked() {
-					ctx.Splog.Info("Did not restack branch %s because it is locked.", style.ColorBranchName(branchName, branchName == currentBranchName))
+					ctx.Splog.Info("Did not restack branch %s because it is locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
 				} else {
 					ctx.Splog.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
 				}

@@ -5,6 +5,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // Standard library error functions wrapped for convenience
@@ -58,21 +60,26 @@ func NewBranchNotFoundError(branchName string) *BranchNotFoundError {
 // BranchModificationError represents an error when a branch cannot be modified
 type BranchModificationError struct {
 	BranchName string
-	IsLocked   bool
+	LockReason git.LockReason
 	IsFrozen   bool
 }
 
 func (e *BranchModificationError) Error() string {
 	state := ""
 	switch {
-	case e.IsLocked && e.IsFrozen:
-		state = "locked and frozen"
-	case e.IsLocked:
-		state = "locked"
+	case e.IsLocked() && e.IsFrozen:
+		state = fmt.Sprintf("locked (%s) and frozen", e.LockReason)
+	case e.IsLocked():
+		state = fmt.Sprintf("locked (%s)", e.LockReason)
 	case e.IsFrozen:
 		state = "frozen"
 	}
 	return fmt.Sprintf("branch %s is %s", e.BranchName, state)
+}
+
+// IsLocked returns true if the branch is locked
+func (e *BranchModificationError) IsLocked() bool {
+	return e.LockReason.IsLocked()
 }
 
 // Is returns true if the target error is ErrBranchModificationRestricted
@@ -81,10 +88,10 @@ func (e *BranchModificationError) Is(target error) bool {
 }
 
 // NewBranchModificationError creates a new BranchModificationError
-func NewBranchModificationError(branchName string, locked, frozen bool) *BranchModificationError {
+func NewBranchModificationError(branchName string, lockReason git.LockReason, frozen bool) *BranchModificationError {
 	return &BranchModificationError{
 		BranchName: branchName,
-		IsLocked:   locked,
+		LockReason: lockReason,
 		IsFrozen:   frozen,
 	}
 }
@@ -112,46 +119,5 @@ func NewRebaseConflictError(branchName string, message string) *RebaseConflictEr
 	return &RebaseConflictError{
 		BranchName: branchName,
 		Message:    message,
-	}
-}
-
-// GitCommandError represents an error from a git command execution
-type GitCommandError struct {
-	Command string
-	Args    []string
-	Stdout  string
-	Stderr  string
-	Err     error
-}
-
-func (e *GitCommandError) Error() string {
-	msg := fmt.Sprintf("git command failed: %s", e.Command)
-	if len(e.Args) > 0 {
-		msg += fmt.Sprintf(" %v", e.Args)
-	}
-	if e.Stderr != "" {
-		msg += fmt.Sprintf("\nstderr: %s", e.Stderr)
-	}
-	if e.Stdout != "" {
-		msg += fmt.Sprintf("\nstdout: %s", e.Stdout)
-	}
-	if e.Err != nil {
-		msg += fmt.Sprintf("\n%v", e.Err)
-	}
-	return msg
-}
-
-func (e *GitCommandError) Unwrap() error {
-	return e.Err
-}
-
-// NewGitCommandError creates a new GitCommandError
-func NewGitCommandError(command string, args []string, stdout, stderr string, err error) *GitCommandError {
-	return &GitCommandError{
-		Command: command,
-		Args:    args,
-		Stdout:  stdout,
-		Stderr:  stderr,
-		Err:     err,
 	}
 }

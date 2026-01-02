@@ -102,24 +102,24 @@ func TestSync(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// 2. Create a "consolidation" branch representing a Squash & Merge of the whole stack
+		// 2. Create a "merge" branch representing a Squash & Merge of the whole stack
 		// This branch will have the same content as branch-c but only one commit.
-		consolidationBranch := "consolidated-feature"
+		mergeBranch := "merged-feature"
 		sh.Checkout("main").
-			CreateBranch(consolidationBranch).
-			CommitChange("consolidation-file", "consolidated content")
+			CreateBranch(mergeBranch).
+			CommitChange("merge-file", "merged content")
 
-		// Track the consolidation branch (normally consolidation branches aren't tracked,
+		// Track the merge branch (normally merge branches aren't tracked,
 		// but for the test to work with current clean_branches logic, we need to track it)
 		// TODO: Fix clean_branches to handle untracked branches that should be deleted
 		parentName := mainBranchName
-		err := eng.Git().WriteMetadata(consolidationBranch, &git.Meta{
+		err := eng.Git().WriteMetadata(mergeBranch, &git.Meta{
 			ParentBranchName: &parentName,
 		})
 		require.NoError(t, err)
 
-		// Mark consolidation branch as merged
-		meta, err := eng.Git().ReadMetadata(consolidationBranch)
+		// Mark merge branch as merged
+		meta, err := eng.Git().ReadMetadata(mergeBranch)
 		require.NoError(t, err)
 		if meta.PrInfo == nil {
 			meta.PrInfo = &git.PrInfoPersistence{}
@@ -130,7 +130,7 @@ func TestSync(t *testing.T) {
 		meta.PrInfo.Number = &prNum
 		meta.PrInfo.State = &state
 		meta.PrInfo.Base = &base
-		err = eng.Git().WriteMetadata(consolidationBranch, meta)
+		err = eng.Git().WriteMetadata(mergeBranch, meta)
 		require.NoError(t, err)
 
 		// 3. Run sync (which should call clean_branches)
@@ -142,7 +142,7 @@ func TestSync(t *testing.T) {
 		for _, name := range branchNames {
 			require.NotContains(t, allLocalBranches, name, "Merged branch %s should have been deleted", name)
 		}
-		require.NotContains(t, allLocalBranches, consolidationBranch, "Merged consolidation branch should have been deleted")
+		require.NotContains(t, allLocalBranches, mergeBranch, "Merged merge branch should have been deleted")
 	})
 
 	t.Run("handles diamond dependency during sync", func(t *testing.T) {
@@ -358,13 +358,13 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Set local metadata
 		branch := eng.GetBranch("feature-a")
-		_, err := eng.SetLocked([]engine.Branch{branch}, false)
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonNone)
 		require.NoError(t, err)
 
 		// Create remote metadata refs (simulating a successful fetch)
 		remoteMeta := &git.Meta{
-			Locked: true,
-			Scope:  scopePtr("remote-scope"),
+			LockReason: git.LockReasonUser,
+			Scope:      scopePtr("remote-scope"),
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
 
@@ -375,7 +375,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
 		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
-		require.True(t, cache["feature-a"].Locked, "Remote metadata should show locked=true")
+		require.Equal(t, git.LockReasonUser, cache["feature-a"].LockReason, "Remote metadata should show lock reason")
 		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
 	})
 
@@ -390,12 +390,12 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Set local metadata: locked=false
 		branch := eng.GetBranch("feature-b")
-		_, err := eng.SetLocked([]engine.Branch{branch}, false)
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonNone)
 		require.NoError(t, err)
 
 		// Create remote metadata refs: locked=true (conflict)
 		remoteMeta := &git.Meta{
-			Locked: true,
+			LockReason: git.LockReasonUser,
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
 
@@ -411,9 +411,9 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Verify the specific field that differs
 		require.Len(t, diff.Differences, 1)
-		require.Equal(t, "locked", diff.Differences[0].Field)
-		require.Equal(t, false, diff.Differences[0].LocalValue)
-		require.Equal(t, true, diff.Differences[0].RemoteValue)
+		require.Equal(t, "lockReason", diff.Differences[0].Field)
+		require.Equal(t, git.LockReasonNone, diff.Differences[0].LocalValue)
+		require.Equal(t, git.LockReasonUser, diff.Differences[0].RemoteValue)
 	})
 }
 

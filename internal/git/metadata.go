@@ -10,6 +10,23 @@ import (
 	"stackit.dev/stackit/internal/utils"
 )
 
+// LockReason is an enum for the reason why a branch is locked
+type LockReason string
+
+const (
+	// LockReasonNone indicates the branch is not locked
+	LockReasonNone LockReason = ""
+	// LockReasonUser indicates the branch was manually locked by the user
+	LockReasonUser LockReason = "user"
+	// LockReasonConsolidating indicates the branch is being consolidated
+	LockReasonConsolidating LockReason = "consolidating"
+)
+
+// IsLocked returns true if the lock reason indicates the branch is locked
+func (r LockReason) IsLocked() bool {
+	return r != LockReasonNone
+}
+
 // BranchType indicates the type of branch
 type BranchType string
 
@@ -25,7 +42,7 @@ type Meta struct {
 	ParentBranchRevision *string            `json:"parentBranchRevision,omitempty"`
 	PrInfo               *PrInfoPersistence `json:"prInfo,omitempty"`
 	Scope                *string            `json:"scope,omitempty"`
-	Locked               bool               `json:"locked,omitempty"`
+	LockReason           LockReason         `json:"lockReason,omitempty"`
 
 	// Fields for remote sync
 	BranchType     BranchType  `json:"branchType,omitempty"`     // Type of branch (regular, consolidated)
@@ -48,14 +65,15 @@ type ModifiedBy struct {
 
 // PrInfoPersistence represents PR information for persistence
 type PrInfoPersistence struct {
-	Number  *int    `json:"number,omitempty"`
-	Base    *string `json:"base,omitempty"`
-	URL     *string `json:"url,omitempty"`
-	Title   *string `json:"title,omitempty"`
-	Body    *string `json:"body,omitempty"`
-	State   *string `json:"state,omitempty"`
-	IsDraft *bool   `json:"isDraft,omitempty"`
-	Locked  *bool   `json:"locked,omitempty"`
+	Number      *int        `json:"number,omitempty"`
+	Base        *string     `json:"base,omitempty"`
+	URL         *string     `json:"url,omitempty"`
+	Title       *string     `json:"title,omitempty"`
+	Body        *string     `json:"body,omitempty"`
+	State       *string     `json:"state,omitempty"`
+	IsDraft     *bool       `json:"isDraft,omitempty"`
+	LockReason  *LockReason `json:"lockReason,omitempty"`
+	MergeBranch *string     `json:"mergeBranch,omitempty"`
 }
 
 const (

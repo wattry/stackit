@@ -41,8 +41,8 @@ jobs:
           echo "Stackit metadata found for '$BRANCH_NAME'. Checking lock status..."
           
           # Check for lock status.
-          # The 'locked' field in the metadata indicates if the branch is locked.
-          IS_LOCKED=$(echo "$METADATA" | jq -r 'if .locked == true then "true" else "false" end')
+          # The 'lockReason' field in the metadata indicates if the branch is locked.
+          IS_LOCKED=$(echo "$METADATA" | jq -r 'if .lockReason then "true" else "false" end')
           
           if [ "$IS_LOCKED" = "true" ]; then
             echo "::error::This PR is locked by Stackit. Merging is blocked until it is unlocked with 'st unlock'."

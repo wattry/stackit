@@ -6,6 +6,7 @@ import (
 	stdsync "sync"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -171,7 +172,7 @@ func (h *SimpleGetHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for restack phase
-func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, locked bool, frozen bool) {
+func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -185,8 +186,8 @@ func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.Restac
 			style.ColorDim(newRev))
 	case handlers.RestackUnneeded:
 		reason := "does not need restacking"
-		if locked {
-			reason = "is locked"
+		if lockReason.IsLocked() {
+			reason = fmt.Sprintf("is locked: %s", lockReason)
 		} else if frozen {
 			reason = "is frozen"
 		}

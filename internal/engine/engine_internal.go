@@ -46,7 +46,7 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 	e.parentMap = make(map[string]string)
 	e.childrenMap = make(map[string][]string)
 	e.scopeMap = make(map[string]string)
-	e.lockedMap = make(map[string]bool)
+	e.lockedMap = make(map[string]string)
 	e.frozenMap = make(map[string]bool)
 
 	// Collect results and populate maps sequentially to avoid lock contention/races
@@ -59,8 +59,8 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 		if meta.Scope != nil {
 			e.scopeMap[name] = *meta.Scope
 		}
-		if meta.Locked {
-			e.lockedMap[name] = true
+		if meta.LockReason != LockReasonNone {
+			e.lockedMap[name] = string(meta.LockReason)
 		}
 	}
 
@@ -121,8 +121,8 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 	}
 
 	// Update locked map
-	if meta.Locked {
-		e.lockedMap[branchName] = true
+	if meta.LockReason != LockReasonNone {
+		e.lockedMap[branchName] = string(meta.LockReason)
 	} else {
 		delete(e.lockedMap, branchName)
 	}

@@ -37,7 +37,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		executor := merge.NewConsolidateMergeExecutor(plan, s.Context.GitHubClient, s.Engine, s.Context.Splog, s.Scene.Dir)
+		executor := merge.NewConsolidateMergeExecutor(plan, s.Engine, s.Context)
 
 		// This should fail pre-validation because branches aren't pushed to remote
 		_, err = executor.Execute(s.Context.Context, merge.ExecuteOptions{
@@ -110,7 +110,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		executor := merge.NewConsolidateMergeExecutor(plan, s.Context.GitHubClient, s.Engine, s.Context.Splog, s.Scene.Dir)
+		executor := merge.NewConsolidateMergeExecutor(plan, s.Engine, s.Context)
 
 		// Verify the executor was created successfully
 		require.NotNil(t, executor)
@@ -148,7 +148,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		executor := merge.NewConsolidateMergeExecutor(plan, s.Context.GitHubClient, s.Engine, s.Context.Splog, s.Scene.Dir)
+		executor := merge.NewConsolidateMergeExecutor(plan, s.Engine, s.Context)
 
 		// Verify the executor understands the scope
 		require.NotNil(t, executor)

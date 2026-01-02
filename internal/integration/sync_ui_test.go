@@ -24,7 +24,8 @@ func TestSyncUIReporting(t *testing.T) {
 			CreateBranch("feature-c").Commit("c1").TrackBranch("feature-c", "feature-b")
 
 		// Lock feature-b
-		_, err := sh.Engine.SetLocked([]engine.Branch{sh.Engine.GetBranch("feature-b")}, true)
+		branch := sh.Engine.GetBranch("feature-b")
+		_, err := sh.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Freeze feature-c
