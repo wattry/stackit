@@ -153,8 +153,3 @@ type Absorber interface {
 	ApplyHunksToBranch(ctx context.Context, branch Branch, hunksByCommit map[string][]git.Hunk) error
 	FindTargetCommitForHunk(hunk git.Hunk, commitSHAs []string) (string, int, error)
 }
-
-// AbsorbManager is deprecated. Use Absorber instead.
-//
-// Deprecated: Use Absorber interface directly.
-type AbsorbManager = Absorber
