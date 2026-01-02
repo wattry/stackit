@@ -2,7 +2,6 @@
 package dashboard
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -14,9 +13,10 @@ import (
 
 	submitAction "stackit.dev/stackit/internal/actions/submit"
 	syncAction "stackit.dev/stackit/internal/actions/sync"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/operations"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -38,10 +38,8 @@ type Options struct {
 }
 
 type model struct {
-	context       context.Context
+	ctx           *app.Context
 	engine        engine.Engine
-	githubClient  github.Client
-	splog         *Splog
 	renderer      *tree.StackTreeRenderer
 	width         int
 	height        int
@@ -88,7 +86,7 @@ type operationProgressMsg operations.Progress
 type operationDoneMsg struct{}
 
 // Run starts the interactive dashboard program.
-func Run(ctx context.Context, eng engine.Engine, ghClient github.Client, splog *Splog, opts Options) error {
+func Run(ctx *app.Context, opts Options) error {
 	ti := textinput.New()
 	ti.Placeholder = "Enter command (e.g. create -m \"msg\") or 'quit'"
 	ti.Focus()
@@ -96,10 +94,8 @@ func Run(ctx context.Context, eng engine.Engine, ghClient github.Client, splog *
 	ti.Width = 100
 
 	m := &model{
-		context:      ctx,
-		engine:       eng,
-		githubClient: ghClient,
-		splog:        splog,
+		ctx:          ctx,
+		engine:       ctx.Engine,
 		options:      opts,
 		commandInput: ti,
 	}
@@ -186,7 +182,7 @@ func (m *model) refresh() tea.Cmd {
 		collect(trunk)
 
 		// Pending changes
-		pending, _ := m.engine.GetPendingChanges(m.context)
+		pending, _ := m.engine.GetPendingChanges(m.ctx.Context)
 
 		return refreshMsg{
 			renderer:       renderer,
@@ -395,7 +391,7 @@ func (m *model) checkout() tea.Cmd {
 		}
 
 		branch := m.engine.GetBranch(m.selectedBranch)
-		if err := m.engine.CheckoutBranch(m.context, branch); err != nil {
+		if err := m.engine.CheckoutBranch(m.ctx.Context, branch); err != nil {
 			return activityMsg{message: fmt.Sprintf("Failed to checkout %s: %v", m.selectedBranch, err), isError: true}
 		}
 
@@ -421,8 +417,8 @@ func (m *model) runCommand(cmdStr string) tea.Cmd {
 			return nil
 		}
 
-		m.splog.SetQuiet(true)
-		defer m.splog.SetQuiet(false)
+		m.ctx.Splog.SetQuiet(true)
+		defer m.ctx.Splog.SetQuiet(false)
 
 		output, err := m.options.CommandFunc(args)
 		if err != nil {
@@ -457,12 +453,13 @@ func (m *model) startSubmit(stack bool) tea.Cmd {
 			SubmitFooter: true,
 		}
 
-		// Hack: since NewSubmitOperation needs app.Context, we have a problem here.
-		// However, dashboard is interactive, so it probably should be in internal/actions or similar
-		// OR operations should not depend on app.Context.
-		// For now, I'll assume we can't easily fix this without moving things.
-		// Wait, let's check operations package.
-		return nil
+		op := operations.NewSubmitOperation(m.ctx, opts)
+		m.activeOperation = op
+		m.operationProgress = nil
+		m.progressChan = op.Start(m.ctx.Context)
+
+		// Return first progress wait
+		return m.waitForProgressSync()
 	}
 }
 

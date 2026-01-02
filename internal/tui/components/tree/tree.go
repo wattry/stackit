@@ -61,6 +61,7 @@ type RenderOptions struct {
 	NoStyleBranchName bool
 	HideStats         bool
 	SelectedBranch    string
+	Collapsed         map[string]bool
 }
 
 // StackTreeRenderer renders branch trees with annotations
@@ -119,6 +120,8 @@ func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) [
 		hideStats:         opts.HideStats,
 		overallIndent:     &overallIndent,
 		selectedBranch:    opts.SelectedBranch,
+		collapsed:         opts.Collapsed,
+		currentBranch:     r.currentBranch,
 	}
 
 	outputDeep := [][]string{
@@ -161,10 +164,16 @@ type treeRenderArgs struct {
 	skipBranchingLine bool
 	overallIndent     *int
 	selectedBranch    string
+	collapsed         map[string]bool
+	currentBranch     string
 }
 
 func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []string {
 	if args.steps != nil && *args.steps == 0 {
+		return []string{}
+	}
+
+	if args.collapsed != nil && args.collapsed[args.branchName] {
 		return []string{}
 	}
 
@@ -216,6 +225,8 @@ func (r *StackTreeRenderer) getUpstackExclusiveLines(args treeRenderArgs) []stri
 			hideStats:         args.hideStats,
 			overallIndent:     args.overallIndent,
 			selectedBranch:    args.selectedBranch,
+			collapsed:         args.collapsed,
+			currentBranch:     args.currentBranch,
 		})
 
 		result = append(result, childLines...)
@@ -284,6 +295,8 @@ func (r *StackTreeRenderer) getDownstackExclusiveLines(args treeRenderArgs) []st
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
 			selectedBranch:    args.selectedBranch,
+			collapsed:         args.collapsed,
+			currentBranch:     args.currentBranch,
 		})
 		result = append(result, branchLines...)
 	}
@@ -455,6 +468,15 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		symbol = CurrentBranchSymbol
 	} else {
 		symbol = BranchSymbol
+	}
+
+	children := r.getChildren(args.branchName)
+	if len(children) > 0 {
+		if args.collapsed != nil && args.collapsed[args.branchName] {
+			symbol = "+"
+		} else {
+			symbol = "-"
+		}
 	}
 
 	styleObj := lipgloss.NewStyle()
@@ -766,7 +788,7 @@ func (r *StackTreeRenderer) formatShortLines(lines []string, args treeRenderArgs
 			arrowWidth := utf8.RuneLen(arrowRune)
 			branchNameAndDetails := line[arrowIndex+arrowWidth:]
 			branchName := strings.Fields(branchNameAndDetails)[0]
-			isCurrent := !args.noStyleBranchName && r.currentBranch != "" && branchName == r.currentBranch
+			isCurrent := !args.noStyleBranchName && args.currentBranch != "" && branchName == args.currentBranch
 
 			overallIndent := 0
 			if args.overallIndent != nil {
