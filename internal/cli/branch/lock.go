@@ -26,7 +26,8 @@ should not be modified. For local-only protection (e.g. when building on
 top of a colleague's PR), use 'st freeze' instead.
 
 This operation can be undone with 'st unlock'.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
@@ -58,7 +59,8 @@ by clearing the shared lock in remote metadata.
 
 If the branch is also frozen locally, you will still need to run 'st unfreeze' 
 to enable modifications.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""

@@ -28,7 +28,8 @@ to opt out of this behavior, use the --downstack flag.
 Note that remote-only branches upstack of the branch are not currently synced. 
 
 If no branch is provided, sync the current stack.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchOrPR := ""

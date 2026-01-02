@@ -8,9 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/cli/agent"
 	"stackit.dev/stackit/internal/cli/branch"
-	"stackit.dev/stackit/internal/cli/github"
+	"stackit.dev/stackit/internal/cli/integrations"
 	"stackit.dev/stackit/internal/cli/navigation"
 	"stackit.dev/stackit/internal/cli/stack"
 )
@@ -28,10 +27,11 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	)
 
 	rootCmd := &cobra.Command{
-		Use:     "stackit",
-		Aliases: []string{"st"},
-		Short:   "Stackit is a command line tool that makes working with stacked changes fast & intuitive",
-		Version: version,
+		Use:          "stackit",
+		Aliases:      []string{"st"},
+		Short:        "Stackit is a command line tool that makes working with stacked changes fast & intuitive",
+		Version:      version,
+		SilenceUsage: true,
 		Long: `Stackit is a command line tool that makes working with stacked changes fast & intuitive.
 
 https://github.com/getstackit/stackit
@@ -81,7 +81,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(newAbortCmd())
 	rootCmd.AddCommand(newAddCmd())
 	rootCmd.AddCommand(branch.NewAbsorbCmd())
-	rootCmd.AddCommand(agent.NewAgentCmd(version))
+	rootCmd.AddCommand(integrations.NewAgentsCmd(version))
 	rootCmd.AddCommand(navigation.NewBottomCmd())
 	rootCmd.AddCommand(navigation.NewCheckoutCmd())
 	rootCmd.AddCommand(newCherryPickCmd())
@@ -98,7 +98,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(branch.NewGetCmd())
 	rootCmd.AddCommand(newInfoCmd())
 	rootCmd.AddCommand(newInitCmd())
-	rootCmd.AddCommand(github.NewGithubCmd())
+	rootCmd.AddCommand(integrations.NewGithubCmd())
 	rootCmd.AddCommand(branch.NewLockCmd())
 	rootCmd.AddCommand(navigation.NewLogCmd())
 	rootCmd.AddCommand(stack.NewMergeCmd())
@@ -111,6 +111,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(stack.NewReorderCmd())
 	rootCmd.AddCommand(newResetCmd())
 	rootCmd.AddCommand(stack.NewRestackCmd())
+	rootCmd.AddCommand(integrations.NewPrecommitCmd())
 	rootCmd.AddCommand(branch.NewSplitCmd())
 	rootCmd.AddCommand(branch.NewSquashCmd())
 	rootCmd.AddCommand(newScopeCmd())
