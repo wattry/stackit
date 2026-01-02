@@ -357,6 +357,10 @@ func (d *demoGitRunner) IsMerged(_ context.Context, _, _ string) (bool, error) {
 	return false, nil
 }
 
+func (d *demoGitRunner) GetMergedBranches(_ context.Context, _ string) (map[string]bool, error) {
+	return make(map[string]bool), nil
+}
+
 func (d *demoGitRunner) IsDiffEmpty(_ context.Context, _, _ string) (bool, error) {
 	return false, nil
 }

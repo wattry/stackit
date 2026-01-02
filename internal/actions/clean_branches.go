@@ -24,7 +24,6 @@ type CleanBranchesResult struct {
 
 // branchDeletionInfo stores information about a branch marked for deletion
 type branchDeletionInfo struct {
-	name     string
 	reason   string
 	blockers map[string]bool
 }
@@ -42,7 +41,6 @@ func newDeletionPlan() *deletionPlan {
 
 func (p *deletionPlan) add(name, reason string, blockers map[string]bool) {
 	p.branches[name] = &branchDeletionInfo{
-		name:     name,
 		reason:   reason,
 		blockers: blockers,
 	}
@@ -76,7 +74,9 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 	}
 
 	// Phase 3: Execute deletions
-	executeDeletions(ctx, plan)
+	if err := executeDeletions(ctx, plan); err != nil {
+		return nil, err
+	}
 
 	return &CleanBranchesResult{
 		BranchesWithNewParents: branchesWithNewParents,
@@ -118,13 +118,18 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[s
 		splog.Debug("Failed to get revisions for some branches: %v", revErrs)
 	}
 
+	mergedBranches, err := eng.Git().GetMergedBranches(c, eng.Trunk().GetName())
+	if err != nil {
+		splog.Debug("Failed to get merged branches: %v", err)
+	}
+
 	deleteStatuses := make(map[string]string) // name -> reason
 	var mu sync.Mutex
 
 	if len(branchesToProcessPool) > 0 {
 		utils.Run(branchesToProcessPool, func(branch engine.Branch) {
 			name := branch.GetName()
-			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, metadataMap[name], revisionsMap)
+			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, metadataMap[name], revisionsMap, mergedBranches)
 			if shouldDelete {
 				mu.Lock()
 				deleteStatuses[name] = reason
@@ -197,7 +202,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 }
 
 // executeDeletions greedily deletes unblocked branches from the plan.
-func executeDeletions(ctx *app.Context, plan *deletionPlan) {
+func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 	eng := ctx.Engine
 	splog := ctx.Splog
 	c := ctx.Context
@@ -225,7 +230,7 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) {
 
 		// Batch delete from engine
 		if _, err := eng.DeleteBranches(c, branches); err != nil {
-			splog.Debug("Failed to batch delete branches: %v", err)
+			return fmt.Errorf("failed to delete some branches: %w", err)
 		}
 
 		// Batch delete remote metadata
@@ -242,6 +247,8 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) {
 			plan.removeBlocker(parentName, name)
 		}
 	}
+
+	return nil
 }
 
 // getParentName returns the name of the parent branch or trunk if no parent exists
