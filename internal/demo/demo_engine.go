@@ -5,7 +5,6 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // Delay constants for simulating real operations
@@ -29,17 +28,6 @@ func init() {
 		eng, _ := NewDemoEngine()
 		return eng
 	}
-}
-
-// NewDemoContext creates a demo engine and context if in demo mode.
-// Returns (context, true) if in demo mode, (nil, false) otherwise.
-// Deprecated: Use runtime.NewContextAuto instead.
-func NewDemoContext() (*app.Context, bool) {
-	if !utils.IsDemoMode() {
-		return nil, false
-	}
-	eng, _ := NewDemoEngine()
-	return app.NewContext(eng), true
 }
 
 // NewDemoEngine creates a new demo engine using the standard engine implementation
