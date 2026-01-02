@@ -396,7 +396,7 @@ func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 		t.Errorf("expected base branch to have [AUTH] label")
 	}
 
-	// feature-login should NOT have the [AUTH] label but its symbol and tree lines should be colored
+	// feature-login should have the [AUTH] label and its symbol and tree lines should be colored
 	loginLine := ""
 	trailingLine := ""
 	for i, line := range lines {
@@ -413,8 +413,8 @@ func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 		t.Fatalf("could not find line for feature-login")
 	}
 
-	if strings.Contains(loginLine, "[AUTH]") {
-		t.Errorf("expected inherited branch to NOT have [AUTH] label")
+	if !strings.Contains(loginLine, "[AUTH]") {
+		t.Errorf("expected inherited branch to have [AUTH] label")
 	}
 
 	authStyleSymbol := lipgloss.NewStyle().Foreground(authHex).Render(CurrentBranchSymbol)

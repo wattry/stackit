@@ -6,6 +6,7 @@ import (
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // Options contains options for the fold command
@@ -68,6 +69,22 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	parentBranch := eng.GetBranch(parentName)
+
+	// Prohibit folding if current or parent is locked or frozen
+	if !currentBranchObj.CanModify() {
+		return &errors.BranchModificationError{
+			BranchName: currentBranch,
+			IsFrozen:   currentBranchObj.IsFrozen(),
+			LockReason: currentBranchObj.GetLockReason(),
+		}
+	}
+	if !parentBranch.IsTrunk() && !parentBranch.CanModify() {
+		return &errors.BranchModificationError{
+			BranchName: parentName,
+			IsFrozen:   parentBranch.IsFrozen(),
+			LockReason: parentBranch.GetLockReason(),
+		}
+	}
 
 	// Prohibit folding branches with different scopes
 	if !parentBranch.IsTrunk() {
