@@ -147,7 +147,7 @@ func (c *GitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames [
 	var firstErr error
 	var errMu sync.Mutex
 
-	utils.Run(branchNames, func(name string) {
+	utils.RunWithWorkers(branchNames, github.MaxGitHubConcurrency, func(name string) {
 		status, err := c.GetPRChecksStatus(ctx, name)
 		if err != nil {
 			errMu.Lock()

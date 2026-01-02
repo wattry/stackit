@@ -514,7 +514,8 @@ func BatchGetPRChecksStatus(ctx context.Context, client *github.Client, owner, r
 	var firstErr error
 	var errMu sync.Mutex
 
-	utils.Run(branchNames, func(branch string) {
+	// Use a fixed number of workers for network-bound GitHub tasks to avoid rate limits
+	utils.RunWithWorkers(branchNames, MaxGitHubConcurrency, func(branch string) {
 		status, err := GetPRChecksStatus(ctx, client, owner, repo, branch)
 		if err != nil {
 			errMu.Lock()

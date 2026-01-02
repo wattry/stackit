@@ -243,7 +243,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 		indices[i] = i
 	}
 
-	utils.Run(indices, func(idx int) {
+	utils.RunWithWorkers(indices, github.MaxGitHubConcurrency, func(idx int) {
 		name := allBranches[idx]
 
 		// Get PR info from batch-loaded metadata

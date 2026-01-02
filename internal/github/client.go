@@ -9,6 +9,12 @@ import (
 	"github.com/google/go-github/v62/github"
 )
 
+const (
+	// MaxGitHubConcurrency limits the number of concurrent requests to GitHub
+	// to avoid triggering secondary rate limits.
+	MaxGitHubConcurrency = 10
+)
+
 // PullRequestInfo contains information about a pull request
 // This is a simplified struct to avoid coupling to go-github library
 type PullRequestInfo struct {
