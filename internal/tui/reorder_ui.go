@@ -5,59 +5,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"stackit.dev/stackit/internal/tui/keys"
+	"stackit.dev/stackit/internal/tui/style"
 )
-
-type reorderKeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	MoveUp   key.Binding
-	MoveDown key.Binding
-	Confirm  key.Binding
-	Cancel   key.Binding
-}
-
-func (k reorderKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.MoveUp, k.MoveDown, k.Confirm, k.Cancel}
-}
-
-func (k reorderKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down},
-		{k.MoveUp, k.MoveDown},
-		{k.Confirm, k.Cancel},
-	}
-}
-
-var defaultReorderKeys = reorderKeyMap{
-	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "up"),
-	),
-	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "down"),
-	),
-	MoveUp: key.NewBinding(
-		key.WithKeys("shift+up", "K"),
-		key.WithHelp("K", "move up"),
-	),
-	MoveDown: key.NewBinding(
-		key.WithKeys("shift+down", "J"),
-		key.WithHelp("J", "move down"),
-	),
-	Confirm: key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "confirm"),
-	),
-	Cancel: key.NewBinding(
-		key.WithKeys("ctrl+c", "q", "esc"),
-		key.WithHelp("q/esc", "cancel"),
-	),
-}
 
 // reorderModel is the bubbletea model for reordering branches
 type reorderModel struct {
@@ -65,27 +19,7 @@ type reorderModel struct {
 	cursor    int
 	confirmed bool
 	canceled  bool
-	styles    reorderStyles
-	keys      reorderKeyMap
-	help      help.Model
-}
-
-type reorderStyles struct {
-	title    lipgloss.Style
-	cursor   lipgloss.Style
-	selected lipgloss.Style
-	dim      lipgloss.Style
-	branch   lipgloss.Style
-}
-
-func newReorderStyles() reorderStyles {
-	return reorderStyles{
-		title:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).MarginBottom(1),
-		cursor:   lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
-		selected: lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true),
-		dim:      lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		branch:   lipgloss.NewStyle().Foreground(lipgloss.Color("39")),
-	}
+	keys      keys.ReorderKeyMap
 }
 
 // newReorderModel creates a new reorder TUI model
@@ -93,9 +27,7 @@ func newReorderModel(branches []string) reorderModel {
 	return reorderModel{
 		branches: branches,
 		cursor:   0,
-		styles:   newReorderStyles(),
-		keys:     defaultReorderKeys,
-		help:     help.New(),
+		keys:     keys.DefaultReorder,
 	}
 }
 
@@ -134,7 +66,7 @@ func (m reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 
-		case key.Matches(msg, m.keys.Confirm):
+		case key.Matches(msg, m.keys.Select):
 			m.confirmed = true
 			return m, tea.Quit
 		}
@@ -146,23 +78,29 @@ func (m reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m reorderModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(m.styles.title.Render("Reorder Branches"))
-	b.WriteString("\n")
+	// Header with title and help (consistent with log view)
+	title := "Reorder Branches"
+	help := "'↑/k' '↓/j' navigate, 'K' 'J' move, 'enter' confirm, 'esc' cancel"
+	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.branches), help))
+	b.WriteString(header)
+	b.WriteString("\n\n")
+
+	// Branch list with cursor + background selection
+	selectionStyle := style.Selection()
+	cursorStyle := style.SelectionCursorStyle()
+	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // Cyan
 
 	for i, branch := range m.branches {
-		cursor := "  "
-		style := m.styles.branch
 		if i == m.cursor {
-			cursor = m.styles.cursor.Render("▸ ")
-			style = m.styles.selected
+			// Selected: cursor symbol + background highlight
+			cursor := cursorStyle.Render(style.SelectionCursor)
+			branchText := selectionStyle.Render(branch)
+			b.WriteString(fmt.Sprintf("%s%s\n", cursor, branchText))
+		} else {
+			// Unselected: padding + normal style
+			b.WriteString(fmt.Sprintf("%s%s\n", style.SelectionPadding, branchStyle.Render(branch)))
 		}
-
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(branch)))
 	}
-
-	b.WriteString("\n")
-	b.WriteString(m.help.View(m.keys))
-	b.WriteString("\n")
 
 	return b.String()
 }

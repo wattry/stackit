@@ -539,6 +539,12 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		styleObj = styleObj.Foreground(lipgloss.Color("8"))
 	}
 
+	// Selection cursor prefix
+	cursorPrefix := style.SelectionPadding // Default: spaces for alignment
+	if isSelected {
+		cursorPrefix = style.SelectionCursorStyle().Render(style.SelectionCursor)
+	}
+
 	// TRUNK: minimal single line
 	if isTrunk {
 		branchName := args.branchName
@@ -548,12 +554,12 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		} else if !matchesSearch && args.searchQuery != "" {
 			coloredBranchName = style.ColorDim(branchName)
 		}
-		return []string{prefix + styleObj.Render(symbol) + " " + coloredBranchName}
+		return []string{cursorPrefix + prefix + styleObj.Render(symbol) + " " + coloredBranchName}
 	}
 
 	// MERGED/CLOSED: collapsed single line, dimmed
 	if isDim {
-		dimLine := prefix + styleObj.Render(symbol) + " " + style.ColorDim(args.branchName)
+		dimLine := cursorPrefix + prefix + styleObj.Render(symbol) + " " + style.ColorDim(args.branchName)
 		if annotation.ExplicitScope != "" {
 			dimLine += " " + style.ColorDim("["+annotation.ExplicitScope+"]")
 		}
@@ -563,7 +569,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		}
 		return []string{
 			dimLine,
-			prefix + parentStyle.Render("│"),
+			style.SelectionPadding + prefix + parentStyle.Render("│"),
 		}
 	}
 
@@ -596,7 +602,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		coloredBranchName += " " + style.IconFrozen() + " " + style.ColorDim("(frozen)")
 	}
 
-	result = append(result, prefix+styleObj.Render(symbol)+" "+coloredBranchName)
+	result = append(result, cursorPrefix+prefix+styleObj.Render(symbol)+" "+coloredBranchName)
 
 	if args.singleLine {
 		return result
@@ -607,11 +613,11 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
 
 	if summaryLine != "" {
-		result = append(result, prefix+branchPipe+"  "+summaryLine)
+		result = append(result, style.SelectionPadding+prefix+branchPipe+"  "+summaryLine)
 	}
 
 	// Trailing spacer line
-	result = append(result, prefix+parentStyle.Render("│"))
+	result = append(result, style.SelectionPadding+prefix+parentStyle.Render("│"))
 
 	return result
 }

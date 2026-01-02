@@ -45,10 +45,23 @@ func ColorGreen(text string) string {
 		Render(text)
 }
 
+// Selection cursor constants
+const (
+	SelectionCursor  = "▸ " // Cursor symbol for selected items
+	SelectionPadding = "  " // Same width as cursor for unselected items
+)
+
 // Selection returns a style for selected items
 func Selection() lipgloss.Style {
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color("6")). // Cyan background
 		Foreground(lipgloss.Color("0")). // Black foreground
+		Bold(true)
+}
+
+// SelectionCursorStyle returns the style for the selection cursor
+func SelectionCursorStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("6")). // Cyan
 		Bold(true)
 }
