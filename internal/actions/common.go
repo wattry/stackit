@@ -21,6 +21,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -212,6 +213,76 @@ func ShouldDeleteBranch(ctx context.Context, branchName string, eng engine.Engin
 	}
 
 	// Interactive prompting not yet implemented
+	return false, ""
+}
+
+// ShouldDeleteBranchCached checks if a branch should be deleted using pre-fetched metadata and revisions
+func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng engine.Engine, force bool, meta *git.Meta, revisions map[string]string) (bool, string) {
+	// 1. Check PR info from cached metadata
+	if meta != nil && meta.PrInfo != nil {
+		const (
+			prStateClosed = "CLOSED"
+			prStateMerged = "MERGED"
+		)
+		if meta.PrInfo.State != nil {
+			if *meta.PrInfo.State == prStateClosed {
+				return true, fmt.Sprintf("%s is closed on GitHub", branchName)
+			}
+			if *meta.PrInfo.State == prStateMerged {
+				base := ""
+				if meta.PrInfo.Base != nil {
+					base = *meta.PrInfo.Base
+				}
+				if base == "" {
+					base = eng.Trunk().GetName()
+				}
+				return true, fmt.Sprintf("%s is merged into %s", branchName, base)
+			}
+		}
+	}
+
+	// 2. Check if merged into trunk
+	trunkName := eng.Trunk().GetName()
+	merged, err := eng.Git().IsMerged(ctx, branchName, trunkName)
+	if err == nil && merged {
+		return true, fmt.Sprintf("%s is merged into %s", branchName, trunkName)
+	}
+
+	// 3. Check if empty
+	// Need parent revision
+	var parentRev string
+	branch := eng.GetBranch(branchName)
+	parent := branch.GetParent()
+	parentName := trunkName
+	if parent != nil {
+		parentName = parent.GetName()
+	}
+
+	// Use cached revisions to avoid eng.git.GetRevision calls
+	if rev, ok := revisions[parentName]; ok {
+		parentRev = rev
+	} else {
+		// Fallback
+		rev, err := eng.Git().GetRevision(parentName)
+		if err == nil {
+			parentRev = rev
+		}
+	}
+
+	if parentRev != "" {
+		empty, err := eng.Git().IsDiffEmpty(ctx, branchName, parentRev)
+		if err == nil && empty {
+			// Only delete empty branches if they have a PR
+			if meta != nil && meta.PrInfo != nil && meta.PrInfo.Number != nil && *meta.PrInfo.Number != 0 {
+				return true, fmt.Sprintf("%s is empty", branchName)
+			}
+		}
+	}
+
+	if force {
+		return false, ""
+	}
+
 	return false, ""
 }
 

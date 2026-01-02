@@ -40,16 +40,30 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 
 	// Filter out trunk branches before processing
 	branchesToProcessPool := []engine.Branch{}
+	branchNames := []string{}
+	allRevisionsToFetch := []string{eng.Trunk().GetName()}
 	for _, branch := range allTrackedBranches {
+		name := branch.GetName()
+		allRevisionsToFetch = append(allRevisionsToFetch, name)
 		if !branch.IsTrunk() {
 			branchesToProcessPool = append(branchesToProcessPool, branch)
+			branchNames = append(branchNames, name)
+
+			parent := branch.GetParent()
+			if parent != nil {
+				allRevisionsToFetch = append(allRevisionsToFetch, parent.GetName())
+			}
 		}
 	}
+
+	// Pre-fetch metadata and revisions in batch to avoid O(N) git calls in worker pool
+	metadataMap, _ := eng.Git().BatchReadMetadata(branchNames)
+	revisionsMap, _ := eng.Git().BatchGetRevisions(allRevisionsToFetch)
 
 	if len(branchesToProcessPool) > 0 {
 		utils.Run(branchesToProcessPool, func(branch engine.Branch) {
 			name := branch.GetName()
-			shouldDelete, reason := ShouldDeleteBranch(c, name, eng, opts.Force)
+			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, metadataMap[name], revisionsMap)
 			mu.Lock()
 			deleteStatuses[name] = deleteStatus{shouldDelete: shouldDelete, reason: reason}
 			mu.Unlock()
