@@ -151,56 +151,56 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 
 // greedilyDeleteUnblockedBranches deletes branches that have no blockers
 func greedilyDeleteUnblockedBranches(ctx context.Context, branchesToDelete map[string]map[string]bool, eng engine.Engine, splog *tui.Splog) {
-	// Find all initially unblocked branches
-	queue := make([]string, 0)
-	for branchName, blockers := range branchesToDelete {
-		if len(blockers) == 0 {
-			queue = append(queue, branchName)
-		}
-	}
-
-	// Process queue iteratively
-	for len(queue) > 0 {
-		branchName := queue[0]
-		queue = queue[1:]
-
-		// Skip if already removed from deletion map
-		if _, ok := branchesToDelete[branchName]; !ok {
-			continue
+	for {
+		// Find all currently unblocked branches
+		var batchNames []string
+		for branchName, blockers := range branchesToDelete {
+			if len(blockers) == 0 {
+				batchNames = append(batchNames, branchName)
+			}
 		}
 
-		branch := eng.GetBranch(branchName)
-		parent := branch.GetParent()
-		parentName := ""
-		if parent == nil {
-			parentName = eng.Trunk().GetName()
-		} else {
-			parentName = parent.GetName()
+		if len(batchNames) == 0 {
+			break
 		}
 
-		// Delete the branch
-		if err := eng.DeleteBranch(ctx, branch); err != nil {
-			splog.Debug("Failed to delete %s: %v", branchName, err)
-			// Even if deletion fails, we remove it from the map to avoid infinite loops
-			// and to allow parent deletion if appropriate (same as old behavior)
+		// Prepare branches for deletion and track parents for blocker updates
+		branches := make([]engine.Branch, len(batchNames))
+		parents := make(map[string]string)
+		for i, name := range batchNames {
+			branch := eng.GetBranch(name)
+			branches[i] = branch
+
+			parent := branch.GetParent()
+			if parent == nil {
+				parents[name] = eng.Trunk().GetName()
+			} else {
+				parents[name] = parent.GetName()
+			}
 		}
 
-		// Delete remote metadata ref (best effort, don't fail if it doesn't exist)
-		if err := eng.Git().DeleteRemoteMetadataRef(branchName); err != nil {
-			splog.Debug("Failed to delete remote metadata for %s: %v", branchName, err)
+		// Batch delete branches from engine
+		if _, err := eng.DeleteBranches(ctx, branches); err != nil {
+			splog.Debug("Failed to batch delete branches: %v", err)
+			// Even if some failed, we continue to remove them from our internal tracking
+			// to avoid infinite loops and follow the best-effort approach.
 		}
 
-		splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
+		// Post-deletion updates
+		if err := eng.Git().BatchDeleteRemoteMetadataRefs(batchNames); err != nil {
+			splog.Debug("Failed to batch delete remote metadata: %v", err)
+		}
 
-		// Remove from deletion map
-		delete(branchesToDelete, branchName)
+		for _, branchName := range batchNames {
+			splog.Info("Deleted branch %s", style.ColorBranchName(branchName, false))
 
-		// Remove this branch as a blocker for its parent
-		if parentBlockers, ok := branchesToDelete[parentName]; ok {
-			delete(parentBlockers, branchName)
-			// If parent is now unblocked, add to queue
-			if len(parentBlockers) == 0 {
-				queue = append(queue, parentName)
+			// Remove from deletion map
+			delete(branchesToDelete, branchName)
+
+			// Remove this branch as a blocker for its parent
+			parentName := parents[branchName]
+			if parentBlockers, ok := branchesToDelete[parentName]; ok {
+				delete(parentBlockers, branchName)
 			}
 		}
 	}
