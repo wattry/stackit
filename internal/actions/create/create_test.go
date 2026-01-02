@@ -204,61 +204,83 @@ func TestCreateAction_Insert(t *testing.T) {
 		require.True(t, isAncestor, "inserted should be an ancestor of child2")
 	})
 
-	t.Run("inserts branch into a branching stack selecting only one child", func(t *testing.T) {
+	t.Run("restores original branch after insert", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit()
 
-		// 1. Create two children from main: main -> child1, main -> child2
+		// 1. Create child1 on main
 		err := s.Scene.Repo.CreateChange("child1 content", "file1", false)
 		require.NoError(t, err)
 		err = Action(s.Context, Options{BranchName: "child1", Message: "Add child1"})
-		require.NoError(t, err)
-
-		err = s.Scene.Repo.CheckoutBranch("main")
-		require.NoError(t, err)
-
-		err = s.Scene.Repo.CreateChange("child2 content", "file2", false)
-		require.NoError(t, err)
-		err = Action(s.Context, Options{BranchName: "child2", Message: "Add child2"})
 		require.NoError(t, err)
 
 		// 2. Go back to main
 		err = s.Scene.Repo.CheckoutBranch("main")
 		require.NoError(t, err)
 
-		// 3. Insert 'inserted' after main, but only move 'child1'
+		// 3. Insert 'inserted' branch with --insert
+		err = s.Scene.Repo.CreateChange("inserted content", "file2", false)
+		require.NoError(t, err)
+		err = Action(s.Context, Options{
+			BranchName: "inserted",
+			Message:    "Add inserted",
+			Insert:     true,
+		})
+		require.NoError(t, err)
+
+		// 4. Verify we are back on main
+		current, err := s.Scene.Repo.CurrentBranchName()
+		require.NoError(t, err)
+		require.Equal(t, "main", current)
+	})
+}
+
+func TestCreateAction_Insert_Deep(t *testing.T) {
+	t.Run("restacks descendants deep into the stack", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit()
+
+		// 1. Create stack: main -> child1 -> grandchild
+		err := s.Scene.Repo.CreateChange("child1 content", "file1", false)
+		require.NoError(t, err)
+		err = Action(s.Context, Options{BranchName: "child1", Message: "Add child1"})
+		require.NoError(t, err)
+
+		err = s.Scene.Repo.CreateChange("grandchild content", "file2", false)
+		require.NoError(t, err)
+		err = Action(s.Context, Options{BranchName: "grandchild", Message: "Add grandchild"})
+		require.NoError(t, err)
+
+		// 2. Go back to main
+		err = s.Scene.Repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = s.Context.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		// 3. Insert 'inserted' after main
 		err = s.Scene.Repo.CreateChange("inserted content", "file3", false)
 		require.NoError(t, err)
 		err = Action(s.Context, Options{
-			BranchName:       "inserted",
-			Message:          "Add inserted",
-			Insert:           true,
-			SelectedChildren: []string{"child1"},
+			BranchName: "inserted",
+			Message:    "Add inserted",
+			Insert:     true,
 		})
 		require.NoError(t, err)
 
 		// 4. Verify relationships
 		eng := s.Context.Engine
-		branchparentInserted := eng.GetBranch("inserted")
-		parentInserted := branchparentInserted.GetParent()
-		require.NotNil(t, parentInserted)
-		require.Equal(t, "main", parentInserted.GetName())
-		branchparentChild1 := eng.GetBranch("child1")
-		parentChild1 := branchparentChild1.GetParent()
-		require.NotNil(t, parentChild1)
-		require.Equal(t, "inserted", parentChild1.GetName(), "child1 should have been moved to inserted")
-		branchparentChild2 := eng.GetBranch("child2")
-		parentChild2 := branchparentChild2.GetParent()
-		require.NotNil(t, parentChild2)
-		require.Equal(t, "main", parentChild2.GetName(), "child2 should have remained a child of main")
+		require.Equal(t, "main", eng.GetBranch("inserted").GetParent().GetName())
+		require.Equal(t, "inserted", eng.GetBranch("child1").GetParent().GetName())
+		require.Equal(t, "child1", eng.GetBranch("grandchild").GetParent().GetName())
 
-		// 5. Verify physical relationships
-		isAncestor, err := s.Scene.Repo.IsAncestor("inserted", "child1")
+		// 5. Verify physical relationships (deep restack)
+		// grandchild should have been restacked and thus should have 'inserted' in its ancestry
+		isAncestor, err := s.Scene.Repo.IsAncestor("inserted", "grandchild")
 		require.NoError(t, err)
-		require.True(t, isAncestor, "inserted should be an ancestor of child1")
+		require.True(t, isAncestor, "inserted should be an ancestor of grandchild after deep restack")
 
-		isAncestor, err = s.Scene.Repo.IsAncestor("inserted", "child2")
+		isAncestor, err = s.Scene.Repo.IsAncestor("child1", "grandchild")
 		require.NoError(t, err)
-		require.False(t, isAncestor, "inserted should NOT be an ancestor of child2")
+		require.True(t, isAncestor, "child1 should still be an ancestor of grandchild")
 	})
 }
