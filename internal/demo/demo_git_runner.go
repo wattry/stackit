@@ -545,6 +545,10 @@ func (d *demoGitRunner) DeleteRemoteMetadataRef(_ string) error {
 	return nil
 }
 
+func (d *demoGitRunner) BatchDeleteRemoteMetadataRefs(_ []string) error {
+	return nil
+}
+
 func (d *demoGitRunner) TestRemoteRefCompatibility() error {
 	return nil
 }
