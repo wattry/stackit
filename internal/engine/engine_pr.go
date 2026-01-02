@@ -31,7 +31,7 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		getStringValue(meta.PrInfo.URL),
 		getBoolValue(meta.PrInfo.IsDraft),
 		errors.LockReason(lockReason),
-		getStringValue(meta.PrInfo.ConsolidationBranch),
+		getStringValue(meta.PrInfo.MergeBranch),
 	)
 
 	return prInfo, nil
@@ -89,8 +89,8 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	}
 	lockReason := string(prInfo.LockReason())
 	meta.PrInfo.LockReason = &lockReason
-	consolidationBranch := prInfo.ConsolidationBranch()
-	meta.PrInfo.ConsolidationBranch = &consolidationBranch
+	mergeBranch := prInfo.MergeBranch()
+	meta.PrInfo.MergeBranch = &mergeBranch
 
 	return e.git.WriteMetadata(branch.GetName(), meta)
 }
@@ -136,17 +136,17 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 		}
 	}
 
-	// Check if consolidation branch changed
-	consolidationBranchChanged := false
+	// Check if merge branch changed
+	mergeBranchChanged := false
 	if err == nil && meta.PrInfo != nil {
-		oldBranch := getStringValue(meta.PrInfo.ConsolidationBranch)
-		newBranch := prInfo.ConsolidationBranch()
+		oldBranch := getStringValue(meta.PrInfo.MergeBranch)
+		newBranch := prInfo.MergeBranch()
 		if oldBranch != newBranch {
-			consolidationBranchChanged = true
+			mergeBranchChanged = true
 		}
 	}
 
-	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged || consolidationBranchChanged
+	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged || mergeBranchChanged
 
 	reason := ""
 	if !needsUpdate {

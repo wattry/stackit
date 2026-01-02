@@ -7,7 +7,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -123,7 +122,7 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 
 	splog.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
 		style.ColorBranchName(info.BranchName, false))
-	if errors.LockReason(info.LocalMeta.LockReason).IsLocked() {
+	if engine.LockReason(info.LocalMeta.LockReason).IsLocked() {
 		splog.Info("  lockReason: %s", info.LocalMeta.LockReason)
 	}
 	if info.LocalMeta.Scope != nil {

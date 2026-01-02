@@ -70,7 +70,7 @@ func TestCreatePRBodyFooter(t *testing.T) {
 		require.NoError(t, err)
 
 		footer := CreatePRBodyFooter("feature-a", s.Engine)
-		assert.Contains(t, footer, "🔒 This PR has been locked (user). To unlock it, run `st unlock`.")
+		assert.Contains(t, footer, "🔒 This PR has been locked. To unlock it, run `st unlock`.")
 	})
 
 	t.Run("does not include lock banner when branch is unlocked", func(t *testing.T) {

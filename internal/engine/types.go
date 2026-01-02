@@ -7,12 +7,15 @@ import (
 	"stackit.dev/stackit/internal/errors"
 )
 
-// Re-export LockReason from errors package
+// LockReason is re-exported from errors package
 type LockReason = errors.LockReason
 
 const (
-	LockReasonNone          LockReason = errors.LockReasonNone
-	LockReasonUser          LockReason = errors.LockReasonUser
+	// LockReasonNone indicates the branch is not locked
+	LockReasonNone LockReason = errors.LockReasonNone
+	// LockReasonUser indicates the branch was manually locked by the user
+	LockReasonUser LockReason = errors.LockReasonUser
+	// LockReasonConsolidating indicates the branch is being consolidated
 	LockReasonConsolidating LockReason = errors.LockReasonConsolidating
 )
 
@@ -279,15 +282,15 @@ func (b Branch) GetPRSubmissionStatus() (PRSubmissionStatus, error) {
 // PrInfo represents PR information for a branch
 // PrInfo is immutable - use With* methods to create modified copies
 type PrInfo struct {
-	number              *int
-	title               string
-	body                string
-	isDraft             bool
-	state               string            // MERGED, CLOSED, OPEN
-	base                string            // Base branch name
-	url                 string            // PR URL
-	lockReason          errors.LockReason // Why the PR is locked (empty if not locked)
-	consolidationBranch string            // Name of the consolidated branch this PR is part of
+	number      *int
+	title       string
+	body        string
+	isDraft     bool
+	state       string            // MERGED, CLOSED, OPEN
+	base        string            // Base branch name
+	url         string            // PR URL
+	lockReason  errors.LockReason // Why the PR is locked (empty if not locked)
+	mergeBranch string            // Name of the merge branch this PR is part of
 }
 
 // NewPrInfo creates a new PrInfo instance
@@ -318,17 +321,17 @@ func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, 
 }
 
 // NewPrInfoFull creates a new PrInfo instance with all fields
-func NewPrInfoFull(number *int, title, body, state, base, url string, isDraft bool, lockReason errors.LockReason, consolidationBranch string) *PrInfo {
+func NewPrInfoFull(number *int, title, body, state, base, url string, isDraft bool, lockReason errors.LockReason, mergeBranch string) *PrInfo {
 	return &PrInfo{
-		number:              number,
-		title:               title,
-		body:                body,
-		isDraft:             isDraft,
-		state:               state,
-		base:                base,
-		url:                 url,
-		lockReason:          lockReason,
-		consolidationBranch: consolidationBranch,
+		number:      number,
+		title:       title,
+		body:        body,
+		isDraft:     isDraft,
+		state:       state,
+		base:        base,
+		url:         url,
+		lockReason:  lockReason,
+		mergeBranch: mergeBranch,
 	}
 }
 
@@ -377,34 +380,34 @@ func (p *PrInfo) LockReason() errors.LockReason {
 	return p.lockReason
 }
 
-// ConsolidationBranch returns the name of the consolidated branch this PR is part of
-func (p *PrInfo) ConsolidationBranch() string {
-	return p.consolidationBranch
+// MergeBranch returns the name of the merge branch this PR is part of
+func (p *PrInfo) MergeBranch() string {
+	return p.mergeBranch
 }
 
 // MarshalJSON implements json.Marshaler for PrInfo
 func (p *PrInfo) MarshalJSON() ([]byte, error) {
 	type Alias struct {
-		Number              *int   `json:"number,omitempty"`
-		Base                string `json:"base,omitempty"`
-		URL                 string `json:"url,omitempty"`
-		Title               string `json:"title,omitempty"`
-		Body                string `json:"body,omitempty"`
-		State               string `json:"state,omitempty"`
-		IsDraft             bool   `json:"is_draft"`
-		LockReason          string `json:"lock_reason,omitempty"`
-		ConsolidationBranch string `json:"consolidation_branch,omitempty"`
+		Number      *int   `json:"number,omitempty"`
+		Base        string `json:"base,omitempty"`
+		URL         string `json:"url,omitempty"`
+		Title       string `json:"title,omitempty"`
+		Body        string `json:"body,omitempty"`
+		State       string `json:"state,omitempty"`
+		IsDraft     bool   `json:"is_draft"`
+		LockReason  string `json:"lock_reason,omitempty"`
+		MergeBranch string `json:"merge_branch,omitempty"`
 	}
 	return json.Marshal(&Alias{
-		Number:              p.number,
-		Base:                p.base,
-		URL:                 p.url,
-		Title:               p.title,
-		Body:                p.body,
-		State:               p.state,
-		IsDraft:             p.isDraft,
-		LockReason:          string(p.lockReason),
-		ConsolidationBranch: p.consolidationBranch,
+		Number:      p.number,
+		Base:        p.base,
+		URL:         p.url,
+		Title:       p.title,
+		Body:        p.body,
+		State:       p.state,
+		IsDraft:     p.isDraft,
+		LockReason:  string(p.lockReason),
+		MergeBranch: p.mergeBranch,
 	})
 }
 
@@ -524,30 +527,30 @@ func (p *PrInfo) WithURL(url string) *PrInfo {
 // WithLockReason returns a new PrInfo with the lockReason field updated
 func (p *PrInfo) WithLockReason(reason errors.LockReason) *PrInfo {
 	return &PrInfo{
-		number:              p.number,
-		title:               p.title,
-		body:                p.body,
-		isDraft:             p.isDraft,
-		state:               p.state,
-		base:                p.base,
-		url:                 p.url,
-		lockReason:          reason,
-		consolidationBranch: p.consolidationBranch,
+		number:      p.number,
+		title:       p.title,
+		body:        p.body,
+		isDraft:     p.isDraft,
+		state:       p.state,
+		base:        p.base,
+		url:         p.url,
+		lockReason:  reason,
+		mergeBranch: p.mergeBranch,
 	}
 }
 
-// WithConsolidationBranch returns a new PrInfo with the consolidationBranch field updated
-func (p *PrInfo) WithConsolidationBranch(branch string) *PrInfo {
+// WithMergeBranch returns a new PrInfo with the mergeBranch field updated
+func (p *PrInfo) WithMergeBranch(branch string) *PrInfo {
 	return &PrInfo{
-		number:              p.number,
-		title:               p.title,
-		body:                p.body,
-		isDraft:             p.isDraft,
-		state:               p.state,
-		base:                p.base,
-		url:                 p.url,
-		lockReason:          p.lockReason,
-		consolidationBranch: branch,
+		number:      p.number,
+		title:       p.title,
+		body:        p.body,
+		isDraft:     p.isDraft,
+		state:       p.state,
+		base:        p.base,
+		url:         p.url,
+		lockReason:  p.lockReason,
+		mergeBranch: branch,
 	}
 }
 

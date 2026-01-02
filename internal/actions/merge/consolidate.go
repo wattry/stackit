@@ -58,24 +58,24 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 	splog.Info("  📦 Consolidated PR")
 	splog.Newline()
 
-	consolidationBranch, err := c.createConsolidationBranch(ctx)
+	mergeBranch, err := c.createMergeBranch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create consolidation branch: %w", err)
+		return nil, fmt.Errorf("failed to create merge branch: %w", err)
 	}
 
-	pr, err := c.createConsolidationPR(ctx, consolidationBranch)
+	pr, err := c.createConsolidationPR(ctx, mergeBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consolidation PR: %w", err)
 	}
 
-	splog.Info("✅ Created consolidation branch: %s", consolidationBranch)
+	splog.Info("✅ Created merge branch: %s", mergeBranch)
 
 	// Lock individual PRs and update them with a notice
-	if err := c.lockAndNotifyIndividualPRs(ctx, consolidationBranch); err != nil {
+	if err := c.lockAndNotifyIndividualPRs(ctx, mergeBranch); err != nil {
 		splog.Warn("Failed to lock and notify individual PRs: %v", err)
 	}
 
-	if err := c.waitForConsolidationMerge(ctx, consolidationBranch, pr); err != nil {
+	if err := c.waitForConsolidationMerge(ctx, mergeBranch, pr); err != nil {
 		return nil, fmt.Errorf("consolidation merge failed: %w", err)
 	}
 
@@ -86,7 +86,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 	splog.Info("🎉 Stack consolidation merge completed successfully!")
 
 	result := &ConsolidationResult{
-		BranchName: consolidationBranch,
+		BranchName: mergeBranch,
 		PRNumber:   pr.Number,
 		PRURL:      pr.HTMLURL,
 	}
@@ -139,15 +139,15 @@ func (c *ConsolidateMergeExecutor) preValidateStack(ctx context.Context, force b
 	return nil
 }
 
-// createConsolidationBranch creates a branch containing all stack commits
-func (c *ConsolidateMergeExecutor) createConsolidationBranch(ctx context.Context) (string, error) {
+// createMergeBranch creates a branch containing all stack commits
+func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (string, error) {
 	splog := c.ctx.Splog
 	// Generate unique branch name
 	timestamp := time.Now().Unix()
 	scope := c.getStackScope()
-	branchName := fmt.Sprintf("stack-consolidate-%s-%d", scope, timestamp)
+	branchName := fmt.Sprintf("stack-merge-%s-%d", scope, timestamp)
 
-	splog.Info("📋 Creating consolidation branch: %s", branchName)
+	splog.Info("📋 Creating merge branch: %s", branchName)
 
 	if err := c.engine.CreateAndCheckoutBranch(ctx, c.engine.GetBranch(branchName)); err != nil {
 		return "", fmt.Errorf("failed to create and checkout branch: %w", err)
@@ -175,7 +175,7 @@ func (c *ConsolidateMergeExecutor) createConsolidationBranch(ctx context.Context
 		return "", fmt.Errorf("failed to push consolidation branch %s: %w", branchName, err)
 	}
 
-	splog.Info("✅ Consolidation branch created and pushed")
+	splog.Info("✅ Merge branch created and pushed")
 	return branchName, nil
 }
 
@@ -307,7 +307,7 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 	}
 }
 
-func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, consolidationBranch string) error {
+func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, mergeBranch string) error {
 	splog := c.ctx.Splog
 	splog.Info("🔒 Locking individual PRs and updating status...")
 
@@ -330,7 +330,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	for _, b := range branchesToLock {
 		prInfo, _ := b.GetPrInfo()
 		if prInfo != nil {
-			_ = c.engine.UpsertPrInfo(b, prInfo.WithConsolidationBranch(consolidationBranch))
+			_ = c.engine.UpsertPrInfo(b, prInfo.WithMergeBranch(mergeBranch))
 		}
 	}
 

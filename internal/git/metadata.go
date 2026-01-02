@@ -48,15 +48,15 @@ type ModifiedBy struct {
 
 // PrInfoPersistence represents PR information for persistence
 type PrInfoPersistence struct {
-	Number              *int    `json:"number,omitempty"`
-	Base                *string `json:"base,omitempty"`
-	URL                 *string `json:"url,omitempty"`
-	Title               *string `json:"title,omitempty"`
-	Body                *string `json:"body,omitempty"`
-	State               *string `json:"state,omitempty"`
-	IsDraft             *bool   `json:"isDraft,omitempty"`
-	LockReason          *string `json:"lockReason,omitempty"`
-	ConsolidationBranch *string `json:"consolidationBranch,omitempty"`
+	Number      *int    `json:"number,omitempty"`
+	Base        *string `json:"base,omitempty"`
+	URL         *string `json:"url,omitempty"`
+	Title       *string `json:"title,omitempty"`
+	Body        *string `json:"body,omitempty"`
+	State       *string `json:"state,omitempty"`
+	IsDraft     *bool   `json:"isDraft,omitempty"`
+	LockReason  *string `json:"lockReason,omitempty"`
+	MergeBranch *string `json:"mergeBranch,omitempty"`
 }
 
 const (

@@ -6,7 +6,6 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/git"
 )
 
 const (
@@ -43,17 +42,17 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	// Add notice if present in PrInfo
 	prInfo, _ := eng.GetBranch(branch).GetPrInfo()
 	if prInfo != nil {
-		if prInfo.ConsolidationBranch() != "" {
+		if prInfo.MergeBranch() != "" {
 			if prInfo.State() == "MERGED" {
-				tree.WriteString("> 💡 **Notice**: This PR was consolidated and has been merged.\n\n")
+				tree.WriteString("> 💡 **Notice**: This PR was merged via a merge branch.\n\n")
 			} else {
-				consolidationBranch := prInfo.ConsolidationBranch()
-				msg := fmt.Sprintf("> 💡 **Notice**: This PR is part of a consolidated stack merge into branch `%s`.\n\n", consolidationBranch)
+				mergeBranch := prInfo.MergeBranch()
+				msg := fmt.Sprintf("> 💡 **Notice**: This PR is part of a stack merge into branch `%s`.\n\n", mergeBranch)
 
-				// If we can find the PR number for the consolidation branch, show it
-				cBranch := eng.GetBranch(consolidationBranch)
-				if cPrInfo, err := cBranch.GetPrInfo(); err == nil && cPrInfo != nil && cPrInfo.Number() != nil {
-					msg = fmt.Sprintf("> 💡 **Notice**: This PR is part of a consolidated stack merge. See PR #%d for details.\n\n", *cPrInfo.Number())
+				// If we can find the PR number for the merge branch, show it
+				mBranch := eng.GetBranch(mergeBranch)
+				if mPrInfo, err := mBranch.GetPrInfo(); err == nil && mPrInfo != nil && mPrInfo.Number() != nil {
+					msg = fmt.Sprintf("> 💡 **Notice**: This PR is part of a stack merge. See PR #%d for details.\n\n", *mPrInfo.Number())
 				}
 				tree.WriteString(msg)
 			}

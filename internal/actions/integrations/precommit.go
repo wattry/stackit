@@ -43,7 +43,7 @@ func PrecommitInstallAction(ctx *app.Context) error {
 		defer func() {
 			if closeErr := f.Close(); closeErr != nil {
 				// Log but don't fail if close fails
-				ctx.Splog.Debug(fmt.Sprintf("failed to close file: %v", closeErr))
+				ctx.Splog.Debug("failed to close file: %v", closeErr)
 			}
 		}()
 
