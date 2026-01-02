@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -13,6 +14,7 @@ import (
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/keys"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -42,6 +44,10 @@ type LogModel struct {
 	height       int
 	ready        bool
 
+	// Keys
+	logKeys    keys.LogKeyMap
+	selectKeys keys.SelectKeyMap
+
 	// State
 	mode           LogMode
 	branches       []tree.RenderedBranch // Visible branches with their lines
@@ -68,6 +74,8 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		context:       ctx,
 		engine:        eng,
 		githubClient:  ghClient,
+		logKeys:       keys.DefaultLog,
+		selectKeys:    keys.DefaultSelect,
 		style:         opts.Style,
 		reverse:       opts.Reverse,
 		showUntracked: opts.ShowUntracked,
@@ -178,40 +186,43 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 
-		// Normal mode key handling
-		switch msg.String() {
-		case KeyQuit, KeyCtrlC:
+		// Normal mode key handling - use shared keys with vim support
+		switch {
+		case m.mode == LogModeView && key.Matches(msg, m.logKeys.Quit):
 			m.canceled = true
 			return m, tea.Quit
-		case KeyEsc:
-			if m.mode == LogModeSelect {
-				m.canceled = true
-				return m, tea.Quit
-			}
+		case m.mode == LogModeSelect && key.Matches(msg, m.selectKeys.Cancel):
+			m.canceled = true
 			return m, tea.Quit
-		case "/":
+		case m.mode == LogModeSelect && key.Matches(msg, m.selectKeys.Search):
 			// Enter search mode (only in select mode)
-			if m.mode == LogModeSelect {
-				m.inSearchMode = true
-				m.searchQuery = ""
-				m.updateSearchMatches()
-				m.renderTree()
-			}
-		case KeyUp:
-			if m.selectedIndex > 0 {
-				m.selectedIndex--
+			m.inSearchMode = true
+			m.searchQuery = ""
+			m.updateSearchMatches()
+			m.renderTree()
+		case key.Matches(msg, m.logKeys.Up):
+			if len(m.branches) > 0 {
+				if m.selectedIndex > 0 {
+					m.selectedIndex--
+				} else {
+					m.selectedIndex = len(m.branches) - 1 // Wrap to last
+				}
 				m.selectedBranch = m.branches[m.selectedIndex].Name
 				m.renderTree()
 				m.ensureVisible()
 			}
-		case KeyDown:
-			if m.selectedIndex < len(m.branches)-1 {
-				m.selectedIndex++
+		case key.Matches(msg, m.logKeys.Down):
+			if len(m.branches) > 0 {
+				if m.selectedIndex < len(m.branches)-1 {
+					m.selectedIndex++
+				} else {
+					m.selectedIndex = 0 // Wrap to first
+				}
 				m.selectedBranch = m.branches[m.selectedIndex].Name
 				m.renderTree()
 				m.ensureVisible()
 			}
-		case KeyEnter:
+		case key.Matches(msg, m.selectKeys.Select):
 			if m.mode == LogModeSelect {
 				return m, tea.Quit
 			}
@@ -219,7 +230,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.collapsed[m.selectedBranch] = !m.collapsed[m.selectedBranch]
 				m.renderTree()
 			}
-		case " ":
+		case key.Matches(msg, m.selectKeys.Expand):
 			if m.selectedBranch != "" {
 				m.collapsed[m.selectedBranch] = !m.collapsed[m.selectedBranch]
 				m.renderTree()
@@ -367,13 +378,13 @@ func (m *LogModel) View() string {
 	}
 
 	title := "Stackit Log"
-	help := "'q' to quit, 'enter' to expand/collapse, 'up/down' to scroll"
+	help := "'q' quit, 'enter' expand/collapse, '↑/k' '↓/j' navigate"
 	if m.mode == LogModeSelect {
 		title = "Select Branch"
 		if m.inSearchMode {
 			help = fmt.Sprintf("Search: /%s (esc to exit, enter to confirm)", m.searchQuery)
 		} else {
-			help = "'/' to search, 'esc' to cancel, 'enter' to select, 'space' to expand/collapse, 'up/down' to scroll"
+			help = "'/' search, 'esc' cancel, 'enter' select, 'space' expand, '↑/k' '↓/j' navigate"
 		}
 	}
 
