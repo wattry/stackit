@@ -27,3 +27,5 @@ st
 
 .gocache/
 st-tui
+
+tmp/
