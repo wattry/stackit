@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/utils"
 )
 
 const (
@@ -510,29 +511,23 @@ func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID s
 func BatchGetPRChecksStatus(ctx context.Context, client *github.Client, owner, repo string, branchNames []string) (map[string]*CheckStatus, error) {
 	results := make(map[string]*CheckStatus)
 	var mu sync.Mutex
-	var wg sync.WaitGroup
-	errs := make(chan error, len(branchNames))
+	var firstErr error
+	var errMu sync.Mutex
 
-	for _, name := range branchNames {
-		wg.Add(1)
-		go func(branch string) {
-			defer wg.Done()
-			status, err := GetPRChecksStatus(ctx, client, owner, repo, branch)
-			if err != nil {
-				errs <- err
-				return
+	utils.Run(branchNames, func(branch string) {
+		status, err := GetPRChecksStatus(ctx, client, owner, repo, branch)
+		if err != nil {
+			errMu.Lock()
+			if firstErr == nil {
+				firstErr = err
 			}
-			mu.Lock()
-			results[branch] = status
-			mu.Unlock()
-		}(name)
-	}
+			errMu.Unlock()
+			return
+		}
+		mu.Lock()
+		results[branch] = status
+		mu.Unlock()
+	})
 
-	wg.Wait()
-	close(errs)
-
-	if len(errs) > 0 {
-		return results, <-errs
-	}
-	return results, nil
+	return results, firstErr
 }

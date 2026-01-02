@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // Strategy defines how PRs in the stack should be merged
@@ -238,88 +238,88 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 		branchValid[i] = true
 	}
 
-	var wg sync.WaitGroup
-	for i, branchName := range allBranches {
-		wg.Add(1)
-		go func(idx int, name string) {
-			defer wg.Done()
-
-			// Get PR info from batch-loaded metadata
-			meta := allMeta[name]
-			prInfo := engine.NewPrInfoFromMeta(meta)
-
-			// Check if PR exists
-			if prInfo == nil || prInfo.Number() == nil {
-				branchValid[idx] = false
-				branchErrors[idx] = fmt.Sprintf("Branch %s has no associated PR", name)
-				return
-			}
-
-			// Check PR state
-			state := prInfo.State()
-			if state != "OPEN" {
-				if state == "MERGED" {
-					splog.Debug("Skipping %s: PR #%d is already merged", name, *prInfo.Number())
-					branchValid[idx] = true // Not an error, just skip
-					return
-				}
-				branchValid[idx] = false
-				branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d is %s (not open)", name, *prInfo.Number(), state)
-				return
-			}
-
-			// Check if draft
-			if prInfo.IsDraft() && !opts.Force {
-				branchValid[idx] = false
-				branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d is a draft", name, *prInfo.Number())
-			}
-
-			// Check if local matches remote
-			matchesRemote, err := eng.BranchMatchesRemote(name)
-			if err != nil {
-				splog.Debug("Failed to check if branch matches remote: %v", err)
-				matchesRemote = true // Assume matches if check fails
-			}
-			if !matchesRemote && prInfo != nil && prInfo.Number() != nil {
-				// Get detailed difference information
-				diffInfo, _ := eng.GetBranchRemoteDifference(name)
-				if diffInfo != "" {
-					branchWarnings[idx] = append(branchWarnings[idx], fmt.Sprintf("Branch %s differs from remote: %s", name, diffInfo))
-				} else {
-					branchWarnings[idx] = append(branchWarnings[idx], fmt.Sprintf("Branch %s differs from remote", name))
-				}
-			}
-
-			// Get CI check status from batch-loaded results
-			checksStatus := ChecksNone
-			if allCheckStatuses != nil {
-				if status, ok := allCheckStatuses[name]; ok && status != nil {
-					switch {
-					case status.Pending:
-						checksStatus = ChecksPending
-					case !status.Passing:
-						checksStatus = ChecksFailing
-						if !opts.Force {
-							branchValid[idx] = false
-							branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d has failing CI checks", name, *prInfo.Number())
-						}
-					default:
-						checksStatus = ChecksPassing
-					}
-				}
-			}
-
-			branchesToMerge[idx] = BranchMergeInfo{
-				BranchName:    name,
-				PRNumber:      *prInfo.Number(),
-				PRURL:         prInfo.URL(),
-				IsDraft:       prInfo.IsDraft(),
-				ChecksStatus:  checksStatus,
-				MatchesRemote: matchesRemote,
-			}
-		}(i, branchName)
+	indices := make([]int, len(allBranches))
+	for i := range indices {
+		indices[i] = i
 	}
-	wg.Wait()
+
+	utils.Run(indices, func(idx int) {
+		name := allBranches[idx]
+
+		// Get PR info from batch-loaded metadata
+		meta := allMeta[name]
+		prInfo := engine.NewPrInfoFromMeta(meta)
+
+		// Check if PR exists
+		if prInfo == nil || prInfo.Number() == nil {
+			branchValid[idx] = false
+			branchErrors[idx] = fmt.Sprintf("Branch %s has no associated PR", name)
+			return
+		}
+
+		// Check PR state
+		state := prInfo.State()
+		if state != "OPEN" {
+			if state == "MERGED" {
+				splog.Debug("Skipping %s: PR #%d is already merged", name, *prInfo.Number())
+				branchValid[idx] = true // Not an error, just skip
+				return
+			}
+			branchValid[idx] = false
+			branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d is %s (not open)", name, *prInfo.Number(), state)
+			return
+		}
+
+		// Check if draft
+		if prInfo.IsDraft() && !opts.Force {
+			branchValid[idx] = false
+			branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d is a draft", name, *prInfo.Number())
+		}
+
+		// Check if local matches remote
+		matchesRemote, err := eng.BranchMatchesRemote(name)
+		if err != nil {
+			splog.Debug("Failed to check if branch matches remote: %v", err)
+			matchesRemote = true // Assume matches if check fails
+		}
+		if !matchesRemote && prInfo != nil && prInfo.Number() != nil {
+			// Get detailed difference information
+			diffInfo, _ := eng.GetBranchRemoteDifference(name)
+			if diffInfo != "" {
+				branchWarnings[idx] = append(branchWarnings[idx], fmt.Sprintf("Branch %s differs from remote: %s", name, diffInfo))
+			} else {
+				branchWarnings[idx] = append(branchWarnings[idx], fmt.Sprintf("Branch %s differs from remote", name))
+			}
+		}
+
+		// Get CI check status from batch-loaded results
+		checksStatus := ChecksNone
+		if allCheckStatuses != nil {
+			if status, ok := allCheckStatuses[name]; ok && status != nil {
+				switch {
+				case status.Pending:
+					checksStatus = ChecksPending
+				case !status.Passing:
+					checksStatus = ChecksFailing
+					if !opts.Force {
+						branchValid[idx] = false
+						branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d has failing CI checks", name, *prInfo.Number())
+					}
+				default:
+					checksStatus = ChecksPassing
+				}
+			}
+		}
+
+		branchesToMerge[idx] = BranchMergeInfo{
+			BranchName:    name,
+			PRNumber:      *prInfo.Number(),
+			PRURL:         prInfo.URL(),
+			IsDraft:       prInfo.IsDraft(),
+			ChecksStatus:  checksStatus,
+			MatchesRemote: matchesRemote,
+		}
+	})
 
 	// Collect results and filter skipped branches
 	finalBranchesToMerge := []BranchMergeInfo{}
