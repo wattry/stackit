@@ -15,10 +15,28 @@ import (
 	"stackit.dev/stackit/internal/utils"
 )
 
+// StackRangeDownstack returns a StackRange for submitting downstack (ancestors + current)
+func StackRangeDownstack() engine.StackRange {
+	return engine.StackRange{
+		RecursiveParents:  true,
+		IncludeCurrent:    true,
+		RecursiveChildren: false,
+	}
+}
+
+// StackRangeFull returns a StackRange for submitting full stack (descendants + ancestors + current)
+func StackRangeFull() engine.StackRange {
+	return engine.StackRange{
+		RecursiveParents:  true,
+		IncludeCurrent:    true,
+		RecursiveChildren: true,
+	}
+}
+
 // Options contains options for the submit command
 type Options struct {
 	Branch               string
-	Stack                bool
+	StackRange           engine.StackRange
 	Force                bool
 	DryRun               bool
 	Confirm              bool

@@ -86,9 +86,13 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 		submitFooter := cfg.SubmitFooter()
 
 		// Run submit action
+		stackRange := submit.StackRangeDownstack()
+		if f.stack {
+			stackRange = submit.StackRangeFull()
+		}
 		opts := submit.Options{
 			Branch:               f.branch,
-			Stack:                f.stack,
+			StackRange:           stackRange,
 			Force:                f.force,
 			DryRun:               f.dryRun,
 			Confirm:              f.confirm,

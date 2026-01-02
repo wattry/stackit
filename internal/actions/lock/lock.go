@@ -58,9 +58,9 @@ func Action(ctx *app.Context, branchName string) error {
 		confirm, err := tui.PromptConfirm("Would you like to submit these changes before locking?", true)
 		if err == nil && confirm {
 			submitOpts := submit.Options{
-				Branch:  branchName,
-				Stack:   false, // Stack: false submits downstack (ancestors + current), matching what we're locking
-				Confirm: false,
+				Branch:     branchName,
+				StackRange: submit.StackRangeDownstack(),
+				Confirm:    false,
 			}
 			handler := &lockSubmitHandler{splog: splog}
 			if err := submit.Action(ctx, submitOpts, handler); err != nil {
