@@ -6,13 +6,59 @@ import (
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // Options contains options for the fold command
 type Options struct {
 	Keep       bool // If true, keeps the name of the current branch instead of using the name of its parent
 	AllowTrunk bool // If true, allows folding into the trunk branch
+	DryRun     bool // If true, only shows what would happen
+}
+
+func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
+	eng := ctx.Engine
+	splog := ctx.Splog
+
+	splog.Info("%s", style.ColorYellow("Dry Run: Folding plan"))
+	splog.Info("  Fold branch: %s", style.ColorBranchName(current.GetName(), true))
+	splog.Info("  Into parent: %s", style.ColorBranchName(parent.GetName(), false))
+	splog.Newline()
+
+	// Show combined commit messages
+	splog.Info("%s", style.ColorCyan("Proposed Commit History:"))
+	parentCommits, _ := parent.GetAllCommits(engine.CommitFormatReadable)
+	for _, commit := range parentCommits {
+		splog.Info("  %s", style.ColorDim(commit))
+	}
+	currentCommits, _ := current.GetAllCommits(engine.CommitFormatReadable)
+	for _, commit := range currentCommits {
+		splog.Info("  %s", commit)
+	}
+	splog.Newline()
+
+	// Show combined diff stat
+	splog.Info("%s", style.ColorCyan("Combined Diff Stat:"))
+	// Base is parent's parent (or trunk)
+	grandparentName := parent.GetParentPrecondition()
+	baseRev, err := eng.GetRevision(eng.GetBranch(grandparentName))
+	if err != nil {
+		baseRev, _ = eng.GetMergeBase(eng.Trunk().GetName(), parent.GetName())
+	}
+
+	headRev, _ := current.GetRevision()
+	diffStat, err := eng.ShowDiff(ctx.Context, baseRev, headRev, true)
+	if err == nil && diffStat != "" {
+		splog.Info("%s", diffStat)
+	} else {
+		splog.Info("  (No changes or error retrieving diff)")
+	}
+
+	splog.Newline()
+	splog.Info("%s", style.ColorDim("No changes were applied."))
+	return nil
 }
 
 // Action performs the fold operation
@@ -69,6 +115,10 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	parentBranch := eng.GetBranch(parentName)
+
+	if opts.DryRun {
+		return showDryRun(ctx, currentBranchObj, parentBranch)
+	}
 
 	// Prohibit folding if current or parent is locked or frozen
 	if !currentBranchObj.CanModify() {

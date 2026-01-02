@@ -15,6 +15,7 @@ func NewFoldCmd() *cobra.Command {
 	var (
 		keep       bool
 		allowTrunk bool
+		dryRun     bool
 	)
 
 	cmd := &cobra.Command{
@@ -39,6 +40,7 @@ close the pull request.`,
 				return fold.Action(ctx, fold.Options{
 					Keep:       keep,
 					AllowTrunk: allowTrunk,
+					DryRun:     dryRun,
 				})
 			})
 		},
@@ -47,6 +49,7 @@ close the pull request.`,
 	// Add flags
 	cmd.Flags().BoolVarP(&keep, "keep", "k", false, "Keeps the name of the current branch instead of using the name of its parent.")
 	cmd.Flags().BoolVar(&allowTrunk, "allow-trunk", false, "Allows folding into the trunk branch (e.g., main).")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Shows what would happen without applying any changes.")
 
 	return cmd
 }
