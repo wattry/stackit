@@ -121,3 +121,8 @@ func (c *StackitGitHubClient) MergePullRequest(ctx context.Context, branchName s
 func (c *StackitGitHubClient) GetPRChecksStatus(ctx context.Context, branchName string) (*CheckStatus, error) {
 	return GetPRChecksStatus(ctx, c.client, c.owner, c.repo, branchName)
 }
+
+// BatchGetPRChecksStatus returns the check status for multiple branches
+func (c *StackitGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*CheckStatus, error) {
+	return BatchGetPRChecksStatus(ctx, c.client, c.owner, c.repo, branchNames)
+}

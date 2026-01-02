@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // Strategy defines how PRs in the stack should be merged
@@ -109,6 +111,7 @@ type mergePlanEngine interface {
 	engine.BranchReader
 	engine.PRManager
 	engine.SyncManager
+	Git() git.Runner
 }
 
 // CreateMergePlan analyzes the current state and builds a merge plan
@@ -177,121 +180,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 		planCurrentBranch = targetBranch.GetName()
 	}
 
-	// 3. For each branch: fetch PR info, check status, CI checks
-	branchesToMerge := []BranchMergeInfo{}
-	validation := &PlanValidation{
-		Valid:    true,
-		Errors:   []string{},
-		Warnings: []string{},
-	}
-
-	for _, branchName := range allBranches {
-		// Get PR info
-		branch := eng.GetBranch(branchName)
-		prInfo, err := branch.GetPrInfo()
-		if err != nil {
-			splog.Debug("Failed to get PR info for %s: %v", branchName, err)
-			validation.Valid = false
-			validation.Errors = append(validation.Errors, fmt.Sprintf("Failed to get PR info for %s: %v", branchName, err))
-			continue
-		}
-
-		// Check if PR exists
-		if prInfo == nil || prInfo.Number() == nil {
-			validation.Valid = false
-			validation.Errors = append(validation.Errors, fmt.Sprintf("Branch %s has no associated PR", branchName))
-			continue
-		}
-
-		// Check PR state
-		state := prInfo.State()
-		if state != "OPEN" {
-			if state == "MERGED" {
-				splog.Debug("Skipping %s: PR #%d is already merged", branchName, *prInfo.Number())
-				continue
-			}
-			validation.Valid = false
-			validation.Errors = append(validation.Errors, fmt.Sprintf("Branch %s PR #%d is %s (not open)", branchName, *prInfo.Number(), state))
-			continue
-		}
-
-		// Check if draft
-		if prInfo.IsDraft() && !opts.Force {
-			validation.Valid = false
-			validation.Errors = append(validation.Errors, fmt.Sprintf("Branch %s PR #%d is a draft", branchName, *prInfo.Number()))
-		}
-
-		// Check if local matches remote
-		matchesRemote, err := eng.BranchMatchesRemote(branchName)
-		if err != nil {
-			splog.Debug("Failed to check if branch matches remote: %v", err)
-			matchesRemote = true // Assume matches if check fails
-		}
-		if !matchesRemote && prInfo != nil && prInfo.Number() != nil {
-			// Get detailed difference information
-			diffInfo, _ := eng.GetBranchRemoteDifference(branchName)
-			if diffInfo != "" {
-				validation.Warnings = append(validation.Warnings, fmt.Sprintf("Branch %s differs from remote: %s", branchName, diffInfo))
-			} else {
-				validation.Warnings = append(validation.Warnings, fmt.Sprintf("Branch %s differs from remote", branchName))
-			}
-		}
-
-		// Get CI check status
-		checksStatus := ChecksNone
-		if githubClient != nil {
-			status, checkErr := githubClient.GetPRChecksStatus(ctx, branchName)
-			switch {
-			case checkErr != nil:
-				splog.Debug("Failed to get PR checks status for %s: %v", branchName, checkErr)
-			case status.Pending:
-				checksStatus = ChecksPending
-			case !status.Passing:
-				checksStatus = ChecksFailing
-				if !opts.Force {
-					validation.Valid = false
-					validation.Errors = append(validation.Errors, fmt.Sprintf("Branch %s PR #%d has failing CI checks", branchName, *prInfo.Number()))
-				}
-			default:
-				checksStatus = ChecksPassing
-			}
-		}
-
-		branchesToMerge = append(branchesToMerge, BranchMergeInfo{
-			BranchName:    branchName,
-			PRNumber:      *prInfo.Number(),
-			PRURL:         prInfo.URL(),
-			IsDraft:       prInfo.IsDraft(),
-			ChecksStatus:  checksStatus,
-			MatchesRemote: matchesRemote,
-		})
-	}
-
-	// If no PRs to merge, return early
-	if len(branchesToMerge) == 0 {
-		return nil, validation, fmt.Errorf("no open PRs found to merge")
-	}
-
-	// 4. Detect branching stacks (siblings)
-	mergedSet := make(map[string]bool)
-	for _, branch := range allBranches {
-		mergedSet[branch] = true
-	}
-
-	for _, ancestor := range allBranches {
-		ancestorBranch := eng.GetBranch(ancestor)
-		if ancestorBranch.IsTrunk() {
-			continue
-		}
-		children := ancestorBranch.GetChildren()
-		for _, child := range children {
-			if !mergedSet[child.GetName()] {
-				validation.Infos = append(validation.Infos, fmt.Sprintf("Branch %s is not part of this merge and will be moved to %s", child.GetName(), eng.Trunk().GetName()))
-			}
-		}
-	}
-
-	// 5. Identify upstack branches that need restacking
+	// 3. Identify upstack branches that need restacking (moved up for batch loading)
 	upstackBranches := []string{}
 	if opts.Scope != "" {
 		// In scope mode, find all tracked branches with the scope that are not being merged
@@ -328,21 +217,170 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 		}
 	}
 
-	// 6. Build ordered steps based on strategy
+	// 4. Batch fetch metadata and revisions for all involved branches
+	involvedBranches := append(append([]string{}, allBranches...), upstackBranches...)
+	allMeta, _ := eng.Git().BatchReadMetadata(involvedBranches)
+	// We don't strictly need allRevisions here yet, but it's good for cache
+	_, _ = eng.Git().BatchGetRevisions(involvedBranches)
+
+	// Fetch CI statuses in batch if possible
+	var allCheckStatuses map[string]*github.CheckStatus
+	if githubClient != nil {
+		allCheckStatuses, _ = githubClient.BatchGetPRChecksStatus(ctx, allBranches)
+	}
+
+	// 5. For each branch: fetch PR info, check status, CI checks in parallel
+	branchesToMerge := make([]BranchMergeInfo, len(allBranches))
+	branchErrors := make([]string, len(allBranches))
+	branchWarnings := make([][]string, len(allBranches))
+	branchValid := make([]bool, len(allBranches))
+	for i := range branchValid {
+		branchValid[i] = true
+	}
+
+	indices := make([]int, len(allBranches))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	utils.RunWithWorkers(indices, github.MaxGitHubConcurrency, func(idx int) {
+		name := allBranches[idx]
+
+		// Get PR info from batch-loaded metadata
+		meta := allMeta[name]
+		prInfo := engine.NewPrInfoFromMeta(meta)
+
+		// Check if PR exists
+		if prInfo == nil || prInfo.Number() == nil {
+			branchValid[idx] = false
+			branchErrors[idx] = fmt.Sprintf("Branch %s has no associated PR", name)
+			return
+		}
+
+		// Check PR state
+		state := prInfo.State()
+		if state != "OPEN" {
+			if state == "MERGED" {
+				splog.Debug("Skipping %s: PR #%d is already merged", name, *prInfo.Number())
+				branchValid[idx] = true // Not an error, just skip
+				return
+			}
+			branchValid[idx] = false
+			branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d is %s (not open)", name, *prInfo.Number(), state)
+			return
+		}
+
+		// Check if draft
+		if prInfo.IsDraft() && !opts.Force {
+			branchValid[idx] = false
+			branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d is a draft", name, *prInfo.Number())
+		}
+
+		// Check if local matches remote
+		matchesRemote, err := eng.BranchMatchesRemote(name)
+		if err != nil {
+			splog.Debug("Failed to check if branch matches remote: %v", err)
+			matchesRemote = true // Assume matches if check fails
+		}
+		if !matchesRemote && prInfo != nil && prInfo.Number() != nil {
+			// Get detailed difference information
+			diffInfo, _ := eng.GetBranchRemoteDifference(name)
+			if diffInfo != "" {
+				branchWarnings[idx] = append(branchWarnings[idx], fmt.Sprintf("Branch %s differs from remote: %s", name, diffInfo))
+			} else {
+				branchWarnings[idx] = append(branchWarnings[idx], fmt.Sprintf("Branch %s differs from remote", name))
+			}
+		}
+
+		// Get CI check status from batch-loaded results
+		checksStatus := ChecksNone
+		if allCheckStatuses != nil {
+			if status, ok := allCheckStatuses[name]; ok && status != nil {
+				switch {
+				case status.Pending:
+					checksStatus = ChecksPending
+				case !status.Passing:
+					checksStatus = ChecksFailing
+					if !opts.Force {
+						branchValid[idx] = false
+						branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d has failing CI checks", name, *prInfo.Number())
+					}
+				default:
+					checksStatus = ChecksPassing
+				}
+			}
+		}
+
+		branchesToMerge[idx] = BranchMergeInfo{
+			BranchName:    name,
+			PRNumber:      *prInfo.Number(),
+			PRURL:         prInfo.URL(),
+			IsDraft:       prInfo.IsDraft(),
+			ChecksStatus:  checksStatus,
+			MatchesRemote: matchesRemote,
+		}
+	})
+
+	// Collect results and filter skipped branches
+	finalBranchesToMerge := []BranchMergeInfo{}
+	validation := &PlanValidation{
+		Valid:    true,
+		Errors:   []string{},
+		Warnings: []string{},
+	}
+
+	for i := range allBranches {
+		if !branchValid[i] {
+			validation.Valid = false
+		}
+		if branchErrors[i] != "" {
+			validation.Errors = append(validation.Errors, branchErrors[i])
+		}
+		validation.Warnings = append(validation.Warnings, branchWarnings[i]...)
+		if branchesToMerge[i].BranchName != "" {
+			finalBranchesToMerge = append(finalBranchesToMerge, branchesToMerge[i])
+		}
+	}
+
+	// If no PRs to merge, return early
+	if len(finalBranchesToMerge) == 0 {
+		return nil, validation, fmt.Errorf("no open PRs found to merge")
+	}
+
+	// 6. Detect branching stacks (siblings)
+	mergedSet := make(map[string]bool)
+	for _, branch := range allBranches {
+		mergedSet[branch] = true
+	}
+
+	for _, ancestor := range allBranches {
+		ancestorBranch := eng.GetBranch(ancestor)
+		if ancestorBranch.IsTrunk() {
+			continue
+		}
+		children := ancestorBranch.GetChildren()
+		for _, child := range children {
+			if !mergedSet[child.GetName()] {
+				validation.Infos = append(validation.Infos, fmt.Sprintf("Branch %s is not part of this merge and will be moved to %s", child.GetName(), eng.Trunk().GetName()))
+			}
+		}
+	}
+
+	// 7. Build ordered steps based on strategy
 	var steps []PlanStep
 	switch opts.Strategy {
 	case StrategyTopDown:
-		steps = buildTopDownSteps(branchesToMerge, planCurrentBranch, upstackBranches)
+		steps = buildTopDownSteps(finalBranchesToMerge, planCurrentBranch, upstackBranches)
 	case StrategyConsolidate:
-		steps = buildConsolidateSteps(branchesToMerge, upstackBranches)
+		steps = buildConsolidateSteps(finalBranchesToMerge, upstackBranches)
 	default: // StrategyBottomUp or default
-		steps = buildBottomUpSteps(branchesToMerge, upstackBranches)
+		steps = buildBottomUpSteps(finalBranchesToMerge, upstackBranches)
 	}
 
 	plan := &Plan{
 		Strategy:        opts.Strategy,
 		CurrentBranch:   planCurrentBranch,
-		BranchesToMerge: branchesToMerge,
+		BranchesToMerge: finalBranchesToMerge,
 		UpstackBranches: upstackBranches,
 		Steps:           steps,
 		Warnings:        validation.Warnings,

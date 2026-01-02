@@ -2,10 +2,12 @@ package testhelpers
 
 import (
 	"context"
+	"sync"
 
 	"github.com/google/go-github/v62/github"
 
 	githubpkg "stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // MockGitHubClient implements githubpkg.Client using the mock server
@@ -119,4 +121,29 @@ func (c *MockGitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*gith
 			{Name: "Mock Check", Status: "COMPLETED", Conclusion: "SUCCESS"},
 		},
 	}, nil
+}
+
+// BatchGetPRChecksStatus returns the check status for multiple branches
+func (c *MockGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*githubpkg.CheckStatus, error) {
+	results := make(map[string]*githubpkg.CheckStatus)
+	var mu sync.Mutex
+	var firstErr error
+	var errMu sync.Mutex
+
+	utils.RunWithWorkers(branchNames, githubpkg.MaxGitHubConcurrency, func(name string) {
+		status, err := c.GetPRChecksStatus(ctx, name)
+		if err != nil {
+			errMu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			errMu.Unlock()
+			return
+		}
+		mu.Lock()
+		results[name] = status
+		mu.Unlock()
+	})
+
+	return results, firstErr
 }

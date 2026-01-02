@@ -9,11 +9,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/v62/github"
 	"golang.org/x/oauth2"
 
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/utils"
 )
 
 const (
@@ -503,4 +505,30 @@ func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID s
 	}
 
 	return nil
+}
+
+// BatchGetPRChecksStatus returns the check status for multiple branches in parallel
+func BatchGetPRChecksStatus(ctx context.Context, client *github.Client, owner, repo string, branchNames []string) (map[string]*CheckStatus, error) {
+	results := make(map[string]*CheckStatus)
+	var mu sync.Mutex
+	var firstErr error
+	var errMu sync.Mutex
+
+	// Use a fixed number of workers for network-bound GitHub tasks to avoid rate limits
+	utils.RunWithWorkers(branchNames, MaxGitHubConcurrency, func(branch string) {
+		status, err := GetPRChecksStatus(ctx, client, owner, repo, branch)
+		if err != nil {
+			errMu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			errMu.Unlock()
+			return
+		}
+		mu.Lock()
+		results[branch] = status
+		mu.Unlock()
+	})
+
+	return results, firstErr
 }

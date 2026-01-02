@@ -9,6 +9,12 @@ import (
 	"github.com/google/go-github/v62/github"
 )
 
+const (
+	// MaxGitHubConcurrency limits the number of concurrent requests to GitHub
+	// to avoid triggering secondary rate limits.
+	MaxGitHubConcurrency = 10
+)
+
 // PullRequestInfo contains information about a pull request
 // This is a simplified struct to avoid coupling to go-github library
 type PullRequestInfo struct {
@@ -58,6 +64,9 @@ type Client interface {
 
 	// GetPRChecksStatus returns the check status for a PR
 	GetPRChecksStatus(ctx context.Context, branchName string) (*CheckStatus, error)
+
+	// BatchGetPRChecksStatus returns the check status for multiple branches
+	BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*CheckStatus, error)
 
 	// GetOwnerRepo returns the repository owner and name
 	GetOwnerRepo() (owner, repo string)

@@ -247,9 +247,19 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 
 // calculateBaselineEstimate tries to find a branch with successful CI and use its timing as a baseline
 func calculateBaselineEstimate(ctx context.Context, plan *Plan, client github.Client, splog *tui.Splog) time.Duration {
+	branchNames := make([]string, len(plan.BranchesToMerge))
+	for i, b := range plan.BranchesToMerge {
+		branchNames[i] = b.BranchName
+	}
+
+	statuses, err := client.BatchGetPRChecksStatus(ctx, branchNames)
+	if err != nil {
+		return 0
+	}
+
 	for _, branchInfo := range plan.BranchesToMerge {
-		status, err := client.GetPRChecksStatus(ctx, branchInfo.BranchName)
-		if err != nil || !status.Passing || status.Pending {
+		status := statuses[branchInfo.BranchName]
+		if status == nil || !status.Passing || status.Pending {
 			continue
 		}
 

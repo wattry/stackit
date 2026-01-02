@@ -3,11 +3,13 @@ package demo
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // prCounter is used to generate unique PR numbers
@@ -136,4 +138,29 @@ func (c *GitHubClient) GetPRChecksStatus(_ context.Context, _ string) (*github.C
 			{Name: "Lint", Status: "COMPLETED", Conclusion: "SUCCESS"},
 		},
 	}, nil
+}
+
+// BatchGetPRChecksStatus returns simulated check status for multiple branches
+func (c *GitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames []string) (map[string]*github.CheckStatus, error) {
+	results := make(map[string]*github.CheckStatus)
+	var mu sync.Mutex
+	var firstErr error
+	var errMu sync.Mutex
+
+	utils.RunWithWorkers(branchNames, github.MaxGitHubConcurrency, func(name string) {
+		status, err := c.GetPRChecksStatus(ctx, name)
+		if err != nil {
+			errMu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			errMu.Unlock()
+			return
+		}
+		mu.Lock()
+		results[name] = status
+		mu.Unlock()
+	})
+
+	return results, firstErr
 }
