@@ -77,6 +77,7 @@ func NewEngine(opts Options) (Engine, error) {
 	}
 
 	// Auto-fetch remote metadata on first use (fresh clone scenario)
+	// Skip if refspec is already configured to avoid unnecessary work
 	e.maybeAutoFetchRemoteMetadata()
 
 	return e, nil
@@ -84,20 +85,24 @@ func NewEngine(opts Options) (Engine, error) {
 
 // maybeAutoFetchRemoteMetadata fetches remote metadata if this appears to be a fresh clone
 func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
-	// Check if refspec is already configured
+	// Fast path: Check if refspec is already configured (most common case)
+	// This avoids expensive git config reads and network fetches for normal operations
 	refspecs, err := e.git.GetConfigAll("remote.origin.fetch")
 	if err == nil {
 		metadataRefspec := "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*"
 		for _, rs := range refspecs {
 			if rs == metadataRefspec {
-				// Already configured, nothing to do
+				// Already configured, nothing to do - this is the fast path
+				// Skip loading remote metadata cache here - it's not needed for most commands
+				// and will be loaded lazily when actually needed (e.g., during sync operations)
 				return
 			}
 		}
 	}
 
 	// Not configured yet - this might be a fresh clone
-	// Try to fetch metadata refs
+	// Try to fetch metadata refs (this is a network operation, so it's slow)
+	// Only do this if refspec isn't configured to avoid slowing down every command
 	if err := e.git.FetchMetadataRefs(); err != nil {
 		// No remote metadata available, or error fetching - that's okay
 		return
@@ -106,7 +111,7 @@ func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
 	// Configure refspec for future fetches
 	_ = e.git.EnsureMetadataRefspecConfigured()
 
-	// Load remote metadata cache
+	// Load remote metadata cache (only if we just fetched)
 	_ = e.LoadRemoteMetadataCache()
 }
 

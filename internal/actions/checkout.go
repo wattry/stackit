@@ -26,10 +26,6 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	splog := ctx.Splog
 	context := ctx.Context
 
-	if err := eng.PopulateRemoteShas(); err != nil {
-		return fmt.Errorf("failed to populate remote SHAs: %w", err)
-	}
-
 	var branchName string
 	var err error
 
@@ -39,6 +35,12 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	case opts.BranchName != "":
 		branchName = opts.BranchName
 	default:
+		// Only populate remote SHAs when entering interactive mode
+		// (the selector may need remote information for display)
+		if err := eng.PopulateRemoteShas(); err != nil {
+			return fmt.Errorf("failed to populate remote SHAs: %w", err)
+		}
+
 		if !utils.IsInteractive() {
 			return fmt.Errorf("interactive branch selection is not available in non-interactive mode; please specify a branch name")
 		}
@@ -72,7 +74,11 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	}
 
 	splog.Info("Checked out %s.", style.ColorBranchName(branchName, false))
-	printBranchInfo(ctx, branch)
+
+	// Skip branch info in quiet mode for faster checkout
+	if !ctx.Quiet {
+		printBranchInfo(ctx, branch)
+	}
 
 	return nil
 }
@@ -96,6 +102,7 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	}
 
 	// Check if any downstack branch needs restack
+	// Limit to checking up to 10 ancestors to avoid performance issues with deep stacks
 	rng := engine.StackRange{
 		RecursiveParents:  true,
 		IncludeCurrent:    false,
@@ -103,8 +110,15 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	}
 	downstack := branch.GetRelativeStack(rng)
 
-	// Check from trunk upward
-	for i := len(downstack) - 1; i >= 0; i-- {
+	// Limit the number of branches we check to avoid slow metadata reads
+	const maxDownstackChecks = 10
+	startIdx := len(downstack) - maxDownstackChecks
+	if startIdx < 0 {
+		startIdx = 0
+	}
+
+	// Check from trunk upward (but limit to last maxDownstackChecks branches)
+	for i := len(downstack) - 1; i >= startIdx; i-- {
 		ancestor := downstack[i]
 		if !ancestor.IsBranchUpToDate() {
 			parent := ancestor.GetParentPrecondition()
