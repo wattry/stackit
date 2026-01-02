@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	syncAction "stackit.dev/stackit/internal/actions/sync"
-	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	syncComponent "stackit.dev/stackit/internal/tui/components/sync"
 	"stackit.dev/stackit/internal/tui/style"
@@ -214,7 +214,7 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason errors.LockReason, frozen bool) {
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
 	// Convert to Event and use existing printRestackEvent
 	event := syncAction.Event{
 		Phase:       syncAction.PhaseRestack,
@@ -466,7 +466,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason errors.LockReason, frozen bool) {
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -492,7 +492,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 }
 
 // formatRestackDetail formats a restack event into a detail string
-func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason errors.LockReason, frozen bool) string {
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) string {
 	prInfo := ""
 	if prNumber != nil {
 		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)

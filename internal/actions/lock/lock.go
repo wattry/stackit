@@ -9,7 +9,6 @@ import (
 	"stackit.dev/stackit/internal/actions/submit"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -84,7 +83,7 @@ func Action(ctx *app.Context, branchName string) error {
 	}
 
 	if len(branchesToLock) > 0 {
-		res, err := eng.SetLocked(branchesToLock, errors.LockReasonUser)
+		res, err := eng.SetLocked(branchesToLock, engine.LockReasonUser)
 		if err != nil {
 			// Report specific errors if some failed
 			for name, branchErr := range res.Errors {
@@ -167,7 +166,7 @@ func Unlock(ctx *app.Context, branchName string) error {
 	}
 
 	if len(branchesToUnlock) > 0 {
-		res, err := eng.SetLocked(branchesToUnlock, errors.LockReasonNone)
+		res, err := eng.SetLocked(branchesToUnlock, engine.LockReasonNone)
 		if err != nil {
 			// Report specific errors if some failed
 			for name, branchErr := range res.Errors {

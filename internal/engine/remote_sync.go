@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -96,8 +95,8 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	}
 
 	// Update local metadata maps
-	if errors.LockReason(remote.LockReason).IsLocked() {
-		e.lockedMap[branchName] = remote.LockReason
+	if remote.LockReason != git.LockReasonNone {
+		e.lockedMap[branchName] = string(remote.LockReason)
 	} else {
 		delete(e.lockedMap, branchName)
 	}
@@ -256,7 +255,7 @@ func (e *engineImpl) computeMetadataHash(meta *git.Meta) string {
 	if meta.Scope != nil {
 		scope = *meta.Scope
 	}
-	data := fmt.Sprintf("lockReason:%s,scope:%s", meta.LockReason, scope)
+	data := fmt.Sprintf("lockReason:%s,scope:%s", string(meta.LockReason), scope)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }

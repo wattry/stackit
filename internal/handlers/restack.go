@@ -2,7 +2,7 @@
 package handlers
 
 import (
-	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/engine"
 )
 
 // RestackResult represents the outcome of a restack operation for a single branch
@@ -24,7 +24,7 @@ type RestackHandler interface {
 	OnRestackStart(branchCount int)
 
 	// OnRestackBranch is called for each branch during restack
-	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, lockReason errors.LockReason, frozen bool)
+	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool)
 
 	// OnRestackComplete is called when restack finishes
 	OnRestackComplete(restacked, skipped int, conflicts []string)
@@ -37,7 +37,7 @@ type NullRestackHandler struct{}
 func (h *NullRestackHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullRestackHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ errors.LockReason, _ bool) {
+func (h *NullRestackHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool) {
 }
 
 // OnRestackComplete implements RestackHandler.

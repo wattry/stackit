@@ -363,7 +363,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Create remote metadata refs (simulating a successful fetch)
 		remoteMeta := &git.Meta{
-			LockReason: string(engine.LockReasonUser),
+			LockReason: git.LockReasonUser,
 			Scope:      scopePtr("remote-scope"),
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
@@ -375,7 +375,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
 		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
-		require.Equal(t, string(engine.LockReasonUser), cache["feature-a"].LockReason, "Remote metadata should show lock reason")
+		require.Equal(t, git.LockReasonUser, cache["feature-a"].LockReason, "Remote metadata should show lock reason")
 		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
 	})
 
@@ -395,7 +395,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Create remote metadata refs: locked=true (conflict)
 		remoteMeta := &git.Meta{
-			LockReason: string(engine.LockReasonUser),
+			LockReason: git.LockReasonUser,
 		}
 		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
 
@@ -412,8 +412,8 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		// Verify the specific field that differs
 		require.Len(t, diff.Differences, 1)
 		require.Equal(t, "lockReason", diff.Differences[0].Field)
-		require.Equal(t, string(engine.LockReasonNone), diff.Differences[0].LocalValue)
-		require.Equal(t, string(engine.LockReasonUser), diff.Differences[0].RemoteValue)
+		require.Equal(t, git.LockReasonNone, diff.Differences[0].LocalValue)
+		require.Equal(t, git.LockReasonUser, diff.Differences[0].RemoteValue)
 	})
 }
 

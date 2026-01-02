@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
 )
 
@@ -159,7 +159,7 @@ type Event struct {
 	OldRevision string            // For position changes
 	NewRevision string            // For position changes
 	Conflict    bool              // Is this a conflict?
-	LockReason  errors.LockReason // Why the branch is locked (empty if not locked)
+	LockReason  engine.LockReason // Why the branch is locked (empty if not locked)
 	Frozen      bool              // Is the branch frozen?
 	Error       error             // If non-nil, this step had an error
 }
@@ -220,7 +220,7 @@ func (h *NullHandler) Complete(_ Summary) {}
 func (h *NullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ errors.LockReason, _ bool) {
+func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool) {
 }
 
 // OnRestackComplete implements RestackHandler.

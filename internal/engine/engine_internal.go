@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -60,8 +59,8 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 		if meta.Scope != nil {
 			e.scopeMap[name] = *meta.Scope
 		}
-		if errors.LockReason(meta.LockReason).IsLocked() {
-			e.lockedMap[name] = meta.LockReason
+		if meta.LockReason != LockReasonNone {
+			e.lockedMap[name] = string(meta.LockReason)
 		}
 	}
 
@@ -122,8 +121,8 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 	}
 
 	// Update locked map
-	if errors.LockReason(meta.LockReason).IsLocked() {
-		e.lockedMap[branchName] = meta.LockReason
+	if meta.LockReason != LockReasonNone {
+		e.lockedMap[branchName] = string(meta.LockReason)
 	} else {
 		delete(e.lockedMap, branchName)
 	}

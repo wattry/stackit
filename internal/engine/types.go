@@ -5,18 +5,19 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/git"
 )
 
-// LockReason is re-exported from errors package
-type LockReason = errors.LockReason
+// LockReason is re-exported from git package
+type LockReason = git.LockReason
 
 const (
 	// LockReasonNone indicates the branch is not locked
-	LockReasonNone LockReason = errors.LockReasonNone
+	LockReasonNone LockReason = git.LockReasonNone
 	// LockReasonUser indicates the branch was manually locked by the user
-	LockReasonUser LockReason = errors.LockReasonUser
+	LockReasonUser LockReason = git.LockReasonUser
 	// LockReasonConsolidating indicates the branch is being consolidated
-	LockReasonConsolidating LockReason = errors.LockReasonConsolidating
+	LockReasonConsolidating LockReason = git.LockReasonConsolidating
 )
 
 // StackRange specifies the range of branches to include in stack operations
@@ -252,7 +253,7 @@ func (b Branch) IsLocked() bool {
 }
 
 // GetLockReason returns why the branch is locked
-func (b Branch) GetLockReason() errors.LockReason {
+func (b Branch) GetLockReason() LockReason {
 	return b.reader.GetLockReason(b)
 }
 
@@ -286,11 +287,11 @@ type PrInfo struct {
 	title       string
 	body        string
 	isDraft     bool
-	state       string            // MERGED, CLOSED, OPEN
-	base        string            // Base branch name
-	url         string            // PR URL
-	lockReason  errors.LockReason // Why the PR is locked (empty if not locked)
-	mergeBranch string            // Name of the merge branch this PR is part of
+	state       string     // MERGED, CLOSED, OPEN
+	base        string     // Base branch name
+	url         string     // PR URL
+	lockReason  LockReason // Why the PR is locked (empty if not locked)
+	mergeBranch string     // Name of the merge branch this PR is part of
 }
 
 // NewPrInfo creates a new PrInfo instance
@@ -307,7 +308,7 @@ func NewPrInfo(number *int, title, body, state, base, url string, isDraft bool) 
 }
 
 // NewPrInfoWithLockReason creates a new PrInfo instance including lock reason
-func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, isDraft bool, lockReason errors.LockReason) *PrInfo {
+func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, isDraft bool, lockReason LockReason) *PrInfo {
 	return &PrInfo{
 		number:     number,
 		title:      title,
@@ -321,7 +322,7 @@ func NewPrInfoWithLockReason(number *int, title, body, state, base, url string, 
 }
 
 // NewPrInfoFull creates a new PrInfo instance with all fields
-func NewPrInfoFull(number *int, title, body, state, base, url string, isDraft bool, lockReason errors.LockReason, mergeBranch string) *PrInfo {
+func NewPrInfoFull(number *int, title, body, state, base, url string, isDraft bool, lockReason LockReason, mergeBranch string) *PrInfo {
 	return &PrInfo{
 		number:      number,
 		title:       title,
@@ -376,7 +377,7 @@ func (p *PrInfo) IsLocked() bool {
 }
 
 // LockReason returns the reason why the PR is locked
-func (p *PrInfo) LockReason() errors.LockReason {
+func (p *PrInfo) LockReason() LockReason {
 	return p.lockReason
 }
 
@@ -525,7 +526,7 @@ func (p *PrInfo) WithURL(url string) *PrInfo {
 }
 
 // WithLockReason returns a new PrInfo with the lockReason field updated
-func (p *PrInfo) WithLockReason(reason errors.LockReason) *PrInfo {
+func (p *PrInfo) WithLockReason(reason LockReason) *PrInfo {
 	return &PrInfo{
 		number:      p.number,
 		title:       p.title,
@@ -597,12 +598,12 @@ const (
 // RestackBranchResult represents the result of restacking a branch, including the rebased branch base
 type RestackBranchResult struct {
 	Result            RestackResult
-	RebasedBranchBase string            // The new parent revision after successful rebase (only set if Result is RestackDone or RestackConflict)
-	Reparented        bool              // True if the branch was reparented due to merged/deleted parent
-	OldParent         string            // The old parent branch name (only set if Reparented is true)
-	NewParent         string            // The new parent branch name (only set if Reparented is true)
-	LockReason        errors.LockReason // Reason why the branch is locked
-	Frozen            bool              // True if the branch is frozen
+	RebasedBranchBase string     // The new parent revision after successful rebase (only set if Result is RestackDone or RestackConflict)
+	Reparented        bool       // True if the branch was reparented due to merged/deleted parent
+	OldParent         string     // The old parent branch name (only set if Reparented is true)
+	NewParent         string     // The new parent branch name (only set if Reparented is true)
+	LockReason        LockReason // Reason why the branch is locked
+	Frozen            bool       // True if the branch is frozen
 }
 
 // IsLocked returns true if the branch is locked

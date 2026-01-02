@@ -6,7 +6,7 @@ import (
 	stdsync "sync"
 
 	"stackit.dev/stackit/internal/actions"
-	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -172,7 +172,7 @@ func (h *SimpleGetHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for restack phase
-func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason errors.LockReason, frozen bool) {
+func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

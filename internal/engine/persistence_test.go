@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -19,7 +18,7 @@ func TestMetaSerialization(t *testing.T) {
 	meta := &git.Meta{
 		ParentBranchName: &parent,
 		Scope:            &scope,
-		LockReason:       string(errors.LockReasonUser),
+		LockReason:       git.LockReasonUser,
 		BranchType:       git.BranchTypeUser,
 		LastModifiedBy: &git.ModifiedBy{
 			GitName:  "John Doe",
@@ -72,7 +71,7 @@ func TestMetaBackwardCompatibility(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, "main", *meta.ParentBranchName)
-	assert.Equal(t, "locked", meta.LockReason)
+	assert.Equal(t, git.LockReason("locked"), meta.LockReason)
 	assert.Equal(t, git.BranchType(""), meta.BranchType) // Should be empty/default
 	assert.Nil(t, meta.LastModifiedBy)
 	assert.Nil(t, meta.LastModifiedAt)

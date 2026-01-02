@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/git"
 )
 
 const (
@@ -32,7 +32,7 @@ func CreatePRBodyFooter(branch string, eng engine.Engine) string {
 	branchObj := eng.GetBranch(branch)
 	if branchObj.IsLocked() {
 		reason := branchObj.GetLockReason()
-		if reason == errors.LockReasonUser {
+		if reason == git.LockReasonUser {
 			tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
 		} else {
 			tree.WriteString(fmt.Sprintf("> 🔒 This PR has been locked (%s). To unlock it, run `st unlock`.\n\n", reason))

@@ -21,7 +21,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -38,7 +37,7 @@ type Restacker interface {
 // conflict: true if this is a conflict
 // lockReason: why the branch is locked (empty if not locked)
 // frozen: true if the branch is frozen
-type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, lockReason errors.LockReason, frozen bool)
+type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, lockReason engine.LockReason, frozen bool)
 
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
@@ -52,7 +51,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		if batchResult.ConflictBranch != "" {
 			// Report the conflict via callback if provided
 			if callback != nil {
-				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, errors.LockReasonNone, false)
+				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false)
 			}
 
 			continuation := &config.ContinuationState{
@@ -76,7 +75,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	if batchResult.ConflictBranch != "" {
 		// Report the conflict via callback if provided
 		if callback != nil {
-			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, errors.LockReasonNone, false)
+			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false)
 		}
 
 		continuation := &config.ContinuationState{

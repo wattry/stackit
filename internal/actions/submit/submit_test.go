@@ -8,6 +8,7 @@ import (
 
 	"stackit.dev/stackit/internal/actions/submit"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -281,5 +282,5 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	meta, err := s.Engine.Git().ReadMetadata("feature")
 	require.NoError(t, err)
-	require.Equal(t, string(engine.LockReasonUser), meta.LockReason, "Metadata LockReason field should be set")
+	require.Equal(t, git.LockReasonUser, meta.LockReason, "Metadata LockReason field should be set")
 }

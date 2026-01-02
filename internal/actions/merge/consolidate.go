@@ -9,7 +9,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 )
@@ -322,7 +321,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	}
 
 	if len(branchesToLock) > 0 {
-		if _, err := c.engine.SetLocked(branchesToLock, errors.LockReasonConsolidating); err != nil {
+		if _, err := c.engine.SetLocked(branchesToLock, engine.LockReasonConsolidating); err != nil {
 			return fmt.Errorf("failed to lock branches: %w", err)
 		}
 	}
