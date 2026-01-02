@@ -40,9 +40,9 @@ jobs:
           METADATA=$(git show "$REF")
           echo "Stackit metadata found for '$BRANCH_NAME'. Checking lock status..."
           
-          # Check for effective lock status.
-          # This field is the authoritative source for CI and is populated by Stackit.
-          IS_LOCKED=$(echo "$METADATA" | jq -r '.effectivelyLocked // false')
+          # Check for lock status.
+          # The 'lockReason' field in the metadata indicates if the branch is locked.
+          IS_LOCKED=$(echo "$METADATA" | jq -r 'if .lockReason then "true" else "false" end')
           
           if [ "$IS_LOCKED" = "true" ]; then
             echo "::error::This PR is locked by Stackit. Merging is blocked until it is unlocked with 'st unlock'."
