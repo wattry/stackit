@@ -157,6 +157,14 @@ func Action(ctx *app.Context, opts Options) error {
 		if err := handleInsert(ctx.Context, branchName, currentBranch, ctx, &opts); err != nil {
 			splog.Info("Warning: failed to insert branch: %v", err)
 		}
+
+		// DX Improvement: Return to the original branch after insertion
+		originalBranch := eng.GetBranch(currentBranch)
+		if err := eng.CheckoutBranch(ctx.Context, originalBranch); err != nil {
+			splog.Info("Warning: failed to return to original branch %s: %v", currentBranch, err)
+		} else {
+			splog.Info("Inserted %s and returned to %s.", branchName, currentBranch)
+		}
 	} else {
 		// Check if current branch has children and show tip
 		currentBranchObj := eng.GetBranch(currentBranch)

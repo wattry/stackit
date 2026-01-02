@@ -63,8 +63,8 @@ type RenderOptions struct {
 	HideStats         bool
 	SelectedBranch    string
 	Collapsed         map[string]bool
-	SearchQuery       string              // Search query for filtering
-	SearchMatches     map[string]bool     // Branch name -> whether it matches search
+	SearchQuery       string          // Search query for filtering
+	SearchMatches     map[string]bool // Branch name -> whether it matches search
 }
 
 // StackTreeRenderer renders branch trees with annotations
@@ -313,7 +313,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 			parentScopes:      args.parentScopes,
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
-			selectedBranch:     args.selectedBranch,
+			selectedBranch:    args.selectedBranch,
 			collapsed:         args.collapsed,
 			currentBranch:     args.currentBranch,
 			searchQuery:       args.searchQuery,
