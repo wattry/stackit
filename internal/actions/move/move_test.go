@@ -404,7 +404,7 @@ func TestMoveAction(t *testing.T) {
 
 		// Amend branch2
 		s.Checkout("branch2").RunGit("commit", "--amend", "--no-edit", "-m", "amended commit")
-		
+
 		// Move branch2 to main
 		err := Action(s.Context, Options{
 			Source: "branch2",
@@ -426,7 +426,7 @@ func TestMoveAction(t *testing.T) {
 		s.Checkout("main").CreateBranch("branchA1").Commit("commit A1")
 		branchA1Commit, _ := s.Scene.Repo.GetRevision("HEAD")
 		s.TrackBranch("branchA1", "main")
-		
+
 		s.Checkout("branchA1").CreateBranch("branchA2").Commit("commit A2")
 		s.TrackBranch("branchA2", "branchA1")
 
@@ -445,7 +445,7 @@ func TestMoveAction(t *testing.T) {
 		// branchA1's commit should NOT be in branchA2's history relative to branchB1
 		branchA2Commits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branchA2"), engine.CommitFormatSHA)
 		require.NoError(t, err)
-		
+
 		require.Equal(t, 1, len(branchA2Commits), "branchA2 should only have 1 commit after move")
 		require.NotEqual(t, branchA1Commit, branchA2Commits[0], "branchA1's commit should not be in branchA2")
 
