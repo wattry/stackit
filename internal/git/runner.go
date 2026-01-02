@@ -206,7 +206,11 @@ type Runner interface {
 	RefOperations
 	ObjectOperations
 	MetadataOperations
-	CommandRunner
+
+	// Raw command execution
+	RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error)
+	RunGitCommandInteractive(args ...string) error
+	RunGHCommandWithContext(ctx context.Context, args ...string) (string, error)
 }
 
 // NewRunner returns a standard implementation of Runner that uses the current

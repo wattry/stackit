@@ -208,10 +208,3 @@ type MetadataOperations interface {
 	BatchReadLocalMetadata(branchNames []string) map[string]*LocalMeta
 	WriteLocalMetadata(branchName string, meta *LocalMeta) error
 }
-
-// CommandRunner provides raw git command execution.
-type CommandRunner interface {
-	RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error)
-	RunGitCommandInteractive(args ...string) error
-	RunGHCommandWithContext(ctx context.Context, args ...string) (string, error)
-}
