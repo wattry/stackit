@@ -68,6 +68,7 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 - **Abort operation:** `stackit abort --no-interactive`
 - **Undo last command:** `stackit undo --no-interactive --yes`
 - **Stack health issues:** See [workflows/fix-absorb.md](workflows/fix-absorb.md) or run `/stack-fix`
+- **Intelligent folding:** See [workflows/stack-fold.md](workflows/stack-fold.md) or run `/stack-fold`
 
 ## Commit Message Examples
 
@@ -180,7 +181,7 @@ New features:
 - Workflow checklists for complex operations (fix-absorb, conflict resolution)
 - Utility scripts for stack analysis and PR validation
 - Enhanced slash commands with validation loops
-- New /stack-absorb command
+- New `/stack-absorb` and `/stack-fold` commands
 - Expanded commit message examples
 - Better error recovery patterns
 
