@@ -140,10 +140,6 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		return fmt.Errorf("cannot delete trunk branch")
 	}
 
-	if e.IsLocked(branch) {
-		return fmt.Errorf("cannot delete locked branch %s", branchName)
-	}
-
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
