@@ -215,12 +215,13 @@ func ColorPRNumberByState(prNumber int, state string, isDraft bool) string {
 // FormatBranchModificationError formats a BranchModificationError with colors and helpful instructions
 func FormatBranchModificationError(err *errors.BranchModificationError) string {
 	var state, cmd string
+	isLocked := err.IsLocked()
 	switch {
-	case err.IsLocked && err.IsFrozen:
-		state = "locked and frozen"
+	case isLocked && err.IsFrozen:
+		state = fmt.Sprintf("locked (%s) and frozen", err.LockReason)
 		cmd = "st unlock' and 'st unfreeze"
-	case err.IsLocked:
-		state = "locked"
+	case isLocked:
+		state = fmt.Sprintf("locked (%s)", err.LockReason)
 		cmd = "st unlock"
 	case err.IsFrozen:
 		state = "frozen"

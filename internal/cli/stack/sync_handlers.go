@@ -3,15 +3,24 @@ package stack
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	stdsync "sync"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	syncAction "stackit.dev/stackit/internal/actions/sync"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	syncComponent "stackit.dev/stackit/internal/tui/components/sync"
 	"stackit.dev/stackit/internal/tui/style"
+)
+
+const (
+	reasonNoRestackNeeded = "does not need restacking"
+	reasonLocked          = "is locked"
+	reasonFrozen          = "is frozen"
 )
 
 // NewSyncHandler creates the appropriate handler based on TTY availability
@@ -161,9 +170,16 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 				prInfo,
 				style.ColorDim(event.NewRevision))
 		} else {
-			h.splog.Info("  %s%s does not need restacking",
+			reason := reasonNoRestackNeeded
+			if event.IsLocked() {
+				reason = fmt.Sprintf("%s: %s", reasonLocked, event.LockReason)
+			} else if event.Frozen {
+				reason = reasonFrozen
+			}
+			h.splog.Info("  %s%s %s",
 				style.ColorBranchName(event.Branch, false),
-				prInfo)
+				prInfo,
+				reason)
 		}
 	case syncAction.EventSkipped:
 		if event.Conflict {
@@ -200,13 +216,15 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int) {
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
 	// Convert to Event and use existing printRestackEvent
 	event := syncAction.Event{
 		Phase:       syncAction.PhaseRestack,
 		Branch:      branch,
 		PRNumber:    prNumber,
 		NewRevision: newRev,
+		LockReason:  lockReason,
+		Frozen:      frozen,
 	}
 
 	switch result {
@@ -256,6 +274,7 @@ type InteractiveSyncHandler struct {
 	totalOps     int
 	completedOps int
 	currentPhase syncAction.Phase
+	cleanupDone  bool
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
@@ -272,6 +291,7 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 
 	h.totalOps = totalOps
 	h.completedOps = 0
+	h.cleanupDone = false
 
 	// Initialize model
 	h.model = syncComponent.NewModel(totalOps)
@@ -282,11 +302,24 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 	// Start bubbletea program
 	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 
+	// Set up signal handler to ensure terminal is restored on interrupt
+	// Use a buffered channel and only register if not already registered
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		h.Cleanup()
+		// Re-raise the signal so the process can exit properly
+		signal.Stop(sigChan)
+	}()
+
 	// Run program in background
 	go func() {
 		if _, err := h.program.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running sync TUI: %v\n", err)
 		}
+		// Ensure cleanup happens when program exits
+		h.Cleanup()
 	}()
 }
 
@@ -360,7 +393,13 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 			if event.NewRevision != "" {
 				return fmt.Sprintf("Restacked %s%s -> %s", event.Branch, prInfo, event.NewRevision)
 			}
-			return fmt.Sprintf("%s%s does not need restacking", event.Branch, prInfo)
+			reason := reasonNoRestackNeeded
+			if event.IsLocked() {
+				reason = fmt.Sprintf("%s: %s", reasonLocked, event.LockReason)
+			} else if event.Frozen {
+				reason = reasonFrozen
+			}
+			return fmt.Sprintf("%s%s %s", event.Branch, prInfo, reason)
 		case syncAction.EventSkipped:
 			if event.Conflict {
 				return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", event.Branch, prInfo)
@@ -390,6 +429,7 @@ func (h *InteractiveSyncHandler) Complete(summary syncAction.Summary) {
 
 	// Restore splog
 	h.splog.SetQuiet(false)
+	h.cleanupDone = true
 }
 
 // formatSummary formats the sync summary
@@ -420,6 +460,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 
 	h.totalOps = branchCount
 	h.completedOps = 0
+	h.cleanupDone = false
 
 	// Initialize model for restack (reusing sync model with just restack phase)
 	h.model = syncComponent.NewModel(branchCount)
@@ -430,11 +471,24 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 	// Start bubbletea program
 	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 
+	// Set up signal handler to ensure terminal is restored on interrupt
+	// Use a buffered channel and only register if not already registered
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		h.Cleanup()
+		// Re-raise the signal so the process can exit properly
+		signal.Stop(sigChan)
+	}()
+
 	// Run program in background
 	go func() {
 		if _, err := h.program.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running restack TUI: %v\n", err)
 		}
+		// Ensure cleanup happens when program exits
+		h.Cleanup()
 	}()
 
 	// Start restack phase
@@ -444,7 +498,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int) {
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -453,7 +507,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 	}
 
 	// Build detail message
-	detail := h.formatRestackDetail(branch, result, newRev, prNumber)
+	detail := h.formatRestackDetail(branch, result, newRev, prNumber, lockReason, frozen)
 	if detail != "" {
 		h.program.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(syncAction.PhaseRestack),
@@ -470,7 +524,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 }
 
 // formatRestackDetail formats a restack event into a detail string
-func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int) string {
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) string {
 	prInfo := ""
 	if prNumber != nil {
 		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)
@@ -480,7 +534,13 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 	case syncAction.RestackDone:
 		return fmt.Sprintf("Restacked %s%s -> %s", branch, prInfo, newRev)
 	case syncAction.RestackUnneeded:
-		return fmt.Sprintf("%s%s does not need restacking", branch, prInfo)
+		reason := reasonNoRestackNeeded
+		if lockReason.IsLocked() {
+			reason = fmt.Sprintf("%s: %s", reasonLocked, lockReason)
+		} else if frozen {
+			reason = reasonFrozen
+		}
+		return fmt.Sprintf("%s%s %s", branch, prInfo, reason)
 	case syncAction.RestackConflict:
 		return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", branch, prInfo)
 	}
@@ -506,6 +566,28 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 
 	// Restore splog
 	h.splog.SetQuiet(false)
+	h.cleanupDone = true
+}
+
+// Cleanup ensures the terminal is restored to normal mode
+// This should be called on interrupt or error to prevent leaving the terminal in raw mode
+func (h *InteractiveSyncHandler) Cleanup() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.cleanupDone {
+		return
+	}
+
+	if h.program != nil {
+		// Quit the program to restore terminal state
+		h.program.Quit()
+		h.program = nil
+	}
+
+	// Restore splog
+	h.splog.SetQuiet(false)
+	h.cleanupDone = true
 }
 
 // formatRestackSummary formats the restack summary

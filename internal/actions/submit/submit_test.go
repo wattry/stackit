@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/actions/submit"
+	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -138,9 +140,9 @@ func TestActionWithMockedGitHub(t *testing.T) {
 
 		// Submit with --stack flag from branch P
 		opts := submit.Options{
-			Stack:  true,
-			NoEdit: true,
-			Draft:  true,
+			StackRange: submit.StackRangeFull(),
+			NoEdit:     true,
+			Draft:      true,
 		}
 
 		err = submit.Action(s.Context, opts, &noopHandler{})
@@ -240,4 +242,45 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		require.True(t, exists, "PR %d should be in UpdatedPRs", prNumberB)
 		require.NotNil(t, updatedPR, "Updated PR should not be nil")
 	})
+}
+
+func TestSubmitPreservesLockStatus(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+		WithStack(map[string]string{
+			"feature": "main",
+		})
+
+	// Create a local remote to push to
+	_, err := s.Scene.Repo.CreateBareRemote("origin")
+	require.NoError(t, err)
+
+	// Create mocked GitHub client
+	config := testhelpers.NewMockGitHubServerConfig()
+	rawClient, owner, repo := testhelpers.NewMockGitHubClient(t, config)
+	githubClient := testhelpers.NewMockGitHubClientInterface(rawClient, owner, repo, config)
+
+	// Lock the branch
+	branch := s.Engine.GetBranch("feature")
+	_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+	require.NoError(t, err)
+	require.True(t, branch.IsLocked())
+
+	// Create context with mocked client
+	s.Context.GitHubClient = githubClient
+	opts := submit.Options{
+		DryRun: false,
+		NoEdit: true,
+		Draft:  true,
+	}
+
+	err = submit.Action(s.Context, opts, &noopHandler{})
+	require.NoError(t, err)
+
+	// Verify that the branch is STILL locked
+	branch = s.Engine.GetBranch("feature")
+	require.True(t, branch.IsLocked(), "Branch should still be locked after submission")
+
+	meta, err := s.Engine.Git().ReadMetadata("feature")
+	require.NoError(t, err)
+	require.Equal(t, git.LockReasonUser, meta.LockReason, "Metadata LockReason field should be set")
 }

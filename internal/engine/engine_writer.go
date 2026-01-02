@@ -319,9 +319,6 @@ func (e *engineImpl) UpdateParentRevision(branchName string, parentRev string) e
 
 	meta.ParentBranchRevision = &parentRev
 
-	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
-	meta.EffectivelyLocked = e.lockedMap[branchName]
-
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
@@ -350,9 +347,6 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 		meta.Scope = &scopeStr
 	}
 
-	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
-	meta.EffectivelyLocked = e.lockedMap[branchName]
-
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
@@ -368,69 +362,96 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 	return nil
 }
 
-// SetLocked updates a branch's locked status
-func (e *engineImpl) SetLocked(branch Branch, locked bool) error {
+// SetLocked updates multiple branches' locked status
+func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	branchName := branch.GetName()
-
-	// Read existing metadata
-	meta, err := e.git.ReadMetadata(branchName)
-	if err != nil {
-		return fmt.Errorf("failed to read metadata: %w", err)
+	result := BatchLockResult{
+		AffectedBranches: make([]string, 0, len(branches)),
+		Errors:           make(map[string]error),
 	}
 
-	// Update locked status
-	meta.Locked = locked
+	for _, branch := range branches {
+		branchName := branch.GetName()
 
-	// Update in-memory map
-	if locked {
-		e.lockedMap[branchName] = true
-	} else {
-		delete(e.lockedMap, branchName)
+		// Read existing metadata
+		meta, err := e.git.ReadMetadata(branchName)
+		if err != nil {
+			result.Errors[branchName] = fmt.Errorf("failed to read metadata: %w", err)
+			continue
+		}
+
+		// Update locked status
+		meta.LockReason = reason
+
+		// Update in-memory map
+		if reason.IsLocked() {
+			e.lockedMap[branchName] = string(reason)
+		} else {
+			delete(e.lockedMap, branchName)
+		}
+
+		// Write metadata
+		if err := e.git.WriteMetadata(branchName, meta); err != nil {
+			result.Errors[branchName] = fmt.Errorf("failed to write metadata: %w", err)
+			continue
+		}
+
+		result.AffectedBranches = append(result.AffectedBranches, branchName)
 	}
 
-	// EffectivelyLocked is the same as Locked since we now lock upstack branches explicitly
-	meta.EffectivelyLocked = locked
-
-	// Write metadata
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
-		return fmt.Errorf("failed to write metadata: %w", err)
+	if len(result.Errors) > 0 {
+		return result, fmt.Errorf("failed to update locked status for some branches")
 	}
 
-	return nil
+	return result, nil
 }
 
-// SetFrozen updates a branch's frozen status
-func (e *engineImpl) SetFrozen(branch Branch, frozen bool) error {
+// SetFrozen updates multiple branches' frozen status
+func (e *engineImpl) SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	branchName := branch.GetName()
-
-	// Read existing local metadata
-	meta, err := e.git.ReadLocalMetadata(branchName)
-	if err != nil {
-		return fmt.Errorf("failed to read local metadata: %w", err)
+	result := BatchFreezeResult{
+		AffectedBranches: make([]string, 0, len(branches)),
+		Errors:           make(map[string]error),
 	}
 
-	// Update frozen status
-	meta.Frozen = frozen
+	for _, branch := range branches {
+		branchName := branch.GetName()
 
-	// Write local metadata
-	if err := e.git.WriteLocalMetadata(branchName, meta); err != nil {
-		return fmt.Errorf("failed to write local metadata: %w", err)
+		// Read existing local metadata
+		meta, err := e.git.ReadLocalMetadata(branchName)
+		if err != nil {
+			result.Errors[branchName] = fmt.Errorf("failed to read local metadata: %w", err)
+			continue
+		}
+
+		// Update frozen status
+		meta.Frozen = frozen
+
+		// Write local metadata
+		if err := e.git.WriteLocalMetadata(branchName, meta); err != nil {
+			result.Errors[branchName] = fmt.Errorf("failed to write local metadata: %w", err)
+			continue
+		}
+
+		// Update in-memory map
+		if frozen {
+			e.frozenMap[branchName] = true
+		} else {
+			delete(e.frozenMap, branchName)
+		}
+
+		result.AffectedBranches = append(result.AffectedBranches, branchName)
 	}
 
-	// Update in-memory map
-	if frozen {
-		e.frozenMap[branchName] = true
-	} else {
-		delete(e.frozenMap, branchName)
+	if len(result.Errors) > 0 {
+		return result, fmt.Errorf("failed to update frozen status for some branches")
 	}
 
-	return nil
+	return result, nil
 }
 
 // RenameBranch renames a branch and its metadata
@@ -475,8 +496,6 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 			continue
 		}
 		childMeta.ParentBranchName = &newName
-		// EffectivelyLocked equals Locked since we now lock upstack branches explicitly
-		childMeta.EffectivelyLocked = childMeta.Locked
 		if err := e.git.WriteMetadata(child, childMeta); err != nil {
 			continue
 		}
@@ -569,9 +588,6 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 	if shouldUpdateRevision {
 		meta.ParentBranchRevision = &parentRev
 	}
-
-	// EffectivelyLocked equals Locked since we now lock upstack branches explicitly
-	meta.EffectivelyLocked = e.lockedMap[branchName]
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {

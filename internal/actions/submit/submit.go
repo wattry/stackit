@@ -15,10 +15,28 @@ import (
 	"stackit.dev/stackit/internal/utils"
 )
 
+// StackRangeDownstack returns a StackRange for submitting downstack (ancestors + current)
+func StackRangeDownstack() engine.StackRange {
+	return engine.StackRange{
+		RecursiveParents:  true,
+		IncludeCurrent:    true,
+		RecursiveChildren: false,
+	}
+}
+
+// StackRangeFull returns a StackRange for submitting full stack (descendants + ancestors + current)
+func StackRangeFull() engine.StackRange {
+	return engine.StackRange{
+		RecursiveParents:  true,
+		IncludeCurrent:    true,
+		RecursiveChildren: true,
+	}
+}
+
 // Options contains options for the submit command
 type Options struct {
 	Branch               string
-	Stack                bool
+	StackRange           engine.StackRange
 	Force                bool
 	DryRun               bool
 	Confirm              bool
@@ -332,7 +350,7 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 		submissionInfo.Base,
 		prURL,
 		submissionInfo.Metadata.IsDraft,
-	).WithLocked(branch.IsLocked()))
+	).WithLockReason(branch.GetLockReason()))
 
 	return prURL, nil
 }
@@ -416,7 +434,7 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		baseToStore,
 		prURL,
 		submissionInfo.Metadata.IsDraft,
-	).WithLocked(branch.IsLocked()))
+	).WithLockReason(branch.GetLockReason()))
 
 	return prURL, nil
 }

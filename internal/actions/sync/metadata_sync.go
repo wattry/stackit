@@ -122,7 +122,9 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 
 	splog.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
 		style.ColorBranchName(info.BranchName, false))
-	splog.Info("  locked: %v", info.LocalMeta.Locked)
+	if info.LocalMeta.LockReason.IsLocked() {
+		splog.Info("  lockReason: %s", info.LocalMeta.LockReason)
+	}
 	if info.LocalMeta.Scope != nil {
 		splog.Info("  scope: %s", *info.LocalMeta.Scope)
 	}

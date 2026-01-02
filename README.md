@@ -45,6 +45,8 @@ Stackit manages the complexity of this workflow—automatically handling rebases
 - 🔍 **Branch inspection** — Easily see parent/child relationships with `children` and `parent` commands
 - ⚙️ **Advanced configuration** — Customize branch naming patterns and submit behavior
 - 🤖 **AI assistant integration** — Generate integration files for Cursor and Claude Code
+- 🐙 **GitHub Integration** — Install CI checks to prevent merging locked PRs
+- ⚓ **Git Hooks** — Automatically validate branch state before committing with `precommit`
 ---
 
 ## Installation
@@ -130,7 +132,7 @@ Stackit includes specialized commands designed for Claude Code, providing intell
 ### Setting Up Claude Integration
 
 ```bash
-stackit agent init
+stackit agent install
 ```
 
 This creates the necessary integration files for Claude Code to use these specialized commands. The commands are designed to:
@@ -196,10 +198,13 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit reorder` | Interactively reorder branches in your stack |
 | `stackit move` | Rebase a branch (and its children) onto a new parent |
 
-### AI & Automation
+### Integrations
 | Command | Description |
 |:---|:---|
-| `stackit agent init` | Setup integration files for Cursor and Claude Code |
+| `stackit agent install` | Setup integration files for Cursor and Claude Code |
+| `stackit github install` | Install GitHub Action CI checks for branch locking |
+| `stackit precommit install` | Install git pre-commit hook for branch state validation |
+| `stackit precommit uninstall` | Remove the git pre-commit hook |
 
 ### Utilities & System
 | Command | Description |

@@ -117,7 +117,7 @@ func (e *engineImpl) restackBranch(
 	}
 
 	if e.IsLocked(branch) {
-		return RestackBranchResult{Result: RestackUnneeded}, nil
+		return RestackBranchResult{Result: RestackUnneeded, LockReason: e.GetLockReason(branch)}, nil
 	}
 
 	if e.IsFrozen(branch) {
@@ -125,10 +125,10 @@ func (e *engineImpl) restackBranch(
 		remoteSha, err := e.git.GetRemoteRevision(branchName)
 		if err != nil {
 			// If remote branch is not found, just skip restack
-			return RestackBranchResult{Result: RestackUnneeded}, nil //nolint:nilerr
+			return RestackBranchResult{Result: RestackUnneeded, Frozen: true}, nil //nolint:nilerr
 		}
 		if remoteSha == "" {
-			return RestackBranchResult{Result: RestackUnneeded}, nil
+			return RestackBranchResult{Result: RestackUnneeded, Frozen: true}, nil
 		}
 
 		localSha, err := branch.GetRevision()
@@ -168,7 +168,7 @@ func (e *engineImpl) restackBranch(
 			}, nil
 		}
 
-		return RestackBranchResult{Result: RestackUnneeded}, nil
+		return RestackBranchResult{Result: RestackUnneeded, Frozen: true}, nil
 	}
 
 	// Track reparenting info

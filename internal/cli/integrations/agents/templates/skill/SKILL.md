@@ -185,5 +185,5 @@ New features:
 - Better error recovery patterns
 
 Migration:
-- Re-run `stackit agent init --force` to update files
+- Re-run `stackit agent install --force` to update files
 - No breaking changes to existing workflows

@@ -27,7 +27,8 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// Set local metadata: locked=false, scope="local-scope"
 		branch := eng.GetBranch("feature-a")
-		require.NoError(t, eng.SetLocked(branch, false))
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonNone)
+		require.NoError(t, err)
 		require.NoError(t, eng.SetScope(branch, engine.NewScope("local-scope")))
 
 		// Verify local metadata
@@ -37,8 +38,8 @@ func TestRemoteMetadataSync(t *testing.T) {
 		// 2. Simulate remote metadata with different values (locked=true, scope="remote-scope")
 		// This simulates what would happen after `git fetch origin refs/stackit/metadata/*:refs/stackit/remote-metadata/*`
 		remoteMeta := &git.Meta{
-			Locked: true,
-			Scope:  strPtr("remote-scope"),
+			LockReason: git.LockReasonUser,
+			Scope:      strPtr("remote-scope"),
 			LastModifiedBy: &git.ModifiedBy{
 				GitName:  "Remote User",
 				GitEmail: "remote@example.com",
@@ -47,7 +48,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		createRemoteMetadataRef(t, sh, "feature-a", remoteMeta)
 
 		// 3. Load remote metadata cache
-		err := eng.LoadRemoteMetadataCache()
+		err = eng.LoadRemoteMetadataCache()
 		require.NoError(t, err)
 
 		// 4. Compute metadata diff
@@ -62,7 +63,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		for _, fd := range diff.Differences {
 			fieldNames[fd.Field] = true
 		}
-		require.True(t, fieldNames["locked"], "expected 'locked' field in diff")
+		require.True(t, fieldNames["lockReason"], "expected 'lockReason' field in diff")
 		require.True(t, fieldNames["scope"], "expected 'scope' field in diff")
 
 		// 5. Accept remote metadata
@@ -85,18 +86,19 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// Set local metadata
 		branch := eng.GetBranch("feature-b")
-		require.NoError(t, eng.SetLocked(branch, true))
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		require.NoError(t, err)
 		require.NoError(t, eng.SetScope(branch, engine.NewScope("same-scope")))
 
 		// Create identical remote metadata
 		remoteMeta := &git.Meta{
-			Locked: true,
-			Scope:  strPtr("same-scope"),
+			LockReason: git.LockReasonUser,
+			Scope:      strPtr("same-scope"),
 		}
 		createRemoteMetadataRef(t, sh, "feature-b", remoteMeta)
 
 		// Load remote cache
-		err := eng.LoadRemoteMetadataCache()
+		err = eng.LoadRemoteMetadataCache()
 		require.NoError(t, err)
 
 		// Compute diff - should have no conflict
@@ -118,11 +120,11 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// Set local metadata and simulate it was previously synced
 		branch := eng.GetBranch("feature-c")
-		require.NoError(t, eng.SetLocked(branch, true))
+		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		require.NoError(t, err)
 
 		// Simulate that this metadata was synced from remote by setting LastModifiedBy
-		// (which triggers LocalOnlyHash to be set)
-		err := eng.SetLastModifiedBy("feature-c")
+		err = eng.SetLastModifiedBy("feature-c")
 		require.NoError(t, err)
 
 		// Load empty remote cache (simulating remote metadata was deleted)
@@ -157,7 +159,8 @@ func TestRemoteMetadataSync(t *testing.T) {
 		require.False(t, eng.HasLocalModifications("feature-d"))
 
 		// Now make a local change
-		require.NoError(t, eng.SetLocked(branch, true))
+		_, err = eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		require.NoError(t, err)
 
 		// Should now be detected as modified
 		require.True(t, eng.HasLocalModifications("feature-d"))
@@ -169,8 +172,8 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
 		remoteMeta := &git.Meta{
-			Locked: true,
-			Scope:  strPtr("remote-scope"),
+			LockReason: git.LockReasonUser,
+			Scope:      strPtr("remote-scope"),
 		}
 		createRemoteMetadataRef(t, sh, "non-existent-branch", remoteMeta)
 

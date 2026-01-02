@@ -22,6 +22,13 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 	if repoOwner != "" && repoName != "" {
 		if err := github.SyncPrInfo(ctx.Context, ctx.Git(), branches, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
 			branch := ctx.Engine.GetBranch(name)
+
+			// Preserve existing locked status
+			lockReason := engine.LockReasonNone
+			if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
+				lockReason = existing.LockReason()
+			}
+
 			_ = ctx.Engine.UpsertPrInfo(branch, engine.NewPrInfo(
 				&prInfo.Number,
 				prInfo.Title,
@@ -30,7 +37,7 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 				prInfo.Base,
 				prInfo.HTMLURL,
 				prInfo.Draft,
-			))
+			).WithLockReason(lockReason))
 		}); err != nil {
 			// Non-fatal, continue
 			ctx.Splog.Debug("Failed to sync PR info: %v", err)

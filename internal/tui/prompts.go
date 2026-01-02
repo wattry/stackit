@@ -236,7 +236,7 @@ func PromptTextInput(prompt, defaultValue string) (string, error) {
 }
 
 // PromptConfirm prompts the user for yes/no confirmation
-func PromptConfirm(prompt string, defaultValue bool) (bool, error) {
+var PromptConfirm = func(prompt string, defaultValue bool) (bool, error) {
 	if err := checkInteractiveAllowed(); err != nil {
 		return false, err
 	}

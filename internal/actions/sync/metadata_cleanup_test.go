@@ -54,7 +54,7 @@ func TestMetadataCleanup(t *testing.T) {
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
 		remoteMeta := &git.Meta{
-			Locked: true,
+			LockReason: "locked",
 		}
 
 		// Serialize

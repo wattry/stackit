@@ -467,8 +467,12 @@ func (m *model) runCommand(cmdStr string) tea.Cmd {
 // startSubmit starts a submit operation
 func (m *model) startSubmit(stack bool) tea.Cmd {
 	return func() tea.Msg {
+		stackRange := submitAction.StackRangeDownstack()
+		if stack {
+			stackRange = submitAction.StackRangeFull()
+		}
 		opts := submitAction.Options{
-			Stack:        stack,
+			StackRange:   stackRange,
 			SubmitFooter: true,
 		}
 

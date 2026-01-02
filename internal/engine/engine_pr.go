@@ -19,7 +19,12 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		return nil, nil
 	}
 
-	prInfo := NewPrInfoWithLocked(
+	lockReason := ""
+	if meta.PrInfo.LockReason != nil {
+		lockReason = string(*meta.PrInfo.LockReason)
+	}
+
+	prInfo := NewPrInfoFull(
 		meta.PrInfo.Number,
 		getStringValue(meta.PrInfo.Title),
 		getStringValue(meta.PrInfo.Body),
@@ -27,7 +32,8 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 		getStringValue(meta.PrInfo.Base),
 		getStringValue(meta.PrInfo.URL),
 		getBoolValue(meta.PrInfo.IsDraft),
-		getBoolValue(meta.PrInfo.Locked),
+		LockReason(lockReason),
+		getStringValue(meta.PrInfo.MergeBranch),
 	)
 
 	return prInfo, nil
@@ -83,9 +89,10 @@ func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 		url := prInfo.URL()
 		meta.PrInfo.URL = &url
 	}
-	locked := prInfo.IsLocked()
-	meta.PrInfo.Locked = &locked
-	meta.EffectivelyLocked = locked
+	lr := prInfo.LockReason()
+	meta.PrInfo.LockReason = &lr
+	mergeBranch := prInfo.MergeBranch()
+	meta.PrInfo.MergeBranch = &mergeBranch
 
 	return e.git.WriteMetadata(branch.GetName(), meta)
 }
@@ -121,9 +128,27 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	titleNeedsUpdate := e.prTitleNeedsUpdate(branch, prInfo)
 
 	// Check if lock status changed
-	lockStatusChanged := prInfo.IsLocked() != branch.IsLocked()
+	lockStatusChanged := false
+	meta, err := e.git.ReadMetadata(branch.GetName())
+	if err == nil {
+		if meta.LockReason != prInfo.LockReason() {
+			lockStatusChanged = true
+		} else if meta.PrInfo != nil && meta.PrInfo.LockReason != nil && *meta.PrInfo.LockReason != prInfo.LockReason() {
+			lockStatusChanged = true
+		}
+	}
 
-	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged
+	// Check if merge branch changed
+	mergeBranchChanged := false
+	if err == nil && meta.PrInfo != nil {
+		oldBranch := getStringValue(meta.PrInfo.MergeBranch)
+		newBranch := prInfo.MergeBranch()
+		if oldBranch != newBranch {
+			mergeBranchChanged = true
+		}
+	}
+
+	needsUpdate := baseChanged || !branchChanged || titleNeedsUpdate || lockStatusChanged || mergeBranchChanged
 
 	reason := ""
 	if !needsUpdate {

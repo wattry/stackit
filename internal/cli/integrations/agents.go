@@ -1,6 +1,5 @@
-// Package agent provides commands for managing AI agent integration files
-// for Cursor and Claude Code.
-package agent
+// Package integrations provides commands for managing various integrations
+package integrations
 
 import (
 	"fmt"
@@ -13,8 +12,8 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-// NewAgentCmd creates the agent command
-func NewAgentCmd(version string) *cobra.Command {
+// NewAgentsCmd creates the agent command
+func NewAgentsCmd(version string) *cobra.Command {
 	// Set the template version to match the app version
 	TemplateVersion = version
 
@@ -28,19 +27,19 @@ to understand how to use stackit commands for managing stacked branches.`,
 		SilenceUsage: true,
 	}
 
-	cmd.AddCommand(newAgentInitCmd())
+	cmd.AddCommand(newAgentInstallCmd())
 
 	return cmd
 }
 
-// newAgentInitCmd creates the agent init command
-func newAgentInitCmd() *cobra.Command {
+// newAgentInstallCmd creates the agent install command
+func newAgentInstallCmd() *cobra.Command {
 	var local bool
 	var force bool
 
 	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize agent integration files",
+		Use:   "install",
+		Short: "Install agent integration files",
 		Long: `Install agent integration files for AI assistants.
 
 By default, files are installed globally in ~/.claude/ and work across all repositories.
@@ -56,7 +55,7 @@ to manage stacked branches, create commits, submit PRs, and more.`,
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			runner := git.NewRunner()
-			return runAgentInit(runner, local, force)
+			return runAgentInstall(runner, local, force)
 		},
 	}
 
@@ -66,7 +65,7 @@ to manage stacked branches, create commits, submit PRs, and more.`,
 	return cmd
 }
 
-func runAgentInit(runner git.Runner, local, force bool) error {
+func runAgentInstall(runner git.Runner, local, force bool) error {
 	var baseDir string
 	var err error
 
@@ -101,12 +100,12 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 
 	// Write skill files
 	skillFiles := map[string]string{
-		"SKILL.md":     "templates/skill/SKILL.md",
-		"reference.md": "templates/skill/reference.md",
+		"SKILL.md":     "agents/templates/skill/SKILL.md",
+		"reference.md": "agents/templates/skill/reference.md",
 	}
 
 	for filename, templatePath := range skillFiles {
-		content, err := skillTemplates.ReadFile(templatePath)
+		content, err := agentTemplates.ReadFile(templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
@@ -146,8 +145,8 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 	}
 
 	for _, filename := range commandRefFiles {
-		templatePath := "templates/skill/commands/" + filename
-		content, err := skillTemplates.ReadFile(templatePath)
+		templatePath := "agents/templates/skill/commands/" + filename
+		content, err := agentTemplates.ReadFile(templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
@@ -166,8 +165,8 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 	}
 
 	for _, filename := range workflowFiles {
-		templatePath := "templates/skill/workflows/" + filename
-		content, err := skillTemplates.ReadFile(templatePath)
+		templatePath := "agents/templates/skill/workflows/" + filename
+		content, err := agentTemplates.ReadFile(templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
@@ -185,8 +184,8 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 	}
 
 	for _, filename := range scriptFiles {
-		templatePath := "templates/skill/scripts/" + filename
-		content, err := skillTemplates.ReadFile(templatePath)
+		templatePath := "agents/templates/skill/scripts/" + filename
+		content, err := agentTemplates.ReadFile(templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
@@ -221,8 +220,8 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 	}
 
 	for _, filename := range commands {
-		templatePath := "templates/commands/" + filename
-		content, err := commandTemplates.ReadFile(templatePath)
+		templatePath := "agents/templates/commands/" + filename
+		content, err := agentTemplates.ReadFile(templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
@@ -240,7 +239,7 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 	}
 
 	// Write Cursor rules file
-	cursorContent, err := cursorTemplates.ReadFile("templates/cursor/stackit.md")
+	cursorContent, err := agentTemplates.ReadFile("agents/templates/cursor/stackit.md")
 	if err != nil {
 		return fmt.Errorf("failed to read Cursor template: %w", err)
 	}
@@ -282,7 +281,7 @@ func runAgentInit(runner git.Runner, local, force bool) error {
 
 	if !local {
 		fmt.Println()
-		fmt.Println("Tip: Use 'stackit agent init --local' to install files in a specific repository")
+		fmt.Println("Tip: Use 'stackit agent install --local' to install files in a specific repository")
 	}
 
 	return nil

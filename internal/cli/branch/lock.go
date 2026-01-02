@@ -5,14 +5,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/lock"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 )
 
 // NewLockCmd creates the lock command
 func NewLockCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "lock [branch]",
 		Short: "Lock specified branch and its downstack",
 		Long: `Lock specified branch and branches downstack of it.
@@ -26,7 +26,8 @@ should not be modified. For local-only protection (e.g. when building on
 top of a colleague's PR), use 'st freeze' instead.
 
 This operation can be undone with 'st unlock'.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
@@ -40,10 +41,12 @@ This operation can be undone with 'st unlock'.`,
 					branchName = current.GetName()
 				}
 
-				return actions.LockAction(ctx, branchName)
+				return lock.Action(ctx, branchName)
 			})
 		},
 	}
+
+	return cmd
 }
 
 // NewUnlockCmd creates the unlock command
@@ -58,7 +61,8 @@ by clearing the shared lock in remote metadata.
 
 If the branch is also frozen locally, you will still need to run 'st unfreeze' 
 to enable modifications.`,
-		Args: cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				branchName := ""
@@ -72,7 +76,7 @@ to enable modifications.`,
 					branchName = current.GetName()
 				}
 
-				return actions.UnlockAction(ctx, branchName)
+				return lock.Unlock(ctx, branchName)
 			})
 		},
 	}

@@ -66,7 +66,7 @@ func TestExecuteInWorktree(t *testing.T) {
 		s.Checkout("branch-a")
 
 		// Execute in worktree
-		err = merge.ExecuteInWorktree(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, s.Context.RepoRoot, merge.ExecuteOptions{
+		err = merge.ExecuteInWorktree(s.Context, s.Engine, merge.ExecuteOptions{
 			Plan:  plan,
 			Force: true,
 		})

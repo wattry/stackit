@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -178,10 +179,10 @@ func isCurrentBranchLockedOrFrozen(runner git.Runner) (bool, bool, string) {
 	if sha, err := runner.GetRef(refName); err == nil {
 		if content, err := runner.CatFile(sha); err == nil {
 			var meta struct {
-				Locked bool `json:"locked"`
+				LockReason engine.LockReason `json:"lockReason"`
 			}
 			if err := json.Unmarshal([]byte(content), &meta); err == nil {
-				locked = meta.Locked
+				locked = meta.LockReason.IsLocked()
 			}
 		}
 	}
@@ -208,6 +209,7 @@ func newAddCmd() *cobra.Command {
 		Short:              "git add passthrough",
 		Long:               "arguments [args] (optional) git add arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
@@ -220,6 +222,7 @@ func newCherryPickCmd() *cobra.Command {
 		Short:              "git cherry-pick passthrough",
 		Long:               "arguments [args] (optional) git cherry-pick arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
@@ -232,6 +235,7 @@ func newRebaseCmd() *cobra.Command {
 		Short:              "git rebase passthrough",
 		Long:               "arguments [args] (optional) git rebase arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
@@ -244,6 +248,7 @@ func newResetCmd() *cobra.Command {
 		Short:              "git reset passthrough",
 		Long:               "arguments [args] (optional) git reset arguments",
 		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
