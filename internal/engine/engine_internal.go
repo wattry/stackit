@@ -70,16 +70,16 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 		}
 	}
 
-	// Sort children by name descending (newest first) and hoist active path
+	// Sort children by name for deterministic traversal
 	for _, children := range e.childrenMap {
-		e.sortChildren(children)
+		slices.Sort(children)
 	}
 }
 
-// sortChildren sorts a list of sibling branches:
+// smartSortChildren sorts a list of sibling branches using the "smart" strategy:
 // 1. Branches on the path from current branch to trunk are hoisted to the top.
 // 2. Other branches are sorted by name descending (newest first).
-func (e *engineImpl) sortChildren(children []string) {
+func (e *engineImpl) smartSortChildren(children []string) {
 	if len(children) <= 1 {
 		return
 	}
@@ -202,8 +202,8 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 	// Add to new parent's children if it has a parent
 	if newParent != "" {
 		e.childrenMap[newParent] = append(e.childrenMap[newParent], branchName)
-		// Sort with active path hoisting
-		e.sortChildren(e.childrenMap[newParent])
+		// Sort for deterministic traversal
+		slices.Sort(e.childrenMap[newParent])
 	}
 }
 

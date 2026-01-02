@@ -122,15 +122,32 @@ func (e *engineImpl) getParent(branch Branch) *Branch {
 	return e.GetParent(branch) // Delegate to existing implementation for now
 }
 
-// GetChildren returns the children branches
+// GetChildren returns the children branches using the default sorting strategy (Alphabetical)
 func (e *engineImpl) GetChildren(branch Branch) []Branch {
+	return e.GetChildrenWithStrategy(branch, SortStrategyAlphabetical)
+}
+
+// GetChildrenWithStrategy returns the children branches using the specified sorting strategy
+func (e *engineImpl) GetChildrenWithStrategy(branch Branch, strategy SortStrategy) []Branch {
 	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	if children, ok := e.childrenMap[branchName]; ok {
-		branches := make([]Branch, len(children))
-		for i, name := range children {
+		// Copy child names so we don't modify the engine's internal map
+		childNames := make([]string, len(children))
+		copy(childNames, children)
+
+		// Apply sorting strategy
+		switch strategy {
+		case SortStrategySmart:
+			e.smartSortChildren(childNames)
+		case SortStrategyAlphabetical:
+			// Already sorted alphabetically in internal map
+		}
+
+		branches := make([]Branch, len(childNames))
+		for i, name := range childNames {
 			branches[i] = NewBranch(name, e)
 		}
 		return branches

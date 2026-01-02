@@ -6,7 +6,13 @@ import (
 )
 
 // NewStackTreeRenderer creates a tree renderer configured for the current engine state
+// using the SMART sorting strategy (active path hoisting + newest first).
 func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
+	return NewStackTreeRendererWithStrategy(eng, engine.SortStrategySmart)
+}
+
+// NewStackTreeRendererWithStrategy creates a tree renderer with a specific sorting strategy
+func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.SortStrategy) *tree.StackTreeRenderer {
 	currentBranch := eng.CurrentBranch()
 	currentBranchName := ""
 	if currentBranch != nil {
@@ -20,7 +26,7 @@ func NewStackTreeRenderer(eng engine.BranchReader) *tree.StackTreeRenderer {
 		trunk.GetName(),
 		func(branchName string) []string {
 			branch := eng.GetBranch(branchName)
-			children := branch.GetChildren()
+			children := eng.GetChildrenWithStrategy(branch, strategy)
 			childNames := make([]string, len(children))
 			for i, c := range children {
 				childNames[i] = c.GetName()

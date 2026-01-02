@@ -15,6 +15,7 @@ type StackNavigator interface {
 	Trunk() Branch
 	GetBranch(branchName string) Branch
 	GetChildren(branch Branch) []Branch
+	GetChildrenWithStrategy(branch Branch, strategy SortStrategy) []Branch
 	GetRelativeStack(branch Branch, rng StackRange) []Branch
 	GetRelativeStackUpstack(branch Branch) []Branch
 	GetRelativeStackDownstack(branch Branch) []Branch

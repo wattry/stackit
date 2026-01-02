@@ -88,7 +88,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		// Update in-memory cache
 		e.parentMap[branchName] = lastBranchName
 		e.childrenMap[lastBranchName] = append(e.childrenMap[lastBranchName], branchName)
-		e.sortChildren(e.childrenMap[lastBranchName])
+		slices.Sort(e.childrenMap[lastBranchName])
 
 		// Update last branch info
 		lastBranchName = branchName

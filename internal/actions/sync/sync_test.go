@@ -128,25 +128,27 @@ func TestSyncAction(t *testing.T) {
 	t.Run("partial success in branching restack (one child succeeds, one fails)", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
-		// Create: main -> P -> [C1, C2]
+		// Create: main -> P -> [0-Success, 1-Failure]
+		// We use these names because siblings are sorted ascending by name by default,
+		// and we want the successful one to be processed first.
 		s.CreateBranch("P").
 			Commit("P change").
 			TrackBranch("P", "main")
 
-		// C1 will restack successfully
+		// 0-Success will restack successfully
 		s.Checkout("P").
-			CreateBranch("C1").
-			Commit("C1 change").
-			TrackBranch("C1", "P")
+			CreateBranch("0-Success").
+			Commit("Success change").
+			TrackBranch("0-Success", "P")
 
-		// C2 will have a conflict
+		// 1-Failure will have a conflict
 		s.Checkout("P").
-			CreateBranch("C2")
+			CreateBranch("1-Failure")
 		err := s.Scene.Repo.CreateChangeAndCommit("initial content", "conflict")
 		require.NoError(t, err)
-		s.TrackBranch("C2", "P")
+		s.TrackBranch("1-Failure", "P")
 
-		// Modify P with a change that conflicts with C2 but not C1
+		// Modify P with a change that conflicts with 1-Failure but not 0-Success
 		s.Checkout("P")
 		err = s.Scene.Repo.CreateChangeAndCommit("conflicting content", "conflict")
 		require.NoError(t, err)
@@ -162,13 +164,13 @@ func TestSyncAction(t *testing.T) {
 			Restack: true,
 		}, nil)
 
-		// Should error due to conflict in C2
+		// Should error due to conflict in 1-Failure
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "conflict")
 
-		// C1 should still have been restacked successfully
-		s.ExpectBranchFixed("C1")
-		// C2 should NOT be fixed
-		s.ExpectBranchNotFixed("C2")
+		// 0-Success should still have been restacked successfully
+		s.ExpectBranchFixed("0-Success")
+		// 1-Failure should NOT be fixed
+		s.ExpectBranchNotFixed("1-Failure")
 	})
 }

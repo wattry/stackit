@@ -8,6 +8,16 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
+// SortStrategy specifies how branches should be sorted in displays
+type SortStrategy string
+
+const (
+	// SortStrategyAlphabetical sorts branches by name ascending (A-Z)
+	SortStrategyAlphabetical SortStrategy = "ALPHABETICAL"
+	// SortStrategySmart sorts branches by name descending (newest first) and hoists the active path
+	SortStrategySmart SortStrategy = "SMART"
+)
+
 // LockReason is re-exported from git package
 type LockReason = git.LockReason
 
