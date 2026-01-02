@@ -122,33 +122,7 @@ func getUntrackedBranchNames(ctx *app.Context) []string {
 }
 
 func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOptions) tree.BranchAnnotation {
-	annotation := tree.BranchAnnotation{
-		Scope:         ctx.Engine.GetScope(branchObj).String(),
-		ExplicitScope: branchObj.GetExplicitScope().String(),
-		IsLocked:      branchObj.IsLocked(),
-		IsFrozen:      branchObj.IsFrozen(),
-	}
-
-	// Local stats (always fast enough)
-	if !branchObj.IsTrunk() {
-		if count, err := branchObj.GetCommitCount(); err == nil {
-			annotation.CommitCount = count
-		}
-		if added, deleted, err := branchObj.GetDiffStats(); err == nil {
-			annotation.LinesAdded = added
-			annotation.LinesDeleted = deleted
-		}
-	}
-
-	// PR info (local metadata)
-	if !branchObj.IsTrunk() {
-		prInfo, _ := branchObj.GetPrInfo()
-		if prInfo != nil {
-			annotation.PRNumber = prInfo.Number()
-			annotation.PRState = prInfo.State()
-			annotation.IsDraft = prInfo.IsDraft()
-		}
-	}
+	annotation := tui.GetBranchAnnotation(ctx.Engine, branchObj)
 
 	// CI status (only in FULL mode)
 	if opts.Style == "FULL" && !branchObj.IsTrunk() && ctx.GitHubClient != nil {
