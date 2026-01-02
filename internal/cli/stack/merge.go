@@ -2,16 +2,20 @@
 package stack
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/merge"
+	"stackit.dev/stackit/internal/actions/sync"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	sterrors "stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
@@ -376,6 +380,46 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 		return fmt.Errorf("merge action failed: %w", err)
 	}
 
+	if !dryRun && ctx.Interactive {
+		return handlePostMergeFollowUp(ctx)
+	}
+
+	return nil
+}
+
+func handlePostMergeFollowUp(ctx *app.Context) error {
+	splog := ctx.Splog
+	splog.Newline()
+	splog.Info("🎉 Merge completed successfully in the temporary worktree!")
+	splog.Info("Your main workspace remains untouched.")
+
+	options := []tui.SelectOption{
+		{Label: "🔄 Switch to trunk and sync (" + ctx.Engine.Trunk().GetName() + ")", Value: "trunk-sync"},
+		{Label: "Done", Value: "done"},
+	}
+
+	selected, err := tui.PromptSelect("What would you like to do in your main workspace?", options, 0)
+	if err != nil {
+		if errors.Is(err, sterrors.ErrCanceled) {
+			return nil
+		}
+		return err
+	}
+	if selected == "done" {
+		return nil
+	}
+
+	if selected == "trunk-sync" {
+		if err := actions.CheckoutAction(ctx, actions.CheckoutOptions{
+			CheckoutTrunk: true,
+		}); err != nil {
+			return err
+		}
+		handler := NewSyncHandler(ctx.Splog)
+		return sync.Action(ctx, sync.Options{
+			Restack: true,
+		}, handler)
+	}
 	return nil
 }
 
