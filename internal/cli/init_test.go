@@ -37,6 +37,29 @@ func TestInitCommand(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, "init command failed: %s", string(output))
 
+		normalized := testhelpers.NormalizeOutput(string(output))
+
+		expected := testhelpers.NormalizeOutput(`
+Welcome to Stackit!
+
+Trunk set to main
+Stackit initialized successfully!
+
+Default configuration:
+  - branch.pattern: {username}/{date}/{message}
+  - submit.footer:  true
+  - undo.depth:     10
+
+Run 'stackit config' to change these settings.
+
+Pro-tip: enhance your workflow with integrations:
+  - GitHub:     stackit github install
+  - Pre-commit: stackit precommit install
+  - Agents:     stackit agents install
+`)
+
+		require.Equal(t, expected, normalized, "output format should match expected structure")
+
 		// Verify config was created with correct trunk
 		cfg := readRepoConfig(t, scene.Dir)
 		require.NotNil(t, cfg.Trunk)
@@ -107,6 +130,29 @@ func TestInitCommand(t *testing.T) {
 		cmd.Dir = scene.Dir
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, "init command failed: %s", string(output))
+
+		normalized := testhelpers.NormalizeOutput(string(output))
+
+		expected := testhelpers.NormalizeOutput(`
+Welcome to Stackit!
+
+Trunk set to main
+Stackit initialized successfully!
+
+Default configuration:
+  - branch.pattern: {username}/{date}/{message}
+  - submit.footer:  true
+  - undo.depth:     10
+
+Run 'stackit config' to change these settings.
+
+Pro-tip: enhance your workflow with integrations:
+  - GitHub:     stackit github install
+  - Pre-commit: stackit precommit install
+  - Agents:     stackit agents install
+`)
+
+		require.Equal(t, expected, normalized, "output format should match expected structure")
 
 		// Verify config was created with inferred trunk (main)
 		cfg := readRepoConfig(t, scene.Dir)

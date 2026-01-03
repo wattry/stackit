@@ -165,19 +165,6 @@ func Action(ctx *app.Context, opts Options) error {
 		} else {
 			splog.Info("Inserted %s and returned to %s.", branchName, currentBranch)
 		}
-	} else {
-		// Check if current branch has children and show tip
-		currentBranchObj := eng.GetBranch(currentBranch)
-		children := currentBranchObj.GetChildren()
-		siblings := []string{}
-		for _, child := range children {
-			if child.GetName() != branchName {
-				siblings = append(siblings, child.GetName())
-			}
-		}
-		if len(siblings) > 0 {
-			splog.Info("Tip: To insert a created branch into the middle of your stack, use the `--insert` flag.")
-		}
 	}
 
 	return nil
