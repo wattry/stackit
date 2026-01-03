@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/tui/keys"
 	"stackit.dev/stackit/internal/tui/style"
@@ -96,7 +95,7 @@ func (m reorderModel) View() string {
 	// Branch list with cursor + background selection
 	selectionStyle := style.Selection()
 	cursorStyle := style.SelectionCursorStyle()
-	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // Cyan
+	branchStyle := style.BranchStyle(false, false, false)
 
 	for i, branch := range m.branches {
 		if i == m.cursor {

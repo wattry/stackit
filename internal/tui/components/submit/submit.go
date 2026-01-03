@@ -3,6 +3,8 @@ package submit
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // Item represents a branch being submitted
@@ -33,7 +35,7 @@ func DefaultStyles() Styles {
 		SpinnerStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
 		DoneStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
 		ErrorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		BranchStyle:  lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true),
+		BranchStyle:  style.BranchStyle(false, false, false).Bold(true),
 		URLStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 		DimStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 	}

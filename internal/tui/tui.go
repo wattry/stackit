@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/tui/components/submit"
+	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -76,7 +77,7 @@ func NewSubmitTUIModel(items []submit.Item, submitFunc func(idx int) tea.Cmd) Su
 			spinnerStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
 			doneStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
 			errorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-			branchStyle:  lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true),
+			branchStyle:  style.BranchStyle(false, false, false).Bold(true),
 			urlStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 			dimStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 		},

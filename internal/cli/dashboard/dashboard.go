@@ -761,7 +761,8 @@ func (m *model) renderDetails() string {
 
 	parent := b.GetParent()
 	if parent != nil {
-		sb.WriteString(labelStyle.Render("Parent:") + " " + valueStyle.Render(parent.GetName()) + "\n")
+		coloredParent := style.ColorBranchNameWithTrunk(parent.GetName(), false, parent.IsTrunk())
+		sb.WriteString(labelStyle.Render("Parent:") + " " + coloredParent + "\n")
 	}
 
 	sb.WriteString("\n")
@@ -801,7 +802,7 @@ func (m *model) renderDetails() string {
 func (m *model) getStatusString(branchName string) string {
 	branch := m.engine.GetBranch(branchName)
 	if m.engine.IsTrunk(branch) {
-		return style.ColorDim("Trunk")
+		return style.BranchStyle(false, true, false).Render("Trunk")
 	}
 	statusParts := []string{}
 	if branch.IsLocked() {

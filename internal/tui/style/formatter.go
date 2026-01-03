@@ -70,14 +70,45 @@ func FormatShortLine(line string, circleIndex, arrowIndex int, isCurrent bool, o
 
 // ColorBranchName colors a branch name based on whether it's current
 func ColorBranchName(branchName string, isCurrent bool) string {
+	name := branchName
 	if isCurrent {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("6")).
-			Render(branchName + " (current)")
+		name += " (current)"
 	}
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("12")).
-		Render(branchName)
+	return BranchStyle(isCurrent, false, false).Render(name)
+}
+
+// ColorBranchNameWithTrunk colors a branch name based on whether it's current and trunk status
+func ColorBranchNameWithTrunk(branchName string, isCurrent bool, isTrunk bool) string {
+	name := branchName
+	if isCurrent {
+		name += " (current)"
+	}
+	return BranchStyle(isCurrent, isTrunk, false).Render(name)
+}
+
+// ColorBranchNameBold colors a branch name with bold if current (green)
+func ColorBranchNameBold(branchName string, isCurrent bool) string {
+	return BranchStyle(isCurrent, false, false).Render(branchName)
+}
+
+// ColorBranchNameBoldWithTrunk colors a branch name with bold if current and trunk status
+func ColorBranchNameBoldWithTrunk(branchName string, isCurrent bool, isTrunk bool) string {
+	return BranchStyle(isCurrent, isTrunk, false).Render(branchName)
+}
+
+// BranchStyle returns the unified style for a branch name
+func BranchStyle(isCurrent, isTrunk, isDim bool) lipgloss.Style {
+	if isDim {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray
+	}
+	if isCurrent {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true) // Bold Green
+	}
+	if isTrunk {
+		// Distinct color for main/trunk: Pink (205)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Bright Blue for others
 }
 
 // ColorNeedsRestack colors the "needs restack" text
@@ -150,15 +181,6 @@ func ColorScope(scope string) string {
 		return lipgloss.NewStyle().Foreground(color).Render("[" + scope + "]")
 	}
 	return ColorDim("[" + scope + "]")
-}
-
-// ColorBranchNameBold colors a branch name with bold if current (green)
-func ColorBranchNameBold(branchName string, isCurrent bool) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
-	if isCurrent {
-		style = style.Bold(true).Foreground(lipgloss.Color("2")) // green
-	}
-	return style.Render(branchName)
 }
 
 // IconReviewApproved returns the approved icon (green checkmark)
