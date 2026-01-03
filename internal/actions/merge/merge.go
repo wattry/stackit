@@ -76,7 +76,16 @@ func Action(ctx *app.Context, opts Options) error {
 		Handler:        opts.Handler,
 	}
 
-	if err := ExecuteInWorktree(ctx, eng, executeOpts, opts.Scope, opts.TargetBranch); err != nil {
+	// If no target branch or scope specified, use current branch
+	targetBranch := opts.TargetBranch
+	if targetBranch == "" && opts.Scope == "" && opts.Plan == nil {
+		cb := eng.CurrentBranch()
+		if cb != nil {
+			targetBranch = cb.GetName()
+		}
+	}
+
+	if err := ExecuteInWorktree(ctx, eng, executeOpts, opts.Scope, targetBranch); err != nil {
 		return err
 	}
 

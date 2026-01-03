@@ -637,11 +637,7 @@ func (r *runner) runGitCommandInternal(args ...string) (string, error) {
 }
 
 func (r *runner) GetRef(name string) (string, error) {
-	repo, err := r.ensureRepo()
-	if err != nil {
-		return "", err
-	}
-	return r.getRef(repo, name)
+	return r.RunGitCommandWithContext(context.Background(), "rev-parse", "--verify", name)
 }
 
 func (r *runner) UpdateRef(name, sha string) error {
@@ -663,19 +659,25 @@ func (r *runner) CreateBlob(content string) (string, error) {
 }
 
 func (r *runner) ReadBlob(sha string) (string, error) {
-	repo, err := r.ensureRepo()
-	if err != nil {
-		return "", err
-	}
-	return r.readBlob(repo, sha)
+	return r.CatFile(sha)
 }
 
 func (r *runner) ListRefs(prefix string) (map[string]string, error) {
-	repo, err := r.ensureRepo()
-	if err != nil {
-		return nil, err
+	output, _ := r.RunGitCommandWithContext(context.Background(), "show-ref")
+
+	result := make(map[string]string)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, " ")
+		if len(parts) == 2 {
+			sha := parts[0]
+			refName := parts[1]
+			if strings.HasPrefix(refName, prefix) {
+				result[refName] = sha
+			}
+		}
 	}
-	return r.listRefs(repo, prefix)
+	return result, nil
 }
 
 func (r *runner) PushMetadataRefs(branches []string) error {

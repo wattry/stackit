@@ -433,6 +433,38 @@ func indexOf(slice []string, item string) int {
 	return -1
 }
 
+func TestNewEngine_Scoping(t *testing.T) {
+	// 1. Create a "main" repo and stay "inside" it (scenario.NewScenario calls os.Chdir)
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	mainDir := s.Scene.Dir
+
+	// 2. Create a "separate" repo in a different location
+	otherDir := t.TempDir()
+	otherRepo, err := testhelpers.NewGitRepo(otherDir)
+	require.NoError(t, err)
+
+	// Create a unique branch in the other repo
+	err = otherRepo.CreateChangeAndCommit("initial", "init")
+	require.NoError(t, err)
+	err = otherRepo.CreateAndCheckoutBranch("unique-branch-in-other-repo")
+	require.NoError(t, err)
+
+	// 3. Initialize an engine for otherDir while our CWD is still mainDir
+	eng, err := engine.NewEngine(engine.Options{
+		RepoRoot: otherDir,
+		Trunk:    "main",
+	})
+	require.NoError(t, err)
+
+	// 4. VERIFY: The engine should see the branch from otherDir
+	// If the bug exists, the engine's Git runner will have used os.Getwd()
+	// and will incorrectly see the current branch of mainDir (which is "main")
+	curr := eng.CurrentBranch()
+	require.NotNil(t, curr)
+	require.Equal(t, "unique-branch-in-other-repo", curr.GetName(),
+		"Engine must be scoped to its RepoRoot (%s), but seems to be looking at CWD (%s)", otherDir, mainDir)
+}
+
 func TestRestackBranches(t *testing.T) {
 	t.Run("restacks branch when parent has moved", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
