@@ -3,6 +3,7 @@ package foreach
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
 	"stackit.dev/stackit/internal/tui/style"
 )
 

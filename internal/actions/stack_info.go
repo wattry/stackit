@@ -102,7 +102,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		for i, info := range result {
 			coloredName := style.ColorBranchName(info.Name, info.Name == currentBranchName)
 			fmt.Printf("%s\n", coloredName)
-			
+
 			var coloredParent string
 			if info.Parent != "" {
 				parentBranch := eng.GetBranch(info.Parent)
