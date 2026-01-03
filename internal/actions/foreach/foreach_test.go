@@ -32,7 +32,9 @@ func (h *testHandler) Events() []foreach.Event {
 }
 
 func TestForeachAction(t *testing.T) {
+	t.Parallel()
 	t.Run("sequential execution on stack", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -67,6 +69,7 @@ func TestForeachAction(t *testing.T) {
 	})
 
 	t.Run("fail-fast sequential", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -102,6 +105,7 @@ func TestForeachAction(t *testing.T) {
 	})
 
 	t.Run("no-fail-fast sequential", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -131,6 +135,7 @@ func TestForeachAction(t *testing.T) {
 	})
 
 	t.Run("parallel execution", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -163,6 +168,7 @@ func TestForeachAction(t *testing.T) {
 	})
 
 	t.Run("environment variable STACKIT_BRANCH", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"feature": "main",
@@ -191,6 +197,7 @@ func TestForeachAction(t *testing.T) {
 	})
 
 	t.Run("various scopes", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"b1": "main",
