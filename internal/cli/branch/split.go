@@ -7,6 +7,7 @@ import (
 	"stackit.dev/stackit/internal/actions/split"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/config"
 )
 
 // NewSplitCmd creates the split command
@@ -53,10 +54,15 @@ split without options will prompt for a splitting strategy.`,
 				}
 				// If style is empty, SplitAction will prompt
 
+				// Load config for branch pattern
+				cfg, _ := config.LoadConfig(ctx.RepoRoot)
+				branchPattern := cfg.GetBranchPattern()
+
 				// Run split action
 				return split.Action(ctx, split.Options{
-					Style:     style,
-					Pathspecs: byFile,
+					Style:         style,
+					Pathspecs:     byFile,
+					BranchPattern: branchPattern,
 				})
 			})
 		},
