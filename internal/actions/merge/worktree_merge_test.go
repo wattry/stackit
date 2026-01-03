@@ -62,8 +62,8 @@ func TestExecuteInWorktree(t *testing.T) {
 			RunGit("merge", "branch-a", "--no-ff", "-m", "Merge branch-a").
 			RunGit("push", "origin", "main")
 
-		// Switch back to branch-a
-		s.Checkout("branch-a")
+		// Switch to main in the main workspace so branch-a can be deleted in the worktree
+		s.Checkout("main")
 
 		// Execute in worktree
 		err = merge.ExecuteInWorktree(s.Context, s.Engine, merge.ExecuteOptions{
@@ -72,7 +72,18 @@ func TestExecuteInWorktree(t *testing.T) {
 		}, "", "")
 		require.NoError(t, err)
 
-		// Verify we have switched to main since branch-a was merged and deleted
+		// Rebuild the engine to pick up changes from the worktree
+		s.Rebuild()
+
+		// Verify the merge branch is gone from the branch list
+		allBranches := s.Engine.AllBranches()
+		branchNames := make([]string, len(allBranches))
+		for i, b := range allBranches {
+			branchNames[i] = b.GetName()
+		}
+		require.NotContains(t, branchNames, "branch-a")
+
+		// Verify your main workspace remains on main
 		currentBranch := s.Engine.CurrentBranch()
 		require.NotNil(t, currentBranch)
 		require.Equal(t, "main", currentBranch.GetName())

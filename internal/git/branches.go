@@ -7,19 +7,31 @@ import (
 )
 
 func (r *runner) GetCurrentBranch() (string, error) {
-	repo, err := r.ensureRepo()
+	branch, err := r.RunGitCommandWithContext(context.Background(), "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return "", err
 	}
-	return repo.GetCurrentBranch()
+	if branch == "HEAD" {
+		return "", fmt.Errorf("HEAD is not on a branch")
+	}
+	return branch, nil
 }
 
 func (r *runner) GetAllBranchNames() ([]string, error) {
-	repo, err := r.ensureRepo()
+	out, err := r.RunGitCommandWithContext(context.Background(), "branch", "--format=%(refname:short)")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get branches: %w", err)
 	}
-	return repo.GetBranchNames()
+
+	var names []string
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			names = append(names, line)
+		}
+	}
+	return names, nil
 }
 
 func (r *runner) CheckoutBranch(ctx context.Context, branchName string) error {
