@@ -555,7 +555,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	// TRUNK: minimal single line
 	if isTrunk {
 		branchName := args.branchName
-		coloredBranchName := style.ColorDim(branchName)
+		coloredBranchName := style.BranchStyle(isCurrent, true, false).Render(branchName)
 		if isSelected {
 			coloredBranchName = style.Selection().Render(branchName)
 		} else if !matchesSearch && args.searchQuery != "" {
@@ -584,7 +584,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	// LINE 1: Symbol + Branch Name (bold if current) + Scope + Actionable Warnings
 	branchName := args.branchName
-	coloredBranchName := style.ColorBranchNameBold(branchName, isCurrent)
+	coloredBranchName := style.ColorBranchNameBoldWithTrunk(branchName, isCurrent, isTrunk)
 
 	if isSelected {
 		coloredBranchName = style.Selection().Render(branchName)
@@ -892,7 +892,7 @@ func (r *StackTreeRenderer) RenderBranchList(branches []string) []string {
 			line += BranchSymbol + " "
 		}
 
-		line += style.ColorBranchName(branchName, isCurrent)
+		line += style.ColorBranchNameWithTrunk(branchName, isCurrent, r.isTrunk(branchName))
 		line += r.FormatAnnotationColored(annotation)
 
 		result = append(result, line)

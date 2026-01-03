@@ -619,7 +619,7 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 		}
 
 		// Get colored branch name
-		coloredBranchName := style.ColorBranchName(branch.GetName(), isCurrent)
+		coloredBranchName := style.ColorBranchNameWithTrunk(branch.GetName(), isCurrent, branch.IsTrunk())
 
 		// Add annotation
 		annotation := annotations[branch.GetName()]
