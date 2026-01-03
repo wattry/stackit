@@ -18,7 +18,7 @@ type cliInitHandler struct {
 	noInteractive bool
 }
 
-func (h *cliInitHandler) SelectTrunk(ctx context.Context, branchNames []string, inferredTrunk string) (string, error) {
+func (h *cliInitHandler) SelectTrunk(_ context.Context, branchNames []string, inferredTrunk string) (string, error) {
 	interactive := !h.noInteractive && tui.IsTTY()
 	if !interactive {
 		if inferredTrunk != "" {

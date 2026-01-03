@@ -1,3 +1,4 @@
+// Package init provides functionality for initializing Stackit in a Git repository.
 package init
 
 import (
@@ -19,7 +20,7 @@ type Options struct {
 type Handler interface {
 	// SelectTrunk prompts the user to select the trunk branch
 	SelectTrunk(ctx context.Context, branchNames []string, inferredTrunk string) (string, error)
-	
+
 	// OnSuccess is called when initialization finishes
 	OnSuccess(trunkName string, wasInitialized bool, isReset bool)
 }
