@@ -105,8 +105,8 @@ func BranchStyle(isCurrent, isTrunk, isDim bool) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true) // Bold Green
 	}
 	if isTrunk {
-		// Distinct color for main/trunk: Bold Orange (208)
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Bold(true)
+		// Distinct color for main/trunk: Pink (205)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Bright Blue for others
 }
