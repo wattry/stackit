@@ -134,11 +134,11 @@ func executeStepWithProgress(ctx *app.Context, step PlanStep, stepIndex int, eng
 	if step.StepType == StepWaitCI {
 		return executeWaitCIWithProgress(ctx, step, stepIndex, eng, opts)
 	}
-	return executeStep(ctx, step, eng, opts)
+	return executeStep(ctx, step, stepIndex, eng, opts)
 }
 
 // executeStep executes a single step
-func executeStep(ctx *app.Context, step PlanStep, eng mergeExecuteEngine, opts ExecuteOptions) error {
+func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecuteEngine, opts ExecuteOptions) error {
 	trunk := eng.Trunk() // Cache trunk for this function scope
 	trunkName := trunk.GetName()
 	githubClient := ctx.GitHubClient
@@ -272,7 +272,7 @@ func executeStep(ctx *app.Context, step PlanStep, eng mergeExecuteEngine, opts E
 	case StepConsolidate:
 		// Execute stack consolidation
 		splog.Debug("Executing StepConsolidate")
-		result, err := executeConsolidation(ctx, eng, opts)
+		result, err := executeConsolidation(ctx, eng, stepIndex, opts)
 		if err != nil {
 			splog.Debug("StepConsolidate failed: %v", err)
 			return err

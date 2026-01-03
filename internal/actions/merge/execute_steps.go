@@ -190,8 +190,9 @@ func updatePRBaseBranchFromContext(ctx context.Context, githubClient github.Clie
 }
 
 // executeConsolidation handles the stack consolidation process
-func executeConsolidation(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) (*ConsolidationResult, error) {
+func executeConsolidation(ctx *app.Context, eng mergeExecuteEngine, stepIndex int, opts ExecuteOptions) (*ConsolidationResult, error) {
 	consolidator := NewConsolidateMergeExecutor(opts.Plan, eng, ctx)
+	consolidator.SetProgressHandler(opts.Handler, stepIndex)
 	result, err := consolidator.Execute(ctx.Context, opts)
 	if err != nil {
 		return nil, err
