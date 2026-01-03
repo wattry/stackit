@@ -76,21 +76,26 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 		splog.Warn("Failed to lock and notify individual PRs: %v", err)
 	}
 
-	if err := c.waitForConsolidationMerge(ctx, consolidationBranch, pr); err != nil {
-		return nil, fmt.Errorf("consolidation merge failed: %w", err)
-	}
+	if opts.Wait {
+		if err := c.waitForConsolidationMerge(ctx, consolidationBranch, pr); err != nil {
+			return nil, fmt.Errorf("consolidation merge failed: %w", err)
+		}
 
-	// Store consolidation info for footer updates
-	c.consolidationPR = pr
-	if userName, err := git.NewRunner().GetUserName(ctx); err == nil && userName != "" {
-		c.consolidationUser = userName
-	}
+		// Store consolidation info for footer updates
+		c.consolidationPR = pr
+		if userName, err := git.NewRunner().GetUserName(ctx); err == nil && userName != "" {
+			c.consolidationUser = userName
+		}
 
-	if err := c.postMergeCleanup(ctx); err != nil {
-		splog.Warn("Post-merge cleanup had issues: %v", err)
-	}
+		if err := c.postMergeCleanup(ctx); err != nil {
+			splog.Warn("Post-merge cleanup had issues: %v", err)
+		}
 
-	splog.Info("🎉 Stack consolidation merge completed successfully!")
+		splog.Info("🎉 Stack consolidation merge completed successfully!")
+	} else {
+		splog.Info("🎉 Consolidation PR created: %s", pr.HTMLURL)
+		splog.Info("   Individual PRs have been locked. Merge the consolidation PR manually to complete.")
+	}
 
 	result := &ConsolidationResult{
 		BranchName: consolidationBranch,
@@ -207,6 +212,13 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, b
 	startTime := time.Now()
 	deadline := startTime.Add(timeout)
 
+	expectChecks := AnyPRHasChecks(c.plan.BranchesToMerge)
+	if expectChecks {
+		splog.Info("   Waiting for CI checks to register...")
+		// Give GitHub a moment to register the PR and start CI
+		time.Sleep(5 * time.Second)
+	}
+
 	splog.Info("   Waiting for CI checks (timeout: %v)...", timeout)
 
 	for {
@@ -221,7 +233,15 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, b
 			if !status.Passing {
 				return fmt.Errorf("CI checks failed on consolidation PR #%d", prNumber)
 			}
-			if !status.Pending {
+
+			// If we expect checks but none have appeared yet, treat as pending
+			isReallyPending := status.Pending
+			if expectChecks && len(status.Checks) == 0 {
+				isReallyPending = true
+				splog.Debug("No checks found yet for PR #%d, still waiting...", prNumber)
+			}
+
+			if !isReallyPending {
 				elapsed := time.Since(startTime)
 				splog.Info("✅ CI checks passed on consolidation PR #%d after %v", prNumber, elapsed.Round(time.Second))
 				return nil
