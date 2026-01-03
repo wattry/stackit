@@ -9,6 +9,7 @@ import (
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -27,8 +28,9 @@ const (
 
 // Options contains options for the split command
 type Options struct {
-	Style     Style
-	Pathspecs []string
+	Style         Style
+	Pathspecs     []string
+	BranchPattern config.BranchPattern
 }
 
 // Result contains the result of a split operation
@@ -133,7 +135,7 @@ func Action(ctx *app.Context, opts Options) error {
 	var result *Result
 	switch style {
 	case StyleCommit:
-		result, err = splitByCommit(context, currentBranch.GetName(), eng, splog)
+		result, err = splitByCommit(ctx, currentBranch.GetName(), eng, splog, opts.BranchPattern)
 	case StyleHunk:
 		result, err = splitByHunk(context, *currentBranch, eng, splog)
 	case StyleFile:
