@@ -189,18 +189,15 @@ func TestSplitWorkflow(t *testing.T) {
 		// Initialize stackit
 		sh.Run("init")
 
-		// Create a feature branch with multiple commits
+		// Create a feature branch with multiple commits on the same branch
 		sh.Write("file1", "commit 1 content").
 			Run("create feature -m 'First commit'")
-		sh.Write("file2", "commit 2 content").
-			Run("create commit2 -m 'Second commit'")
-		sh.Write("file3", "commit 3 content").
-			Run("create commit3 -m 'Third commit'")
+		// Add more commits to the same branch using git directly
+		sh.Commit("file2", "Second commit on feature").
+			Commit("file3", "Third commit on feature")
 
-		// Verify we have multiple commits
-		sh.CommitCount("main", "feature", 1)    // feature has 1 commit from its creation
-		sh.CommitCount("feature", "commit2", 1) // commit2 has 1 commit
-		sh.CommitCount("commit2", "commit3", 1) // commit3 has 1 commit
+		// Verify the feature branch has multiple commits
+		sh.CommitCount("main", "feature", 3) // feature now has 3 commits
 
 		// Attempt to run split --by-commit
 		// This will fail because it requires interactive input for commit selection

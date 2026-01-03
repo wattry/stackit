@@ -1,12 +1,12 @@
 package split
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/AlecAivazis/survey/v2"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -20,30 +20,43 @@ type splitByCommitEngine interface {
 	engine.StackRewriter
 }
 
-// splitByCommit splits a branch by selecting commit points.
+// branchGroup represents a group of commits that will form a branch
+type branchGroup struct {
+	startIdx int    // Start index in commit list (inclusive)
+	endIdx   int    // End index in commit list (exclusive)
+	name     string // Branch name (may be auto-derived or user-provided)
+}
+
+// splitByCommit splits a branch by selecting commits to keep in the current branch,
+// then iteratively grouping remaining commits into new branches.
 //
 // Algorithm:
-//  1. Get all commits on the branch in a readable format.
-//  2. Interactively prompt the user to select split points (commits that will start a new branch).
-//  3. Interactively prompt for a name for each new branch.
-//  4. Detach HEAD to the original branch's head to prepare for state changes.
-//  5. Return the selected branch names and points to be applied by the engine.
-func splitByCommit(ctx context.Context, branchToSplit string, eng splitByCommitEngine, splog *tui.Splog) (*Result, error) {
-	// Get readable commits
+//  1. Get all commits on the branch.
+//  2. User selects which commits to keep in the current branch (draws a split line).
+//  3. For remaining commits, iteratively group them into new branches.
+//  4. Auto-derive names for single-commit branches, prompt for multi-commit branches.
+//  5. Detach HEAD and return the branch names and points.
+func splitByCommit(ctx *app.Context, branchToSplit string, eng splitByCommitEngine, splog *tui.Splog, pattern config.BranchPattern) (*Result, error) {
+	// Get commits in both readable and subject formats
 	branchToSplitObj := eng.GetBranch(branchToSplit)
 	readableCommits, err := branchToSplitObj.GetAllCommits(engine.CommitFormatReadable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commits: %w", err)
+	}
+	subjectCommits, err := branchToSplitObj.GetAllCommits(engine.CommitFormatSubject)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit subjects: %w", err)
 	}
 
 	if len(readableCommits) == 0 {
 		return nil, fmt.Errorf("no commits to split")
 	}
 
-	parentBranchName := branchToSplitObj.GetParentPrecondition()
-	numChildren := len(branchToSplitObj.GetChildren())
+	if len(readableCommits) == 1 {
+		return nil, fmt.Errorf("cannot split a branch with only one commit (use --by-hunk instead)")
+	}
 
-	// Show instructions
+	// Show initial info
 	splog.Info("Splitting the commits of %s into multiple branches.", style.ColorBranchName(branchToSplit, true))
 	branch := eng.GetBranch(branchToSplit)
 	prInfo, _ := branch.GetPrInfo()
@@ -52,38 +65,50 @@ func splitByCommit(ctx context.Context, branchToSplit string, eng splitByCommitE
 			style.ColorBranchName(branchToSplit, true), *prInfo.Number())
 	}
 	splog.Info("")
-	splog.Info("For each branch you'd like to create:")
-	splog.Info("1. Choose which commit it begins at using the below prompt.")
-	splog.Info("2. Choose its name.")
-	splog.Info("")
 
-	// Get branch points interactively
-	branchPoints, err := getBranchPoints(readableCommits, numChildren, parentBranchName)
+	// Step 1: Select commits to keep in current branch
+	splitPoint, err := selectSplitPoint(readableCommits, branchToSplit)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get branch names
-	branchNames := []string{}
-	for i := 0; i < len(branchPoints); i++ {
-		splog.Info("Commits for branch %d:", i+1)
-		startIdx := branchPoints[len(branchPoints)-1-i]
-		var endIdx int
-		if i < len(branchPoints)-1 {
-			endIdx = branchPoints[len(branchPoints)-2-i]
-		} else {
-			endIdx = len(readableCommits)
-		}
-		for j := startIdx; j < endIdx; j++ {
-			splog.Info("  %s", readableCommits[j])
-		}
-		splog.Info("")
+	// If user chose to keep all commits, no split needed
+	if splitPoint == len(readableCommits) {
+		return nil, fmt.Errorf("no commits selected for split (all commits kept in current branch)")
+	}
 
-		branchName, err := promptBranchName(branchNames, branchToSplit, i+1, eng)
-		if err != nil {
-			return nil, err
-		}
-		branchNames = append(branchNames, branchName)
+	// Step 2: Group remaining commits into new branches
+	remainingCommits := readableCommits[splitPoint:]
+	remainingSubjects := subjectCommits[splitPoint:]
+
+	groups, err := groupRemainingCommits(ctx, remainingCommits, remainingSubjects, pattern, eng, branchToSplit, splog)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build result for engine.ApplySplitToCommits
+	// Engine expects:
+	// - branchPoints: sorted indices (0, 1, 2, ...) where each branch starts
+	// - branchNames: names in REVERSE order of branchPoints (oldest branch name first)
+	//
+	// Example with 2 commits (newest=0, older=1), splitting at index 1:
+	// - branchPoints = [0, 1] (current branch at 0, split branch at 1)
+	// - branchNames = [split_name, current_name] (older first)
+	branchNames := []string{}
+	branchPoints := []int{}
+
+	// Add group names in reverse order (oldest branches first)
+	// Groups are ordered by startIdx ascending, so reverse gives us oldest first
+	for i := len(groups) - 1; i >= 0; i-- {
+		branchNames = append(branchNames, groups[i].name)
+	}
+	// Add current branch name last (newest branch, has index 0)
+	branchNames = append(branchNames, branchToSplit)
+
+	// Build branchPoints in sorted order (0 first, then group points in ascending order)
+	branchPoints = append(branchPoints, 0) // Current branch at commit 0
+	for i := 0; i < len(groups); i++ {
+		branchPoints = append(branchPoints, splitPoint+groups[i].startIdx)
 	}
 
 	// Detach HEAD to the branch revision
@@ -101,97 +126,236 @@ func splitByCommit(ctx context.Context, branchToSplit string, eng splitByCommitE
 	}, nil
 }
 
-// getBranchPoints interactively gets branch points from the user
-func getBranchPoints(readableCommits []string, numChildren int, parentBranchName string) ([]int, error) {
+// selectSplitPoint prompts the user to select which commits to keep in the current branch.
+// Returns the index of the first commit to split off (commits 0..index-1 stay in current branch).
+// Returns len(commits) if user wants to keep all commits (no split).
+func selectSplitPoint(readableCommits []string, branchToSplit string) (int, error) {
 	if !utils.IsInteractive() {
-		return nil, fmt.Errorf("branch points must be specified in non-interactive mode")
+		return 0, fmt.Errorf("split point must be specified in non-interactive mode")
 	}
-	// Array where nth index is whether we want a branch pointing to nth commit
-	isBranchPoint := make([]bool, len(readableCommits))
-	isBranchPoint[0] = true // First commit always has a branch
 
-	// Build choices for the prompt
+	// Build choices: commits interleaved with split lines
+	// Format:
+	//   ─────── keep all (no split) ───────
+	//   abc123 First commit (newest)
+	//   ─────── split here ───────
+	//   def456 Second commit
+	//   ─────── split here ───────
+	//   ...
 	choices := []string{}
-	if numChildren > 0 {
-		choices = append(choices, fmt.Sprintf("%d %s", numChildren, actions.Pluralize("child", numChildren)))
-	}
+	splitLineIndices := make(map[int]int) // choice index -> split point (how many commits to keep)
 
-	// Add commits
+	// "Keep all" option at top
+	keepAllLine := "─────── keep all (no split) ───────"
+	choices = append(choices, keepAllLine)
+	splitLineIndices[0] = len(readableCommits)
+
+	// Add commits and split lines
 	for i, commit := range readableCommits {
-		status := " "
-		if isBranchPoint[i] {
-			status = "✓"
+		choices = append(choices, fmt.Sprintf("  %s", commit))
+		if i < len(readableCommits)-1 {
+			splitLine := "─────── split here ───────"
+			choices = append(choices, splitLine)
+			splitLineIndices[len(choices)-1] = i + 1 // Keep commits 0..i, split from i+1
 		}
-		choices = append(choices, fmt.Sprintf("%s %s", status, commit))
 	}
 
-	// Add parent and confirm
-	choices = append(choices, parentBranchName)
-	choices = append(choices, "Confirm")
+	var selected string
+	prompt := &survey.Select{
+		Message: fmt.Sprintf("Select where to split %s (commits above the line stay):", style.ColorBranchName(branchToSplit, true)),
+		Options: choices,
+	}
+	if err := survey.AskOne(prompt, &selected); err != nil {
+		return 0, fmt.Errorf("canceled")
+	}
 
-	// Interactive loop
+	// Find the selected split point
+	for i, choice := range choices {
+		if choice == selected {
+			if splitPoint, ok := splitLineIndices[i]; ok {
+				return splitPoint, nil
+			}
+			// User selected a commit line, not a split line - treat as invalid
+			return 0, fmt.Errorf("please select a split line, not a commit")
+		}
+	}
+
+	return 0, fmt.Errorf("invalid selection")
+}
+
+// groupRemainingCommits iteratively groups commits into branches.
+// For single-commit groups, auto-derives the branch name.
+// For multi-commit groups, prompts for a name.
+func groupRemainingCommits(
+	ctx *app.Context,
+	readableCommits []string,
+	subjectCommits []string,
+	pattern config.BranchPattern,
+	eng splitByCommitEngine,
+	originalBranch string,
+	splog *tui.Splog,
+) ([]branchGroup, error) {
+	if len(readableCommits) == 0 {
+		return nil, nil
+	}
+
+	groups := []branchGroup{}
+	existingNames := []string{originalBranch} // Track names already used
+	offset := 0
+
+	for offset < len(readableCommits) {
+		remaining := readableCommits[offset:]
+		remainingSubjects := subjectCommits[offset:]
+
+		if len(remaining) == 1 {
+			// Single commit - auto-derive name
+			name, err := deriveBranchName(ctx, remainingSubjects[0], pattern, existingNames, eng)
+			if err != nil {
+				return nil, err
+			}
+			existingNames = append(existingNames, name)
+
+			splog.Info("New branch: %s", style.ColorBranchName(name, false))
+			splog.Info("  %s", remaining[0])
+			splog.Info("")
+
+			groups = append(groups, branchGroup{
+				startIdx: offset,
+				endIdx:   offset + 1,
+				name:     name,
+			})
+			offset++
+		} else {
+			// Multiple commits - ask user to group or split further
+			groupSize, err := selectGroupSize(remaining)
+			if err != nil {
+				return nil, err
+			}
+
+			groupReadable := remaining[:groupSize]
+			groupSubjects := remainingSubjects[:groupSize]
+
+			var name string
+			if groupSize == 1 {
+				// Single commit after selection - auto-derive
+				name, err = deriveBranchName(ctx, groupSubjects[0], pattern, existingNames, eng)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				// Multiple commits - prompt for name
+				splog.Info("Commits for new branch:")
+				for _, c := range groupReadable {
+					splog.Info("  %s", c)
+				}
+				splog.Info("")
+				name, err = promptBranchName(existingNames, originalBranch, len(groups)+1, eng)
+				if err != nil {
+					return nil, err
+				}
+			}
+			existingNames = append(existingNames, name)
+
+			if groupSize == 1 {
+				splog.Info("New branch: %s", style.ColorBranchName(name, false))
+				splog.Info("  %s", groupReadable[0])
+				splog.Info("")
+			}
+
+			groups = append(groups, branchGroup{
+				startIdx: offset,
+				endIdx:   offset + groupSize,
+				name:     name,
+			})
+			offset += groupSize
+		}
+	}
+
+	return groups, nil
+}
+
+// selectGroupSize prompts user to select how many commits to include in the next branch.
+// Returns the number of commits (1 to len(commits)).
+func selectGroupSize(readableCommits []string) (int, error) {
+	if !utils.IsInteractive() {
+		return len(readableCommits), nil // In non-interactive mode, group all remaining
+	}
+
+	// Build choices similar to selectSplitPoint
+	choices := []string{}
+	sizeByIndex := make(map[int]int) // choice index -> group size
+
+	// "All remaining" option at top
+	allLine := "─────── all remaining as one branch ───────"
+	choices = append(choices, allLine)
+	sizeByIndex[0] = len(readableCommits)
+
+	// Add commits and split lines
+	for i, commit := range readableCommits {
+		choices = append(choices, fmt.Sprintf("  %s", commit))
+		if i < len(readableCommits)-1 {
+			splitLine := "─────── include above ───────"
+			choices = append(choices, splitLine)
+			sizeByIndex[len(choices)-1] = i + 1 // Include commits 0..i
+		}
+	}
+
+	var selected string
+	prompt := &survey.Select{
+		Message: "Select commits for the next new branch:",
+		Options: choices,
+	}
+	if err := survey.AskOne(prompt, &selected); err != nil {
+		return 0, fmt.Errorf("canceled")
+	}
+
+	// Find the selected size
+	for i, choice := range choices {
+		if choice == selected {
+			if size, ok := sizeByIndex[i]; ok {
+				return size, nil
+			}
+			// User selected a commit line - invalid
+			return 0, fmt.Errorf("please select a split line, not a commit")
+		}
+	}
+
+	return 0, fmt.Errorf("invalid selection")
+}
+
+// deriveBranchName generates a branch name from a commit subject using the branch pattern.
+func deriveBranchName(ctx *app.Context, commitSubject string, pattern config.BranchPattern, existingNames []string, eng splitByCommitEngine) (string, error) {
+	name, err := pattern.GetBranchName(ctx, commitSubject, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to derive branch name: %w", err)
+	}
+
+	// Check for conflicts with existing names
+	originalName := name
+	suffix := 1
 	for {
-		var selected string
-		prompt := &survey.Select{
-			Message: "Toggle a commit to split the branch there. Select confirm to finish.",
-			Options: choices,
-		}
-		if err := survey.AskOne(prompt, &selected); err != nil {
-			return nil, fmt.Errorf("canceled")
-		}
-
-		if selected == "Confirm" {
-			break
-		}
-
-		// Find the index of the selected commit
-		// Choices structure: [children line (if any), commits..., parent, confirm]
-		for i, choice := range choices {
-			if choice == selected {
-				// Skip if it's the children line, parent, or confirm
-				if i == 0 && numChildren > 0 {
-					// Children line - skip
-					continue
-				}
-				if i == len(choices)-2 {
-					// Parent line - skip
-					continue
-				}
-				if i == len(choices)-1 {
-					// Confirm - already handled above
-					continue
-				}
-
-				// Calculate commit index
-				commitIdx := i
-				if numChildren > 0 {
-					commitIdx-- // Skip children line
-				}
-
-				if commitIdx >= 0 && commitIdx < len(readableCommits) {
-					// Never toggle the first commit
-					if commitIdx != 0 {
-						isBranchPoint[commitIdx] = !isBranchPoint[commitIdx]
-						// Update the choice display
-						status := " "
-						if isBranchPoint[commitIdx] {
-							status = "✓"
-						}
-						choices[i] = fmt.Sprintf("%s %s", status, readableCommits[commitIdx])
-					}
-				}
+		conflict := false
+		for _, existing := range existingNames {
+			if name == existing {
+				conflict = true
 				break
 			}
 		}
-	}
-
-	// Convert to array of indices
-	branchPoints := []int{}
-	for i, isPoint := range isBranchPoint {
-		if isPoint {
-			branchPoints = append(branchPoints, i)
+		// Also check existing branches in the repo
+		if !conflict {
+			for _, b := range eng.AllBranches() {
+				if b.GetName() == name {
+					conflict = true
+					break
+				}
+			}
 		}
+		if !conflict {
+			break
+		}
+		suffix++
+		name = fmt.Sprintf("%s-%d", originalName, suffix)
 	}
 
-	return branchPoints, nil
+	return name, nil
 }

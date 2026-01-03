@@ -27,6 +27,9 @@ type ConsolidateMergeExecutor struct {
 	ctx               *app.Context
 	consolidationPR   *github.PullRequestInfo // Set after consolidation PR is merged
 	consolidationUser string                  // GitHub username who performed the consolidation
+
+	handler   Handler // Optional progress handler for TUI updates
+	stepIndex int     // Current step index for the handler
 }
 
 // NewConsolidateMergeExecutor creates a new consolidation executor
@@ -36,6 +39,12 @@ func NewConsolidateMergeExecutor(plan *Plan, engine mergeExecuteEngine, ctx *app
 		engine: engine,
 		ctx:    ctx,
 	}
+}
+
+// SetProgressHandler sets the progress handler and step index for reporting
+func (c *ConsolidateMergeExecutor) SetProgressHandler(handler Handler, stepIndex int) {
+	c.handler = handler
+	c.stepIndex = stepIndex
 }
 
 // Execute performs stack consolidation merging
@@ -221,12 +230,26 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, b
 
 	splog.Info("   Waiting for CI checks (timeout: %v)...", timeout)
 
+	lastProgressReport := startTime
+
 	for {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timeout waiting for CI checks on consolidation PR #%d after %v", prNumber, timeout)
 		}
 
+		now := time.Now()
 		status, err := githubClient.GetPRChecksStatus(ctx, branchName)
+
+		// Report progress to handler if available
+		if c.handler != nil && status != nil {
+			elapsed := now.Sub(startTime)
+			// Only update if it's been at least a second or if we have new status
+			if now.Sub(lastProgressReport) >= 1*time.Second {
+				c.handler.StepWaiting(c.stepIndex, elapsed, timeout, status.Checks)
+				lastProgressReport = now
+			}
+		}
+
 		if err != nil {
 			splog.Debug("Error checking CI status: %v", err)
 		} else if status != nil {

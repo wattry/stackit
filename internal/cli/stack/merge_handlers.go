@@ -162,6 +162,23 @@ func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
 	var groups []tui.MergeGroup
 	assigned := make(map[int]bool)
 
+	// 0. If consolidation, create a special group for it first
+	if plan.Strategy == merge.StrategyConsolidate {
+		var consolidationIndices []int
+		for i, step := range plan.Steps {
+			if step.StepType == merge.StepConsolidate {
+				consolidationIndices = append(consolidationIndices, i)
+				assigned[i] = true
+			}
+		}
+		if len(consolidationIndices) > 0 {
+			groups = append(groups, tui.MergeGroup{
+				Label:       "Consolidate branches into single PR and wait for merge",
+				StepIndices: consolidationIndices,
+			})
+		}
+	}
+
 	// 1. Create groups for each branch being merged
 	for _, branchInfo := range plan.BranchesToMerge {
 		var indices []int

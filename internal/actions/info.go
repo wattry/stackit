@@ -74,7 +74,7 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	isCurrent := branchName == currentBranch.GetName()
 	isTrunk := branch.IsTrunk()
 
-	coloredBranchName := style.ColorBranchName(branchName, isCurrent)
+	coloredBranchName := style.ColorBranchNameWithTrunk(branchName, isCurrent, isTrunk)
 
 	if branch.IsLocked() {
 		coloredBranchName += " " + style.IconLocked() + " " + style.ColorDim("(locked)")
@@ -119,14 +119,14 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	parentBranch := branchObj.GetParent()
 	if parentBranch != nil {
 		outputLines = append(outputLines, "")
-		outputLines = append(outputLines, fmt.Sprintf("%s: %s", style.ColorCyan("Parent"), parentBranch.GetName()))
+		outputLines = append(outputLines, fmt.Sprintf("%s: %s", style.ColorCyan("Parent"), style.ColorBranchNameWithTrunk(parentBranch.GetName(), false, parentBranch.IsTrunk())))
 	}
 
 	children := branchObj.GetChildren()
 	if len(children) > 0 {
 		outputLines = append(outputLines, fmt.Sprintf("%s:", style.ColorCyan("Children")))
 		for _, child := range children {
-			outputLines = append(outputLines, fmt.Sprintf("▸ %s", child.GetName()))
+			outputLines = append(outputLines, fmt.Sprintf("▸ %s", style.ColorBranchNameWithTrunk(child.GetName(), false, child.IsTrunk())))
 		}
 	}
 

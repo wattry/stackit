@@ -102,7 +102,15 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		for i, info := range result {
 			coloredName := style.ColorBranchName(info.Name, info.Name == currentBranchName)
 			fmt.Printf("%s\n", coloredName)
-			fmt.Printf("  %s %s\n", style.ColorCyan("Parent:"), info.Parent)
+
+			var coloredParent string
+			if info.Parent != "" {
+				parentBranch := eng.GetBranch(info.Parent)
+				coloredParent = style.ColorBranchNameWithTrunk(info.Parent, false, eng.IsTrunk(parentBranch))
+			} else {
+				coloredParent = style.ColorDim("(none)")
+			}
+			fmt.Printf("  %s %s\n", style.ColorCyan("Parent:"), coloredParent)
 
 			if info.IsLocked {
 				fmt.Printf("  %s %s\n", style.IconLocked(), style.ColorDim("(locked)"))

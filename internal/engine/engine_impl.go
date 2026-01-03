@@ -30,7 +30,7 @@ type engineImpl struct {
 func NewEngine(opts Options) (Engine, error) {
 	g := opts.Git
 	if g == nil {
-		g = git.NewRunner()
+		g = git.NewRunnerWithPath(opts.RepoRoot)
 	}
 
 	if err := g.InitDefaultRepo(); err != nil {
