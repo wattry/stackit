@@ -487,13 +487,13 @@ func handlePostMergeFollowUp(ctx *app.Context) error {
 		}); err != nil {
 			// Provide guidance if checkout failed due to local changes
 			// actions.CheckoutAction already wraps the error with a friendly message if it's a local changes error
-			splog.Newline()
-			splog.Error("%v", err)
-			splog.Newline()
-			splog.Info("%s", style.ColorYellow("To fix and continue:"))
-			splog.Info("  (1) Handle your local changes (e.g., %s or %s)", style.ColorCyan("git stash"), style.ColorCyan("git commit"))
-			splog.Info("  (2) Switch to trunk: %s", style.ColorCyan("stackit checkout --trunk"))
-			splog.Info("  (3) Sync your workspace: %s", style.ColorCyan("stackit sync --restack"))
+			out.Newline()
+			out.Error("%v", err)
+			out.Newline()
+			out.Info("%s", style.ColorYellow("To fix and continue:"))
+			out.Info("  (1) Handle your local changes (e.g., %s or %s)", style.ColorCyan("git stash"), style.ColorCyan("git commit"))
+			out.Info("  (2) Switch to trunk: %s", style.ColorCyan("stackit checkout --trunk"))
+			out.Info("  (3) Sync your workspace: %s", style.ColorCyan("stackit sync --restack"))
 			return nil // Return nil so we don't show the error twice at the top level
 		}
 		handler := NewSyncHandler(ctx.Output)
