@@ -220,9 +220,11 @@ func (e *engineImpl) DeleteBranches(ctx context.Context, branches []Branch) ([]s
 	for _, b := range branches {
 		branchName := b.GetName()
 		toDeleteSet[branchName] = true
-		children := e.GetChildren(b)
+		e.mu.RLock()
+		children := e.childrenMap[branchName]
+		e.mu.RUnlock()
 		for _, child := range children {
-			allChildren[child.GetName()] = true
+			allChildren[child] = true
 		}
 	}
 

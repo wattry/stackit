@@ -159,9 +159,12 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 	branchesWithNewParents := []string{}
 	visited := make(map[string]bool)
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Start DFS from trunk children to handle the tracked hierarchy
 	trunk := eng.Trunk()
-	trunkChildren := trunk.GetChildren()
+	trunkChildren := graph.ChildBranches(trunk)
 	branchesToProcess := make([]string, len(trunkChildren))
 	for i, child := range trunkChildren {
 		branchesToProcess[i] = child.GetName()
@@ -178,7 +181,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 
 		reason, shouldDelete := deleteReasons[branchName]
 		branch := eng.GetBranch(branchName)
-		children := branch.GetChildren()
+		children := graph.ChildBranches(branch)
 
 		// Add children to DFS stack
 		for _, child := range children {

@@ -12,8 +12,11 @@ import (
 )
 
 func foldWithKeep(gctx context.Context, ctx *app.Context, currentBranch, parentBranch engine.Branch, eng engine.Engine, splog output.Output, _ Options) error {
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Get all children of parent (siblings + current branch)
-	allChildren := parentBranch.GetChildren()
+	allChildren := graph.ChildBranches(parentBranch)
 
 	// Identify siblings (children of parent excluding current branch)
 	siblings := []engine.Branch{}
@@ -60,8 +63,11 @@ func foldWithKeep(gctx context.Context, ctx *app.Context, currentBranch, parentB
 		style.ColorBranchName(currentBranch.GetName(), false),
 		style.ColorBranchName(currentBranch.GetName(), false))
 
+	// Rebuild graph with fresh engine state after deletion
+	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Restack current branch and all its descendants
-	branchesToRestack := currentBranch.GetRelativeStack(engine.StackRange{
+	branchesToRestack := graph.Range(currentBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,

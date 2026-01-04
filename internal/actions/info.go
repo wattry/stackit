@@ -122,7 +122,8 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 		outputLines = append(outputLines, fmt.Sprintf("%s: %s", style.ColorCyan("Parent"), style.ColorBranchNameWithTrunk(parentBranch.GetName(), false, parentBranch.IsTrunk())))
 	}
 
-	children := branchObj.GetChildren()
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	children := graph.ChildBranches(branchObj)
 	if len(children) > 0 {
 		outputLines = append(outputLines, fmt.Sprintf("%s:", style.ColorCyan("Children")))
 		for _, child := range children {

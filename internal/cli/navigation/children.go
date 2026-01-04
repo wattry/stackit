@@ -5,6 +5,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -29,7 +30,8 @@ branches depend on the current branch.`,
 				}
 
 				// Get children
-				children := currentBranch.GetChildren()
+				graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+				children := graph.ChildBranches(*currentBranch)
 				if len(children) == 0 {
 					ctx.Output.Info("%s has no children.", style.ColorBranchName(currentBranch.GetName(), true))
 					return nil

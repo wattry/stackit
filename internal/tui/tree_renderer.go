@@ -31,14 +31,22 @@ func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.S
 		graph.Current,
 		graph.Trunk,
 		func(branchName string) []string {
-			return graph.Children(branchName)
+			node := graph.Nodes[branchName]
+			if node == nil {
+				return nil
+			}
+			return graph.Children(node.Branch)
 		},
 		func(branchName string) string {
-			return graph.Parent(branchName)
+			node := graph.Nodes[branchName]
+			if node == nil {
+				return ""
+			}
+			return graph.Parent(node.Branch)
 		},
 		func(branchName string) bool { return branchName == graph.Trunk },
 		func(branchName string) bool {
-			node := graph.Node(branchName)
+			node := graph.Nodes[branchName]
 			if node == nil {
 				return false
 			}

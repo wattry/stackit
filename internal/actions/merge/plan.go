@@ -151,6 +151,9 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 	var allBranches []string
 	var planCurrentBranch string
 
+	// Build a StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	if opts.Scope != "" {
 		// Collect all branches with the specified scope
 		scopeBranches := []engine.Branch{}
@@ -183,7 +186,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 
 		// 2. Collect branches from trunk to target
 		rng := engine.StackRange{RecursiveParents: true}
-		parentBranches := targetBranch.GetRelativeStack(rng)
+		parentBranches := graph.Range(targetBranch, rng)
 
 		// Build full list: parent branches + target branch
 		// Filter out trunk (it shouldn't be in the list, but be safe)
@@ -225,8 +228,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 		}
 
 		// Only get upstack of the current branch (the top of the stack being merged)
-		currentBranchObj := eng.GetBranch(planCurrentBranch)
-		upstack := currentBranchObj.GetRelativeStackUpstack()
+		upstack := graph.Range(eng.GetBranch(planCurrentBranch), engine.StackRange{RecursiveChildren: true})
 		for _, ub := range upstack {
 			if ub.IsTracked() && !mergedMap[ub.GetName()] {
 				upstackBranches = append(upstackBranches, ub.GetName())
@@ -380,11 +382,10 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 	}
 
 	for _, ancestor := range allBranches {
-		ancestorBranch := eng.GetBranch(ancestor)
-		if ancestorBranch.IsTrunk() {
+		if ancestor == eng.Trunk().GetName() {
 			continue
 		}
-		children := ancestorBranch.GetChildren()
+		children := graph.ChildBranches(eng.GetBranch(ancestor))
 		for _, child := range children {
 			if !mergedSet[child.GetName()] {
 				validation.Infos = append(validation.Infos, fmt.Sprintf("Branch %s is not part of this merge and will be moved to %s", child.GetName(), eng.Trunk().GetName()))

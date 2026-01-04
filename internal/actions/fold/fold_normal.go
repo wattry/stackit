@@ -32,8 +32,11 @@ func foldNormal(gctx context.Context, ctx *app.Context, currentBranch, parentBra
 		}
 	}
 
+	// Build StackGraph for traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Get all descendants of parent before deletion (for restacking)
-	descendants := parentBranch.GetRelativeStack(engine.StackRange{
+	descendants := graph.Range(parentBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    false,
 		RecursiveParents:  false,
@@ -55,9 +58,11 @@ func foldNormal(gctx context.Context, ctx *app.Context, currentBranch, parentBra
 			return fmt.Errorf("failed to rebuild engine: %w", err)
 		}
 
+		// Rebuild graph with fresh engine state
+		graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 		// Get updated descendants list (current branch's children are now children of parent)
-		// parentBranch object remains valid and will reflect the updated engine state after the Rebuild() call.
-		updatedDescendants := parentBranch.GetRelativeStack(engine.StackRange{
+		updatedDescendants := graph.Range(parentBranch, engine.StackRange{
 			RecursiveChildren: true,
 			IncludeCurrent:    false,
 			RecursiveParents:  false,

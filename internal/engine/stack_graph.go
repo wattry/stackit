@@ -2,6 +2,26 @@ package engine
 
 import "slices"
 
+// isOnActivePath checks if branchName is on the path from trunk to current branch
+func isOnActivePath(nodes map[string]*StackNode, branchName, current string) bool {
+	if current == "" {
+		return false
+	}
+	// Walk from current up to trunk, checking if branchName is on the path
+	cur := current
+	for cur != "" {
+		if cur == branchName {
+			return true
+		}
+		node := nodes[cur]
+		if node == nil {
+			break
+		}
+		cur = node.Parent
+	}
+	return false
+}
+
 // StackNode represents a branch within a stack snapshot.
 type StackNode struct {
 	Branch   Branch
@@ -64,15 +84,43 @@ func BuildStackGraph(eng BranchReader, strategy SortStrategy, filter func(Branch
 		}
 	}
 
-	// Populate children using the requested strategy, honoring the filter set.
-	for _, node := range graph.Nodes {
-		children := eng.GetChildrenWithStrategy(node.Branch, strategy)
-		for _, child := range children {
-			childName := child.GetName()
-			if _, ok := graph.Nodes[childName]; !ok {
-				continue
+	// Populate children by deriving from parent relationships
+	for name, node := range graph.Nodes {
+		if node.Parent != "" {
+			if parentNode := graph.Nodes[node.Parent]; parentNode != nil {
+				parentNode.Children = append(parentNode.Children, name)
 			}
-			node.Children = append(node.Children, childName)
+		}
+	}
+
+	// Sort children based on strategy
+	for _, node := range graph.Nodes {
+		if len(node.Children) > 1 {
+			switch strategy {
+			case SortStrategySmart:
+				// Smart sort: hoist the active path (current branch first) and then sort descending
+				slices.SortFunc(node.Children, func(a, b string) int {
+					// Current branch or its ancestors come first
+					aOnPath := isOnActivePath(graph.Nodes, a, current)
+					bOnPath := isOnActivePath(graph.Nodes, b, current)
+					if aOnPath && !bOnPath {
+						return -1
+					}
+					if !aOnPath && bOnPath {
+						return 1
+					}
+					// Otherwise sort descending (newest/Z-first)
+					if a > b {
+						return -1
+					}
+					if a < b {
+						return 1
+					}
+					return 0
+				})
+			case SortStrategyAlphabetical:
+				slices.Sort(node.Children)
+			}
 		}
 	}
 
@@ -108,22 +156,35 @@ func BuildStackGraph(eng BranchReader, strategy SortStrategy, filter func(Branch
 	return graph
 }
 
-// Node returns the StackNode for the given branch name.
-func (g *StackGraph) Node(name string) *StackNode {
-	return g.Nodes[name]
+// Node returns the StackNode for the given branch.
+func (g *StackGraph) Node(branch Branch) *StackNode {
+	return g.Nodes[branch.GetName()]
 }
 
 // Children returns the child branch names for the given branch.
-func (g *StackGraph) Children(name string) []string {
-	if node := g.Nodes[name]; node != nil {
+func (g *StackGraph) Children(branch Branch) []string {
+	if node := g.Nodes[branch.GetName()]; node != nil {
 		return node.Children
 	}
 	return nil
 }
 
+// ChildBranches returns the child branches for the given branch.
+func (g *StackGraph) ChildBranches(branch Branch) []Branch {
+	node := g.Nodes[branch.GetName()]
+	if node == nil {
+		return nil
+	}
+	branches := make([]Branch, len(node.Children))
+	for i, n := range node.Children {
+		branches[i] = g.Nodes[n].Branch
+	}
+	return branches
+}
+
 // Parent returns the parent branch name (empty string if none).
-func (g *StackGraph) Parent(name string) string {
-	if node := g.Nodes[name]; node != nil {
+func (g *StackGraph) Parent(branch Branch) string {
+	if node := g.Nodes[branch.GetName()]; node != nil {
 		return node.Parent
 	}
 	return ""
@@ -132,7 +193,8 @@ func (g *StackGraph) Parent(name string) string {
 // Range returns branches matching the provided StackRange, ordered the same as the legacy
 // GetRelativeStack implementation: ancestors (oldest to nearest), current, then descendants.
 // Descendants are traversed depth-first using the graph's pre-sorted children.
-func (g *StackGraph) Range(start string, rng StackRange) []Branch {
+func (g *StackGraph) Range(branch Branch, rng StackRange) []Branch {
+	start := branch.GetName()
 	startNode := g.Nodes[start]
 	if startNode == nil {
 		return nil
