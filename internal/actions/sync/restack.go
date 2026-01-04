@@ -11,20 +11,27 @@ import (
 // restackBranches handles restacking branches after sync operations
 func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handler, summary *Summary) error {
 	nav := ctx.Navigator()
+	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 
 	// Add current branch stack to restack list
 	currentBranch := nav.CurrentBranch()
 	if currentBranch != nil {
 		if currentBranch.IsTracked() {
 			// Get full stack (up to trunk)
-			stack := currentBranch.GetFullStack()
+			stack := graph.Range(*currentBranch, engine.StackRange{
+				RecursiveParents:  true,
+				IncludeCurrent:    true,
+				RecursiveChildren: true,
+			})
 			// Add branches to restack list
 			for _, b := range stack {
 				branchesToRestack = append(branchesToRestack, b.GetName())
 			}
 		} else if currentBranch.IsTrunk() {
 			// If on trunk, restack all branches
-			stack := currentBranch.GetRelativeStack(engine.StackRange{RecursiveChildren: true})
+			stack := graph.Range(*currentBranch, engine.StackRange{
+				RecursiveChildren: true,
+			})
 			for _, b := range stack {
 				branchesToRestack = append(branchesToRestack, b.GetName())
 			}

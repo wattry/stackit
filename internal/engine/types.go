@@ -212,11 +212,6 @@ func (b Branch) GetScope() Scope {
 	return b.reader.GetScope(b)
 }
 
-// GetChildren returns the children branches
-func (b Branch) GetChildren() []Branch {
-	return b.reader.GetChildren(b)
-}
-
 // GetParentPrecondition returns the parent branch name, or trunk if no parent
 // This is used for validation where we expect a parent to exist
 func (b Branch) GetParentPrecondition() string {
@@ -231,11 +226,6 @@ func (b Branch) GetParentPrecondition() string {
 // A branch is up to date if its parent revision matches the stored parent revision
 func (b Branch) IsBranchUpToDate() bool {
 	return b.reader.IsUpToDate(b)
-}
-
-// GetRelativeStack returns the stack relative to this branch
-func (b Branch) GetRelativeStack(scope StackRange) []Branch {
-	return b.reader.GetRelativeStack(b, scope)
 }
 
 // GetCommitDate returns the commit date for this branch
@@ -276,21 +266,6 @@ func (b Branch) GetParent() *Branch {
 // GetPrInfo returns PR information for this branch
 func (b Branch) GetPrInfo() (*PrInfo, error) {
 	return b.reader.getPrInfo(b)
-}
-
-// GetRelativeStackUpstack returns all upstack branches
-func (b Branch) GetRelativeStackUpstack() []Branch {
-	return b.reader.getRelativeStackUpstack(b)
-}
-
-// GetRelativeStackDownstack returns all downstack branches
-func (b Branch) GetRelativeStackDownstack() []Branch {
-	return b.reader.getRelativeStackDownstack(b)
-}
-
-// GetFullStack returns the full stack for this branch
-func (b Branch) GetFullStack() []Branch {
-	return b.reader.getFullStack(b)
 }
 
 // GetExplicitScope returns the explicit scope set for this branch (no inheritance)

@@ -22,8 +22,11 @@ func FreezeAction(ctx *app.Context, branchName string) error {
 		return fmt.Errorf("branch %s is not tracked by stackit", branchName)
 	}
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Get downstack (ancestors including current)
-	branches := branch.GetRelativeStack(engine.StackRange{
+	branches := graph.Range(branch, engine.StackRange{
 		RecursiveParents: true,
 		IncludeCurrent:   true,
 	})

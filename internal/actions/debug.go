@@ -138,6 +138,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 	}
 	allMeta, _ := eng.Git().BatchReadMetadata(branchNames)
 
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 	branchInfos := make([]BranchInfo, 0, len(allBranches))
 	for _, branch := range allBranches {
 		branchName := branch.GetName()
@@ -158,7 +159,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 			branchInfo.Parent = parent.GetName()
 		}
 
-		children := branchObj.GetChildren()
+		children := graph.ChildBranches(branchObj)
 		if len(children) > 0 {
 			childNames := make([]string, len(children))
 			for i, c := range children {

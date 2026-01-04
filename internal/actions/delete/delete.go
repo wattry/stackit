@@ -45,16 +45,19 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("branch %s is not tracked by stackit", branchName)
 	}
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Determine branches to delete
 	toDelete := []engine.Branch{branch}
 
 	if opts.Upstack {
-		upstack := branch.GetRelativeStackUpstack()
+		upstack := graph.Range(branch, engine.StackRange{RecursiveChildren: true})
 		toDelete = append(toDelete, upstack...)
 	}
 
 	if opts.Downstack {
-		downstack := branch.GetRelativeStackDownstack()
+		downstack := graph.Range(branch, engine.StackRange{RecursiveParents: true})
 		toDelete = append(downstack, toDelete...)
 	}
 

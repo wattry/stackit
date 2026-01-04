@@ -82,12 +82,15 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 	if err != nil {
 		out.Debug("Failed to sync parents from GitHub: %v", err)
 	} else if len(syncResult.BranchesReparented) > 0 {
+		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 		// Add reparented branches to restack list
 		for _, branchName := range syncResult.BranchesReparented {
 			*branchesToRestack = append(*branchesToRestack, branchName)
 			// Also add descendants
 			branch := nav.GetBranch(branchName)
-			upstack := branch.GetRelativeStackUpstack()
+			upstack := graph.Range(branch, engine.StackRange{
+				RecursiveChildren: true,
+			})
 			for _, b := range upstack {
 				*branchesToRestack = append(*branchesToRestack, b.GetName())
 			}

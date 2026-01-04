@@ -76,85 +76,6 @@ func (e *engineImpl) getParent(branch Branch) *Branch {
 	return e.GetParent(branch) // Delegate to existing implementation for now
 }
 
-// GetChildren returns the children branches using the default sorting strategy (Alphabetical)
-func (e *engineImpl) GetChildren(branch Branch) []Branch {
-	return e.GetChildrenWithStrategy(branch, SortStrategyAlphabetical)
-}
-
-// GetChildrenWithStrategy returns the children branches using the specified sorting strategy
-func (e *engineImpl) GetChildrenWithStrategy(branch Branch, strategy SortStrategy) []Branch {
-	branchName := branch.GetName()
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if children, ok := e.childrenMap[branchName]; ok {
-		// Copy child names so we don't modify the engine's internal map
-		childNames := make([]string, len(children))
-		copy(childNames, children)
-
-		// Apply sorting strategy
-		switch strategy {
-		case SortStrategySmart:
-			e.smartSortChildren(childNames)
-		case SortStrategyAlphabetical:
-			// Already sorted alphabetically in internal map
-		}
-
-		branches := make([]Branch, len(childNames))
-		for i, name := range childNames {
-			branches[i] = NewBranch(name, e)
-		}
-		return branches
-	}
-	return []Branch{}
-}
-
-// GetRelativeStack returns the stack relative to a branch
-// Returns branches in order: ancestors (if RecursiveParents), current (if IncludeCurrent), descendants (if RecursiveChildren)
-func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	result := []Branch{}
-
-	// Add ancestors if RecursiveParents is true (excluding trunk)
-	if rng.RecursiveParents {
-		current := branch.GetName()
-		// Build ancestors in reverse order (append to end) for O(n) performance
-		// Then reverse at the end to get correct order
-		ancestors := []Branch{}
-		for {
-			if current == e.trunk {
-				break
-			}
-			parent, ok := e.parentMap[current]
-			if !ok || parent == e.trunk {
-				break
-			}
-			ancestors = append(ancestors, NewBranch(parent, e))
-			current = parent
-		}
-		// Reverse to get correct order (trunk -> branch)
-		for i, j := 0, len(ancestors)-1; i < j; i, j = i+1, j-1 {
-			ancestors[i], ancestors[j] = ancestors[j], ancestors[i]
-		}
-		result = append(result, ancestors...)
-	}
-
-	// Add current branch if IncludeCurrent is true
-	if rng.IncludeCurrent {
-		result = append(result, branch)
-	}
-
-	// Add descendants if RecursiveChildren is true
-	if rng.RecursiveChildren {
-		descendants := e.getRelativeStackUpstackInternal(branch.GetName())
-		result = append(result, descendants...)
-	}
-
-	return result
-}
-
 // FindMostRecentTrackedAncestors finds the most recent tracked ancestors of a branch
 // by checking the branch's commit history against tracked branch tips.
 // Returns a slice of branch names that point to the most recent tracked commit in history.
@@ -244,49 +165,6 @@ func (e *engineImpl) FindBranchForCommit(commitSHA string) (string, error) {
 	return "", nil
 }
 
-// GetRelativeStackUpstack returns all branches in the upstack (descendants)
-func (e *engineImpl) GetRelativeStackUpstack(branch Branch) []Branch {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	return e.getRelativeStackUpstackInternal(branch.GetName())
-}
-
-// getRelativeStackUpstack is an internal method for Branch type
-func (e *engineImpl) getRelativeStackUpstack(branch Branch) []Branch {
-	return e.GetRelativeStackUpstack(branch)
-}
-
-// GetRelativeStackDownstack returns all branches in the downstack (ancestors)
-func (e *engineImpl) GetRelativeStackDownstack(branch Branch) []Branch {
-	rng := StackRange{
-		RecursiveParents:  true,
-		IncludeCurrent:    false,
-		RecursiveChildren: false,
-	}
-	return e.GetRelativeStack(branch, rng)
-}
-
-// getRelativeStackDownstack is an internal method for Branch type
-func (e *engineImpl) getRelativeStackDownstack(branch Branch) []Branch {
-	return e.GetRelativeStackDownstack(branch)
-}
-
-// GetFullStack returns the entire stack containing the branch
-func (e *engineImpl) GetFullStack(branch Branch) []Branch {
-	rng := StackRange{
-		RecursiveParents:  true,
-		IncludeCurrent:    true,
-		RecursiveChildren: true,
-	}
-	return e.GetRelativeStack(branch, rng)
-}
-
-// getFullStack is an internal method for Branch type
-func (e *engineImpl) getFullStack(branch Branch) []Branch {
-	return e.GetFullStack(branch)
-}
-
 // SortBranchesTopologically sorts branches so parents come before children.
 // This ensures correct restack order (bottom of stack first).
 func (e *engineImpl) SortBranchesTopologically(branches []Branch) []Branch {
@@ -362,9 +240,13 @@ func (e *engineImpl) BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, in
 				return false // iterator wants to stop
 			}
 
-			children := e.GetChildren(NewBranch(branch, e))
-			for _, child := range children {
-				if !visit(child.GetName(), depth+1) {
+			// Get children directly from internal map
+			e.mu.RLock()
+			children := e.childrenMap[branch]
+			e.mu.RUnlock()
+
+			for _, childName := range children {
+				if !visit(childName, depth+1) {
 					return false
 				}
 			}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -26,7 +27,8 @@ func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
 	}
 
 	// Find descendants
-	descendants := branch.GetRelativeStackUpstack()
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	descendants := graph.Range(branch, engine.StackRange{RecursiveChildren: true})
 
 	// If there are descendants and not forced, prompt for confirmation
 	if len(descendants) > 0 && !opts.Force {

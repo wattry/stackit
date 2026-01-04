@@ -105,8 +105,11 @@ func ShowConflict(ctx *app.Context) error {
 		return fmt.Errorf("not on a tracked branch")
 	}
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Get downstack commits
-	downstackBranches := currentBranchObj.GetRelativeStackDownstack()
+	downstackBranches := graph.Range(*currentBranchObj, engine.StackRange{RecursiveParents: true})
 	downstackBranches = append([]engine.Branch{*currentBranchObj}, downstackBranches...)
 
 	out.Info("Stack (bottom to top):")

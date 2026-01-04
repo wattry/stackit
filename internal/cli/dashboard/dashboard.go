@@ -138,17 +138,19 @@ func (m *model) refresh() tea.Cmd {
 
 		trunk := m.engine.Trunk().GetName()
 
+		// Build StackGraph for efficient traversals
+		graph := engine.BuildStackGraph(m.engine, engine.SortStrategyAlphabetical, nil)
+
 		// Create renderer
 		renderer := tree.NewStackTreeRenderer(
 			currentName,
 			trunk,
 			func(name string) []string {
-				children := m.engine.GetChildren(m.engine.GetBranch(name))
-				names := make([]string, len(children))
-				for i, c := range children {
-					names[i] = c.GetName()
+				node := graph.Nodes[name]
+				if node == nil {
+					return nil
 				}
-				return names
+				return graph.Children(node.Branch)
 			},
 			func(name string) string {
 				branch := m.engine.GetBranch(name)
@@ -177,10 +179,14 @@ func (m *model) refresh() tea.Cmd {
 		branches := []string{trunk}
 		var collect func(string)
 		collect = func(name string) {
-			children := m.engine.GetChildren(m.engine.GetBranch(name))
+			node := graph.Nodes[name]
+			if node == nil {
+				return
+			}
+			children := graph.Children(node.Branch)
 			for _, child := range children {
-				branches = append(branches, child.GetName())
-				collect(child.GetName())
+				branches = append(branches, child)
+				collect(child)
 			}
 		}
 		collect(trunk)

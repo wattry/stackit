@@ -83,55 +83,6 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 	}
 }
 
-// smartSortChildren sorts a list of sibling branches using the "smart" strategy:
-// 1. Branches on the path from current branch to trunk are hoisted to the top.
-// 2. Other branches are sorted by name descending (newest first).
-func (e *engineImpl) smartSortChildren(children []string) {
-	if len(children) <= 1 {
-		return
-	}
-
-	// Calculate active path from current branch to trunk
-	activePath := make(map[string]bool)
-	if e.currentBranch != "" {
-		activePath[e.currentBranch] = true
-		curr := e.currentBranch
-		visited := make(map[string]bool)
-		visited[curr] = true
-		for {
-			parent, ok := e.parentMap[curr]
-			if !ok || parent == "" || parent == e.trunk || visited[parent] {
-				break
-			}
-			activePath[parent] = true
-			curr = parent
-			visited[curr] = true
-		}
-	}
-
-	slices.SortFunc(children, func(a, b string) int {
-		// First, check if either is on the active path
-		aOnPath := activePath[a]
-		bOnPath := activePath[b]
-
-		if aOnPath && !bOnPath {
-			return -1 // a comes first
-		}
-		if bOnPath && !aOnPath {
-			return 1 // b comes first
-		}
-
-		// Otherwise sort by name descending
-		if a < b {
-			return 1
-		}
-		if a > b {
-			return -1
-		}
-		return 0
-	})
-}
-
 // updateBranchInCache updates the cache for a specific branch after restack/metadata changes
 func (e *engineImpl) updateBranchInCache(branchName string) {
 	if branchName == e.trunk {
@@ -312,40 +263,6 @@ func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName st
 	}
 
 	return e.trunk
-}
-
-// getRelativeStackUpstackInternal is the internal implementation without lock
-// The caller MUST hold at least a read lock (e.mu.RLock())
-func (e *engineImpl) getRelativeStackUpstackInternal(branchName string) []Branch {
-	result := []Branch{}
-	visited := make(map[string]bool)
-
-	var collectDescendants func(string)
-	collectDescendants = func(branch string) {
-		if visited[branch] {
-			return
-		}
-		visited[branch] = true
-
-		// Don't include the starting branch
-		if branch != branchName {
-			result = append(result, NewBranch(branch, e))
-		}
-
-		// Access childrenMap directly since we already hold the lock
-		// This avoids re-acquiring the lock in GetChildren
-		if children, ok := e.childrenMap[branch]; ok {
-			// Copy child names to avoid modifying the internal map
-			childNames := make([]string, len(children))
-			copy(childNames, children)
-			for _, childName := range childNames {
-				collectDescendants(childName)
-			}
-		}
-	}
-
-	collectDescendants(branchName)
-	return result
 }
 
 // Helper functions
