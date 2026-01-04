@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -619,15 +620,23 @@ func (e *engineImpl) GetWorktreeForStack(stackRoot string) (*WorktreeInfo, error
 	}, nil
 }
 
-// ListManagedWorktrees returns all stackit-managed worktrees
+// ListManagedWorktrees returns all stackit-managed worktrees, sorted by stack root name
 func (e *engineImpl) ListManagedWorktrees() ([]WorktreeInfo, error) {
 	metas, err := e.git.ListWorktreeMetas()
 	if err != nil {
 		return nil, err
 	}
 
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(metas))
+	for k := range metas {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	result := make([]WorktreeInfo, 0, len(metas))
-	for _, meta := range metas {
+	for _, k := range keys {
+		meta := metas[k]
 		result = append(result, WorktreeInfo{
 			Path:        meta.Path,
 			StackRoot:   meta.StackRoot,
@@ -641,19 +650,29 @@ func (e *engineImpl) ListManagedWorktrees() ([]WorktreeInfo, error) {
 
 // GetStackRootForBranch returns the stack root for a given branch.
 // The stack root is the first ancestor branch whose parent is trunk.
+// Returns empty string for trunk or untracked branches.
 func (e *engineImpl) GetStackRootForBranch(branch Branch) string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	current := branch.GetName()
+	branchName := branch.GetName()
+
+	// Trunk has no stack root
+	if branchName == e.trunk {
+		return ""
+	}
+
+	// Check if branch is tracked at all
+	if _, ok := e.parentMap[branchName]; !ok {
+		return "" // Untracked branch has no stack root
+	}
+
+	current := branchName
 	for {
 		parent, ok := e.parentMap[current]
 		if !ok {
-			// No parent tracked, this branch is either trunk or not tracked
-			if current == e.trunk {
-				return ""
-			}
-			return current
+			// Should not happen since we checked above, but handle gracefully
+			return ""
 		}
 
 		// If parent is trunk, current is the stack root

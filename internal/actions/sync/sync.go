@@ -81,6 +81,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if len(worktreeResult.RemovedWorktrees) > 0 {
 		summary.WorktreesCleaned = len(worktreeResult.RemovedWorktrees)
 	}
+	// Surface any worktree cleanup errors as warnings (non-fatal)
+	for _, errMsg := range worktreeResult.Errors {
+		ctx.Output.Warn("Worktree cleanup: %s", errMsg)
+	}
 
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
