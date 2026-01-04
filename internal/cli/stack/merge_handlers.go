@@ -2,6 +2,10 @@ package stack
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"stackit.dev/stackit/internal/actions/merge"
@@ -65,11 +69,13 @@ func (h *SimpleMergeHandler) Complete(result *merge.ConsolidationResult) {
 
 // InteractiveMergeHandler provides a TUI for merge operations
 type InteractiveMergeHandler struct {
-	ctx      *app.Context
-	reporter *tui.ChannelMergeProgressReporter
-	done     chan bool
-	errChan  chan error
-	plan     *merge.Plan
+	ctx         *app.Context
+	reporter    *tui.ChannelMergeProgressReporter
+	done        chan bool
+	errChan     chan error
+	plan        *merge.Plan
+	cleanupDone bool
+	mu          sync.Mutex
 }
 
 // NewInteractiveMergeHandler creates a new InteractiveMergeHandler
@@ -85,10 +91,14 @@ func (h *InteractiveMergeHandler) Start(plan *merge.Plan) {
 }
 
 func (h *InteractiveMergeHandler) startTUI(plan *merge.Plan) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	h.plan = plan
 	h.reporter = tui.NewChannelMergeProgressReporter()
 	h.done = make(chan bool, 1)
 	h.errChan = make(chan error, 1)
+	h.cleanupDone = false
 
 	groups := CalculateMergeGroups(plan)
 	stepDescriptions := make([]string, len(plan.Steps))
@@ -98,12 +108,50 @@ func (h *InteractiveMergeHandler) startTUI(plan *merge.Plan) {
 
 	h.ctx.Splog.SetQuiet(true)
 
+	// Set up signal handler to ensure terminal is restored on interrupt
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		h.Cleanup()
+		// Re-raise the signal so the process can exit properly
+		signal.Stop(sigChan)
+	}()
+
 	go func() {
 		err := tui.RunMergeTUI(groups, stepDescriptions, h.reporter.Updates(), h.done)
 		if err != nil {
 			h.errChan <- err
 		}
+		h.Cleanup()
 	}()
+}
+
+// Cleanup ensures the terminal is restored to normal mode
+func (h *InteractiveMergeHandler) Cleanup() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.cleanupDone {
+		return
+	}
+
+	if h.reporter != nil {
+		h.reporter.Close()
+	}
+
+	if h.done != nil {
+		// Wait for TUI to finish and restore terminal
+		// Use a timeout to avoid hanging indefinitely if something goes wrong
+		select {
+		case <-h.done:
+		case <-time.After(2 * time.Second):
+		}
+		h.done = nil
+	}
+
+	h.ctx.Splog.SetQuiet(false)
+	h.cleanupDone = true
 }
 
 // StepStarted implements merge.Handler.
@@ -143,14 +191,7 @@ func (h *InteractiveMergeHandler) SetEstimatedDuration(duration time.Duration) {
 
 // Complete implements merge.Handler.
 func (h *InteractiveMergeHandler) Complete(result *merge.ConsolidationResult) {
-	if h.reporter != nil {
-		h.reporter.Close()
-		if h.done != nil {
-			<-h.done
-			h.done = nil
-		}
-		h.ctx.Splog.SetQuiet(false)
-	}
+	h.Cleanup()
 
 	if result != nil {
 		h.ctx.Splog.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)

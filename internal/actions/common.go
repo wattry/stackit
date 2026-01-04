@@ -38,7 +38,11 @@ type Restacker interface {
 // conflict: true if this is a conflict
 // lockReason: why the branch is locked (empty if not locked)
 // frozen: true if the branch is frozen
-type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, lockReason engine.LockReason, frozen bool)
+// isCurrent: true if this is the current branch
+// reparented: true if the branch was reparented
+// oldParent: the old parent name if reparented
+// newParent: the new parent name if reparented
+type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, lockReason engine.LockReason, frozen bool, isCurrent bool, reparented bool, oldParent, newParent string)
 
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
@@ -50,9 +54,15 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	batchResult, err := ctx.Engine.RestackBranches(ctx.Context, branches)
 	if err != nil {
 		if batchResult.ConflictBranch != "" {
+			currentBranch := ctx.Engine.CurrentBranch()
+			currentBranchName := ""
+			if currentBranch != nil {
+				currentBranchName = currentBranch.GetName()
+			}
+
 			// Report the conflict via callback if provided
 			if callback != nil {
-				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false)
+				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false, batchResult.ConflictBranch == currentBranchName, false, "", "")
 			}
 
 			continuation := &config.ContinuationState{
@@ -74,9 +84,15 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 	// Handle conflicts even when no error was returned
 	if batchResult.ConflictBranch != "" {
+		currentBranch := ctx.Engine.CurrentBranch()
+		currentBranchName := ""
+		if currentBranch != nil {
+			currentBranchName = currentBranch.GetName()
+		}
+
 		// Report the conflict via callback if provided
 		if callback != nil {
-			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false)
+			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false, batchResult.ConflictBranch == currentBranchName, false, "", "")
 		}
 
 		continuation := &config.ContinuationState{
@@ -123,7 +139,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 		// Report via callback if provided
 		if callback != nil {
-			callback(branchName, result.Result, newRev, false, result.LockReason, result.Frozen)
+			callback(branchName, result.Result, newRev, false, result.LockReason, result.Frozen, branchName == currentBranchName, result.Reparented, result.OldParent, result.NewParent)
 			continue // Skip splog output when using callback handler
 		}
 

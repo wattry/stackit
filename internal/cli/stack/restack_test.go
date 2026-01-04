@@ -157,7 +157,9 @@ func TestRestackCommand(t *testing.T) {
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-feature (current) does not need to be restacked on main.
+  feature (current) does not need to be restacked on main.
+
+✨ All branches are up to date!
 `)
 		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
@@ -196,8 +198,10 @@ feature (current) does not need to be restacked on main.
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-branch1 does not need to be restacked on main.
-branch2 (current) does not need to be restacked on branch1.
+  branch1 does not need to be restacked on main.
+  branch2 (current) does not need to be restacked on branch1.
+
+✨ All branches are up to date!
 `)
 		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
@@ -240,8 +244,10 @@ branch2 (current) does not need to be restacked on branch1.
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-branch1 (current) does not need to be restacked on main.
-branch2 does not need to be restacked on branch1.
+  branch1 (current) does not need to be restacked on main.
+  branch2 does not need to be restacked on branch1.
+
+✨ All branches are up to date!
 `)
 		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
@@ -275,7 +281,9 @@ branch2 does not need to be restacked on branch1.
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-branch1 does not need to be restacked on main.
+  branch1 does not need to be restacked on main.
+
+✨ All branches are up to date!
 `)
 		require.Equal(t, expected, normalized, "output format should match expected structure")
 	})
@@ -325,6 +333,7 @@ branch1 does not need to be restacked on main.
 		// Output should show branches being restacked
 		require.Contains(t, normalized, "Restacked branch1 on main", "should show branch1 restacked")
 		require.Contains(t, normalized, "Restacked branch2 (current) on branch1", "should show branch2 restacked")
+		require.Contains(t, normalized, "Summary: restacked 2")
 	})
 
 	t.Run("restack errors when multiple scope flags specified", func(t *testing.T) {

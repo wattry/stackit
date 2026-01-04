@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -176,6 +178,7 @@ type InteractiveForeachHandler struct {
 	mu          sync.Mutex
 	stack       *tree.StackTree
 	command     string
+	cleanupDone bool
 }
 
 // NewInteractiveForeachHandler creates a new interactive foreach handler
@@ -222,13 +225,52 @@ func (h *InteractiveForeachHandler) ensureProgramStarted() {
 	h.splog.SetQuiet(true)
 
 	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	h.cleanupDone = false
+
+	// Set up signal handler to ensure terminal is restored on interrupt
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		h.Cleanup()
+		// Re-raise the signal so the process can exit properly
+		signal.Stop(sigChan)
+	}()
 
 	// Run program in background
 	go func() {
 		if _, err := h.program.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running foreach TUI: %v\n", err)
 		}
+		// Ensure cleanup happens when program exits
+		h.Cleanup()
 	}()
+}
+
+// Cleanup ensures the terminal is restored to normal mode
+// This should be called on interrupt or error to prevent leaving the terminal in raw mode
+func (h *InteractiveForeachHandler) Cleanup() {
+	h.mu.Lock()
+	if h.cleanupDone {
+		h.mu.Unlock()
+		return
+	}
+
+	p := h.program
+	h.mu.Unlock()
+
+	if p != nil {
+		// Quit the program and wait for it to restore terminal state
+		p.Quit()
+		p.Wait()
+	}
+
+	h.mu.Lock()
+	h.program = nil
+	// Restore splog
+	h.splog.SetQuiet(false)
+	h.cleanupDone = true
+	h.mu.Unlock()
 }
 
 // OnEvent handles events from the foreach action

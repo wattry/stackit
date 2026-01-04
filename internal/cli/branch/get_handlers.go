@@ -172,18 +172,27 @@ func (h *SimpleGetHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for restack phase
-func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
+func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if reparented {
+		h.splog.Info("  Reparented %s from %s to %s",
+			style.ColorBranchName(branch, isCurrent),
+			style.ColorBranchName(oldParent, false),
+			style.ColorBranchName(newParent, false))
+	}
 
 	prInfo := h.formatPRInfo(prNumber)
 
 	switch result {
 	case handlers.RestackDone:
-		h.splog.Info("  Restacked %s%s -> %s",
-			style.ColorBranchName(branch, false),
-			prInfo,
-			style.ColorDim(newRev))
+		msg := fmt.Sprintf("Restacked %s%s", style.ColorBranchName(branch, isCurrent), prInfo)
+		if parent != "" {
+			msg += fmt.Sprintf(" on %s", style.ColorBranchName(parent, false))
+		}
+		msg += fmt.Sprintf(" -> %s", style.ColorDim(newRev))
+		h.splog.Info("  %s", msg)
 	case handlers.RestackUnneeded:
 		reason := "does not need restacking"
 		if lockReason.IsLocked() {
@@ -191,13 +200,18 @@ func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.Restac
 		} else if frozen {
 			reason = "is frozen"
 		}
-		h.splog.Info("  %s%s %s",
-			style.ColorBranchName(branch, false),
-			prInfo,
-			reason)
+
+		msg := fmt.Sprintf("%s%s %s", style.ColorBranchName(branch, isCurrent), prInfo, reason)
+		if reason == "does not need restacking" && parent != "" {
+			msg = fmt.Sprintf("%s%s does not need to be restacked on %s.",
+				style.ColorBranchName(branch, isCurrent),
+				prInfo,
+				style.ColorBranchName(parent, false))
+		}
+		h.splog.Info("  %s", msg)
 	case handlers.RestackConflict:
 		h.splog.Warn("  Skipped %s%s (conflict)",
-			style.ColorBranchName(branch, false),
+			style.ColorBranchName(branch, isCurrent),
 			prInfo)
 	}
 }
