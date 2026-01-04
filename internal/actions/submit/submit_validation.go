@@ -43,7 +43,7 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 			).WithLockReason(lockReason))
 		}); err != nil {
 			// Non-fatal, continue
-			ctx.Output.Debug("Failed to sync PR info: %v", err)
+			ctx.Splog.Debug("Failed to sync PR info: %v", err)
 		}
 	}
 
@@ -80,7 +80,7 @@ func validateBaseRevisions(branches []string, eng engine.BranchStatus, ctx *app.
 		switch {
 		case parentBranch.IsTrunk():
 			if !branch.IsBranchUpToDate() {
-				ctx.Output.Info("Note that %s has fallen behind trunk. You may encounter conflicts if you attempt to merge it.",
+				ctx.Splog.Info("Note that %s has fallen behind trunk. You may encounter conflicts if you attempt to merge it.",
 					style.ColorBranchName(branchName, false))
 			}
 		case validatedBranches[parentBranchName]:
@@ -125,11 +125,11 @@ func validateNoEmptyBranches(ctx context.Context, branches []string, nav engine.
 	}
 
 	hasMultiple := len(emptyBranches) > 1
-	runtimeCtx.Output.Warn("The following branch%s have no changes:", actions.PluralSuffix(hasMultiple))
+	runtimeCtx.Splog.Warn("The following branch%s have no changes:", actions.PluralSuffix(hasMultiple))
 	for _, b := range emptyBranches {
-		runtimeCtx.Output.Warn("▸ %s", b)
+		runtimeCtx.Splog.Warn("▸ %s", b)
 	}
-	runtimeCtx.Output.Warn("Are you sure you want to submit %s?", actions.PluralIt(hasMultiple))
+	runtimeCtx.Splog.Warn("Are you sure you want to submit %s?", actions.PluralIt(hasMultiple))
 
 	// For now, we'll allow empty branches (non-interactive mode)
 	// In interactive mode, we would prompt here
@@ -157,10 +157,10 @@ func validateNoMergedOrClosedBranches(branches []string, eng engine.BranchStatus
 	}
 
 	hasMultiple := len(mergedOrClosedBranches) > 1
-	ctx.Output.Tip("You can use 'stackit sync' to find and delete all merged/closed branches automatically and rebase their children.")
-	ctx.Output.Warn("PR%s for the following branch%s already been merged or closed:", actions.PluralSuffix(hasMultiple), actions.PluralSuffix(hasMultiple))
+	ctx.Splog.Tip("You can use 'stackit sync' to find and delete all merged/closed branches automatically and rebase their children.")
+	ctx.Splog.Warn("PR%s for the following branch%s already been merged or closed:", actions.PluralSuffix(hasMultiple), actions.PluralSuffix(hasMultiple))
 	for _, b := range mergedOrClosedBranches {
-		ctx.Output.Warn("▸ %s", b)
+		ctx.Splog.Warn("▸ %s", b)
 	}
 
 	// For now, we'll allow creating new PRs (non-interactive mode)
@@ -168,7 +168,7 @@ func validateNoMergedOrClosedBranches(branches []string, eng engine.BranchStatus
 	// TODO: Add interactive prompt when needed
 	// Note: We used to clear PR info here, but mutation requires mutation interface.
 	for _, branchName := range mergedOrClosedBranches {
-		ctx.Output.Debug("Branch %s already has a merged/closed PR", branchName)
+		ctx.Splog.Debug("Branch %s already has a merged/closed PR", branchName)
 	}
 
 	return nil

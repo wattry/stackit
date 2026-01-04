@@ -8,7 +8,6 @@ import (
 
 	"stackit.dev/stackit/internal/actions/lock"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
@@ -46,14 +45,14 @@ func TestLockUnlockAction(t *testing.T) {
 		require.NoError(t, err)
 
 		var buf bytes.Buffer
-		s.Context.Output = output.NewConsoleOutput(&buf, false)
+		s.Context.Splog = tui.NewSplogToWriter(&buf)
 
 		err = lock.Action(s.Context, "feature-a")
 		require.NoError(t, err)
 
-		out := buf.String()
-		require.Contains(t, out, "feature-a")
-		require.Contains(t, out, "already locked")
+		output := buf.String()
+		require.Contains(t, output, "feature-a")
+		require.Contains(t, output, "already locked")
 	})
 
 	t.Run("UnlockAction unlocks branch and descendants", func(t *testing.T) {
@@ -89,14 +88,14 @@ func TestLockUnlockAction(t *testing.T) {
 		// Already unlocked by default
 
 		var buf bytes.Buffer
-		s.Context.Output = output.NewConsoleOutput(&buf, false)
+		s.Context.Splog = tui.NewSplogToWriter(&buf)
 
 		err := lock.Unlock(s.Context, "feature-a")
 		require.NoError(t, err)
 
-		out := buf.String()
-		require.Contains(t, out, "feature-a")
-		require.Contains(t, out, "already unlocked")
+		output := buf.String()
+		require.Contains(t, output, "feature-a")
+		require.Contains(t, output, "already unlocked")
 	})
 
 	t.Run("LockAction fails on untracked branch", func(t *testing.T) {

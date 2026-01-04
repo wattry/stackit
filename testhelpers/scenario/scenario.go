@@ -16,7 +16,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/testhelpers"
 )
@@ -93,14 +92,14 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 	})
 	require.NoError(t, err)
 
-	buf := &bytes.Buffer{}
+	output := &bytes.Buffer{}
 	ctx := app.NewContextWithOptions(eng, app.GlobalOptions{
 		Interactive: false,
 		Verify:      true,
 		Debug:       os.Getenv("DEBUG") != "",
 		Quiet:       true,
 	})
-	ctx.Output = output.NewConsoleOutput(buf, os.Getenv("DEBUG") != "")
+	ctx.Splog = tui.NewSplogToWriter(output)
 	ctx.RepoRoot = scene.Dir
 
 	return &Scenario{
@@ -108,7 +107,7 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 		Scene:   scene,
 		Engine:  eng,
 		Context: ctx,
-		Output:  buf,
+		Output:  output,
 	}
 }
 

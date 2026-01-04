@@ -19,70 +19,70 @@ type Options struct {
 
 func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 
-	out.Info("%s", style.ColorYellow("Dry Run: Folding plan"))
-	out.Info("  Fold branch: %s", style.ColorBranchName(current.GetName(), true))
-	out.Info("  Into parent: %s", style.ColorBranchName(parent.GetName(), false))
-	out.Newline()
+	splog.Info("%s", style.ColorYellow("Dry Run: Folding plan"))
+	splog.Info("  Fold branch: %s", style.ColorBranchName(current.GetName(), true))
+	splog.Info("  Into parent: %s", style.ColorBranchName(parent.GetName(), false))
+	splog.Newline()
 
 	// Show combined commit messages
-	out.Info("%s", style.ColorCyan("Proposed Commit History:"))
+	splog.Info("%s", style.ColorCyan("Proposed Commit History:"))
 	parentCommits, err := parent.GetAllCommits(engine.CommitFormatReadable)
 	if err != nil {
-		out.Debug("Failed to get parent commits for %s: %v", parent.GetName(), err)
+		splog.Debug("Failed to get parent commits for %s: %v", parent.GetName(), err)
 	}
 	for _, commit := range parentCommits {
-		out.Info("  %s", style.ColorDim(commit))
+		splog.Info("  %s", style.ColorDim(commit))
 	}
 
 	currentCommits, err := current.GetAllCommits(engine.CommitFormatReadable)
 	if err != nil {
-		out.Debug("Failed to get current commits for %s: %v", current.GetName(), err)
+		splog.Debug("Failed to get current commits for %s: %v", current.GetName(), err)
 	}
 	for _, commit := range currentCommits {
-		out.Info("  %s", commit)
+		splog.Info("  %s", commit)
 	}
-	out.Newline()
+	splog.Newline()
 
 	// Show combined diff stat
-	out.Info("%s", style.ColorCyan("Combined Diff Stat:"))
+	splog.Info("%s", style.ColorCyan("Combined Diff Stat:"))
 	// Base is parent's parent (or trunk)
 	grandparentName := parent.GetParentPrecondition()
 	baseRev, err := eng.GetRevision(eng.GetBranch(grandparentName))
 	if err != nil {
-		out.Debug("Failed to get revision for grandparent %s: %v", grandparentName, err)
+		splog.Debug("Failed to get revision for grandparent %s: %v", grandparentName, err)
 		var mbErr error
 		baseRev, mbErr = eng.GetMergeBase(eng.Trunk().GetName(), parent.GetName())
 		if mbErr != nil {
-			out.Debug("Failed to get merge base for %s: %v", parent.GetName(), mbErr)
+			splog.Debug("Failed to get merge base for %s: %v", parent.GetName(), mbErr)
 		}
 	}
 
 	headRev, err := current.GetRevision()
 	if err != nil {
-		out.Debug("Failed to get revision for current branch %s: %v", current.GetName(), err)
+		splog.Debug("Failed to get revision for current branch %s: %v", current.GetName(), err)
 	}
 
 	diffStat, err := eng.ShowDiff(ctx.Context, baseRev, headRev, true)
 	if err == nil && diffStat != "" {
-		out.Info("%s", diffStat)
+		splog.Info("%s", diffStat)
 	} else {
 		if err != nil {
-			out.Debug("Failed to get diff stat: %v", err)
+			splog.Debug("Failed to get diff stat: %v", err)
 		}
-		out.Info("  (No changes or error retrieving diff)")
+		splog.Info("  (No changes or error retrieving diff)")
 	}
 
-	out.Newline()
-	out.Info("%s", style.ColorDim("No changes were applied."))
+	splog.Newline()
+	splog.Info("%s", style.ColorDim("No changes were applied."))
 	return nil
 }
 
 // Action performs the fold operation
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 	gctx := ctx.Context
 
 	// Validate we're on a branch
@@ -98,7 +98,7 @@ func Action(ctx *app.Context, opts Options) error {
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
+		splog.Debug("Failed to take snapshot: %v", err)
 	}
 
 	// Check if on trunk
@@ -162,7 +162,7 @@ func Action(ctx *app.Context, opts Options) error {
 		if parentBranch.IsTrunk() {
 			return fmt.Errorf("cannot fold into trunk with --keep because it would delete the trunk branch")
 		}
-		return foldWithKeep(gctx, ctx, currentBranchObj, parentBranch, eng, out, opts)
+		return foldWithKeep(gctx, ctx, currentBranchObj, parentBranch, eng, splog, opts)
 	}
 
 	// Check if folding into trunk
@@ -170,5 +170,5 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("cannot fold into trunk branch %s without --allow-trunk. Folding into trunk will modify your local main branch directly", parentName)
 	}
 
-	return foldNormal(gctx, ctx, currentBranchObj, parentBranch, eng, out, opts)
+	return foldNormal(gctx, ctx, currentBranchObj, parentBranch, eng, splog, opts)
 }

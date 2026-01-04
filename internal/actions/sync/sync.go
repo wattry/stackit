@@ -21,7 +21,7 @@ type Options struct {
 // Action performs the sync operation
 func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 	gctx := ctx.Context
 	summary := &Summary{}
 
@@ -34,7 +34,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if opts.All {
 		// For now, just sync the current trunk
 		// In the future, this would sync across all configured trunks
-		out.Info("Syncing branches across all configured trunks...")
+		splog.Info("Syncing branches across all configured trunks...")
 	}
 
 	// Check for uncommitted changes
@@ -88,7 +88,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Restack if requested
 	if !opts.Restack {
-		out.Tip("Try the --restack flag to automatically restack the current stack.")
+		splog.Tip("Try the --restack flag to automatically restack the current stack.")
 		// Check if everything was up to date
 		if !summary.HasChanges() {
 			summary.UpToDate = true

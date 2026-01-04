@@ -43,7 +43,7 @@ func Action(ctx *app.Context, opts Options) error {
 		var validation *PlanValidation
 		if plan == nil {
 			var err error
-			plan, validation, err = CreateMergePlan(ctx.Context, eng, ctx.Output, ctx.GitHubClient, CreatePlanOptions{
+			plan, validation, err = CreateMergePlan(ctx.Context, eng, ctx.Splog, ctx.GitHubClient, CreatePlanOptions{
 				Strategy:     opts.Strategy,
 				Force:        opts.Force,
 				Scope:        opts.Scope,
@@ -60,8 +60,8 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 
 		planText := FormatMergePlan(plan, validation)
-		ctx.Output.Print(planText)
-		ctx.Output.Info("Dry-run mode: plan displayed above. No changes were made.")
+		ctx.Splog.Page(planText)
+		ctx.Splog.Info("Dry-run mode: plan displayed above. No changes were made.")
 		return nil
 	}
 

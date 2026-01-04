@@ -2,6 +2,7 @@
 //
 // It handles:
 //   - Interactive prompts and selections (using survey and bubbletea)
+//   - Structured logging and status reporting (Splog)
 //   - Terminal styling and colors (using lipgloss)
 //   - Progress indicators and UI components
 package tui
@@ -17,7 +18,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/components/submit"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -244,7 +244,7 @@ func RunSubmitTUI(items []submit.Item, submitFunc func(idx int) tea.Cmd) error {
 }
 
 // RunSubmitTUISimple runs a simple non-interactive version for non-TTY environments
-func RunSubmitTUISimple(items []submit.Item, submitFunc func(idx int) (string, error), splog output.Output) error {
+func RunSubmitTUISimple(items []submit.Item, submitFunc func(idx int) (string, error), splog *Splog) error {
 	const (
 		actionUpdate  = "update"
 		actionCreated = "created"

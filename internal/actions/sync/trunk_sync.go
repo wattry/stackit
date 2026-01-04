@@ -11,7 +11,7 @@ import (
 func syncTrunk(ctx *app.Context, opts *Options, handler Handler, summary *Summary) error {
 	eng := ctx.Sync()
 	nav := ctx.Navigator()
-	out := ctx.Output
+	splog := ctx.Splog
 	gctx := ctx.Context
 	trunk := nav.Trunk()
 	trunkName := trunk.GetName()
@@ -49,7 +49,7 @@ func syncTrunk(ctx *app.Context, opts *Options, handler Handler, summary *Summar
 		if !shouldReset {
 			// For now, if not force and interactive, we'll skip
 			// In a full implementation, we would prompt here
-			out.Warn("%s could not be fast-forwarded. Use --force to overwrite.", trunkName)
+			splog.Warn("%s could not be fast-forwarded. Use --force to overwrite.", trunkName)
 		}
 
 		if shouldReset {

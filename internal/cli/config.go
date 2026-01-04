@@ -9,7 +9,6 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	configtui "stackit.dev/stackit/internal/tui/config"
 )
@@ -132,7 +131,7 @@ func newConfigSetCmd() *cobra.Command {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			splog := output.NewConsoleOutput(cmd.OutOrStdout(), false)
+			splog := tui.NewSplogToWriter(cmd.OutOrStdout())
 
 			switch key {
 			case "branch.pattern":

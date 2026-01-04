@@ -8,34 +8,34 @@ import (
 
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 )
 
 // checkEnvironment performs environment-related checks
-func checkEnvironment(runner git.Runner, out output.Output, warnings []string, errors []string) ([]string, []string) {
+func checkEnvironment(runner git.Runner, splog *tui.Splog, warnings []string, errors []string) ([]string, []string) {
 	// Check git version
 	gitVersion, err := exec.Command("git", "version").Output()
 	if err != nil {
 		errors = append(errors, "git is not installed or not in PATH")
-		out.Error("  git is not installed or not in PATH")
+		splog.Error("  git is not installed or not in PATH")
 	} else {
 		version := strings.TrimSpace(string(gitVersion))
-		out.Info("  ✅ %s", version)
+		splog.Info("  ✅ %s", version)
 	}
 
 	// Check gh CLI
 	ghVersion, err := exec.Command("gh", "version").Output()
 	if err != nil {
 		warnings = append(warnings, "GitHub CLI (gh) is not installed or not in PATH")
-		out.Warn("  GitHub CLI (gh) is not installed or not in PATH")
+		splog.Warn("  GitHub CLI (gh) is not installed or not in PATH")
 	} else {
 		version := strings.TrimSpace(string(ghVersion))
 		// Extract just the version number
 		parts := strings.Fields(version)
 		if len(parts) > 0 {
-			out.Info("  ✅ gh %s", parts[0])
+			splog.Info("  ✅ gh %s", parts[0])
 		} else {
-			out.Info("  ✅ %s", version)
+			splog.Info("  ✅ %s", version)
 		}
 	}
 
@@ -43,24 +43,24 @@ func checkEnvironment(runner git.Runner, out output.Output, warnings []string, e
 	token, err := getGitHubToken(runner)
 	if err != nil {
 		warnings = append(warnings, "GitHub authentication not configured (GITHUB_TOKEN env var or gh auth token)")
-		out.Warn("  GitHub authentication not configured")
+		splog.Warn("  GitHub authentication not configured")
 	} else {
 		if token == "" {
 			warnings = append(warnings, "GitHub token is empty")
-			out.Warn("  GitHub token is empty")
+			splog.Warn("  GitHub token is empty")
 		} else {
 			// Try to create a GitHub client to verify connectivity
 			ghCtx := context.Background()
 			client, err := github.NewGitHubClient(ghCtx, runner)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("GitHub authentication failed: %v", err))
-				out.Warn("  GitHub authentication failed: %v", err)
+				splog.Warn("  GitHub authentication failed: %v", err)
 			} else {
 				owner, repo := client.GetOwnerRepo()
 				if owner != "" && repo != "" {
-					out.Info("  ✅ GitHub authentication successful (%s/%s)", owner, repo)
+					splog.Info("  ✅ GitHub authentication successful (%s/%s)", owner, repo)
 				} else {
-					out.Info("  ✅ GitHub authentication successful")
+					splog.Info("  ✅ GitHub authentication successful")
 				}
 			}
 		}

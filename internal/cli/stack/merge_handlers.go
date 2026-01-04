@@ -37,7 +37,7 @@ func (h *SimpleMergeHandler) Start(_ *merge.Plan) {}
 
 // StepStarted implements merge.Handler.
 func (h *SimpleMergeHandler) StepStarted(_ int, description string) {
-	h.ctx.Output.Info("Starting: %s", description)
+	h.ctx.Splog.Info("Starting: %s", description)
 }
 
 // StepCompleted implements merge.Handler.
@@ -47,13 +47,13 @@ func (h *SimpleMergeHandler) StepCompleted(_ int) {
 
 // StepFailed implements merge.Handler.
 func (h *SimpleMergeHandler) StepFailed(_ int, err error) {
-	h.ctx.Output.Error("Step failed: %v", err)
+	h.ctx.Splog.Error("Step failed: %v", err)
 }
 
 // StepWaiting implements merge.Handler.
 func (h *SimpleMergeHandler) StepWaiting(_ int, elapsed, _ time.Duration, _ []github.CheckDetail) {
 	if int(elapsed.Seconds())%30 == 0 {
-		h.ctx.Output.Info("  ... still waiting (%v elapsed)", elapsed.Round(time.Second))
+		h.ctx.Splog.Info("  ... still waiting (%v elapsed)", elapsed.Round(time.Second))
 	}
 }
 
@@ -63,7 +63,7 @@ func (h *SimpleMergeHandler) SetEstimatedDuration(_ time.Duration) {}
 // Complete implements merge.Handler.
 func (h *SimpleMergeHandler) Complete(result *merge.ConsolidationResult) {
 	if result != nil {
-		h.ctx.Output.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)
+		h.ctx.Splog.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)
 	}
 }
 
@@ -106,7 +106,7 @@ func (h *InteractiveMergeHandler) startTUI(plan *merge.Plan) {
 		stepDescriptions[i] = step.Description
 	}
 
-	h.ctx.Output.SetQuiet(true)
+	h.ctx.Splog.SetQuiet(true)
 
 	// Set up signal handler to ensure terminal is restored on interrupt
 	sigChan := make(chan os.Signal, 1)
@@ -150,7 +150,7 @@ func (h *InteractiveMergeHandler) Cleanup() {
 		h.done = nil
 	}
 
-	h.ctx.Output.SetQuiet(false)
+	h.ctx.Splog.SetQuiet(false)
 	h.cleanupDone = true
 }
 
@@ -194,7 +194,7 @@ func (h *InteractiveMergeHandler) Complete(result *merge.ConsolidationResult) {
 	h.Cleanup()
 
 	if result != nil {
-		h.ctx.Output.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)
+		h.ctx.Splog.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)
 	}
 }
 

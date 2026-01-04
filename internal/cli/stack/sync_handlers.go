@@ -12,7 +12,6 @@ import (
 
 	syncAction "stackit.dev/stackit/internal/actions/sync"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	syncComponent "stackit.dev/stackit/internal/tui/components/sync"
 	"stackit.dev/stackit/internal/tui/style"
@@ -25,7 +24,7 @@ const (
 )
 
 // NewSyncHandler creates the appropriate handler based on TTY availability
-func NewSyncHandler(splog output.Output) syncAction.Handler {
+func NewSyncHandler(splog *tui.Splog) syncAction.Handler {
 	if tui.IsTTY() {
 		return NewInteractiveSyncHandler(splog)
 	}
@@ -34,7 +33,7 @@ func NewSyncHandler(splog output.Output) syncAction.Handler {
 
 // SimpleSyncHandler provides streaming text output for non-TTY environments
 type SimpleSyncHandler struct {
-	splog        output.Output
+	splog        *tui.Splog
 	currentPhase syncAction.Phase
 	mu           stdsync.Mutex
 	totalOps     int
@@ -42,7 +41,7 @@ type SimpleSyncHandler struct {
 }
 
 // NewSimpleSyncHandler creates a new SimpleSyncHandler
-func NewSimpleSyncHandler(splog output.Output) *SimpleSyncHandler {
+func NewSimpleSyncHandler(splog *tui.Splog) *SimpleSyncHandler {
 	return &SimpleSyncHandler{
 		splog: splog,
 	}
@@ -285,7 +284,7 @@ func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts 
 
 // InteractiveSyncHandler provides bubbletea TUI for TTY environments
 type InteractiveSyncHandler struct {
-	splog        output.Output
+	splog        *tui.Splog
 	program      *tea.Program
 	model        *syncComponent.Model
 	mu           stdsync.Mutex
@@ -296,7 +295,7 @@ type InteractiveSyncHandler struct {
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
-func NewInteractiveSyncHandler(splog output.Output) *InteractiveSyncHandler {
+func NewInteractiveSyncHandler(splog *tui.Splog) *InteractiveSyncHandler {
 	return &InteractiveSyncHandler{
 		splog: splog,
 	}

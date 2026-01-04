@@ -17,7 +17,7 @@ type SquashOptions struct {
 // SquashAction performs the squash operation
 func SquashAction(ctx *app.Context, opts SquashOptions) error {
 	eng := ctx.History()
-	out := ctx.Output
+	splog := ctx.Splog
 	context := ctx.Context
 
 	// Get current branch
@@ -37,7 +37,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 	)
 	if err := ctx.Undo().TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
+		splog.Debug("Failed to take snapshot: %v", err)
 	}
 
 	// Squash current branch
@@ -49,7 +49,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 		return fmt.Errorf("failed to squash branch: %w", err)
 	}
 
-	out.Info("Squashed commits in %s.", style.ColorBranchName(currentBranch.GetName(), true))
+	splog.Info("Squashed commits in %s.", style.ColorBranchName(currentBranch.GetName(), true))
 
 	// Get upstack branches (recursive children only, excluding current branch)
 	rng := engine.StackRange{

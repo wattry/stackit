@@ -146,7 +146,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		// Log via splog only when no callback is provided (backward compatibility)
 		if result.Reparented {
 			isCurrent := branchName == currentBranchName
-			ctx.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
+			ctx.Splog.Info("Reparented %s from %s to %s (parent was merged/deleted).",
 				style.ColorBranchName(branchName, isCurrent),
 				style.ColorBranchName(result.OldParent, false),
 				style.ColorBranchName(result.NewParent, false))
@@ -162,7 +162,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 				parentName = parent.GetName()
 			}
 			isCurrent := branchName == currentBranchName
-			ctx.Output.Info("Restacked %s on %s.",
+			ctx.Splog.Info("Restacked %s on %s.",
 				style.ColorBranchName(branchName, isCurrent),
 				style.ColorBranchName(parentName, false))
 		case engine.RestackConflict:
@@ -172,12 +172,12 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 			switch {
 			case !branch.CanModify():
 				if branch.IsLocked() {
-					ctx.Output.Info("Did not restack branch %s because it is locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
+					ctx.Splog.Info("Did not restack branch %s because it is locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
 				} else {
-					ctx.Output.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
+					ctx.Splog.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
 				}
 			case branch.IsTrunk():
-				ctx.Output.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
+				ctx.Splog.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
 			default:
 				parent := branch.GetParent()
 				parentName := ""
@@ -187,7 +187,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 					parentName = parent.GetName()
 				}
 				isCurrent := branchName == currentBranchName
-				ctx.Output.Info("%s does not need to be restacked on %s.",
+				ctx.Splog.Info("%s does not need to be restacked on %s.",
 					style.ColorBranchName(branchName, isCurrent),
 					style.ColorBranchName(parentName, false))
 			}
@@ -367,20 +367,20 @@ func WithFlagValue(flag string, value string) SnapshotOption {
 // PrintConflictStatus displays conflict information and instructions to the user
 func PrintConflictStatus(ctx *app.Context, branchName string) error {
 	reader := ctx.Reader()
-	out := ctx.Output
+	splog := ctx.Splog
 
 	msg := style.ColorRed(fmt.Sprintf("Hit conflict restacking %s", branchName))
-	out.Info("%s", msg)
-	out.Newline()
+	splog.Info("%s", msg)
+	splog.Newline()
 
 	// Get unmerged files
 	unmergedFiles, err := reader.GetUnmergedFiles(ctx.Context)
 	if err == nil && len(unmergedFiles) > 0 {
-		out.Info("%s", style.ColorYellow("Unmerged files:"))
+		splog.Info("%s", style.ColorYellow("Unmerged files:"))
 		for _, file := range unmergedFiles {
-			out.Info("%s", style.ColorRed(file))
+			splog.Info("%s", style.ColorRed(file))
 		}
-		out.Newline()
+		splog.Newline()
 	}
 
 	// Get rebase head
@@ -391,16 +391,16 @@ func PrintConflictStatus(ctx *app.Context, branchName string) error {
 			rebaseHeadShort = rebaseHead[:7]
 		}
 		msg := style.ColorYellow(fmt.Sprintf("You are here (resolving %s):", rebaseHeadShort))
-		out.Info("%s", msg)
+		splog.Info("%s", msg)
 		// Could show log here if needed
-		out.Newline()
+		splog.Newline()
 	}
 
-	out.Info("%s", style.ColorYellow("To fix and continue your previous Stackit command:"))
-	out.Info("(1) resolve the listed merge conflicts")
-	out.Info("(2) mark them as resolved with %s", style.ColorCyan("stackit add ."))
-	out.Info("(3) run %s to continue executing your previous Stackit command", style.ColorCyan("stackit continue"))
-	out.Info("It's safe to cancel the ongoing rebase with %s.", style.ColorCyan("git rebase --abort"))
+	splog.Info("%s", style.ColorYellow("To fix and continue your previous Stackit command:"))
+	splog.Info("(1) resolve the listed merge conflicts")
+	splog.Info("(2) mark them as resolved with %s", style.ColorCyan("stackit add ."))
+	splog.Info("(3) run %s to continue executing your previous Stackit command", style.ColorCyan("stackit continue"))
+	splog.Info("It's safe to cancel the ongoing rebase with %s.", style.ColorCyan("git rebase --abort"))
 
 	return nil
 }

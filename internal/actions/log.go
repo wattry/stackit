@@ -49,7 +49,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	// Populate remote SHAs if needed (only for FULL mode)
 	if opts.Style == LogStyleFull {
 		if err := ctx.Engine.PopulateRemoteShas(); err != nil {
-			ctx.Output.Debug("Failed to populate remote SHAs: %v", err)
+			ctx.Splog.Debug("Failed to populate remote SHAs: %v", err)
 		}
 	}
 
@@ -141,8 +141,8 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	}
 
 	// Output the result
-	ctx.Output.Print(strings.Join(stackLines, "\n"))
-	ctx.Output.Newline()
+	ctx.Splog.Page(strings.Join(stackLines, "\n"))
+	ctx.Splog.Newline()
 
 	return nil
 }

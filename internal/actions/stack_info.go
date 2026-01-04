@@ -92,7 +92,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal stack info to JSON: %w", err)
 		}
-		ctx.Output.Info("%s", string(data))
+		ctx.Splog.Info("%s", string(data))
 	} else {
 		currentBranchName := ""
 		if currentBranch != nil {
@@ -101,7 +101,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 
 		for i, info := range result {
 			coloredName := style.ColorBranchName(info.Name, info.Name == currentBranchName)
-			ctx.Output.Info("%s", coloredName)
+			ctx.Splog.Info("%s", coloredName)
 
 			var coloredParent string
 			if info.Parent != "" {
@@ -110,23 +110,23 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 			} else {
 				coloredParent = style.ColorDim("(none)")
 			}
-			ctx.Output.Info("  %s %s", style.ColorCyan("Parent:"), coloredParent)
+			ctx.Splog.Info("  %s %s", style.ColorCyan("Parent:"), coloredParent)
 
 			if info.IsLocked {
-				ctx.Output.Info("  %s %s", style.IconLocked(), style.ColorDim("(locked)"))
+				ctx.Splog.Info("  %s %s", style.IconLocked(), style.ColorDim("(locked)"))
 			}
 			if info.IsFrozen {
-				ctx.Output.Info("  %s %s", style.IconFrozen(), style.ColorDim("(frozen)"))
+				ctx.Splog.Info("  %s %s", style.IconFrozen(), style.ColorDim("(frozen)"))
 			}
 			if info.Scope != "" {
-				ctx.Output.Info("  %s %s", style.ColorCyan("Scope:"), style.ColorScope(info.Scope))
+				ctx.Splog.Info("  %s %s", style.ColorCyan("Scope:"), style.ColorScope(info.Scope))
 			}
 
-			ctx.Output.Info("  %s %d", style.ColorCyan("Commits:"), len(info.CommitMessages))
-			ctx.Output.Info("  %s +%d -%d in %d files", style.ColorCyan("Changes:"), info.DiffStats.Additions, info.DiffStats.Deletions, info.DiffStats.FilesChanged)
+			ctx.Splog.Info("  %s %d", style.ColorCyan("Commits:"), len(info.CommitMessages))
+			ctx.Splog.Info("  %s +%d -%d in %d files", style.ColorCyan("Changes:"), info.DiffStats.Additions, info.DiffStats.Deletions, info.DiffStats.FilesChanged)
 
 			if i < len(result)-1 {
-				ctx.Output.Newline()
+				ctx.Splog.Newline()
 			}
 		}
 	}

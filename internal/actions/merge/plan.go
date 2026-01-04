@@ -9,7 +9,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -132,7 +132,7 @@ type mergePlanEngine interface {
 }
 
 // CreateMergePlan analyzes the current state and builds a merge plan
-func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Output, githubClient github.Client, opts CreatePlanOptions) (*Plan, *PlanValidation, error) {
+func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog, githubClient github.Client, opts CreatePlanOptions) (*Plan, *PlanValidation, error) {
 	// 1. Get target branch, validate not on trunk
 	var targetBranch engine.Branch
 	if opts.TargetBranch != "" {

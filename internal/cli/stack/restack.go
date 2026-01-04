@@ -62,7 +62,7 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 				}
 
 				// Run restack action
-				handler := NewSyncHandler(ctx.Output)
+				handler := NewSyncHandler(ctx.Splog)
 				return actions.RestackAction(ctx, actions.RestackOptions{
 					BranchName: targetBranch,
 					Scope:      rng,

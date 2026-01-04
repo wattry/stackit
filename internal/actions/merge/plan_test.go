@@ -31,7 +31,7 @@ func TestCreateMergePlan(t *testing.T) {
 		// Switch to branch2
 		s.Checkout("branch2")
 
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Force:    false,
 		})
@@ -61,7 +61,7 @@ func TestCreateMergePlan(t *testing.T) {
 		// Make sure we're on branch1
 		s.Checkout("branch1")
 
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Force:    false,
 		})
@@ -87,7 +87,7 @@ func TestCreateMergePlan(t *testing.T) {
 		// Make sure we're on branch1
 		s.Checkout("branch1")
 
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Force:    true,
 		})
@@ -121,7 +121,7 @@ func TestCreateMergePlan(t *testing.T) {
 		err = s.Engine.UpsertPrInfo(branchC1, testhelpers.NewTestPrInfo(prC1))
 		require.NoError(t, err)
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 		})
 		require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestCreateMergePlan(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create plan with scope
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Scope:    "PROJ-123",
 		})
@@ -233,7 +233,7 @@ func TestCreateMergePlan(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create plan with scope
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Scope:    "PROJ-456",
 		})
@@ -260,7 +260,7 @@ func TestCreateMergePlan(t *testing.T) {
 		require.NoError(t, err)
 
 		// Try to create plan with non-existent scope
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Scope:    "NONEXISTENT",
 		})
@@ -299,7 +299,7 @@ func TestCreateMergePlan(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create plan with scope - should include all branches that inherit the scope
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Scope:    "PROJ-999",
 		})
@@ -334,7 +334,7 @@ func TestCreateMergePlan(t *testing.T) {
 		// Switch to branch2
 		s.Checkout("branch2")
 
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    false,
 			Wait:     true,

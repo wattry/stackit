@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -16,7 +15,7 @@ func TUIAction(repoRoot string) error {
 	if err := tui.CheckInteractiveAllowed(); err != nil {
 		return err
 	}
-	out := output.NewDefaultOutput()
+	splog := tui.NewSplog()
 
 	for {
 		cfg, err := config.LoadConfig(repoRoot)
@@ -66,14 +65,14 @@ func TUIAction(repoRoot string) error {
 			}
 			if newPattern != "" && newPattern != branchPattern {
 				if err := cfg.SetBranchNamePattern(newPattern); err != nil {
-					out.Info("Failed to set branch.pattern: %v", err)
+					splog.Info("Failed to set branch.pattern: %v", err)
 					continue
 				}
 				if err := cfg.Save(); err != nil {
-					out.Info("Failed to save config: %v", err)
+					splog.Info("Failed to save config: %v", err)
 					continue
 				}
-				out.Info("Set branch.pattern to: %s", newPattern)
+				splog.Info("Set branch.pattern to: %s", newPattern)
 			}
 
 		case "submit.footer":
@@ -87,10 +86,10 @@ func TUIAction(repoRoot string) error {
 			if newValue != submitFooter {
 				cfg.SetSubmitFooter(newValue)
 				if err := cfg.Save(); err != nil {
-					out.Info("Failed to save config: %v", err)
+					splog.Info("Failed to save config: %v", err)
 					continue
 				}
-				out.Info("Set submit.footer to: %v", newValue)
+				splog.Info("Set submit.footer to: %v", newValue)
 			}
 		}
 	}

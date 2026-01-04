@@ -65,7 +65,7 @@ type ExecuteOptions struct {
 func Execute(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) error {
 	plan := opts.Plan
 	githubClient := ctx.GitHubClient
-	out := ctx.Output
+	splog := ctx.Splog
 
 	// Use null handler if none provided
 	if opts.Handler == nil {
@@ -76,7 +76,7 @@ func Execute(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) erro
 
 	// Calculate initial estimate if possible
 	if githubClient != nil {
-		initialEstimate := calculateBaselineEstimate(ctx.Context, plan, githubClient, out)
+		initialEstimate := calculateBaselineEstimate(ctx.Context, plan, githubClient, splog)
 		if initialEstimate > 0 {
 			opts.Handler.SetEstimatedDuration(initialEstimate)
 		}
@@ -116,7 +116,7 @@ func executeSteps(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions)
 
 		// 2. Execute the step (with progress reporting for wait steps)
 		if err := executeStepWithProgress(ctx, step, i, eng, opts); err != nil {
-			ctx.Output.Debug("Step %d (%s) failed: %v", i+1, step.Description, err)
+			ctx.Splog.Debug("Step %d (%s) failed: %v", i+1, step.Description, err)
 			opts.Handler.StepFailed(i, err)
 			return fmt.Errorf("step %d (%s) failed: %w", i+1, step.Description, err)
 		}
@@ -142,7 +142,7 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 	trunk := eng.Trunk() // Cache trunk for this function scope
 	trunkName := trunk.GetName()
 	githubClient := ctx.GitHubClient
-	out := ctx.Output
+	splog := ctx.Splog
 	repoRoot := ctx.RepoRoot
 
 	switch step.StepType {
@@ -150,17 +150,17 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		if githubClient == nil {
 			return fmt.Errorf("GitHub client not available")
 		}
-		out.Debug("Executing StepMergePR for branch %s", step.BranchName)
+		splog.Debug("Executing StepMergePR for branch %s", step.BranchName)
 		if err := githubClient.MergePullRequest(ctx.Context, step.BranchName); err != nil {
-			out.Debug("StepMergePR for branch %s failed: %v", step.BranchName, err)
+			splog.Debug("StepMergePR for branch %s failed: %v", step.BranchName, err)
 			return fmt.Errorf("failed to merge PR: %w", err)
 		}
 
 	case StepPullTrunk:
-		out.Debug("Executing StepPullTrunk")
+		splog.Debug("Executing StepPullTrunk")
 		pullResult, err := eng.PullTrunk(ctx.Context)
 		if err != nil {
-			out.Debug("StepPullTrunk failed: %v", err)
+			splog.Debug("StepPullTrunk failed: %v", err)
 			return fmt.Errorf("failed to pull trunk: %w", err)
 		}
 		switch pullResult {
@@ -171,9 +171,9 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 			if len(rev) > 7 {
 				revShort = rev[:7]
 			}
-			out.Debug("Trunk fast-forwarded to %s", revShort)
+			splog.Debug("Trunk fast-forwarded to %s", revShort)
 		case engine.PullUnneeded:
-			out.Debug("Trunk is up to date")
+			splog.Debug("Trunk is up to date")
 		case engine.PullConflict:
 			return fmt.Errorf("trunk could not be fast-forwarded (conflict). This usually means your local trunk branch has diverged from the remote. Please sync your trunk branch manually")
 		}
@@ -182,11 +182,11 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		// Restack the branch - RestackBranches will automatically handle reparenting
 		// if the parent has been merged/deleted
 		branch := eng.GetBranch(step.BranchName)
-		out.Debug("Executing StepRestack for branch %s", step.BranchName)
+		splog.Debug("Executing StepRestack for branch %s", step.BranchName)
 		batchResult, err := eng.RestackBranches(ctx.Context, []engine.Branch{branch})
 		result := batchResult.Results[step.BranchName]
 		if err != nil {
-			out.Debug("StepRestack for branch %s failed: %v", step.BranchName, err)
+			splog.Debug("StepRestack for branch %s failed: %v", step.BranchName, err)
 			return fmt.Errorf("failed to restack: %w", err)
 		}
 
@@ -213,13 +213,13 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 			}); err != nil {
 				return fmt.Errorf("failed to push rebased branch %s: %w", step.BranchName, err)
 			}
-			out.Debug("Pushed rebased branch %s to remote", step.BranchName)
+			splog.Debug("Pushed rebased branch %s to remote", step.BranchName)
 
 			// Update the PR's base branch to the actual parent (not always trunk)
 			if err := updatePRBaseBranchFromContext(ctx.Context, githubClient, step.BranchName, actualParent); err != nil {
 				return fmt.Errorf("failed to update PR base for %s: %w", step.BranchName, err)
 			}
-			out.Debug("Updated PR base for %s to %s", step.BranchName, actualParent)
+			splog.Debug("Updated PR base for %s to %s", step.BranchName, actualParent)
 
 		case engine.RestackConflict:
 			// Save continuation state
@@ -243,11 +243,11 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 				Force:    true,
 				NoVerify: true,
 			}); err != nil {
-				out.Debug("Failed to push branch %s (may already be up to date): %v", step.BranchName, err)
+				splog.Debug("Failed to push branch %s (may already be up to date): %v", step.BranchName, err)
 			}
 			// Update PR base to the actual parent (not always trunk)
 			if err := updatePRBaseBranchFromContext(ctx.Context, githubClient, step.BranchName, actualParent); err != nil {
-				out.Debug("Failed to update PR base for %s: %v", step.BranchName, err)
+				splog.Debug("Failed to update PR base for %s: %v", step.BranchName, err)
 			}
 		}
 
@@ -257,24 +257,24 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		if branch.IsTracked() {
 			if err := eng.DeleteBranch(ctx.Context, branch); err != nil {
 				// Non-fatal - branch might already be deleted
-				out.Debug("Failed to delete branch %s (may already be deleted): %v", step.BranchName, err)
+				splog.Debug("Failed to delete branch %s (may already be deleted): %v", step.BranchName, err)
 			}
 		}
 
 	case StepUpdatePRBase:
 		// For top-down strategy: rebase branch onto trunk and update PR base
-		out.Debug("Executing StepUpdatePRBase for branch %s", step.BranchName)
+		splog.Debug("Executing StepUpdatePRBase for branch %s", step.BranchName)
 		if err := executeUpdatePRBase(ctx, eng, step); err != nil {
-			out.Debug("StepUpdatePRBase for branch %s failed: %v", step.BranchName, err)
+			splog.Debug("StepUpdatePRBase for branch %s failed: %v", step.BranchName, err)
 			return err
 		}
 
 	case StepConsolidate:
 		// Execute stack consolidation
-		out.Debug("Executing StepConsolidate")
+		splog.Debug("Executing StepConsolidate")
 		result, err := executeConsolidation(ctx, eng, stepIndex, opts)
 		if err != nil {
-			out.Debug("StepConsolidate failed: %v", err)
+			splog.Debug("StepConsolidate failed: %v", err)
 			return err
 		}
 		// Notify caller of consolidation result

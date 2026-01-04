@@ -85,7 +85,7 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 				// Create plan if scope is specified
 				var plan *merge.Plan
 				if scope != "" {
-					p, _, err := merge.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, merge.CreatePlanOptions{
+					p, _, err := merge.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Splog, ctx.GitHubClient, merge.CreatePlanOptions{
 						Strategy: mergeStrategy,
 						Force:    force,
 						Scope:    scope,
@@ -113,7 +113,7 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 				if opts.Confirm {
 					// If we need confirmation, we need a plan first
 					if opts.Plan == nil {
-						p, validation, err := merge.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, merge.CreatePlanOptions{
+						p, validation, err := merge.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Splog, ctx.GitHubClient, merge.CreatePlanOptions{
 							Strategy: opts.Strategy,
 							Force:    opts.Force,
 							Scope:    opts.Scope,
@@ -126,7 +126,7 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 
 						// Show plan and confirm
 						planText := merge.FormatMergePlan(p, validation)
-						ctx.Output.Print(planText)
+						ctx.Splog.Page(planText)
 
 						if !validation.Valid && !opts.Force {
 							return fmt.Errorf("validation failed (use --force to override)")
@@ -137,7 +137,7 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 							return fmt.Errorf("confirmation canceled: %w", err)
 						}
 						if !confirmed {
-							ctx.Output.Info("Merge canceled")
+							ctx.Splog.Info("Merge canceled")
 							return nil
 						}
 						opts.Confirm = false // Already confirmed
@@ -168,18 +168,18 @@ func runInteractiveMergeWizard(ctx *app.Context, dryRun bool, forceFlag bool, sc
 // runInteractiveMergeWizardForBranch runs the interactive merge wizard for a specific branch (if scope is empty)
 func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag bool, scope string, targetBranchName string) error {
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 
-	out.Info("🔍 Analyzing stack...")
-	out.Newline()
+	splog.Info("🔍 Analyzing stack...")
+	splog.Newline()
 
 	// Populate remote SHAs so we can accurately check if branches match remote
 	if err := eng.PopulateRemoteShas(); err != nil {
-		out.Debug("Failed to populate remote SHAs: %v", err)
+		splog.Debug("Failed to populate remote SHAs: %v", err)
 	}
 
 	// Create initial plan with bottom-up strategy (default)
-	plan, validation, err := merge.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, merge.CreatePlanOptions{
+	plan, validation, err := merge.CreateMergePlan(ctx.Context, eng, splog, ctx.GitHubClient, merge.CreatePlanOptions{
 		Strategy:     merge.StrategyBottomUp,
 		Force:        forceFlag,
 		Scope:        scope,
@@ -206,21 +206,21 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 				}
 			}
 			if len(upstackInScope) > 0 {
-				out.Warn("⚠️  You're mid-stack in scope [%s]", currentScope.String())
-				out.Warn("   Branches above in the same scope won't be merged: %s", strings.Join(upstackInScope, ", "))
-				out.Info("   💡 To merge the entire scope, use: stackit merge --scope=%s", currentScope.String())
-				out.Newline()
+				splog.Warn("⚠️  You're mid-stack in scope [%s]", currentScope.String())
+				splog.Warn("   Branches above in the same scope won't be merged: %s", strings.Join(upstackInScope, ", "))
+				splog.Info("   💡 To merge the entire scope, use: stackit merge --scope=%s", currentScope.String())
+				splog.Newline()
 			}
 		}
 	}
 
 	// Display current state using stack tree
 	if scope != "" {
-		out.Info("Merging scope: [%s]", scope)
+		splog.Info("Merging scope: [%s]", scope)
 	} else {
-		out.Info("Target branch: %s", style.ColorBranchName(plan.CurrentBranch, false))
+		splog.Info("Target branch: %s", style.ColorBranchName(plan.CurrentBranch, false))
 	}
-	out.Newline()
+	splog.Newline()
 
 	if len(plan.BranchesToMerge) > 0 {
 		// Create tree renderer
@@ -239,59 +239,59 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 		renderer.SetAnnotations(annotations)
 
 		// Render a list of branches to merge
-		out.Info("Stack to merge (bottom to top):")
+		splog.Info("Stack to merge (bottom to top):")
 		branchNames := make([]string, len(plan.BranchesToMerge))
 		for i, branchInfo := range plan.BranchesToMerge {
 			branchNames[i] = branchInfo.BranchName
 		}
 		stackLines := renderer.RenderBranchList(branchNames)
 		for _, line := range stackLines {
-			out.Info("%s", line)
+			splog.Info("%s", line)
 		}
-		out.Newline()
+		splog.Newline()
 
 		// Show upstack branches that will be restacked
 		if len(plan.UpstackBranches) > 0 {
-			out.Info("Branches above (will be restacked on trunk):")
+			splog.Info("Branches above (will be restacked on trunk):")
 			for _, branchName := range plan.UpstackBranches {
-				out.Info("  • %s", style.ColorBranchName(branchName, false))
+				splog.Info("  • %s", style.ColorBranchName(branchName, false))
 			}
-			out.Newline()
+			splog.Newline()
 		}
 	}
 
 	// Show validation errors if any
 	if !validation.Valid {
-		out.Warn("Errors found:")
+		splog.Warn("Errors found:")
 		for _, errMsg := range validation.Errors {
-			out.Warn("  ✗ %s", errMsg)
+			splog.Warn("  ✗ %s", errMsg)
 		}
-		out.Newline()
-		out.Info("Cannot proceed with merge. Use --force to override validation checks.")
+		splog.Newline()
+		splog.Info("Cannot proceed with merge. Use --force to override validation checks.")
 		return fmt.Errorf("validation failed")
 	}
 
 	// Show warnings if any
 	if len(validation.Warnings) > 0 {
-		out.Warn("Warnings:")
+		splog.Warn("Warnings:")
 		for _, warn := range validation.Warnings {
-			out.Warn("  %s", warn)
+			splog.Warn("  %s", warn)
 		}
-		out.Newline()
+		splog.Newline()
 		if !forceFlag {
-			out.Info("Cannot proceed with merge due to warnings. Use --force to override validation checks.")
+			splog.Info("Cannot proceed with merge due to warnings. Use --force to override validation checks.")
 			return fmt.Errorf("merge blocked due to warnings (use --force to override)")
 		}
-		out.Info("Proceeding despite warnings (--force enabled)")
+		splog.Info("Proceeding despite warnings (--force enabled)")
 	}
 
 	// Show informational messages if any
 	if len(validation.Infos) > 0 {
-		out.Info("Information:")
+		splog.Info("Information:")
 		for _, info := range validation.Infos {
-			out.Info("  • %s", info)
+			splog.Info("  • %s", info)
 		}
-		out.Newline()
+		splog.Newline()
 	}
 
 	// Determine merge strategy
@@ -301,8 +301,8 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 	// If only a single PR, automatically use top-down strategy
 	if len(plan.BranchesToMerge) == 1 {
 		mergeStrategy = merge.StrategyTopDown
-		out.Info("✅ Strategy: %s (auto-selected for single PR)", mergeStrategy)
-		out.Newline()
+		splog.Info("✅ Strategy: %s (auto-selected for single PR)", mergeStrategy)
+		splog.Newline()
 	} else {
 		// Prompt for strategy using interactive selector
 		// Pre-select consolidate for larger stacks (3+), bottom-up for smaller
@@ -346,19 +346,19 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 			}
 		}
 
-		out.Info("✅ Strategy: %s", mergeStrategy)
+		splog.Info("✅ Strategy: %s", mergeStrategy)
 		if mergeStrategy == merge.StrategyConsolidate {
 			if wait {
-				out.Info("✅ Wait for CI: Enabled")
+				splog.Info("✅ Wait for CI: Enabled")
 			} else {
-				out.Info("✅ Wait for CI: Disabled (manual merge required)")
+				splog.Info("✅ Wait for CI: Disabled (manual merge required)")
 			}
 		}
-		out.Newline()
+		splog.Newline()
 	}
 
 	// Recreate plan with selected strategy
-	plan, validation, err = merge.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, merge.CreatePlanOptions{
+	plan, validation, err = merge.CreateMergePlan(ctx.Context, eng, splog, ctx.GitHubClient, merge.CreatePlanOptions{
 		Strategy:     mergeStrategy,
 		Force:        forceFlag,
 		Scope:        scope,
@@ -371,40 +371,40 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 
 	// Re-validate if strategy changed (important for top-down)
 	if !validation.Valid && !forceFlag {
-		out.Warn("Errors found with selected strategy:")
+		splog.Warn("Errors found with selected strategy:")
 		for _, errMsg := range validation.Errors {
-			out.Warn("  ✗ %s", errMsg)
+			splog.Warn("  ✗ %s", errMsg)
 		}
 		return fmt.Errorf("validation failed")
 	}
 
 	// Show plan preview
-	out.Info("📋 Merge Plan:")
+	splog.Info("📋 Merge Plan:")
 	if mergeStrategy == merge.StrategyConsolidate {
 		// For consolidate, show a clear summary of what will happen
-		out.Info("  1. Lock all %d branches to prevent changes", len(plan.BranchesToMerge))
-		out.Info("  2. Create consolidation branch with all commits merged")
-		out.Info("  3. Create consolidation PR")
+		splog.Info("  1. Lock all %d branches to prevent changes", len(plan.BranchesToMerge))
+		splog.Info("  2. Create consolidation branch with all commits merged")
+		splog.Info("  3. Create consolidation PR")
 		if wait {
-			out.Info("  4. Wait for CI and auto-merge consolidation PR")
-			out.Info("  5. Update original PRs with consolidation reference")
+			splog.Info("  4. Wait for CI and auto-merge consolidation PR")
+			splog.Info("  5. Update original PRs with consolidation reference")
 			if len(plan.UpstackBranches) > 0 {
-				out.Info("  6. Restack %d upstack branches onto trunk", len(plan.UpstackBranches))
+				splog.Info("  6. Restack %d upstack branches onto trunk", len(plan.UpstackBranches))
 			}
 		} else {
-			out.Info("  4. Manual merge required (individual PRs remain locked)")
+			splog.Info("  4. Manual merge required (individual PRs remain locked)")
 		}
 	} else {
 		// For other strategies, show step-by-step
 		for i, step := range plan.Steps {
-			out.Info("  %d. %s", i+1, step.Description)
+			splog.Info("  %d. %s", i+1, step.Description)
 		}
 	}
-	out.Newline()
+	splog.Newline()
 
 	// If dry-run, stop here
 	if dryRun {
-		out.Info("Dry-run mode: plan displayed above. Use without --dry-run to execute.")
+		splog.Info("Dry-run mode: plan displayed above. Use without --dry-run to execute.")
 		return nil
 	}
 
@@ -414,7 +414,7 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 		return fmt.Errorf("confirmation canceled: %w", err)
 	}
 	if !confirmed {
-		out.Info("Merge canceled")
+		splog.Info("Merge canceled")
 		return nil
 	}
 
@@ -451,10 +451,10 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 }
 
 func handlePostMergeFollowUp(ctx *app.Context) error {
-	out := ctx.Output
-	out.Newline()
-	out.Info("🎉 Merge completed successfully in the temporary worktree!")
-	out.Info("Your main workspace remains untouched.")
+	splog := ctx.Splog
+	splog.Newline()
+	splog.Info("🎉 Merge completed successfully in the temporary worktree!")
+	splog.Info("Your main workspace remains untouched.")
 
 	options := []tui.SelectOption{
 		{Label: "🔄 Switch to trunk and sync (" + ctx.Engine.Trunk().GetName() + ")", Value: "trunk-sync"},
@@ -478,7 +478,7 @@ func handlePostMergeFollowUp(ctx *app.Context) error {
 		}); err != nil {
 			return err
 		}
-		handler := NewSyncHandler(ctx.Output)
+		handler := NewSyncHandler(ctx.Splog)
 		return sync.Action(ctx, sync.Options{
 			Restack: true,
 		}, handler)

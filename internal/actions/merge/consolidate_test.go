@@ -31,7 +31,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 
 		s.Checkout("branch2")
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    false,
 		})
@@ -72,7 +72,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		err = s.Engine.UpsertPrInfo(branch2, testhelpers.NewTestPrInfoWithTitle(pr2, "Feature 2"))
 		require.NoError(t, err)
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true, // Skip remote sync checks
 			Wait:     true,
@@ -105,7 +105,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 
 		s.Checkout("branch2")
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
 		})
@@ -143,7 +143,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 
 		s.Checkout("batch/feature-b")
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
 		})
@@ -164,7 +164,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		s.Checkout("main")
 
 		// This should not create a consolidation plan since there's nothing to merge
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
 		})
@@ -196,7 +196,7 @@ func TestConsolidationStepExecution(t *testing.T) {
 
 		s.Checkout("branch2")
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
 			Wait:     true,
@@ -230,7 +230,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 
 		s.Checkout("branch2")
 
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    false,
 		})
@@ -261,7 +261,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 		s.Checkout("branch2")
 
 		// Without force, should fail validation
-		_, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		_, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    false,
 		})
@@ -270,7 +270,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 
 		// With force, should succeed
 		var plan *merge.Plan
-		plan, validation, err = merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err = merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
 		})
@@ -302,7 +302,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 		err := s.Engine.UpsertPrInfo(branch1, testhelpers.NewTestPrInfo(pr1))
 		require.NoError(t, err)
 
-		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
 		})

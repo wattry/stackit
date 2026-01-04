@@ -89,12 +89,12 @@ func PushMetadataAndSyncPRs(ctx *app.Context, branchNames []string) error {
 	}
 
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 
 	// Update LastModifiedBy for each branch
 	for _, branchName := range branchNames {
 		if err := eng.SetLastModifiedBy(branchName); err != nil {
-			out.Debug("Failed to update metadata for %s: %v", branchName, err)
+			splog.Debug("Failed to update metadata for %s: %v", branchName, err)
 			continue
 		}
 	}
@@ -102,19 +102,19 @@ func PushMetadataAndSyncPRs(ctx *app.Context, branchNames []string) error {
 	// Check if remote sync is enabled; if not, run compatibility test first
 	if !eng.IsRemoteSyncEnabled() {
 		if err := eng.Git().TestRemoteRefCompatibility(); err != nil {
-			out.Debug("Remote metadata sync not supported: %v", err)
+			splog.Debug("Remote metadata sync not supported: %v", err)
 			return nil // Non-fatal
 		}
 		eng.SetRemoteSyncEnabled(true)
 		// Configure refspec so future git fetch commands also fetch metadata
 		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
-			out.Debug("Failed to configure metadata refspec: %v", err)
+			splog.Debug("Failed to configure metadata refspec: %v", err)
 		}
 	}
 
 	// Push metadata refs
 	if err := eng.Git().PushMetadataRefs(branchNames); err != nil {
-		out.Debug("Failed to push metadata refs: %v", err)
+		splog.Debug("Failed to push metadata refs: %v", err)
 		return err
 	}
 

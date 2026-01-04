@@ -30,7 +30,7 @@ func PrecommitInstallAction(ctx *app.Context) error {
 	if _, err := os.Stat(hookPath); err == nil {
 		content, err := os.ReadFile(hookPath)
 		if err == nil && strings.Contains(string(content), "stackit precommit verify") {
-			ctx.Output.Info("Pre-commit hook is already installed.")
+			ctx.Splog.Info("Pre-commit hook is already installed.")
 			return nil
 		}
 
@@ -50,14 +50,14 @@ func PrecommitInstallAction(ctx *app.Context) error {
 		if _, err := f.WriteString("\n# Added by Stackit\nstackit precommit verify\n"); err != nil {
 			return fmt.Errorf("failed to append to pre-commit hook: %w", err)
 		}
-		ctx.Output.Info("Appended Stackit verification to existing pre-commit hook.")
+		ctx.Splog.Info("Appended Stackit verification to existing pre-commit hook.")
 	} else {
 		// Create new hook
 		// #nosec G306 - Git hooks need to be executable
 		if err := os.WriteFile(hookPath, []byte(precommitHookTemplate), 0750); err != nil {
 			return fmt.Errorf("failed to write pre-commit hook: %w", err)
 		}
-		ctx.Output.Info("Installed Stackit pre-commit hook.")
+		ctx.Splog.Info("Installed Stackit pre-commit hook.")
 	}
 
 	return nil
@@ -85,7 +85,7 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 
 	// Check if hook exists
 	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		ctx.Output.Info("Pre-commit hook is not installed.")
+		ctx.Splog.Info("Pre-commit hook is not installed.")
 		return nil
 	}
 
@@ -112,7 +112,7 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 	}
 
 	if !removed {
-		ctx.Output.Info("Stackit verification not found in pre-commit hook.")
+		ctx.Splog.Info("Stackit verification not found in pre-commit hook.")
 		return nil
 	}
 
@@ -131,7 +131,7 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 		if err := os.Remove(hookPath); err != nil {
 			return fmt.Errorf("failed to remove pre-commit hook: %w", err)
 		}
-		ctx.Output.Info("Removed Stackit pre-commit hook.")
+		ctx.Splog.Info("Removed Stackit pre-commit hook.")
 	} else {
 		// Write back modified content
 		newContent := strings.Join(newLines, "\n")
@@ -141,7 +141,7 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 		if err := os.WriteFile(hookPath, []byte(newContent), 0750); err != nil {
 			return fmt.Errorf("failed to write pre-commit hook: %w", err)
 		}
-		ctx.Output.Info("Removed Stackit verification from existing pre-commit hook.")
+		ctx.Splog.Info("Removed Stackit verification from existing pre-commit hook.")
 	}
 
 	return nil

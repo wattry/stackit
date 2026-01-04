@@ -19,7 +19,7 @@ type Options struct {
 // Action performs the undo operation
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 
 	// Get all available snapshots
 	snapshots, err := eng.GetSnapshots()
@@ -28,7 +28,7 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	if len(snapshots) == 0 {
-		out.Info("No undo history available.")
+		splog.Info("No undo history available.")
 		return nil
 	}
 
@@ -53,7 +53,7 @@ func Action(ctx *app.Context, opts Options) error {
 		if len(snapshots) == 1 {
 			// Only one snapshot, use it directly
 			selectedSnapshotID = snapshots[0].ID
-			out.Info("Restoring to: %s", snapshots[0].DisplayName)
+			splog.Info("Restoring to: %s", snapshots[0].DisplayName)
 		} else {
 			// Multiple snapshots - show interactive selector
 			options := make([]tui.SelectOption, len(snapshots))
@@ -114,31 +114,31 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	if !confirmed {
-		out.Info("Undo canceled.")
+		splog.Info("Undo canceled.")
 		return nil
 	}
 
 	// Abort any in-progress Git operations that might interfere with restoration
 	if eng.Git().IsRebaseInProgress(ctx.Context) {
-		out.Info("Aborting in-progress rebase before undo...")
+		splog.Info("Aborting in-progress rebase before undo...")
 		if err := eng.Git().RebaseAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort rebase: %w", err)
 		}
 	}
 	if eng.Git().IsMergeInProgress(ctx.Context) {
-		out.Info("Aborting in-progress merge before undo...")
+		splog.Info("Aborting in-progress merge before undo...")
 		if err := eng.Git().MergeAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort merge: %w", err)
 		}
 	}
 
 	// Perform the restoration
-	out.Info("Restoring repository state...")
+	splog.Info("Restoring repository state...")
 	if err := eng.RestoreSnapshot(ctx.Context, selectedSnapshotID); err != nil {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
 
-	out.Info("Successfully restored to state before '%s'.", selectedSnapshot.Command)
+	splog.Info("Successfully restored to state before '%s'.", selectedSnapshot.Command)
 
 	return nil
 }

@@ -22,7 +22,7 @@ type Options struct {
 // Action performs the move operation
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	out := ctx.Output
+	splog := ctx.Splog
 	gctx := ctx.Context
 
 	// Default source to current branch
@@ -42,7 +42,7 @@ func Action(ctx *app.Context, opts Options) error {
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
+		splog.Debug("Failed to take snapshot: %v", err)
 	}
 
 	// Prevent moving trunk (check before tracking check since trunk might not be tracked)
@@ -106,9 +106,9 @@ func Action(ctx *app.Context, opts Options) error {
 			if err == nil && confirmed {
 				newName := strings.Replace(source, sourceScope.String(), ontoScope.String(), 1)
 				if err := eng.RenameBranch(gctx, eng.GetBranch(source), eng.GetBranch(newName)); err != nil {
-					out.Info("Warning: failed to rename branch: %v", err)
+					splog.Info("Warning: failed to rename branch: %v", err)
 				} else {
-					out.Info("Renamed branch %s to %s.", style.ColorBranchName(source, false), style.ColorBranchName(newName, true))
+					splog.Info("Renamed branch %s to %s.", style.ColorBranchName(source, false), style.ColorBranchName(newName, true))
 					source = newName
 					sourceBranch = eng.GetBranch(source)
 				}
@@ -145,7 +145,7 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 	}
 
-	out.Info("Moved %s from %s to %s.",
+	splog.Info("Moved %s from %s to %s.",
 		style.ColorBranchName(source, true),
 		style.ColorBranchName(oldParentName, false),
 		style.ColorBranchName(onto, false))

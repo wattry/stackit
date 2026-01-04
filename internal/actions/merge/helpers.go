@@ -8,11 +8,11 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 )
 
 // calculateBaselineEstimate tries to find a branch with successful CI and use its timing as a baseline
-func calculateBaselineEstimate(ctx context.Context, plan *Plan, client github.Client, splog output.Output) time.Duration {
+func calculateBaselineEstimate(ctx context.Context, plan *Plan, client github.Client, splog *tui.Splog) time.Duration {
 	branchNames := make([]string, len(plan.BranchesToMerge))
 	for i, b := range plan.BranchesToMerge {
 		branchNames[i] = b.BranchName
@@ -66,7 +66,7 @@ func isCIFailure(err error) bool {
 }
 
 // CheckSyncStatus checks if the repository is up to date with remote
-func CheckSyncStatus(ctx context.Context, eng engine.Engine, splog output.Output) (bool, []string, error) {
+func CheckSyncStatus(ctx context.Context, eng engine.Engine, splog *tui.Splog) (bool, []string, error) {
 	needsSync := false
 	staleBranches := []string{}
 

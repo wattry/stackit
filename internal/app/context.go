@@ -15,7 +15,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -23,8 +23,7 @@ import (
 type Context struct {
 	context.Context
 	Engine       engine.Engine
-	Output       output.Output
-	Logger       output.Logger
+	Splog        *tui.Splog
 	RepoRoot     string
 	GitHubClient github.Client
 
@@ -104,7 +103,7 @@ func NewContext(eng engine.Engine) *Context {
 
 // NewContextWithOptions creates a new context with the given engine and options
 func NewContextWithOptions(eng engine.Engine, opts GlobalOptions) *Context {
-	return NewContextWithRepoRootOptionsAndWriter(eng, "", opts, output.DefaultConsoleWriter)
+	return NewContextWithRepoRootOptionsAndWriter(eng, "", opts, tui.DefaultConsoleWriter)
 }
 
 // NewContextWithRepoRoot creates a new context with the given engine and repo root
@@ -123,35 +122,28 @@ func NewContextWithRepoRootOptionsAndWriter(eng engine.Engine, repoRoot string, 
 		panic("NewContextWithRepoRootAndOptions called with nil engine")
 	}
 
+	var splog *tui.Splog
+	var err error
+
 	// Update global TUI interactivity
 	utils.SetInteractive(opts.Interactive)
 
-	// Create console output
-	consoleOutput := output.NewConsoleOutput(writer, opts.Debug)
-	if opts.Quiet {
-		consoleOutput.SetQuiet(true)
-	}
-
-	// Create file logger (skip when STACKIT_NO_LOGGING is set, e.g., during tests or CI)
-	var logger output.Logger
+	// Skip file logging when STACKIT_NO_LOGGING is set (e.g., during tests or CI)
 	if os.Getenv("STACKIT_NO_LOGGING") != "" {
-		logger = output.NewNullLogger()
+		splog = tui.NewSplogToWriter(writer) // Console-only logging
 	} else {
-		logPath := output.GetLogFilePath()
-		fileLogger, err := output.NewFileLogger(logPath)
+		logPath := tui.GetLogFilePath()
+		splog, err = tui.NewSplogWithFlagsAndWriter(logPath, opts.Debug, opts.Quiet, writer)
 		if err != nil {
-			// If file logging fails, use null logger
-			logger = output.NewNullLogger()
-		} else {
-			logger = fileLogger
+			// If file logging fails, fall back to console-only
+			splog = tui.NewSplogToWriter(writer)
 		}
 	}
 
 	return &Context{
 		Context:     context.Background(),
 		Engine:      eng,
-		Output:      consoleOutput,
-		Logger:      logger,
+		Splog:       splog,
 		RepoRoot:    repoRoot,
 		Interactive: opts.Interactive,
 		Verify:      opts.Verify,

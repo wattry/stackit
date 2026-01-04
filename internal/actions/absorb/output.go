@@ -3,12 +3,12 @@ package absorb
 import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // printDryRunOutput prints what would be absorbed in dry-run mode
-func printDryRunOutput(hunksByCommit map[string][]git.Hunk, unabsorbedHunks []git.Hunk, eng engine.Engine, splog output.Output) {
+func printDryRunOutput(hunksByCommit map[string][]git.Hunk, unabsorbedHunks []git.Hunk, eng engine.Engine, splog *tui.Splog) {
 	splog.Info("Would absorb the following changes:")
 	splog.Newline()
 
@@ -44,7 +44,7 @@ func printDryRunOutput(hunksByCommit map[string][]git.Hunk, unabsorbedHunks []gi
 }
 
 // printAbsorbPlan prints the plan for absorbing changes
-func printAbsorbPlan(hunksByCommit map[string][]git.Hunk, unabsorbedHunks []git.Hunk, eng engine.Engine, splog output.Output) {
+func printAbsorbPlan(hunksByCommit map[string][]git.Hunk, unabsorbedHunks []git.Hunk, eng engine.Engine, splog *tui.Splog) {
 	splog.Info("Will absorb the following changes:")
 	splog.Newline()
 

@@ -421,8 +421,8 @@ func (m *model) runCommand(cmdStr string) tea.Cmd {
 			return nil
 		}
 
-		m.ctx.Output.SetQuiet(true)
-		defer m.ctx.Output.SetQuiet(false)
+		m.ctx.Splog.SetQuiet(true)
+		defer m.ctx.Splog.SetQuiet(false)
 
 		output, err := m.options.CommandFunc(args)
 		if err != nil {

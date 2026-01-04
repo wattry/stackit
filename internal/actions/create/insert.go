@@ -38,7 +38,7 @@ func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeC
 			}
 		}
 	case len(siblings) > 1 && utils.IsInteractive():
-		runtimeCtx.Output.Info("Current branch has multiple children. Select which should be moved onto the new branch:")
+		runtimeCtx.Splog.Info("Current branch has multiple children. Select which should be moved onto the new branch:")
 		options := []tui.SelectOption{
 			{Label: "All children", Value: "all"},
 		}
@@ -81,7 +81,7 @@ func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeC
 	if len(branchesToRestack) > 0 {
 		batchRes, err := runtimeCtx.Engine.RestackBranches(ctx, branchesToRestack)
 		if err != nil {
-			runtimeCtx.Output.Info("Warning: failed to restack branches onto %s: %v", newBranch, err)
+			runtimeCtx.Splog.Info("Warning: failed to restack branches onto %s: %v", newBranch, err)
 		}
 
 		for _, branch := range branchesToRestack {
@@ -92,9 +92,9 @@ func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeC
 			}
 
 			if res.Result == engine.RestackConflict {
-				runtimeCtx.Output.Info("Conflict restacking %s onto %s. Please resolve manually or run 'stackit sync --restack'.", child, newBranch)
+				runtimeCtx.Splog.Info("Conflict restacking %s onto %s. Please resolve manually or run 'stackit sync --restack'.", child, newBranch)
 			} else if res.Result == engine.RestackDone {
-				runtimeCtx.Output.Info("Restacked %s onto %s.", child, newBranch)
+				runtimeCtx.Splog.Info("Restacked %s onto %s.", child, newBranch)
 			}
 		}
 	}
