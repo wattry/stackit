@@ -13,13 +13,14 @@ import (
 // NewCreateCmd creates the create command
 func NewCreateCmd() *cobra.Command {
 	var (
-		all     bool
-		insert  bool
-		message string
-		patch   bool
-		scope   string
-		update  bool
-		verbose int
+		all      bool
+		insert   bool
+		message  string
+		patch    bool
+		scope    string
+		update   bool
+		verbose  int
+		worktree bool
 	)
 
 	cmd := &cobra.Command{
@@ -54,6 +55,7 @@ If you have any unstaged changes, you will be asked whether you'd like to stage 
 					Update:        update,
 					Verbose:       verbose,
 					BranchPattern: branchPattern,
+					Worktree:      worktree,
 				}
 
 				// Execute create action
@@ -70,6 +72,7 @@ If you have any unstaged changes, you will be asked whether you'd like to stage 
 	cmd.Flags().StringVar(&scope, "scope", "", "Set a scope (e.g., Jira ticket ID, Linear ID) for the new branch. If not provided, inherits from parent branch")
 	cmd.Flags().BoolVarP(&update, "update", "u", false, "Stage all updates to tracked files before creating the branch")
 	cmd.Flags().CountVarP(&verbose, "verbose", "v", "Show unified diff between the HEAD commit and what would be committed at the bottom of the commit message template. If specified twice, show in addition the unified diff between what would be committed and the worktree files")
+	cmd.Flags().BoolVarP(&worktree, "worktree", "w", false, "Create a dedicated worktree for this stack (only valid when creating a new stack from trunk)")
 
 	return cmd
 }
