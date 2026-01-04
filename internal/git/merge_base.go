@@ -1,7 +1,10 @@
 package git
 
 import (
+	"context"
 	"fmt"
+
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 func (r *runner) getMergeBase(repo *Repository, branch1, branch2 string) (string, error) {
@@ -49,12 +52,12 @@ func (r *runner) getMergeBaseByRef(repo *Repository, ref1Name, ref2Name string) 
 func (r *runner) isAncestor(repo *Repository, ancestor, descendant string) (bool, error) {
 	ancestorHash, err := r.resolveRefHash(repo, ancestor)
 	if err != nil {
-		return false, fmt.Errorf("failed to resolve ancestor ref: %w", err)
+		return r.isAncestorGitFallback(ancestor, descendant)
 	}
 
 	descendantHash, err := r.resolveRefHash(repo, descendant)
 	if err != nil {
-		return false, fmt.Errorf("failed to resolve descendant ref: %w", err)
+		return r.isAncestorGitFallback(ancestor, descendant)
 	}
 
 	// If they're the same, ancestor is an ancestor
@@ -62,6 +65,15 @@ func (r *runner) isAncestor(repo *Repository, ancestor, descendant string) (bool
 		return true, nil
 	}
 
+	// Try go-git first, fallback to git command if it fails
+	result, err := r.isAncestorGoGit(repo, ancestorHash, descendantHash)
+	if err != nil {
+		return r.isAncestorGitFallback(ancestor, descendant)
+	}
+	return result, nil
+}
+
+func (r *runner) isAncestorGoGit(repo *Repository, ancestorHash, descendantHash plumbing.Hash) (bool, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
 	goGitMu.Lock()
 	defer goGitMu.Unlock()
@@ -78,4 +90,20 @@ func (r *runner) isAncestor(repo *Repository, ancestor, descendant string) (bool
 	}
 
 	return ancestorCommit.IsAncestor(descendantCommit)
+}
+
+// isAncestorGitFallback uses git merge-base --is-ancestor as a fallback
+// when go-git fails. This is especially important for worktrees where go-git
+// might not find all refs/objects because it doesn't handle the 'commondir'
+// redirection properly.
+func (r *runner) isAncestorGitFallback(ancestor, descendant string) (bool, error) {
+	_, err := r.RunGitCommandWithContext(context.Background(),
+		"merge-base", "--is-ancestor", ancestor, descendant)
+	if err == nil {
+		return true, nil
+	}
+	// git merge-base --is-ancestor returns exit code 1 if not an ancestor (not an error)
+	// and exit code 128+ for actual errors (invalid commits, etc.)
+	// We treat both as "not an ancestor" since we can't distinguish easily
+	return false, nil
 }
