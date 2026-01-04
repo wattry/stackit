@@ -29,7 +29,13 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 	defer e.mu.RUnlock()
 
 	current := branchName
+	visited := make(map[string]bool)
 	for {
+		if visited[current] {
+			break
+		}
+		visited[current] = true
+
 		if scopeStr, ok := e.scopeMap[current]; ok && scopeStr != "" {
 			scope := NewScope(scopeStr)
 			if scope.IsNone() {

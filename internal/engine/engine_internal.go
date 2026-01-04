@@ -51,8 +51,15 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 
 	// Collect results and populate maps sequentially to avoid lock contention/races
 	for name, meta := range allMeta {
+		if name == e.trunk {
+			continue // Trunk branches should never be tracked
+		}
+
 		if meta.ParentBranchName != nil {
 			parent := *meta.ParentBranchName
+			if parent == name {
+				continue // Skip self-parenting to avoid cycles
+			}
 			e.parentMap[name] = parent
 			e.childrenMap[parent] = append(e.childrenMap[parent], name)
 		}
@@ -89,13 +96,16 @@ func (e *engineImpl) smartSortChildren(children []string) {
 	if e.currentBranch != "" {
 		activePath[e.currentBranch] = true
 		curr := e.currentBranch
+		visited := make(map[string]bool)
+		visited[curr] = true
 		for {
 			parent, ok := e.parentMap[curr]
-			if !ok || parent == "" || parent == e.trunk {
+			if !ok || parent == "" || parent == e.trunk || visited[parent] {
 				break
 			}
 			activePath[parent] = true
 			curr = parent
+			visited[curr] = true
 		}
 	}
 
@@ -124,6 +134,10 @@ func (e *engineImpl) smartSortChildren(children []string) {
 
 // updateBranchInCache updates the cache for a specific branch after restack/metadata changes
 func (e *engineImpl) updateBranchInCache(branchName string) {
+	if branchName == e.trunk {
+		return
+	}
+
 	// Read metadata for this branch
 	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {

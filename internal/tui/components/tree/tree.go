@@ -155,6 +155,7 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		currentBranch:     r.currentBranch,
 		searchQuery:       opts.SearchQuery,
 		searchMatches:     opts.SearchMatches,
+		visited:           make(map[string]bool),
 	}
 
 	outputDeep := [][]RenderedBranch{
@@ -197,6 +198,7 @@ type treeRenderArgs struct {
 	currentBranch     string
 	searchQuery       string
 	searchMatches     map[string]bool
+	visited           map[string]bool
 }
 
 func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []RenderedBranch {
@@ -207,6 +209,15 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 	if args.collapsed != nil && args.collapsed[args.branchName] {
 		return []RenderedBranch{}
 	}
+
+	if args.visited == nil {
+		args.visited = make(map[string]bool)
+	}
+	if args.visited[args.branchName] {
+		return []RenderedBranch{}
+	}
+	args.visited[args.branchName] = true
+	defer func() { delete(args.visited, args.branchName) }()
 
 	children := r.getChildren(args.branchName)
 	filteredChildren := []string{}
@@ -252,6 +263,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 			currentBranch:     args.currentBranch,
 			searchQuery:       args.searchQuery,
 			searchMatches:     args.searchMatches,
+			visited:           args.visited,
 		})
 		result = append(result, childBranches...)
 	}
@@ -284,13 +296,15 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 
 	var fullStack []string
 	current := args.branchName
+	visited := make(map[string]bool)
 	for {
 		parent := r.getParent(current)
-		if parent == "" || r.isTrunk(parent) {
+		if parent == "" || r.isTrunk(parent) || visited[parent] {
 			break
 		}
 		fullStack = append([]string{parent}, fullStack...)
 		current = parent
+		visited[current] = true
 	}
 	fullStack = append([]string{r.trunk}, fullStack...)
 

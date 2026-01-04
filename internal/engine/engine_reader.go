@@ -292,11 +292,18 @@ func (e *engineImpl) SortBranchesTopologically(branches []Branch) []Branch {
 
 	// Calculate depth for each branch (distance from trunk)
 	depths := make(map[string]int)
+	visited := make(map[string]bool)
 	var getDepth func(branchName string) int
 	getDepth = func(branchName string) int {
 		if depth, ok := depths[branchName]; ok {
 			return depth
 		}
+
+		if visited[branchName] {
+			return 1000 // Arbitrary high depth for cycles
+		}
+		visited[branchName] = true
+		defer func() { visited[branchName] = false }()
 
 		e.mu.RLock()
 		isTrunk := branchName == e.trunk
