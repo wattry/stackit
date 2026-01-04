@@ -15,6 +15,7 @@ package engine
 
 import (
 	"context"
+	"io"
 
 	"stackit.dev/stackit/internal/git"
 )
@@ -23,9 +24,9 @@ import (
 // Thread-safe: All methods are safe for concurrent use
 type PRManager interface {
 	UpsertPrInfo(branch Branch, prInfo *PrInfo) error
-	BranchMatchesRemote(branchName string) (bool, error)
+	GetBranchRemoteStatus(branch Branch) (BranchRemoteStatus, error)
 	PopulateRemoteShas() error
-	PushBranch(ctx context.Context, branchName string, remote string, opts git.PushOptions) error
+	PushBranch(ctx context.Context, branch Branch, remote string, opts git.PushOptions) error
 }
 
 // SyncManager provides operations for syncing and restacking branches
@@ -99,6 +100,10 @@ type Options struct {
 
 	// Git is the git runner to use. If nil, a default real git runner is used.
 	Git git.Runner
+
+	// Writer is the output writer for warnings and informational messages.
+	// If nil, os.Stderr is used.
+	Writer io.Writer
 }
 
 // UndoManager provides operations for undo/redo functionality

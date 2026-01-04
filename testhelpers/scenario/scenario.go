@@ -3,11 +3,12 @@
 package scenario
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,41 @@ import (
 	"stackit.dev/stackit/testhelpers"
 )
 
+// InProcessRunner is a function that executes a stackit command in-process.
+type InProcessRunner func(workDir string, args ...string) (string, error)
+
+var (
+	// GlobalInProcessRunner is a registered runner for in-process CLI execution.
+	// This is used to break import cycles between scenario and cli packages.
+	globalInProcessRunner InProcessRunner
+	globalRunnerMu        sync.RWMutex
+)
+
+// SetGlobalInProcessRunner sets the global in-process runner in a thread-safe way.
+func SetGlobalInProcessRunner(runner InProcessRunner) {
+	globalRunnerMu.Lock()
+	defer globalRunnerMu.Unlock()
+	globalInProcessRunner = runner
+}
+
+// GetGlobalInProcessRunner gets the global in-process runner in a thread-safe way.
+func GetGlobalInProcessRunner() InProcessRunner {
+	globalRunnerMu.RLock()
+	defer globalRunnerMu.RUnlock()
+	return globalInProcessRunner
+}
+
+// GlobalInProcessRunner is kept for backward compatibility.
+// It's a pointer to a struct that provides thread-safe access.
+// Use SetGlobalInProcessRunner and GetGlobalInProcessRunner directly for better clarity.
+var GlobalInProcessRunner = &struct {
+	Get func() InProcessRunner
+	Set func(InProcessRunner)
+}{
+	Get: GetGlobalInProcessRunner,
+	Set: SetGlobalInProcessRunner,
+}
+
 // Scenario represents a high-level test scenario that combines a Scene,
 // an Engine, and a runtime Context to provide a terse API for integration tests.
 type Scenario struct {
@@ -27,17 +63,19 @@ type Scenario struct {
 	Engine     engine.Engine
 	Context    *app.Context
 	BinaryPath string
+	InProcess  bool
+	Output     *bytes.Buffer
 }
 
 // NewScenario creates a new Scenario with an optional setup function.
-// NOTE: This function is NOT safe for parallel tests as it uses NewScene.
+// It is safe for parallel tests as it uses NewSceneParallel.
 func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 	t.Helper()
 
 	// Force non-interactive mode for tests in the current process
 	tui.SetInteractive(false)
 
-	scene := testhelpers.NewScene(t, setup)
+	scene := testhelpers.NewSceneParallel(t, setup)
 	cfg, _ := config.LoadConfig(scene.Dir)
 	trunk := cfg.Trunk()
 	if trunk == "" {
@@ -54,13 +92,14 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 	})
 	require.NoError(t, err)
 
+	output := &bytes.Buffer{}
 	ctx := app.NewContextWithOptions(eng, app.GlobalOptions{
 		Interactive: false,
 		Verify:      true,
 		Debug:       os.Getenv("DEBUG") != "",
 		Quiet:       true,
 	})
-	ctx.Splog = tui.NewSplogToWriter(io.Discard)
+	ctx.Splog = tui.NewSplogToWriter(output)
 	ctx.RepoRoot = scene.Dir
 
 	return &Scenario{
@@ -68,6 +107,7 @@ func NewScenario(t *testing.T, setup testhelpers.SceneSetup) *Scenario {
 		Scene:   scene,
 		Engine:  eng,
 		Context: ctx,
+		Output:  output,
 	}
 }
 
@@ -254,11 +294,33 @@ func (s *Scenario) WithBinaryPath(path string) *Scenario {
 	return s
 }
 
+// WithInProcess sets whether to use in-process CLI execution for RunCli methods.
+func (s *Scenario) WithInProcess(inProcess bool) *Scenario {
+	s.InProcess = inProcess
+	return s
+}
+
 // RunCli executes a stackit CLI command and rebuilds the engine if it exists.
 func (s *Scenario) RunCli(args ...string) *Scenario {
 	s.T.Helper()
+
+	if s.InProcess {
+		runner := GetGlobalInProcessRunner()
+		if runner == nil {
+			s.T.Fatal("GlobalInProcessRunner not set. Import stackit.dev/stackit/internal/integration/setup in your test.")
+		}
+		// Use in-process runner if enabled
+		_, err := runner(s.Scene.Dir, args...)
+		require.NoError(s.T, err, "CLI command failed: stackit %v", args)
+
+		if s.Engine != nil {
+			return s.Rebuild()
+		}
+		return s
+	}
+
 	if s.BinaryPath == "" {
-		s.T.Fatal("BinaryPath not set. Call WithBinaryPath first.")
+		s.T.Fatal("BinaryPath not set. Call WithBinaryPath or WithInProcess(true) first.")
 	}
 	// Add --no-interactive to all CLI commands in tests
 	fullArgs := append([]string{"--no-interactive"}, args...)
@@ -275,6 +337,14 @@ func (s *Scenario) RunCli(args ...string) *Scenario {
 
 // RunCliAndGetOutput executes a stackit CLI command and returns its output.
 func (s *Scenario) RunCliAndGetOutput(args ...string) (string, error) {
+	if s.InProcess {
+		runner := GetGlobalInProcessRunner()
+		if runner == nil {
+			return "", fmt.Errorf("GlobalInProcessRunner not set")
+		}
+		return runner(s.Scene.Dir, args...)
+	}
+
 	if s.BinaryPath == "" {
 		return "", fmt.Errorf("BinaryPath not set")
 	}
@@ -293,6 +363,21 @@ func (s *Scenario) RunCliAndGetOutput(args ...string) (string, error) {
 // RunExpectError executes a stackit CLI command and expects it to fail.
 func (s *Scenario) RunExpectError(args ...string) *Scenario {
 	s.T.Helper()
+
+	if s.InProcess {
+		runner := GetGlobalInProcessRunner()
+		if runner == nil {
+			s.T.Fatal("GlobalInProcessRunner not set")
+		}
+		_, err := runner(s.Scene.Dir, args...)
+		require.Error(s.T, err, "expected CLI command to fail: stackit %v", args)
+
+		if s.Engine != nil {
+			return s.Rebuild()
+		}
+		return s
+	}
+
 	if s.BinaryPath == "" {
 		s.T.Fatal("BinaryPath not set")
 	}

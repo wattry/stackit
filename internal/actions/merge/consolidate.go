@@ -92,7 +92,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 
 		// Store consolidation info for footer updates
 		c.consolidationPR = pr
-		if userName, err := git.NewRunner().GetUserName(ctx); err == nil && userName != "" {
+		if userName, err := c.ctx.Git().GetUserName(ctx); err == nil && userName != "" {
 			c.consolidationUser = userName
 		}
 
@@ -174,7 +174,7 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 		}
 	}
 
-	if err := c.engine.PushBranch(ctx, branchName, c.engine.GetRemote(), git.PushOptions{
+	if err := c.engine.PushBranch(ctx, c.engine.GetBranch(branchName), c.engine.GetRemote(), git.PushOptions{
 		Force:    false,
 		NoVerify: true,
 	}); err != nil {
