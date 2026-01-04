@@ -120,6 +120,7 @@ type CreatePlanOptions struct {
 	Force        bool
 	Scope        string
 	TargetBranch string // Optional branch to merge from (instead of current)
+	Wait         bool   // Whether to wait for CI/merge (applies to consolidate strategy)
 }
 
 // mergePlanEngine is a minimal interface needed for creating a merge plan
@@ -397,7 +398,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog *tui.Splog,
 	case StrategyTopDown:
 		steps = buildTopDownSteps(finalBranchesToMerge, planCurrentBranch, upstackBranches)
 	case StrategyConsolidate:
-		steps = buildConsolidateSteps(finalBranchesToMerge, upstackBranches)
+		steps = buildConsolidateSteps(finalBranchesToMerge, upstackBranches, opts.Wait)
 	default: // StrategyBottomUp or default
 		steps = buildBottomUpSteps(finalBranchesToMerge, upstackBranches)
 	}
@@ -550,32 +551,46 @@ func buildTopDownSteps(branchesToMerge []BranchMergeInfo, currentBranch string, 
 	return steps
 }
 
-func buildConsolidateSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string) []PlanStep {
+func buildConsolidateSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string, wait bool) []PlanStep {
 	steps := []PlanStep{}
+
+	desc := "Consolidate %d branches into single PR"
+	if wait {
+		desc += " and wait for merge"
+	} else {
+		desc += " (manual merge required)"
+	}
 
 	// Single consolidation step
 	steps = append(steps, PlanStep{
 		StepType:    StepConsolidate,
-		Description: fmt.Sprintf("Consolidate %d branches into single PR and wait for merge", len(branchesToMerge)),
+		Description: fmt.Sprintf(desc, len(branchesToMerge)),
 	})
 
-	// Post-consolidation cleanup steps
-	for _, branchInfo := range branchesToMerge {
+	// Post-consolidation cleanup steps - only if waiting for auto-merge
+	if wait {
 		steps = append(steps, PlanStep{
-			StepType:    StepDeleteBranch,
-			BranchName:  branchInfo.BranchName,
-			PRNumber:    0,
-			Description: fmt.Sprintf("Delete consolidated branch %s", branchInfo.BranchName),
+			StepType:    StepPullTrunk,
+			Description: "Pull trunk to get merged consolidation changes",
 		})
-	}
 
-	for _, upstackBranch := range upstackBranches {
-		steps = append(steps, PlanStep{
-			StepType:    StepRestack,
-			BranchName:  upstackBranch,
-			PRNumber:    0,
-			Description: fmt.Sprintf("Restack %s onto trunk", upstackBranch),
-		})
+		for _, branchInfo := range branchesToMerge {
+			steps = append(steps, PlanStep{
+				StepType:    StepDeleteBranch,
+				BranchName:  branchInfo.BranchName,
+				PRNumber:    0,
+				Description: fmt.Sprintf("Delete consolidated branch %s", branchInfo.BranchName),
+			})
+		}
+
+		for _, upstackBranch := range upstackBranches {
+			steps = append(steps, PlanStep{
+				StepType:    StepRestack,
+				BranchName:  upstackBranch,
+				PRNumber:    0,
+				Description: fmt.Sprintf("Restack %s onto trunk", upstackBranch),
+			})
+		}
 	}
 
 	return steps

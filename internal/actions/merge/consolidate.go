@@ -308,13 +308,9 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 }
 
 func (c *ConsolidateMergeExecutor) postMergeCleanup(ctx context.Context) error {
-	c.ctx.Splog.Info("🧹 Running post-merge cleanup...")
+	c.ctx.Splog.Info("🧹 Updating individual PRs...")
 
 	c.updateIndividualPRs()
-
-	if err := c.restackRemainingBranches(ctx); err != nil {
-		return fmt.Errorf("failed to restack branches: %w", err)
-	}
 
 	return nil
 }
@@ -411,33 +407,6 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 
 	if err := actions.PushMetadataAndSyncPRs(c.ctx, branchNames); err != nil {
 		splog.Warn("Failed to sync individual PRs: %v", err)
-	}
-
-	return nil
-}
-
-func (c *ConsolidateMergeExecutor) restackRemainingBranches(ctx context.Context) error {
-	splog := c.ctx.Splog
-	if _, err := c.engine.PullTrunk(ctx); err != nil {
-		return err
-	}
-
-	if len(c.plan.UpstackBranches) == 0 {
-		return nil
-	}
-
-	branches := make([]engine.Branch, len(c.plan.UpstackBranches))
-	for i, name := range c.plan.UpstackBranches {
-		branches[i] = c.engine.GetBranch(name)
-	}
-
-	batchResult, err := c.engine.RestackBranches(ctx, branches)
-	if err != nil {
-		if batchResult.ConflictBranch != "" {
-			splog.Warn("Conflict restacking %s - manual resolution needed", batchResult.ConflictBranch)
-			return nil // Don't fail the whole cleanup for a conflict
-		}
-		return fmt.Errorf("failed to restack branches: %w", err)
 	}
 
 	return nil

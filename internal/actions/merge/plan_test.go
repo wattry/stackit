@@ -337,6 +337,7 @@ func TestCreateMergePlan(t *testing.T) {
 		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    false,
+			Wait:     true,
 		})
 
 		require.NoError(t, err)
@@ -346,10 +347,11 @@ func TestCreateMergePlan(t *testing.T) {
 		require.Equal(t, "branch2", plan.CurrentBranch)
 		require.Len(t, plan.BranchesToMerge, 2)
 
-		// Should have single consolidation step
-		require.Len(t, plan.Steps, 3)
+		// Should have consolidation steps: Consolidate, PullTrunk, DeleteBranch x2
+		require.Len(t, plan.Steps, 4)
 		require.Equal(t, merge.StepConsolidate, plan.Steps[0].StepType)
-		require.Equal(t, merge.StepDeleteBranch, plan.Steps[1].StepType)
+		require.Equal(t, merge.StepPullTrunk, plan.Steps[1].StepType)
 		require.Equal(t, merge.StepDeleteBranch, plan.Steps[2].StepType)
+		require.Equal(t, merge.StepDeleteBranch, plan.Steps[3].StepType)
 	})
 }

@@ -75,13 +75,14 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true, // Skip remote sync checks
+			Wait:     true,
 		})
 		require.NoError(t, err)
 
 		// Verify plan has the expected structure
 		require.Equal(t, merge.StrategyConsolidate, plan.Strategy)
 		require.Len(t, plan.BranchesToMerge, 2)
-		require.Len(t, plan.Steps, 3)
+		require.Len(t, plan.Steps, 4)
 		require.Equal(t, merge.StepConsolidate, plan.Steps[0].StepType)
 	})
 
@@ -198,11 +199,12 @@ func TestConsolidationStepExecution(t *testing.T) {
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyConsolidate,
 			Force:    true,
+			Wait:     true,
 		})
 		require.NoError(t, err)
 
 		// Test that the consolidation step is properly structured
-		require.Len(t, plan.Steps, 3)
+		require.Len(t, plan.Steps, 4)
 		require.Equal(t, merge.StepConsolidate, plan.Steps[0].StepType)
 		require.Contains(t, plan.Steps[0].Description, "Consolidate 2 branches")
 	})

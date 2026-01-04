@@ -89,6 +89,7 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 						Strategy: mergeStrategy,
 						Force:    force,
 						Scope:    scope,
+						Wait:     wait,
 					})
 					if err != nil {
 						return err
@@ -116,6 +117,7 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 							Strategy: opts.Strategy,
 							Force:    opts.Force,
 							Scope:    opts.Scope,
+							Wait:     opts.Wait,
 						})
 						if err != nil {
 							return err
@@ -182,6 +184,7 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 		Force:        forceFlag,
 		Scope:        scope,
 		TargetBranch: targetBranchName,
+		Wait:         false, // Not determined yet
 	})
 	if err != nil {
 		return err
@@ -360,6 +363,7 @@ func runInteractiveMergeWizardForBranch(ctx *app.Context, dryRun bool, forceFlag
 		Force:        forceFlag,
 		Scope:        scope,
 		TargetBranch: targetBranchName,
+		Wait:         wait,
 	})
 	if err != nil {
 		return err
