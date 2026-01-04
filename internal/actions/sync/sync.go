@@ -161,6 +161,8 @@ type Event struct {
 	Conflict    bool              // Is this a conflict?
 	LockReason  engine.LockReason // Why the branch is locked (empty if not locked)
 	Frozen      bool              // Is the branch frozen?
+	IsCurrent   bool              // Is this the current branch?
+	Parent      string            // Parent branch name (if applicable)
 	Error       error             // If non-nil, this step had an error
 }
 
@@ -225,7 +227,7 @@ func (h *NullHandler) Complete(_ Summary) {}
 func (h *NullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool) {
+func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool, _ bool, _ string, _ bool, _, _ string) {
 }
 
 // OnRestackComplete implements RestackHandler.

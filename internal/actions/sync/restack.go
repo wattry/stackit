@@ -50,8 +50,18 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 
 	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
-		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool) {
+		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool, isCurrent bool, _ bool, _, _ string) {
 			prNumber := getPRNumber(ctx.Status(), branchName)
+
+			parentName := ""
+			br := nav.GetBranch(branchName)
+			if br.GetName() != "" {
+				if p := br.GetParent(); p != nil {
+					parentName = p.GetName()
+				} else {
+					parentName = ctx.Engine.Trunk().GetName()
+				}
+			}
 
 			switch result {
 			case engine.RestackDone:
@@ -64,6 +74,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					NewRevision: newRev,
 					LockReason:  lockReason,
 					Frozen:      frozen,
+					IsCurrent:   isCurrent,
+					Parent:      parentName,
 				})
 			case engine.RestackUnneeded:
 				handler.EmitEvent(Event{
@@ -73,6 +85,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					PRNumber:   prNumber,
 					LockReason: lockReason,
 					Frozen:     frozen,
+					IsCurrent:  isCurrent,
+					Parent:     parentName,
 				})
 			case engine.RestackConflict:
 				summary.BranchesSkipped++
@@ -85,6 +99,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 					Conflict:   true,
 					LockReason: lockReason,
 					Frozen:     frozen,
+					IsCurrent:  isCurrent,
+					Parent:     parentName,
 				})
 			}
 		}); err != nil {

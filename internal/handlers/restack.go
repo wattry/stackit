@@ -24,7 +24,7 @@ type RestackHandler interface {
 	OnRestackStart(branchCount int)
 
 	// OnRestackBranch is called for each branch during restack
-	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool)
+	OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string)
 
 	// OnRestackComplete is called when restack finishes
 	OnRestackComplete(restacked, skipped int, conflicts []string)
@@ -37,7 +37,7 @@ type NullRestackHandler struct{}
 func (h *NullRestackHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullRestackHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool) {
+func (h *NullRestackHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool, _ bool, _ string, _ bool, _, _ string) {
 }
 
 // OnRestackComplete implements RestackHandler.

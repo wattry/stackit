@@ -57,7 +57,7 @@ func TestSyncCommand(t *testing.T) {
   PR info up to date
 🧹 Cleaning branches...
 📚 Restacking branches...
-  branch1 does not need restacking
+  branch1 (current) does not need to be restacked on main.
 ✨ Everything is up to date!
 `), normalized)
 
@@ -70,7 +70,8 @@ func TestSyncCommand(t *testing.T) {
 		require.NoError(t, err, "sync --restack (needed) failed: %s", output)
 		normalized = testhelpers.NormalizeOutput(output)
 		// We don't know the exact revision, so we'll check the structure
-		require.Contains(t, normalized, "Restacked branch1 ->")
+		require.Contains(t, normalized, "Restacked branch1")
+		require.Contains(t, normalized, "->")
 		require.Contains(t, normalized, "✅ Summary: restacked 1")
 	})
 

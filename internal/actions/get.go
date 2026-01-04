@@ -88,7 +88,7 @@ func (h *GetNullHandler) Complete(_ GetSummary) {}
 func (h *GetNullHandler) OnRestackStart(_ int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int, _ engine.LockReason, _ bool) {
+func (h *GetNullHandler) OnRestackBranch(_ string, _ handlers.RestackResult, _ string, _ *int, _ engine.LockReason, _ bool, _ bool, _ string, _ bool, _, _ string) {
 }
 
 // OnRestackComplete implements RestackHandler.
@@ -359,19 +359,29 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			// Use RestackHandler for consistent output
 			handler.OnRestackStart(len(sorted))
 
-			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool) {
+			if err := RestackBranchesWithHandler(ctx, sorted, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool, isCurrent bool, reparented bool, oldParent, newParent string) {
 				prNumber := getPRNumber(eng, branchName)
+
+				parentName := ""
+				br := eng.GetBranch(branchName)
+				if br.GetName() != "" {
+					if p := br.GetParent(); p != nil {
+						parentName = p.GetName()
+					} else {
+						parentName = eng.Trunk().GetName()
+					}
+				}
 
 				switch result {
 				case engine.RestackDone:
 					restacked++
-					handler.OnRestackBranch(branchName, handlers.RestackDone, newRev, prNumber, lockReason, frozen)
+					handler.OnRestackBranch(branchName, handlers.RestackDone, newRev, prNumber, lockReason, frozen, isCurrent, parentName, reparented, oldParent, newParent)
 				case engine.RestackUnneeded:
-					handler.OnRestackBranch(branchName, handlers.RestackUnneeded, "", prNumber, lockReason, frozen)
+					handler.OnRestackBranch(branchName, handlers.RestackUnneeded, "", prNumber, lockReason, frozen, isCurrent, parentName, reparented, oldParent, newParent)
 				case engine.RestackConflict:
 					skipped++
 					conflicts = append(conflicts, branchName)
-					handler.OnRestackBranch(branchName, handlers.RestackConflict, "", prNumber, lockReason, frozen)
+					handler.OnRestackBranch(branchName, handlers.RestackConflict, "", prNumber, lockReason, frozen, isCurrent, parentName, reparented, oldParent, newParent)
 				}
 			}); err != nil {
 				handler.OnRestackComplete(restacked, skipped, conflicts)

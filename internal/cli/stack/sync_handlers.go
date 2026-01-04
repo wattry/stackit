@@ -165,10 +165,12 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 	switch event.Type {
 	case syncAction.EventCompleted:
 		if event.NewRevision != "" {
-			h.splog.Info("  Restacked %s%s -> %s",
-				style.ColorBranchName(event.Branch, false),
-				prInfo,
-				style.ColorDim(event.NewRevision))
+			msg := fmt.Sprintf("Restacked %s%s", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo)
+			if event.Parent != "" {
+				msg += fmt.Sprintf(" on %s", style.ColorBranchName(event.Parent, false))
+			}
+			msg += fmt.Sprintf(" -> %s", style.ColorDim(event.NewRevision))
+			h.splog.Info("  %s", msg)
 		} else {
 			reason := reasonNoRestackNeeded
 			if event.IsLocked() {
@@ -176,19 +178,24 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 			} else if event.Frozen {
 				reason = reasonFrozen
 			}
-			h.splog.Info("  %s%s %s",
-				style.ColorBranchName(event.Branch, false),
-				prInfo,
-				reason)
+
+			msg := fmt.Sprintf("%s%s %s", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo, reason)
+			if reason == reasonNoRestackNeeded && event.Parent != "" {
+				msg = fmt.Sprintf("%s%s does not need to be restacked on %s.",
+					style.ColorBranchName(event.Branch, event.IsCurrent),
+					prInfo,
+					style.ColorBranchName(event.Parent, false))
+			}
+			h.splog.Info("  %s", msg)
 		}
 	case syncAction.EventSkipped:
 		if event.Conflict {
 			h.splog.Warn("Skipped %s%s (conflict)",
-				style.ColorBranchName(event.Branch, false),
+				style.ColorBranchName(event.Branch, event.IsCurrent),
 				prInfo)
 		} else {
 			h.splog.Info("  Skipped %s%s %s",
-				style.ColorBranchName(event.Branch, false),
+				style.ColorBranchName(event.Branch, event.IsCurrent),
 				prInfo,
 				style.ColorDim(event.Message))
 		}
@@ -216,7 +223,15 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
+	// Log reparenting info if applicable
+	if reparented {
+		h.splog.Info("Reparented %s from %s to %s (parent was merged/deleted).",
+			style.ColorBranchName(branch, isCurrent),
+			style.ColorBranchName(oldParent, false),
+			style.ColorBranchName(newParent, false))
+	}
+
 	// Convert to Event and use existing printRestackEvent
 	event := syncAction.Event{
 		Phase:       syncAction.PhaseRestack,
@@ -225,6 +240,8 @@ func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.Res
 		NewRevision: newRev,
 		LockReason:  lockReason,
 		Frozen:      frozen,
+		IsCurrent:   isCurrent,
+		Parent:      parent,
 	}
 
 	switch result {
@@ -388,10 +405,18 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 		if event.PRNumber != nil {
 			prInfo = fmt.Sprintf(" (PR #%d)", *event.PRNumber)
 		}
+
+		displayName := style.ColorBranchName(event.Branch, event.IsCurrent)
+
 		switch event.Type {
 		case syncAction.EventCompleted:
 			if event.NewRevision != "" {
-				return fmt.Sprintf("Restacked %s%s -> %s", event.Branch, prInfo, event.NewRevision)
+				msg := fmt.Sprintf("Restacked %s%s", displayName, prInfo)
+				if event.Parent != "" {
+					msg += fmt.Sprintf(" on %s", event.Parent)
+				}
+				msg += fmt.Sprintf(" -> %s", event.NewRevision)
+				return msg
 			}
 			reason := reasonNoRestackNeeded
 			if event.IsLocked() {
@@ -399,12 +424,19 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 			} else if event.Frozen {
 				reason = reasonFrozen
 			}
-			return fmt.Sprintf("%s%s %s", event.Branch, prInfo, reason)
+
+			if reason == reasonNoRestackNeeded && event.Parent != "" {
+				return fmt.Sprintf("%s%s does not need to be restacked on %s.",
+					displayName,
+					prInfo,
+					event.Parent)
+			}
+			return fmt.Sprintf("%s%s %s", displayName, prInfo, reason)
 		case syncAction.EventSkipped:
 			if event.Conflict {
-				return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", event.Branch, prInfo)
+				return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", displayName, prInfo)
 			}
-			return fmt.Sprintf("Skipped %s%s %s", event.Branch, prInfo, event.Message)
+			return fmt.Sprintf("Skipped %s%s %s", displayName, prInfo, event.Message)
 		}
 	}
 	return ""
@@ -498,7 +530,7 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) {
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -507,8 +539,11 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 	}
 
 	// Build detail message
-	detail := h.formatRestackDetail(branch, result, newRev, prNumber, lockReason, frozen)
+	detail := h.formatRestackDetail(branch, result, newRev, prNumber, lockReason, frozen, isCurrent, parent)
 	if detail != "" {
+		if reparented {
+			detail = fmt.Sprintf("Reparented %s -> %s. %s", oldParent, newParent, detail)
+		}
 		h.program.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(syncAction.PhaseRestack),
 			Message: detail,
@@ -524,15 +559,22 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 }
 
 // formatRestackDetail formats a restack event into a detail string
-func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool) string {
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string) string {
 	prInfo := ""
 	if prNumber != nil {
 		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)
 	}
 
+	displayName := style.ColorBranchName(branch, isCurrent)
+
 	switch result {
 	case syncAction.RestackDone:
-		return fmt.Sprintf("Restacked %s%s -> %s", branch, prInfo, newRev)
+		msg := fmt.Sprintf("Restacked %s%s", displayName, prInfo)
+		if parent != "" {
+			msg += fmt.Sprintf(" on %s", parent)
+		}
+		msg += fmt.Sprintf(" -> %s", newRev)
+		return msg
 	case syncAction.RestackUnneeded:
 		reason := reasonNoRestackNeeded
 		if lockReason.IsLocked() {
@@ -540,9 +582,16 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 		} else if frozen {
 			reason = reasonFrozen
 		}
-		return fmt.Sprintf("%s%s %s", branch, prInfo, reason)
+
+		if reason == reasonNoRestackNeeded && parent != "" {
+			return fmt.Sprintf("%s%s does not need to be restacked on %s.",
+				displayName,
+				prInfo,
+				parent)
+		}
+		return fmt.Sprintf("%s%s %s", displayName, prInfo, reason)
 	case syncAction.RestackConflict:
-		return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", branch, prInfo)
+		return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", displayName, prInfo)
 	}
 	return ""
 }
@@ -573,21 +622,26 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 // This should be called on interrupt or error to prevent leaving the terminal in raw mode
 func (h *InteractiveSyncHandler) Cleanup() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if h.cleanupDone {
+		h.mu.Unlock()
 		return
 	}
 
-	if h.program != nil {
-		// Quit the program to restore terminal state
-		h.program.Quit()
-		h.program = nil
+	p := h.program
+	h.mu.Unlock()
+
+	if p != nil {
+		// Quit the program and wait for it to restore terminal state
+		p.Quit()
+		p.Wait()
 	}
 
+	h.mu.Lock()
+	h.program = nil
 	// Restore splog
 	h.splog.SetQuiet(false)
 	h.cleanupDone = true
+	h.mu.Unlock()
 }
 
 // formatRestackSummary formats the restack summary
