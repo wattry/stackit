@@ -4,12 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
-
-	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/actions/foreach"
 	"stackit.dev/stackit/internal/output"
@@ -20,11 +16,11 @@ import (
 )
 
 // NewForeachHandler creates the appropriate handler based on TTY availability
-func NewForeachHandler(splog output.Output, parallel bool) foreach.Handler {
+func NewForeachHandler(out output.Output, logger output.Logger, parallel bool) foreach.Handler {
 	if tui.IsTTY() {
-		return NewInteractiveForeachHandler(splog)
+		return NewInteractiveForeachHandler(out, logger)
 	}
-	return NewSimpleForeachHandler(splog, parallel)
+	return NewSimpleForeachHandler(out, parallel)
 }
 
 // SimpleForeachHandler implements foreach.Handler with line-by-line output
@@ -172,19 +168,18 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 
 // InteractiveForeachHandler implements foreach.Handler with bubbletea for animated progress
 type InteractiveForeachHandler struct {
-	splog       output.Output
-	program     *tea.Program
+	out         output.Output
+	logger      output.Logger
+	runner      *tui.Runner
 	model       *foreachComponent.Model
 	inExecPhase bool
-	mu          sync.Mutex
 	stack       *tree.StackTree
 	command     string
-	cleanupDone bool
 }
 
 // NewInteractiveForeachHandler creates a new interactive foreach handler
-func NewInteractiveForeachHandler(splog output.Output) *InteractiveForeachHandler {
-	return &InteractiveForeachHandler{splog: splog}
+func NewInteractiveForeachHandler(out output.Output, logger output.Logger) *InteractiveForeachHandler {
+	return &InteractiveForeachHandler{out: out, logger: logger}
 }
 
 // findRootBranch finds the root branch of the stack (the one whose parent is trunk)
@@ -210,10 +205,7 @@ func (h *InteractiveForeachHandler) findRootBranch() string {
 }
 
 func (h *InteractiveForeachHandler) ensureProgramStarted() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.program != nil {
+	if h.runner != nil {
 		return
 	}
 
@@ -222,56 +214,15 @@ func (h *InteractiveForeachHandler) ensureProgramStarted() {
 		h.model = foreachComponent.NewModel(nil)
 	}
 
-	// Quiet the splog so it doesn't interfere with the TUI
-	h.splog.SetQuiet(true)
-
-	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
-	h.cleanupDone = false
-
-	// Set up signal handler to ensure terminal is restored on interrupt
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		h.Cleanup()
-		// Re-raise the signal so the process can exit properly
-		signal.Stop(sigChan)
-	}()
-
-	// Run program in background
-	go func() {
-		if _, err := h.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running foreach TUI: %v\n", err)
-		}
-		// Ensure cleanup happens when program exits
-		h.Cleanup()
-	}()
+	h.runner = tui.NewRunner(h.model, h.out, h.logger)
+	h.runner.Start()
 }
 
-// Cleanup ensures the terminal is restored to normal mode
-// This should be called on interrupt or error to prevent leaving the terminal in raw mode
+// Cleanup ensures the terminal is restored to normal mode.
 func (h *InteractiveForeachHandler) Cleanup() {
-	h.mu.Lock()
-	if h.cleanupDone {
-		h.mu.Unlock()
-		return
+	if h.runner != nil {
+		h.runner.Cleanup()
 	}
-
-	p := h.program
-	h.mu.Unlock()
-
-	if p != nil {
-		// Quit the program and wait for it to restore terminal state
-		p.Quit()
-		p.Wait()
-	}
-
-	h.mu.Lock()
-	h.program = nil
-	// Restore splog
-	h.splog.SetQuiet(false)
-	h.cleanupDone = true
-	h.mu.Unlock()
 }
 
 // OnEvent handles events from the foreach action
@@ -312,15 +263,15 @@ func (h *InteractiveForeachHandler) OnEvent(e foreach.Event) {
 			}
 		}
 
-		h.program.Send(foreachComponent.GlobalMessageMsg("Executing..."))
+		h.runner.Send(foreachComponent.GlobalMessageMsg("Executing..."))
 
 	case foreach.BranchProgressEvent:
-		if !h.inExecPhase || h.program == nil {
+		if !h.inExecPhase || h.runner == nil {
 			return
 		}
 
 		status := string(ev.Status)
-		h.program.Send(foreachComponent.ProgressUpdateMsg{
+		h.runner.Send(foreachComponent.ProgressUpdateMsg{
 			BranchName: ev.BranchName,
 			Status:     status,
 			Output:     ev.Output,
@@ -328,32 +279,31 @@ func (h *InteractiveForeachHandler) OnEvent(e foreach.Event) {
 		})
 
 	case foreach.CompletionEvent:
-		if h.program == nil {
+		if h.runner == nil {
 			return
 		}
 
 		if ev.Message != "" && ev.Message != "Execution complete" {
-			h.program.Send(foreachComponent.GlobalMessageMsg(ev.Message))
+			h.runner.Send(foreachComponent.GlobalMessageMsg(ev.Message))
 		} else {
-			h.program.Send(foreachComponent.GlobalMessageMsg(""))
+			h.runner.Send(foreachComponent.GlobalMessageMsg(""))
 		}
-		h.program.Send(foreachComponent.ProgressCompleteMsg{})
+		h.runner.Send(foreachComponent.ProgressCompleteMsg{})
 		h.complete(ev.Results)
 	}
 }
 
 // complete finalizes the display and shows consolidated output
 func (h *InteractiveForeachHandler) complete(results []foreach.BranchResult) {
-	if h.program != nil {
-		h.program.Wait()
-		h.program = nil
-		h.splog.SetQuiet(false)
+	if h.runner != nil {
+		h.runner.Wait()
+		h.runner.Cleanup()
 	}
 
 	// Show consolidated output summary
 	if len(results) > 0 {
-		h.splog.Newline()
-		h.splog.Info("Summary:")
+		h.out.Newline()
+		h.out.Info("Summary:")
 		successCount := 0
 		failCount := 0
 		for _, result := range results {
@@ -361,15 +311,15 @@ func (h *InteractiveForeachHandler) complete(results []foreach.BranchResult) {
 			case foreach.StatusDone:
 				successCount++
 				isCurrent := h.stack != nil && result.BranchName == h.stack.CurrentBranch
-				h.splog.Info("  ✓ %s", style.ColorBranchName(result.BranchName, isCurrent))
+				h.out.Info("  ✓ %s", style.ColorBranchName(result.BranchName, isCurrent))
 				if result.Output != "" {
-					output := strings.TrimSpace(result.Output)
-					if len(output) > 0 {
+					resultOutput := strings.TrimSpace(result.Output)
+					if len(resultOutput) > 0 {
 						// Indent output
-						lines := strings.Split(output, "\n")
+						lines := strings.Split(resultOutput, "\n")
 						for _, line := range lines {
 							if strings.TrimSpace(line) != "" {
-								h.splog.Info("    %s", line)
+								h.out.Info("    %s", line)
 							}
 						}
 					}
@@ -377,29 +327,29 @@ func (h *InteractiveForeachHandler) complete(results []foreach.BranchResult) {
 			case foreach.StatusError:
 				failCount++
 				isCurrent := h.stack != nil && result.BranchName == h.stack.CurrentBranch
-				h.splog.Error("  ✗ %s", style.ColorBranchName(result.BranchName, isCurrent))
+				h.out.Error("  ✗ %s", style.ColorBranchName(result.BranchName, isCurrent))
 				if result.Error != nil {
-					h.splog.Error("    Error: %v", result.Error)
+					h.out.Error("    Error: %v", result.Error)
 				}
 				if result.Output != "" {
-					output := strings.TrimSpace(result.Output)
-					if len(output) > 0 {
+					resultOutput := strings.TrimSpace(result.Output)
+					if len(resultOutput) > 0 {
 						// Indent output
-						lines := strings.Split(output, "\n")
+						lines := strings.Split(resultOutput, "\n")
 						for _, line := range lines {
 							if strings.TrimSpace(line) != "" {
-								h.splog.Info("    %s", line)
+								h.out.Info("    %s", line)
 							}
 						}
 					}
 				}
 			}
 		}
-		h.splog.Newline()
+		h.out.Newline()
 		if failCount > 0 {
-			h.splog.Info("Completed: %d succeeded, %d failed", successCount, failCount)
+			h.out.Info("Completed: %d succeeded, %d failed", successCount, failCount)
 		} else {
-			h.splog.Info("All branches completed successfully (%d total)", successCount)
+			h.out.Info("All branches completed successfully (%d total)", successCount)
 		}
 	}
 }

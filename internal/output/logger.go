@@ -106,6 +106,16 @@ func (l *NullLogger) Error(_ string, _ ...any) {}
 // Close does nothing and returns nil.
 func (l *NullLogger) Close() error { return nil }
 
+// NewFileLoggerOrNull creates a FileLogger, falling back to NullLogger on error.
+// This is useful for contexts where logging is optional (e.g., crash handlers).
+func NewFileLoggerOrNull(logFilePath string) Logger {
+	logger, err := NewFileLogger(logFilePath)
+	if err != nil {
+		return NewNullLogger()
+	}
+	return logger
+}
+
 // createLumberjackLogger creates a lumberjack logger with configuration from environment variables.
 func createLumberjackLogger(logFilePath string) *lumberjack.Logger {
 	config := &lumberjack.Logger{

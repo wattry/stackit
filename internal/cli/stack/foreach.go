@@ -69,7 +69,7 @@ Examples:
 				}
 
 				// Create the appropriate handler based on TTY availability
-				handler := NewForeachHandler(ctx.Output, opts.Parallel)
+				handler := NewForeachHandler(ctx.Output, ctx.Logger, opts.Parallel)
 				return foreach.Action(ctx, opts, handler)
 			})
 		},

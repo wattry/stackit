@@ -2,9 +2,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"runtime/debug"
 
 	"stackit.dev/stackit/internal/cli"
+	"stackit.dev/stackit/internal/output"
 )
 
 var (
@@ -14,13 +17,31 @@ var (
 )
 
 func main() {
+	exitCode := run()
+	os.Exit(exitCode)
+}
+
+func run() int {
+	// Set up crash logger for panic recovery
+	logger := output.NewFileLoggerOrNull(output.GetLogFilePath())
+	defer func() { _ = logger.Close() }()
+
+	defer func() {
+		if p := recover(); p != nil {
+			stack := string(debug.Stack())
+			logger.Error("stackit crashed: %v\n%s", p, stack)
+			fmt.Fprintf(os.Stderr, "stackit crashed: %v\n", p)
+		}
+	}()
+
 	// Check for passthrough commands before processing with cobra
 	if cli.HandlePassthrough(os.Args) {
-		return // HandlePassthrough already exited
+		return 0 // HandlePassthrough already exited
 	}
 
 	rootCmd := cli.NewRootCmd(version, commit, date)
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
