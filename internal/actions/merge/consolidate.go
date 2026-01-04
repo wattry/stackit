@@ -96,9 +96,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 			c.consolidationUser = userName
 		}
 
-		if err := c.postMergeCleanup(ctx); err != nil {
-			splog.Warn("Post-merge cleanup had issues: %v", err)
-		}
+		c.postMergeCleanup(ctx)
 
 		splog.Info("🎉 Stack consolidation merge completed successfully!")
 	} else {
@@ -307,12 +305,10 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 	return nil
 }
 
-func (c *ConsolidateMergeExecutor) postMergeCleanup(ctx context.Context) error {
+func (c *ConsolidateMergeExecutor) postMergeCleanup(_ context.Context) {
 	c.ctx.Splog.Info("🧹 Updating individual PRs...")
 
 	c.updateIndividualPRs()
-
-	return nil
 }
 
 func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
