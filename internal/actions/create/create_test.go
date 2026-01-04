@@ -284,3 +284,63 @@ func TestCreateAction_Insert_Deep(t *testing.T) {
 		require.True(t, isAncestor, "child1 should still be an ancestor of grandchild")
 	})
 }
+
+func TestCreateAction_Worktree(t *testing.T) {
+	t.Run("creates worktree when -w flag is used from trunk", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit()
+
+		// Create a change to stage
+		err := s.Scene.Repo.CreateChange("feature content", "feature.txt", false)
+		require.NoError(t, err)
+
+		// Create branch with worktree from trunk
+		opts := Options{
+			BranchName: "feature-branch",
+			Message:    "Add feature",
+			Worktree:   true,
+		}
+		err = Action(s.Context, opts)
+		require.NoError(t, err)
+
+		// Verify we're back on trunk (main repo stays on trunk, worktree has the branch)
+		currentBranch, err := s.Scene.Repo.CurrentBranchName()
+		require.NoError(t, err)
+		require.Equal(t, "main", currentBranch)
+
+		// Verify worktree was registered
+		eng := s.Context.Engine
+		worktreeInfo, err := eng.GetWorktreeForStack("feature-branch")
+		require.NoError(t, err)
+		require.NotNil(t, worktreeInfo)
+		require.Equal(t, "feature-branch", worktreeInfo.StackRoot)
+		require.Contains(t, worktreeInfo.Path, "feature-branch")
+
+		// Clean up worktree
+		_ = eng.RemoveWorktree(s.Context.Context, worktreeInfo.Path)
+		_ = eng.UnregisterWorktree("feature-branch")
+	})
+
+	t.Run("fails with -w flag when not on trunk", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit()
+
+		// Create a child branch first (without worktree)
+		err := s.Scene.Repo.CreateChange("child1 content", "file1", false)
+		require.NoError(t, err)
+		err = Action(s.Context, Options{BranchName: "child1", Message: "Add child1"})
+		require.NoError(t, err)
+
+		// Now try to create another branch with -w from child1 (not trunk)
+		err = s.Scene.Repo.CreateChange("child2 content", "file2", false)
+		require.NoError(t, err)
+		opts := Options{
+			BranchName: "child2",
+			Message:    "Add child2",
+			Worktree:   true,
+		}
+		err = Action(s.Context, opts)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "only valid when creating a new stack from trunk")
+	})
+}

@@ -128,5 +128,6 @@ type Engine interface {
 	Absorber
 	UndoManager
 	RemoteMetadataManager
+	WorktreeRegistry
 	Git() git.Runner
 }
