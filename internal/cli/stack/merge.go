@@ -456,8 +456,17 @@ func handlePostMergeFollowUp(ctx *app.Context) error {
 	out.Info("🎉 Merge completed successfully in the temporary worktree!")
 	out.Info("Your main workspace remains untouched.")
 
+	// Proactively check for uncommitted changes
+	hasChanges := ctx.Engine.HasUncommittedChanges(ctx.Context)
+	trunkName := ctx.Engine.Trunk().GetName()
+
+	trunkLabel := fmt.Sprintf("🔄 Switch to trunk and sync (%s)", trunkName)
+	if hasChanges {
+		trunkLabel += " " + style.ColorYellow("(warning: you have local changes)")
+	}
+
 	options := []tui.SelectOption{
-		{Label: "🔄 Switch to trunk and sync (" + ctx.Engine.Trunk().GetName() + ")", Value: "trunk-sync"},
+		{Label: trunkLabel, Value: "trunk-sync"},
 		{Label: "Done", Value: "done"},
 	}
 
@@ -476,7 +485,16 @@ func handlePostMergeFollowUp(ctx *app.Context) error {
 		if err := actions.CheckoutAction(ctx, actions.CheckoutOptions{
 			CheckoutTrunk: true,
 		}); err != nil {
-			return err
+			// Provide guidance if checkout failed due to local changes
+			// actions.CheckoutAction already wraps the error with a friendly message if it's a local changes error
+			out.Newline()
+			out.Error("%v", err)
+			out.Newline()
+			out.Info("%s", style.ColorYellow("To fix and continue:"))
+			out.Info("  (1) Handle your local changes (e.g., %s or %s)", style.ColorCyan("git stash"), style.ColorCyan("git commit"))
+			out.Info("  (2) Switch to trunk: %s", style.ColorCyan("stackit checkout --trunk"))
+			out.Info("  (3) Sync your workspace: %s", style.ColorCyan("stackit sync --restack"))
+			return nil // Return nil so we don't show the error twice at the top level
 		}
 		handler := NewSyncHandler(ctx.Output)
 		return sync.Action(ctx, sync.Options{

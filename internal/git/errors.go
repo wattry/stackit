@@ -58,3 +58,16 @@ func IsBranchNotFoundError(err error) bool {
 	}
 	return false
 }
+
+// IsLocalChangesError returns true if the error indicates that local changes would be overwritten
+func IsLocalChangesError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ce *CommandError
+	if errors.As(err, &ce) {
+		return strings.Contains(ce.Stderr, "Your local changes to the following files would be overwritten by checkout") ||
+			strings.Contains(ce.Stderr, "Your local changes to the following files would be overwritten by merge")
+	}
+	return false
+}

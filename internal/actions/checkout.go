@@ -6,6 +6,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -70,6 +71,9 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 
 	branch := eng.GetBranch(branchName)
 	if err := eng.CheckoutBranch(context, branch); err != nil {
+		if git.IsLocalChangesError(err) {
+			return fmt.Errorf("cannot checkout branch %s because you have uncommitted changes that would be overwritten; please commit or stash your changes before switching branches", branchName)
+		}
 		return fmt.Errorf("failed to checkout branch %s: %w", branchName, err)
 	}
 
