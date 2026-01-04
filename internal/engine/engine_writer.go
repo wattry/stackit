@@ -53,6 +53,13 @@ func (e *engineImpl) PushBranch(ctx context.Context, branch Branch, remote strin
 
 // TrackBranch tracks a branch with a parent branch
 func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentBranchName string) error {
+	if branchName == e.trunk {
+		return fmt.Errorf("cannot track trunk branch %s", e.trunk)
+	}
+	if branchName == parentBranchName {
+		return fmt.Errorf("branch cannot be its own parent")
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -572,6 +579,10 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 
 // setParentInternal updates parent without locking (caller must hold lock)
 func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, parentBranchName string) error {
+	if branchName == parentBranchName {
+		return fmt.Errorf("branch %s cannot be its own parent", branchName)
+	}
+
 	// Get new parent revision
 	parentRev, err := e.git.GetMergeBase(branchName, parentBranchName)
 	if err != nil {
