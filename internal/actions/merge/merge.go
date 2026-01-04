@@ -48,6 +48,7 @@ func Action(ctx *app.Context, opts Options) error {
 				Force:        opts.Force,
 				Scope:        opts.Scope,
 				TargetBranch: opts.TargetBranch,
+				Wait:         opts.Wait,
 			})
 			if err != nil {
 				return err
