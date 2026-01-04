@@ -43,7 +43,7 @@ func ReorderAction(ctx *app.Context) error {
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Collect branches: get ancestors from trunk to current branch
-	stack := graph.Range(currentBranch, engine.StackRange{
+	stack := graph.Range(eng.GetBranch(currentBranch), engine.StackRange{
 		RecursiveParents:  true,
 		IncludeCurrent:    true,
 		RecursiveChildren: false,
@@ -113,7 +113,7 @@ func ReorderAction(ctx *app.Context) error {
 	firstAffectedBranchName := findFirstAffectedBranch(eng, originalOrder, newOrder)
 
 	// Get all affected branches (first affected and all its descendants)
-	affectedBranches := graph.Range(firstAffectedBranchName, engine.StackRange{
+	affectedBranches := graph.Range(eng.GetBranch(firstAffectedBranchName), engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,

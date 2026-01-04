@@ -90,7 +90,7 @@ func traverseDownward(currentBranch string, ctx *app.Context) string {
 
 // traverseUpward walks up the children chain to find the tip branch
 func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackGraph) (string, error) {
-	children := graph.ChildBranches(currentBranch)
+	children := graph.ChildBranches(ctx.Engine.GetBranch(currentBranch))
 	if len(children) == 0 {
 		// No children, we're at the tip
 		return currentBranch, nil

@@ -31,7 +31,7 @@ branches depend on the current branch.`,
 
 				// Get children
 				graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
-				children := graph.ChildBranches(currentBranch.GetName())
+				children := graph.ChildBranches(*currentBranch)
 				if len(children) == 0 {
 					ctx.Output.Info("%s has no children.", style.ColorBranchName(currentBranch.GetName(), true))
 					return nil

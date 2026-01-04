@@ -14,7 +14,7 @@ func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeC
 	// Build StackGraph for efficient traversals
 	graph := engine.BuildStackGraph(runtimeCtx.Engine, engine.SortStrategyAlphabetical, nil)
 
-	children := graph.ChildBranches(currentBranch)
+	children := graph.ChildBranches(runtimeCtx.Engine.GetBranch(currentBranch))
 	siblings := []string{}
 	for _, child := range children {
 		if child.GetName() != newBranch {
@@ -73,7 +73,7 @@ func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeC
 		allToRestack = append(allToRestack, childBranch)
 
 		// Include all descendants in the restack operation
-		allToRestack = append(allToRestack, graph.Range(child, engine.StackRange{RecursiveChildren: true})...)
+		allToRestack = append(allToRestack, graph.Range(childBranch, engine.StackRange{RecursiveChildren: true})...)
 	}
 
 	// Sort topologically to ensure we restack from bottom to top

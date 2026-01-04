@@ -16,7 +16,7 @@ func foldWithKeep(gctx context.Context, ctx *app.Context, currentBranch, parentB
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Get all children of parent (siblings + current branch)
-	allChildren := graph.ChildBranches(parentBranch.GetName())
+	allChildren := graph.ChildBranches(parentBranch)
 
 	// Identify siblings (children of parent excluding current branch)
 	siblings := []engine.Branch{}
@@ -67,7 +67,7 @@ func foldWithKeep(gctx context.Context, ctx *app.Context, currentBranch, parentB
 	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Restack current branch and all its descendants
-	branchesToRestack := graph.Range(currentBranch.GetName(), engine.StackRange{
+	branchesToRestack := graph.Range(currentBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,

@@ -195,7 +195,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	targetBranchObj := eng.GetBranch(targetBranch)
 	if !opts.Downstack && targetBranchObj.IsTracked() {
 		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		upstack := graph.Range(targetBranch, engine.StackRange{RecursiveChildren: true})
+		upstack := graph.Range(targetBranchObj, engine.StackRange{RecursiveChildren: true})
 		for _, b := range upstack {
 			if !contains(branchesToSync, b.GetName()) {
 				branchesToSync = append(branchesToSync, b.GetName())

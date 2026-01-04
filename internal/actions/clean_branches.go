@@ -164,7 +164,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 
 	// Start DFS from trunk children to handle the tracked hierarchy
 	trunk := eng.Trunk()
-	trunkChildren := graph.ChildBranches(trunk.GetName())
+	trunkChildren := graph.ChildBranches(trunk)
 	branchesToProcess := make([]string, len(trunkChildren))
 	for i, child := range trunkChildren {
 		branchesToProcess[i] = child.GetName()
@@ -181,7 +181,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 
 		reason, shouldDelete := deleteReasons[branchName]
 		branch := eng.GetBranch(branchName)
-		children := graph.ChildBranches(branchName)
+		children := graph.ChildBranches(branch)
 
 		// Add children to DFS stack
 		for _, child := range children {

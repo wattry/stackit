@@ -32,7 +32,7 @@ func Action(ctx *app.Context, branchName string) error {
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Get downstack (ancestors including current)
-	branches := graph.Range(branchName, engine.StackRange{
+	branches := graph.Range(branch, engine.StackRange{
 		RecursiveParents: true,
 		IncludeCurrent:   true,
 	})
@@ -123,13 +123,13 @@ func Unlock(ctx *app.Context, branchName string) error {
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Get upstack (descendants including current)
-	branches := graph.Range(branchName, engine.StackRange{
+	branches := graph.Range(branch, engine.StackRange{
 		IncludeCurrent:    true,
 		RecursiveChildren: true,
 	})
 
 	// Check if downstack has locked branches and prompt to unlock them if interactive
-	downstack := graph.Range(branchName, engine.StackRange{
+	downstack := graph.Range(branch, engine.StackRange{
 		RecursiveParents: true,
 	})
 

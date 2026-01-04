@@ -43,7 +43,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 
 	// Build StackGraph for efficient traversals
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	stackBranches := graph.Range(currentBranch.GetName(), engine.StackRange{
+	stackBranches := graph.Range(*currentBranch, engine.StackRange{
 		RecursiveParents:  true,
 		IncludeCurrent:    true,
 		RecursiveChildren: true,

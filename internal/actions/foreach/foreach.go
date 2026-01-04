@@ -36,7 +36,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Get branches based on scope
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(currentBranch.GetName(), opts.Scope)
+	branches := graph.Range(*currentBranch, opts.Scope)
 	if len(branches) == 0 {
 		handler.OnEvent(CompletionEvent{Success: true, Message: "No branches to process"})
 		return nil

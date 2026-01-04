@@ -81,7 +81,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Add branches with new parents to restack list
 	for _, branchName := range cleanResult.BranchesWithNewParents {
 		branch := eng.GetBranch(branchName)
-		upstack := graph.Range(branch.GetName(), engine.StackRange{
+		upstack := graph.Range(branch, engine.StackRange{
 			RecursiveChildren: true,
 		})
 		for _, b := range upstack {

@@ -123,7 +123,7 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	}
 
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	children := graph.ChildBranches(branchName)
+	children := graph.ChildBranches(branchObj)
 	if len(children) > 0 {
 		outputLines = append(outputLines, fmt.Sprintf("%s:", style.ColorCyan("Children")))
 		for _, child := range children {

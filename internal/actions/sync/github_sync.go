@@ -88,7 +88,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 			*branchesToRestack = append(*branchesToRestack, branchName)
 			// Also add descendants
 			branch := nav.GetBranch(branchName)
-			upstack := graph.Range(branch.GetName(), engine.StackRange{
+			upstack := graph.Range(branch, engine.StackRange{
 				RecursiveChildren: true,
 			})
 			for _, b := range upstack {

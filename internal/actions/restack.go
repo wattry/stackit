@@ -22,7 +22,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	// Get branches to restack based on scope
 	branch := eng.GetBranch(opts.BranchName)
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(branch.GetName(), opts.Scope)
+	branches := graph.Range(branch, opts.Scope)
 
 	if len(branches) == 0 {
 		out.Info("No branches to restack.")

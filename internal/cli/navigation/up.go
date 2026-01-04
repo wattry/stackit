@@ -63,7 +63,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 				// Traverse up the specified number of steps
 				targetBranch := currentBranch.GetName()
 				for i := 0; i < steps; i++ {
-					children := graph.ChildBranches(targetBranch)
+					children := graph.ChildBranches(ctx.Engine.GetBranch(targetBranch))
 					if len(children) == 0 {
 						if i == 0 {
 							ctx.Output.Info("Already at the top of the stack.")
@@ -83,7 +83,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 							// Try to find the child that leads to toBranch
 							var candidates []string
 							for _, child := range children {
-								upstack := graph.Range(child.GetName(), engine.StackRange{RecursiveChildren: true})
+								upstack := graph.Range(child, engine.StackRange{RecursiveChildren: true})
 								upstackNames := make([]string, len(upstack))
 								for j, b := range upstack {
 									upstackNames[j] = b.GetName()

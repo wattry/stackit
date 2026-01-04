@@ -28,7 +28,7 @@ func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
 
 	// Find descendants
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	descendants := graph.Range(branchName, engine.StackRange{RecursiveChildren: true})
+	descendants := graph.Range(branch, engine.StackRange{RecursiveChildren: true})
 
 	// If there are descendants and not forced, prompt for confirmation
 	if len(descendants) > 0 && !opts.Force {

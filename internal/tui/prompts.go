@@ -589,15 +589,15 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 	branchDepth[trunk.GetName()] = 0
 
 	// Build depth map by traversing from trunk
-	var calculateDepth func(branchName string, depth int)
-	calculateDepth = func(branchName string, depth int) {
-		children := graph.Children(branchName)
+	var calculateDepth func(branch engine.Branch, depth int)
+	calculateDepth = func(branch engine.Branch, depth int) {
+		children := graph.Children(branch)
 		for _, childName := range children {
 			branchDepth[childName] = depth + 1
-			calculateDepth(childName, depth+1)
+			calculateDepth(eng.GetBranch(childName), depth+1)
 		}
 	}
-	calculateDepth(trunk.GetName(), 0)
+	calculateDepth(trunk, 0)
 
 	choices := make([]BranchChoice, 0, len(branches))
 	initialIndex := -1

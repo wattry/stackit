@@ -109,7 +109,7 @@ func ShowConflict(ctx *app.Context) error {
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Get downstack commits
-	downstackBranches := graph.Range(currentBranchObj.GetName(), engine.StackRange{RecursiveParents: true})
+	downstackBranches := graph.Range(*currentBranchObj, engine.StackRange{RecursiveParents: true})
 	downstackBranches = append([]engine.Branch{*currentBranchObj}, downstackBranches...)
 
 	out.Info("Stack (bottom to top):")

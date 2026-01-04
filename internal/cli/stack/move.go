@@ -76,7 +76,7 @@ func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, er
 
 	// Get descendants of source to exclude them
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	descendants := graph.Range(sourceBranch, engine.StackRange{
+	descendants := graph.Range(eng.GetBranch(sourceBranch), engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,

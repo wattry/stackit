@@ -104,7 +104,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Get all commits downstack from current branch
 	// We need commits from all branches downstack, not just current branch
-	downstackBranches := graph.Range(currentBranch.GetName(), engine.StackRange{RecursiveParents: true})
+	downstackBranches := graph.Range(*currentBranch, engine.StackRange{RecursiveParents: true})
 	// Include current branch (prepend since Range returns ancestors oldest-to-nearest)
 	downstackBranches = append([]engine.Branch{*currentBranch}, downstackBranches...)
 
@@ -282,7 +282,7 @@ func Action(ctx *app.Context, opts Options) error {
 	if oldestModifiedBranch != "" {
 		// Rebuild graph with fresh engine state
 		graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		upstackBranches := graph.Range(oldestModifiedBranch, engine.StackRange{RecursiveChildren: true})
+		upstackBranches := graph.Range(eng.GetBranch(oldestModifiedBranch), engine.StackRange{RecursiveChildren: true})
 
 		if len(upstackBranches) > 0 {
 			if err := actions.RestackBranches(ctx, upstackBranches); err != nil {

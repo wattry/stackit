@@ -143,16 +143,20 @@ func buildLeaf(eng engine.BranchReader, branchName string, depth int, prBranch s
 // isParentOrChild checks if branch1 is a parent or child of branch2
 func isParentOrChild(graph *engine.StackGraph, branch1, branch2 string) bool {
 	visited := make(map[string]bool)
-	return isParentOrChildRecursive(graph, branch1, branch2, visited)
+	node := graph.Nodes[branch1]
+	if node == nil {
+		return false
+	}
+	return isParentOrChildRecursive(graph, node.Branch, branch2, visited)
 }
 
 // isParentOrChildRecursive is the recursive helper with cycle detection
-func isParentOrChildRecursive(graph *engine.StackGraph, branch1, branch2 string, visited map[string]bool) bool {
+func isParentOrChildRecursive(graph *engine.StackGraph, branch1 engine.Branch, branch2 string, visited map[string]bool) bool {
 	// Prevent infinite recursion
-	if visited[branch1] {
+	if visited[branch1.GetName()] {
 		return false
 	}
-	visited[branch1] = true
+	visited[branch1.GetName()] = true
 
 	// Check if branch1 is parent of branch2
 	children := graph.ChildBranches(branch1)
@@ -160,7 +164,7 @@ func isParentOrChildRecursive(graph *engine.StackGraph, branch1, branch2 string,
 		if child.GetName() == branch2 {
 			return true
 		}
-		if isParentOrChildRecursive(graph, child.GetName(), branch2, visited) {
+		if isParentOrChildRecursive(graph, child, branch2, visited) {
 			return true
 		}
 	}
@@ -171,7 +175,10 @@ func isParentOrChildRecursive(graph *engine.StackGraph, branch1, branch2 string,
 		if parentName == branch2 {
 			return true
 		}
-		return isParentOrChildRecursive(graph, parentName, branch2, visited)
+		parentNode := graph.Nodes[parentName]
+		if parentNode != nil {
+			return isParentOrChildRecursive(graph, parentNode.Branch, branch2, visited)
+		}
 	}
 
 	return false

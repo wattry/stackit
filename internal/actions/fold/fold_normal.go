@@ -36,7 +36,7 @@ func foldNormal(gctx context.Context, ctx *app.Context, currentBranch, parentBra
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Get all descendants of parent before deletion (for restacking)
-	descendants := graph.Range(parentBranch.GetName(), engine.StackRange{
+	descendants := graph.Range(parentBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    false,
 		RecursiveParents:  false,
@@ -62,7 +62,7 @@ func foldNormal(gctx context.Context, ctx *app.Context, currentBranch, parentBra
 		graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 		// Get updated descendants list (current branch's children are now children of parent)
-		updatedDescendants := graph.Range(parentBranch.GetName(), engine.StackRange{
+		updatedDescendants := graph.Range(parentBranch, engine.StackRange{
 			RecursiveChildren: true,
 			IncludeCurrent:    false,
 			RecursiveParents:  false,

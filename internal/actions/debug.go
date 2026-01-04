@@ -159,7 +159,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 			branchInfo.Parent = parent.GetName()
 		}
 
-		children := graph.ChildBranches(branchName)
+		children := graph.ChildBranches(branchObj)
 		if len(children) > 0 {
 			childNames := make([]string, len(children))
 			for i, c := range children {

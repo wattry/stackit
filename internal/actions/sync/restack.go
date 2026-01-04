@@ -18,7 +18,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 	if currentBranch != nil {
 		if currentBranch.IsTracked() {
 			// Get full stack (up to trunk)
-			stack := graph.Range(currentBranch.GetName(), engine.StackRange{
+			stack := graph.Range(*currentBranch, engine.StackRange{
 				RecursiveParents:  true,
 				IncludeCurrent:    true,
 				RecursiveChildren: true,
@@ -29,7 +29,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 			}
 		} else if currentBranch.IsTrunk() {
 			// If on trunk, restack all branches
-			stack := graph.Range(currentBranch.GetName(), engine.StackRange{
+			stack := graph.Range(*currentBranch, engine.StackRange{
 				RecursiveChildren: true,
 			})
 			for _, b := range stack {

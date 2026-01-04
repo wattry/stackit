@@ -163,7 +163,7 @@ func Action(ctx *app.Context, opts Options) error {
 			RecursiveChildren: true,
 		}
 		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		upstackBranches := graph.Range(currentBranch.GetName(), rng)
+		upstackBranches := graph.Range(*currentBranch, rng)
 		if len(upstackBranches) > 0 {
 			if err := actions.RestackBranches(ctx, upstackBranches); err != nil {
 				return fmt.Errorf("failed to restack upstack branches: %w", err)
@@ -185,7 +185,7 @@ func Action(ctx *app.Context, opts Options) error {
 		RecursiveChildren: true,
 	}
 	upstackGraph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	upstackBranches := upstackGraph.Range(currentBranch.GetName(), upstackRng)
+	upstackBranches := upstackGraph.Range(*currentBranch, upstackRng)
 
 	// Apply the split
 	if err := eng.ApplySplitToCommits(context, engine.ApplySplitOptions{

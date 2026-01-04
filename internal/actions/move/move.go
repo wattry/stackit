@@ -88,7 +88,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Cycle detection: ensure onto is not a descendant of source
 	sourceBranch = eng.GetBranch(source)
-	descendants := graph.Range(sourceBranch.GetName(), engine.StackRange{
+	descendants := graph.Range(sourceBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,
@@ -156,7 +156,7 @@ func Action(ctx *app.Context, opts Options) error {
 		style.ColorBranchName(onto, false))
 
 	// Get all branches that need restacking: source and all its descendants
-	branchesToRestack := graph.Range(sourceBranch.GetName(), engine.StackRange{
+	branchesToRestack := graph.Range(sourceBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,

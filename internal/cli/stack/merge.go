@@ -554,7 +554,7 @@ func runMergeTypeSelector(ctx *app.Context, dryRun bool, force bool) error {
 		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 		leafBranches := make([]engine.Branch, 0)
 		for _, b := range branches {
-			if !b.IsTrunk() && len(graph.Children(b.GetName())) == 0 {
+			if !b.IsTrunk() && len(graph.Children(b)) == 0 {
 				leafBranches = append(leafBranches, b)
 			}
 		}

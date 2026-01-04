@@ -20,7 +20,7 @@ func TestStackGraphRangeAncestorsExcludeTrunk(t *testing.T) {
 		})
 
 	graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range("branch2", engine.StackRange{RecursiveParents: true})
+	branches := graph.Range(s.Engine.GetBranch("branch2"), engine.StackRange{RecursiveParents: true})
 
 	names := make([]string, 0, len(branches))
 	for _, b := range branches {
@@ -43,7 +43,7 @@ func TestStackGraphRangeDescendantsOrderParentsFirst(t *testing.T) {
 		})
 
 	graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(s.Engine.Trunk().GetName(), engine.StackRange{
+	branches := graph.Range(s.Engine.Trunk(), engine.StackRange{
 		RecursiveChildren: true,
 	})
 
@@ -82,7 +82,7 @@ func TestStackGraphFilterPrunesSubtrees(t *testing.T) {
 		return b.GetName() != "b"
 	})
 
-	branches := graph.Range(s.Engine.Trunk().GetName(), engine.StackRange{
+	branches := graph.Range(s.Engine.Trunk(), engine.StackRange{
 		RecursiveChildren: true,
 	})
 

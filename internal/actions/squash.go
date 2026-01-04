@@ -58,7 +58,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 		RecursiveChildren: true,
 	}
 	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
-	upstackBranches := graph.Range(currentBranch.GetName(), rng)
+	upstackBranches := graph.Range(*currentBranch, rng)
 
 	// Restack upstack branches
 	if len(upstackBranches) > 0 {

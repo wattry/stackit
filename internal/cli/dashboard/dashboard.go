@@ -146,7 +146,11 @@ func (m *model) refresh() tea.Cmd {
 			currentName,
 			trunk,
 			func(name string) []string {
-				return graph.Children(name)
+				node := graph.Nodes[name]
+				if node == nil {
+					return nil
+				}
+				return graph.Children(node.Branch)
 			},
 			func(name string) string {
 				branch := m.engine.GetBranch(name)
@@ -175,7 +179,11 @@ func (m *model) refresh() tea.Cmd {
 		branches := []string{trunk}
 		var collect func(string)
 		collect = func(name string) {
-			children := graph.Children(name)
+			node := graph.Nodes[name]
+			if node == nil {
+				return
+			}
+			children := graph.Children(node.Branch)
 			for _, child := range children {
 				branches = append(branches, child)
 				collect(child)

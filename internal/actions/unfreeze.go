@@ -22,7 +22,7 @@ func UnfreezeAction(ctx *app.Context, branchName string) error {
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Get upstack (descendants including current)
-	branches := graph.Range(branchName, engine.StackRange{
+	branches := graph.Range(branch, engine.StackRange{
 		IncludeCurrent:    true,
 		RecursiveChildren: true,
 	})

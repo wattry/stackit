@@ -52,12 +52,12 @@ func Action(ctx *app.Context, opts Options) error {
 	toDelete := []engine.Branch{branch}
 
 	if opts.Upstack {
-		upstack := graph.Range(branchName, engine.StackRange{RecursiveChildren: true})
+		upstack := graph.Range(branch, engine.StackRange{RecursiveChildren: true})
 		toDelete = append(toDelete, upstack...)
 	}
 
 	if opts.Downstack {
-		downstack := graph.Range(branchName, engine.StackRange{RecursiveParents: true})
+		downstack := graph.Range(branch, engine.StackRange{RecursiveParents: true})
 		toDelete = append(downstack, toDelete...)
 	}
 

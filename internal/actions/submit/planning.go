@@ -132,7 +132,7 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 		stackRange = StackRangeDownstack()
 	}
 	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
-	stackBranches := graph.Range(branchName, stackRange)
+	stackBranches := graph.Range(nav.GetBranch(branchName), stackRange)
 	allBranches := make([]string, len(stackBranches))
 	for i, b := range stackBranches {
 		allBranches[i] = b.GetName()

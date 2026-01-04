@@ -156,32 +156,35 @@ func BuildStackGraph(eng BranchReader, strategy SortStrategy, filter func(Branch
 	return graph
 }
 
-// Node returns the StackNode for the given branch name.
-func (g *StackGraph) Node(name string) *StackNode {
-	return g.Nodes[name]
+// Node returns the StackNode for the given branch.
+func (g *StackGraph) Node(branch Branch) *StackNode {
+	return g.Nodes[branch.GetName()]
 }
 
 // Children returns the child branch names for the given branch.
-func (g *StackGraph) Children(name string) []string {
-	if node := g.Nodes[name]; node != nil {
+func (g *StackGraph) Children(branch Branch) []string {
+	if node := g.Nodes[branch.GetName()]; node != nil {
 		return node.Children
 	}
 	return nil
 }
 
-// ChildBranches returns the child branches for the given branch name.
-func (g *StackGraph) ChildBranches(name string) []Branch {
-	names := g.Children(name)
-	branches := make([]Branch, len(names))
-	for i, n := range names {
+// ChildBranches returns the child branches for the given branch.
+func (g *StackGraph) ChildBranches(branch Branch) []Branch {
+	node := g.Nodes[branch.GetName()]
+	if node == nil {
+		return nil
+	}
+	branches := make([]Branch, len(node.Children))
+	for i, n := range node.Children {
 		branches[i] = g.Nodes[n].Branch
 	}
 	return branches
 }
 
 // Parent returns the parent branch name (empty string if none).
-func (g *StackGraph) Parent(name string) string {
-	if node := g.Nodes[name]; node != nil {
+func (g *StackGraph) Parent(branch Branch) string {
+	if node := g.Nodes[branch.GetName()]; node != nil {
 		return node.Parent
 	}
 	return ""
@@ -190,7 +193,8 @@ func (g *StackGraph) Parent(name string) string {
 // Range returns branches matching the provided StackRange, ordered the same as the legacy
 // GetRelativeStack implementation: ancestors (oldest to nearest), current, then descendants.
 // Descendants are traversed depth-first using the graph's pre-sorted children.
-func (g *StackGraph) Range(start string, rng StackRange) []Branch {
+func (g *StackGraph) Range(branch Branch, rng StackRange) []Branch {
+	start := branch.GetName()
 	startNode := g.Nodes[start]
 	if startNode == nil {
 		return nil
