@@ -33,6 +33,10 @@ type Context struct {
 	Verify      bool
 	Debug       bool
 	Quiet       bool
+
+	// Worktree context
+	InManagedWorktree bool                 // True if running from a stackit-managed worktree
+	WorktreeInfo      *engine.WorktreeInfo // Info about current worktree (nil if not in managed worktree)
 }
 
 // Git returns the git runner from the engine.
@@ -76,6 +80,9 @@ func (c *Context) Undo() engine.UndoManager { return c.Engine }
 
 // RemoteMetadata returns the remote metadata manager from the engine.
 func (c *Context) RemoteMetadata() engine.RemoteMetadataManager { return c.Engine }
+
+// Worktree returns the worktree registry from the engine.
+func (c *Context) Worktree() engine.WorktreeRegistry { return c.Engine }
 
 // GlobalOptions holds settings from global flags
 type GlobalOptions struct {

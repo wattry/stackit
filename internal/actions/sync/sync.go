@@ -76,6 +76,16 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return fmt.Errorf("failed to clean branches: %w", err)
 	}
 
+	// Clean orphaned worktrees (after branch cleanup so we know what's been deleted)
+	worktreeResult := cleanOrphanedWorktrees(ctx)
+	if len(worktreeResult.RemovedWorktrees) > 0 {
+		summary.WorktreesCleaned = len(worktreeResult.RemovedWorktrees)
+	}
+	// Surface any worktree cleanup errors as warnings (non-fatal)
+	for _, errMsg := range worktreeResult.Errors {
+		ctx.Output.Warn("Worktree cleanup: %s", errMsg)
+	}
+
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	// Add branches with new parents to restack list
@@ -185,6 +195,7 @@ type Summary struct {
 	BranchesSkipped   int      // Number of branches skipped (due to conflicts)
 	ConflictBranches  []string // Names of branches that conflicted
 	UpToDate          bool     // Everything was already current
+	WorktreesCleaned  int      // Number of orphaned worktrees cleaned up
 }
 
 // ParentsResult contains the result of synchronizing parents from GitHub
@@ -195,7 +206,7 @@ type ParentsResult struct {
 // HasChanges returns true if any operations were performed
 func (s *Summary) HasChanges() bool {
 	return s.TrunkUpdated || s.BranchesSynced > 0 || s.BranchesRestacked > 0 ||
-		s.BranchesDeleted > 0 || s.BranchesSkipped > 0
+		s.BranchesDeleted > 0 || s.BranchesSkipped > 0 || s.WorktreesCleaned > 0
 }
 
 // Handler abstracts TTY vs non-TTY output for sync operations
@@ -254,11 +265,22 @@ func FormatSummaryParts(summary Summary) []string {
 	if summary.BranchesDeleted > 0 {
 		parts = append(parts, fmt.Sprintf("deleted %d", summary.BranchesDeleted))
 	}
+	if summary.WorktreesCleaned > 0 {
+		parts = append(parts, fmt.Sprintf("cleaned %d worktree%s", summary.WorktreesCleaned, plural(summary.WorktreesCleaned)))
+	}
 	if summary.BranchesSkipped > 0 {
 		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", summary.BranchesSkipped))
 	}
 
 	return parts
+}
+
+// plural returns "s" if count != 1, otherwise empty string
+func plural(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // FormatSummaryString returns the full summary as a string

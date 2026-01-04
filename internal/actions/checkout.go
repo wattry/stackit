@@ -70,6 +70,10 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	}
 
 	branch := eng.GetBranch(branchName)
+
+	// Warn if checking out a branch from a different stack that has its own worktree
+	warnIfCrossWorktreeCheckout(ctx, branch, branchName)
+
 	if err := eng.CheckoutBranch(context, branch); err != nil {
 		if git.IsLocalChangesError(err) {
 			return fmt.Errorf("cannot checkout branch %s because you have uncommitted changes that would be overwritten; please commit or stash your changes before switching branches", branchName)
@@ -134,4 +138,27 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 			return
 		}
 	}
+}
+
+// warnIfCrossWorktreeCheckout warns if checking out a branch that belongs to a different
+// stack which has its own managed worktree.
+func warnIfCrossWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName string) {
+	if !ctx.InManagedWorktree || ctx.WorktreeInfo == nil {
+		return
+	}
+
+	targetStackRoot := ctx.Engine.GetStackRootForBranch(branch)
+	if targetStackRoot == "" || targetStackRoot == ctx.WorktreeInfo.StackRoot {
+		return
+	}
+
+	targetWorktree, err := ctx.Engine.GetWorktreeForStack(targetStackRoot)
+	if err != nil || targetWorktree == nil {
+		return
+	}
+
+	ctx.Output.Warn("Branch %s belongs to a different stack (%s) that has its own worktree.",
+		style.ColorBranchName(branchName, false),
+		style.ColorBranchName(targetStackRoot, false))
+	ctx.Output.Tip("cd %s", targetWorktree.Path)
 }

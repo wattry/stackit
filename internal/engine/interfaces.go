@@ -145,6 +145,31 @@ type WorktreeOperations interface {
 	CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (path string, cleanup func(), err error)
 }
 
+// WorktreeInfo represents information about a stackit-managed worktree
+type WorktreeInfo struct {
+	Path        string    // Absolute path to worktree
+	StackRoot   string    // Stack root branch name
+	CreatedAt   time.Time // When worktree was created
+	MainRepoDir string    // Path to main repo
+}
+
+// WorktreeRegistry handles stackit-managed worktree tracking
+type WorktreeRegistry interface {
+	// RegisterWorktree registers a worktree for a stack root
+	RegisterWorktree(stackRoot string, path string) error
+	// UnregisterWorktree removes worktree registration for a stack root
+	UnregisterWorktree(stackRoot string) error
+	// GetWorktreeForStack returns worktree info for a stack root, or nil if none
+	GetWorktreeForStack(stackRoot string) (*WorktreeInfo, error)
+	// ListManagedWorktrees returns all stackit-managed worktrees
+	ListManagedWorktrees() ([]WorktreeInfo, error)
+	// GetStackRootForBranch returns the stack root for a given branch
+	GetStackRootForBranch(branch Branch) string
+	// IsInManagedWorktree checks if the current directory is a stackit-managed worktree
+	// Returns true and worktree info if in a managed worktree, false otherwise
+	IsInManagedWorktree() (bool, *WorktreeInfo, error)
+}
+
 // Initializer handles repository initialization operations
 type Initializer interface {
 	Reset(newTrunkName string) error

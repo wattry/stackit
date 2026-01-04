@@ -6,10 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
+	"time"
 
 	"stackit.dev/stackit/internal/git"
 )
+
+// timeNow is a variable for time.Now to allow mocking in tests
+var timeNow = time.Now
 
 // CreateBranch creates a new branch at the given start point
 func (e *engineImpl) CreateBranch(ctx context.Context, branchName string, startPoint string) error {
@@ -573,6 +578,161 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 	}
 
 	return worktreePath, cleanup, nil
+}
+
+// RegisterWorktree registers a worktree for a stack root in local git refs
+func (e *engineImpl) RegisterWorktree(stackRoot string, path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	meta := &git.WorktreeMeta{
+		Path:        absPath,
+		StackRoot:   stackRoot,
+		CreatedAt:   timeNow(),
+		MainRepoDir: e.repoRoot,
+	}
+
+	return e.git.WriteWorktreeMeta(stackRoot, meta)
+}
+
+// UnregisterWorktree removes worktree registration for a stack root
+func (e *engineImpl) UnregisterWorktree(stackRoot string) error {
+	return e.git.DeleteWorktreeMeta(stackRoot)
+}
+
+// GetWorktreeForStack returns worktree info for a stack root, or nil if none
+func (e *engineImpl) GetWorktreeForStack(stackRoot string) (*WorktreeInfo, error) {
+	meta, err := e.git.ReadWorktreeMeta(stackRoot)
+	if err != nil {
+		return nil, err
+	}
+	if meta == nil {
+		return nil, nil
+	}
+
+	return &WorktreeInfo{
+		Path:        meta.Path,
+		StackRoot:   meta.StackRoot,
+		CreatedAt:   meta.CreatedAt,
+		MainRepoDir: meta.MainRepoDir,
+	}, nil
+}
+
+// ListManagedWorktrees returns all stackit-managed worktrees, sorted by stack root name
+func (e *engineImpl) ListManagedWorktrees() ([]WorktreeInfo, error) {
+	metas, err := e.git.ListWorktreeMetas()
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(metas))
+	for k := range metas {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	result := make([]WorktreeInfo, 0, len(metas))
+	for _, k := range keys {
+		meta := metas[k]
+		result = append(result, WorktreeInfo{
+			Path:        meta.Path,
+			StackRoot:   meta.StackRoot,
+			CreatedAt:   meta.CreatedAt,
+			MainRepoDir: meta.MainRepoDir,
+		})
+	}
+
+	return result, nil
+}
+
+// GetStackRootForBranch returns the stack root for a given branch.
+// The stack root is the first ancestor branch whose parent is trunk.
+// Returns empty string for trunk or untracked branches.
+func (e *engineImpl) GetStackRootForBranch(branch Branch) string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	branchName := branch.GetName()
+
+	// Trunk has no stack root
+	if branchName == e.trunk {
+		return ""
+	}
+
+	// Check if branch is tracked at all
+	if _, ok := e.parentMap[branchName]; !ok {
+		return "" // Untracked branch has no stack root
+	}
+
+	current := branchName
+	for {
+		parent, ok := e.parentMap[current]
+		if !ok {
+			// Should not happen since we checked above, but handle gracefully
+			return ""
+		}
+
+		// If parent is trunk, current is the stack root
+		if parent == e.trunk {
+			return current
+		}
+
+		current = parent
+	}
+}
+
+// IsInManagedWorktree checks if the current directory is a stackit-managed worktree.
+// Returns true and worktree info if in a managed worktree, false otherwise.
+func (e *engineImpl) IsInManagedWorktree() (bool, *WorktreeInfo, error) {
+	// Check if .git is a file (worktree) vs directory (main repo)
+	gitPath := filepath.Join(e.repoRoot, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil, nil // Not in a git repo
+		}
+		return false, nil, fmt.Errorf("failed to stat .git: %w", err)
+	}
+
+	// If .git is a directory, we're in the main repo, not a worktree
+	if info.IsDir() {
+		return false, nil, nil
+	}
+
+	// .git is a file - we're in a worktree. Now check if it's stackit-managed.
+	// Get the current working directory (worktree path)
+	currentPath, err := filepath.Abs(e.repoRoot)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// List all managed worktrees and check if current path matches
+	worktrees, err := e.ListManagedWorktrees()
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to list managed worktrees: %w", err)
+	}
+
+	for _, wt := range worktrees {
+		// Compare paths (normalize both)
+		wtPath, err := filepath.Abs(wt.Path)
+		if err != nil {
+			continue
+		}
+		if wtPath == currentPath {
+			return true, &WorktreeInfo{
+				Path:        wt.Path,
+				StackRoot:   wt.StackRoot,
+				CreatedAt:   wt.CreatedAt,
+				MainRepoDir: wt.MainRepoDir,
+			}, nil
+		}
+	}
+
+	// It's a worktree but not managed by stackit
+	return false, nil, nil
 }
 
 // setParentInternal updates parent without locking (caller must hold lock)

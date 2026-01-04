@@ -3,6 +3,7 @@ package create
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
@@ -27,6 +28,8 @@ type Options struct {
 	// SelectedChildren is used to specify which children to move during insert
 	// in non-interactive mode (mostly for tests)
 	SelectedChildren []string
+	// Worktree creates a dedicated worktree for this stack (only valid from trunk)
+	Worktree bool
 }
 
 // Action creates a new branch stacked on top of the current branch
@@ -40,6 +43,13 @@ func Action(ctx *app.Context, opts Options) error {
 		return err
 	}
 
+	// Validate worktree flag - only allowed when creating from trunk
+	if opts.Worktree {
+		if !eng.IsTrunk(eng.GetBranch(currentBranch)) {
+			return fmt.Errorf("--worktree/-w flag is only valid when creating a new stack from trunk")
+		}
+	}
+
 	// Take snapshot before modifying the repository
 	snapshotOpts := actions.NewSnapshot("create",
 		actions.WithArg(opts.BranchName),
@@ -49,6 +59,7 @@ func Action(ctx *app.Context, opts Options) error {
 		actions.WithFlag(opts.Insert, "--insert"),
 		actions.WithFlag(opts.Patch, "--patch"),
 		actions.WithFlag(opts.Update, "--update"),
+		actions.WithFlag(opts.Worktree, "--worktree"),
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
@@ -142,6 +153,24 @@ func Action(ctx *app.Context, opts Options) error {
 		out.Info("Warning: failed to track branch: %v", err)
 	}
 
+	// Create worktree if requested
+	if opts.Worktree {
+		// Checkout back to trunk first so we can create the worktree for the branch
+		trunkBranch := eng.Trunk()
+		if err := eng.CheckoutBranch(ctx.Context, trunkBranch); err != nil {
+			out.Debug("Warning: failed to checkout trunk before creating worktree: %v", err)
+		}
+
+		worktreePath, err := createWorktreeForStack(ctx, branchName)
+		if err != nil {
+			// Clean up branch on worktree failure
+			_ = eng.DeleteBranch(ctx.Context, branch)
+			return fmt.Errorf("failed to create worktree: %w", err)
+		}
+		out.Info("Created worktree at %s", worktreePath)
+		out.Tip("cd %s", worktreePath)
+	}
+
 	// Set scope: use provided scope if given, otherwise let it inherit from parent naturally
 	if opts.Scope != "" {
 		// Set explicit scope if provided
@@ -188,4 +217,36 @@ func determineBranch(ctx *app.Context, opts *Options, commitMessage string, scop
 	}
 
 	return ctx.Engine.GetBranch(branchName), nil
+}
+
+// createWorktreeForStack creates a worktree for the given stack root and registers it
+func createWorktreeForStack(ctx *app.Context, stackRoot string) (string, error) {
+	eng := ctx.Engine
+
+	// Get worktree base path from config, or use default
+	cfg, _ := config.LoadConfig(ctx.RepoRoot)
+	basePath := cfg.WorktreeBasePath()
+
+	// Default: sibling directory named {repo}-stacks
+	if basePath == "" {
+		repoName := filepath.Base(ctx.RepoRoot)
+		basePath = filepath.Join(filepath.Dir(ctx.RepoRoot), repoName+"-stacks")
+	}
+
+	// Worktree path: basePath/stackRoot
+	worktreePath := filepath.Join(basePath, stackRoot)
+
+	// Create the worktree (non-detached, pointing to the stack root branch)
+	if err := eng.AddWorktree(ctx.Context, worktreePath, stackRoot, false); err != nil {
+		return "", fmt.Errorf("failed to create worktree: %w", err)
+	}
+
+	// Register the worktree in local refs
+	if err := eng.RegisterWorktree(stackRoot, worktreePath); err != nil {
+		// Clean up worktree on registration failure
+		_ = eng.RemoveWorktree(ctx.Context, worktreePath)
+		return "", fmt.Errorf("failed to register worktree: %w", err)
+	}
+
+	return worktreePath, nil
 }

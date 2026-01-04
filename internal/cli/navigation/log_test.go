@@ -75,4 +75,29 @@ func TestLogCommand(t *testing.T) {
 		require.NoError(t, err, "log command failed: %s", output)
 		require.Contains(t, output, "feature")
 	})
+
+	t.Run("log shows worktree indicator for stack with worktree", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.WithInitialCommit()
+
+		// Create a staged change for the branch
+		s.CommitChange("feature-file", "feature content")
+
+		// Go back to main to create branch with worktree
+		s.Checkout("main")
+
+		// Stage a change for the worktree branch
+		err := s.Scene.Repo.CreateChange("worktree-content", "worktree-file", false)
+		require.NoError(t, err)
+
+		// Create branch with worktree using CLI
+		output, err := s.RunCliAndGetOutput("create", "-m", "worktree feature", "-w")
+		require.NoError(t, err, "create with worktree failed: %s", output)
+
+		// Run log command - should show worktree indicator
+		output, err = s.RunCliAndGetOutput("log")
+		require.NoError(t, err, "log command failed: %s", output)
+		require.Contains(t, output, "worktree", "log should show worktree indicator for branch with managed worktree")
+	})
 }
