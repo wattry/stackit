@@ -11,7 +11,7 @@ import (
 // FreezeAction freezes the specified branch and all branches downstack of it (recursive parents)
 func FreezeAction(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	branch := eng.GetBranch(branchName)
 	if branch.IsTrunk() {
@@ -40,13 +40,13 @@ func FreezeAction(ctx *app.Context, branchName string) error {
 		res, err := eng.SetFrozen(branchesToFreeze, true)
 		if err != nil {
 			for name, branchErr := range res.Errors {
-				splog.Warn("Failed to freeze %s: %v", name, branchErr)
+				out.Warn("Failed to freeze %s: %v", name, branchErr)
 			}
 			return fmt.Errorf("failed to freeze branches: %w", err)
 		}
 
 		for _, name := range res.AffectedBranches {
-			splog.Info("Frozen %s locally.", style.ColorBranchName(name, name == branchName))
+			out.Info("Frozen %s locally.", style.ColorBranchName(name, name == branchName))
 		}
 	}
 

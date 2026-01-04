@@ -8,19 +8,19 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // NewGetHandler creates the appropriate handler based on TTY availability
-func NewGetHandler(splog *tui.Splog) actions.GetHandler {
+func NewGetHandler(splog output.Output) actions.GetHandler {
 	// For now, just use simple handler (can add interactive later)
 	return NewSimpleGetHandler(splog)
 }
 
 // SimpleGetHandler provides streaming text output for non-TTY environments
 type SimpleGetHandler struct {
-	splog        *tui.Splog
+	splog        output.Output
 	currentPhase actions.GetPhase
 	mu           stdsync.Mutex
 	targetBranch string
@@ -28,7 +28,7 @@ type SimpleGetHandler struct {
 }
 
 // NewSimpleGetHandler creates a new SimpleGetHandler
-func NewSimpleGetHandler(splog *tui.Splog) *SimpleGetHandler {
+func NewSimpleGetHandler(splog output.Output) *SimpleGetHandler {
 	return &SimpleGetHandler{
 		splog: splog,
 	}

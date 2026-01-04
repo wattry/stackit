@@ -15,58 +15,58 @@ type Options struct {
 
 // Action runs diagnostic checks on the stackit environment and repository
 func Action(ctx *app.Context, opts Options) error {
-	splog := ctx.Splog
+	out := ctx.Output
 	eng := ctx.Engine
 
 	if opts.Fix {
-		splog.Info("Running stackit doctor with --fix...")
+		out.Info("Running stackit doctor with --fix...")
 	} else {
-		splog.Info("Running stackit doctor...")
+		out.Info("Running stackit doctor...")
 	}
-	splog.Newline()
+	out.Newline()
 
 	var warnings []string
 	var errors []string
 
 	// Environment checks
-	splog.Info("Environment:")
-	warnings, errors = checkEnvironment(ctx.Git(), splog, warnings, errors)
+	out.Info("Environment:")
+	warnings, errors = checkEnvironment(ctx.Git(), out, warnings, errors)
 
-	splog.Newline()
+	out.Newline()
 
 	// Repository checks
-	splog.Info("Repository:")
-	warnings, errors = checkRepository(ctx, splog, warnings, errors, opts.Trunk)
+	out.Info("Repository:")
+	warnings, errors = checkRepository(ctx, out, warnings, errors, opts.Trunk)
 
-	splog.Newline()
+	out.Newline()
 
 	// Stack state checks
-	splog.Info("Stack State:")
-	warnings, errors = checkStackState(eng, splog, warnings, errors, opts.Fix)
+	out.Info("Stack State:")
+	warnings, errors = checkStackState(eng, out, warnings, errors, opts.Fix)
 
 	// Summary
-	splog.Newline()
+	out.Newline()
 	switch {
 	case len(errors) > 0:
-		splog.Warn("Doctor found %d error(s) and %d warning(s).", len(errors), len(warnings))
+		out.Warn("Doctor found %d error(s) and %d warning(s).", len(errors), len(warnings))
 		for _, err := range errors {
-			splog.Error("  %s", err)
+			out.Error("  %s", err)
 		}
 		for _, warn := range warnings {
-			splog.Warn("  %s", warn)
+			out.Warn("  %s", warn)
 		}
 		return fmt.Errorf("doctor found %d error(s)", len(errors))
 	case len(warnings) > 0:
 		if opts.Fix {
-			splog.Info("Doctor found %d warning(s), some of which may have been fixed.", len(warnings))
+			out.Info("Doctor found %d warning(s), some of which may have been fixed.", len(warnings))
 		} else {
-			splog.Info("Doctor found %d warning(s). Your stackit setup is mostly healthy.", len(warnings))
+			out.Info("Doctor found %d warning(s). Your stackit setup is mostly healthy.", len(warnings))
 		}
 		for _, warn := range warnings {
-			splog.Warn("  %s", warn)
+			out.Warn("  %s", warn)
 		}
 	default:
-		splog.Info("✅ All checks passed. Your stackit setup is healthy.")
+		out.Info("✅ All checks passed. Your stackit setup is healthy.")
 	}
 
 	return nil

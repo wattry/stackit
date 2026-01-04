@@ -29,7 +29,7 @@ type Options struct {
 // Action performs the absorb operation
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
@@ -55,7 +55,7 @@ func Action(ctx *app.Context, opts Options) error {
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
-		splog.Debug("Failed to take snapshot: %v", err)
+		out.Debug("Failed to take snapshot: %v", err)
 	}
 
 	// Check if rebase is in progress
@@ -84,7 +84,7 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("failed to check staged changes: %w", err)
 	}
 	if !hasStaged {
-		splog.Info("Nothing to absorb.")
+		out.Info("Nothing to absorb.")
 		return nil
 	}
 
@@ -95,7 +95,7 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	if len(hunks) == 0 {
-		splog.Info("Nothing to absorb.")
+		out.Info("Nothing to absorb.")
 		return nil
 	}
 
@@ -177,12 +177,12 @@ func Action(ctx *app.Context, opts Options) error {
 
 	if len(hunksByBranch) == 0 {
 		if len(unabsorbedHunks) > 0 {
-			splog.Warn("The following hunks could not be absorbed (they commute with all commits):")
+			out.Warn("The following hunks could not be absorbed (they commute with all commits):")
 			for _, hunk := range unabsorbedHunks {
-				splog.Info("  %s (lines %d-%d)", hunk.File, hunk.NewStart, hunk.NewStart+hunk.NewCount-1)
+				out.Info("  %s (lines %d-%d)", hunk.File, hunk.NewStart, hunk.NewStart+hunk.NewCount-1)
 			}
 		} else {
-			splog.Info("Nothing to absorb.")
+			out.Info("Nothing to absorb.")
 		}
 		return nil
 	}
@@ -196,7 +196,7 @@ func Action(ctx *app.Context, opts Options) error {
 				flatHunksByCommit[commitSHA] = hunks
 			}
 		}
-		printDryRunOutput(flatHunksByCommit, unabsorbedHunks, eng, splog)
+		printDryRunOutput(flatHunksByCommit, unabsorbedHunks, eng, out)
 		return nil
 	}
 
@@ -207,7 +207,7 @@ func Action(ctx *app.Context, opts Options) error {
 			flatHunksByCommit[commitSHA] = hunks
 		}
 	}
-	printAbsorbPlan(flatHunksByCommit, unabsorbedHunks, eng, splog)
+	printAbsorbPlan(flatHunksByCommit, unabsorbedHunks, eng, out)
 
 	// Prompt for confirmation if not --force
 	if !opts.Force && ctx.Interactive {
@@ -216,12 +216,12 @@ func Action(ctx *app.Context, opts Options) error {
 			return fmt.Errorf("confirmation canceled: %w", err)
 		}
 		if !confirmed {
-			splog.Info("Absorb canceled")
+			out.Info("Absorb canceled")
 			return nil
 		}
 	} else if !opts.Force && !ctx.Interactive {
 		// Non-interactive without force: default to no
-		splog.Info("Non-interactive mode: skipping absorb (use --force to override)")
+		out.Info("Non-interactive mode: skipping absorb (use --force to override)")
 		return nil
 	}
 
@@ -258,15 +258,15 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 
 		for commitSHA := range branchHunks {
-			splog.Info("Absorbed changes into commit %s in %s", commitSHA[:8], style.ColorBranchName(branch.GetName(), false))
+			out.Info("Absorbed changes into commit %s in %s", commitSHA[:8], style.ColorBranchName(branch.GetName(), false))
 		}
 	}
 
 	// Warn about unabsorbed hunks
 	if len(unabsorbedHunks) > 0 {
-		splog.Warn("The following hunks could not be absorbed (they commute with all commits):")
+		out.Warn("The following hunks could not be absorbed (they commute with all commits):")
 		for _, hunk := range unabsorbedHunks {
-			splog.Info("  %s (lines %d-%d)", hunk.File, hunk.NewStart, hunk.NewStart+hunk.NewCount-1)
+			out.Info("  %s (lines %d-%d)", hunk.File, hunk.NewStart, hunk.NewStart+hunk.NewCount-1)
 		}
 	}
 

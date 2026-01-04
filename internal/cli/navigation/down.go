@@ -51,7 +51,7 @@ as an argument to move multiple levels at once.`,
 
 				// Check if on trunk
 				if currentBranch.IsTrunk() {
-					ctx.Splog.Info("Already at trunk (%s).", style.ColorBranchName(currentBranch.GetName(), true))
+					ctx.Output.Info("Already at trunk (%s).", style.ColorBranchName(currentBranch.GetName(), true))
 					return nil
 				}
 
@@ -62,20 +62,20 @@ as an argument to move multiple levels at once.`,
 					if parent == nil {
 						// No parent found - branch is untracked or we've gone past trunk
 						if i == 0 {
-							ctx.Splog.Info("%s has no parent (untracked branch).", style.ColorBranchName(currentBranch.GetName(), true))
+							ctx.Output.Info("%s has no parent (untracked branch).", style.ColorBranchName(currentBranch.GetName(), true))
 							return nil
 						}
 						// We moved some steps but can't go further
-						ctx.Splog.Info("Stopped at %s (no further parent after %d step(s)).", style.ColorBranchName(targetBranch.GetName(), false), i)
+						ctx.Output.Info("Stopped at %s (no further parent after %d step(s)).", style.ColorBranchName(targetBranch.GetName(), false), i)
 						break
 					}
-					ctx.Splog.Info("⮑  %s", parent.GetName())
+					ctx.Output.Info("⮑  %s", parent.GetName())
 					targetBranch = *parent
 				}
 
 				// Check if we actually moved
 				if targetBranch.GetName() == currentBranch.GetName() {
-					ctx.Splog.Info("Already at the bottom of the stack.")
+					ctx.Output.Info("Already at the bottom of the stack.")
 					return nil
 				}
 
@@ -84,7 +84,7 @@ as an argument to move multiple levels at once.`,
 					return fmt.Errorf("failed to checkout branch %s: %w", targetBranch.GetName(), err)
 				}
 
-				ctx.Splog.Info("Checked out %s.", style.ColorBranchName(targetBranch.GetName(), false))
+				ctx.Output.Info("Checked out %s.", style.ColorBranchName(targetBranch.GetName(), false))
 				return nil
 			})
 		},

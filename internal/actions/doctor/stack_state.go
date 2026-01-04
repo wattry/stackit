@@ -5,17 +5,17 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // checkStackState performs stack state and metadata integrity checks
-func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, errors []string, fix bool) ([]string, []string) {
+func checkStackState(eng engine.Engine, out output.Output, warnings []string, errors []string, fix bool) ([]string, []string) {
 	// Get all branches
 	allBranches, err := eng.Git().GetAllBranchNames()
 	if err != nil {
 		errors = append(errors, fmt.Sprintf("failed to get branch names: %v", err))
-		splog.Error("  failed to get branch names: %v", err)
+		out.Error("  failed to get branch names: %v", err)
 		return warnings, errors
 	}
 
@@ -23,7 +23,7 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 	metadataRefs, err := eng.Git().ListMetadata()
 	if err != nil {
 		errors = append(errors, fmt.Sprintf("failed to get metadata refs: %v", err))
-		splog.Error("  failed to get metadata refs: %v", err)
+		out.Error("  failed to get metadata refs: %v", err)
 		return warnings, errors
 	}
 
@@ -40,10 +40,10 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 			orphanedCount++
 			if fix {
 				if err := eng.Git().DeleteMetadata(branchName); err != nil {
-					splog.Error("  Failed to prune orphaned metadata for %s: %v", branchName, err)
+					out.Error("  Failed to prune orphaned metadata for %s: %v", branchName, err)
 					warnings = append(warnings, fmt.Sprintf("orphaned metadata found for deleted branch '%s' (fix failed)", branchName))
 				} else {
-					splog.Info("  ✅ Pruned orphaned metadata for deleted branch %s", style.ColorBranchName(branchName, false))
+					out.Info("  ✅ Pruned orphaned metadata for deleted branch %s", style.ColorBranchName(branchName, false))
 					prunedCount++
 				}
 			} else {
@@ -55,15 +55,15 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 	if orphanedCount > 0 {
 		if fix {
 			if prunedCount == orphanedCount {
-				splog.Info("  ✅ All %d orphaned metadata ref(s) pruned", prunedCount)
+				out.Info("  ✅ All %d orphaned metadata ref(s) pruned", prunedCount)
 			} else {
-				splog.Warn("  Found %d orphaned metadata ref(s), pruned %d", orphanedCount, prunedCount)
+				out.Warn("  Found %d orphaned metadata ref(s), pruned %d", orphanedCount, prunedCount)
 			}
 		} else {
-			splog.Warn("  Found %d orphaned metadata ref(s) (run 'stackit doctor --fix' to prune)", orphanedCount)
+			out.Warn("  Found %d orphaned metadata ref(s) (run 'stackit doctor --fix' to prune)", orphanedCount)
 		}
 	} else {
-		splog.Info("  ✅ No orphaned metadata found")
+		out.Info("  ✅ No orphaned metadata found")
 	}
 
 	// Check for corrupted metadata
@@ -88,9 +88,9 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 	}
 
 	if corruptedCount > 0 {
-		splog.Error("  Found %d corrupted metadata ref(s)", corruptedCount)
+		out.Error("  Found %d corrupted metadata ref(s)", corruptedCount)
 	} else {
-		splog.Info("  ✅ Metadata integrity check passed")
+		out.Info("  ✅ Metadata integrity check passed")
 	}
 
 	// Check for cycles in the stack graph
@@ -99,9 +99,9 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 		for _, cycle := range cycles {
 			errors = append(errors, fmt.Sprintf("cycle detected in stack graph: %s", strings.Join(cycle, " -> ")))
 		}
-		splog.Error("  Found %d cycle(s) in stack graph", len(cycles))
+		out.Error("  Found %d cycle(s) in stack graph", len(cycles))
 	} else {
-		splog.Info("  ✅ No cycles detected in stack graph")
+		out.Info("  ✅ No cycles detected in stack graph")
 	}
 
 	// Check for missing parent branches
@@ -116,9 +116,9 @@ func checkStackState(eng engine.Engine, splog *tui.Splog, warnings []string, err
 			}
 			warnings = append(warnings, fmt.Sprintf("branch '%s' has parent '%s' that does not exist", branch, parentName))
 		}
-		splog.Warn("  Found %d branch(es) with missing parents", len(missingParents))
+		out.Warn("  Found %d branch(es) with missing parents", len(missingParents))
 	} else {
-		splog.Info("  ✅ All parent branches exist")
+		out.Info("  ✅ All parent branches exist")
 	}
 
 	return warnings, errors

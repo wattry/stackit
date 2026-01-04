@@ -31,13 +31,13 @@ branches depend on the current branch.`,
 				// Get children
 				children := currentBranch.GetChildren()
 				if len(children) == 0 {
-					ctx.Splog.Info("%s has no children.", style.ColorBranchName(currentBranch.GetName(), true))
+					ctx.Output.Info("%s has no children.", style.ColorBranchName(currentBranch.GetName(), true))
 					return nil
 				}
 
 				// Print children
 				for _, child := range children {
-					ctx.Splog.Info("%s", child.GetName())
+					ctx.Output.Info("%s", child.GetName())
 				}
 				return nil
 			})

@@ -103,7 +103,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Populate remote SHAs early for accurate display
 	if err := pr.PopulateRemoteShas(); err != nil {
-		ctx.Splog.Debug("Failed to populate remote SHAs: %v", err)
+		ctx.Output.Debug("Failed to populate remote SHAs: %v", err)
 	}
 
 	// Build tree structure for display
@@ -278,7 +278,7 @@ func submitBranch(ctx *app.Context, info Info, opts Options, handler Handler, re
 	// Open in browser if requested
 	if opts.View && prURL != "" {
 		if err := utils.OpenBrowser(prURL); err != nil {
-			ctx.Splog.Debug("Failed to open browser: %v", err)
+			ctx.Output.Debug("Failed to open browser: %v", err)
 		}
 	}
 
@@ -472,7 +472,7 @@ func pushMetadataRefs(ctx *app.Context, branches []engine.Branch) error {
 		rm.SetRemoteSyncEnabled(true)
 		// Configure refspec so future git fetch commands also fetch metadata
 		if err := ctx.Git().EnsureMetadataRefspecConfigured(); err != nil {
-			ctx.Splog.Debug("Failed to configure metadata refspec: %v", err)
+			ctx.Output.Debug("Failed to configure metadata refspec: %v", err)
 		}
 	}
 

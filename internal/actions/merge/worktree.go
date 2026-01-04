@@ -9,7 +9,7 @@ import (
 
 // ExecuteInWorktree executes the merge plan in a temporary worktree
 func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions, scope string, targetBranch string) (err error) {
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Create temporary worktree via engine
 	// We use detached HEAD at the current revision to avoid "already used by worktree" errors
@@ -19,13 +19,13 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		return err
 	}
 
-	splog.Debug("📁 Worktree: %s", worktreePath)
+	out.Debug("📁 Worktree: %s", worktreePath)
 
 	// Ensure we clean up on exit
 	cleanupWorktree := true
 	defer func() {
 		if cleanupWorktree {
-			splog.Debug("Cleaning up worktree at %s", worktreePath)
+			out.Debug("Cleaning up worktree at %s", worktreePath)
 			cleanup()
 		}
 	}()
@@ -57,16 +57,16 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	// 5. Pre-flight operations in the worktree
 	// Populate remote SHAs so we can accurately check if branches match remote
 	if err := worktreeEng.PopulateRemoteShas(); err != nil {
-		splog.Debug("Failed to populate remote SHAs in worktree: %v", err)
+		out.Debug("Failed to populate remote SHAs in worktree: %v", err)
 	}
 
 	// Pull trunk in the worktree to ensure we have latest changes
 	pullResult, err := worktreeEng.PullTrunk(ctx.Context)
 	if err != nil {
-		splog.Debug("Failed to pull trunk in worktree: %v", err)
+		out.Debug("Failed to pull trunk in worktree: %v", err)
 	} else if pullResult == engine.PullConflict {
 		if opts.Force {
-			splog.Info("Trunk diverged from remote. Force-resetting trunk to match remote...")
+			out.Info("Trunk diverged from remote. Force-resetting trunk to match remote...")
 			if err := worktreeEng.ResetTrunkToRemote(ctx.Context); err != nil {
 				return fmt.Errorf("failed to auto-reset diverged trunk: %w", err)
 			}
@@ -80,7 +80,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	if plan == nil {
 		// Create plan in worktree
 		var err error
-		plan, _, err = CreateMergePlan(ctx.Context, worktreeEng, splog, ctx.GitHubClient, CreatePlanOptions{
+		plan, _, err = CreateMergePlan(ctx.Context, worktreeEng, out, ctx.GitHubClient, CreatePlanOptions{
 			Strategy:     opts.Strategy,
 			Force:        opts.Force,
 			Scope:        scope,
@@ -101,32 +101,32 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		// If it's a conflict, don't clean up so the user can resolve it
 		if isConflictError(err) {
 			cleanupWorktree = false
-			splog.Warn("Conflict detected during merge execution in worktree.")
-			splog.Info("The worktree has been preserved for manual resolution.")
-			splog.Info("Your main workspace has been left untouched.")
-			splog.Newline()
-			splog.Info("To resolve the conflict and continue:")
-			splog.Info("  1. cd %s", worktreePath)
-			splog.Info("  2. Resolve the conflicts and git add the files.")
-			splog.Info("  3. Run 'stackit continue' to finish the merge/restack.")
-			splog.Info("  4. Once finished, return to your main workspace.")
+			out.Warn("Conflict detected during merge execution in worktree.")
+			out.Info("The worktree has been preserved for manual resolution.")
+			out.Info("Your main workspace has been left untouched.")
+			out.Newline()
+			out.Info("To resolve the conflict and continue:")
+			out.Info("  1. cd %s", worktreePath)
+			out.Info("  2. Resolve the conflicts and git add the files.")
+			out.Info("  3. Run 'stackit continue' to finish the merge/restack.")
+			out.Info("  4. Once finished, return to your main workspace.")
 			return err
 		}
 
 		// For other errors (like CI failure), we still want to give instructions
 		// but we can clean up the worktree.
-		splog.Warn("Merge execution failed in worktree.")
-		splog.Info("Your main workspace remains untouched.")
-		splog.Newline()
+		out.Warn("Merge execution failed in worktree.")
+		out.Info("Your main workspace remains untouched.")
+		out.Newline()
 		if isCIFailure(err) {
-			splog.Info("CI checks failed. Please:")
-			splog.Info("  1. Fix the issues in your main workspace.")
-			splog.Info("  2. Run 'stackit submit' to update PRs.")
-			splog.Info("  3. Run 'stackit merge' again once CI passes.")
+			out.Info("CI checks failed. Please:")
+			out.Info("  1. Fix the issues in your main workspace.")
+			out.Info("  2. Run 'stackit submit' to update PRs.")
+			out.Info("  3. Run 'stackit merge' again once CI passes.")
 		} else {
-			splog.Info("To resolve:")
-			splog.Info("  1. Fix the underlying issue in your main workspace.")
-			splog.Info("  2. Run 'stackit merge' again.")
+			out.Info("To resolve:")
+			out.Info("  1. Fix the underlying issue in your main workspace.")
+			out.Info("  2. Run 'stackit merge' again.")
 		}
 		return err
 	}

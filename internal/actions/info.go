@@ -30,7 +30,7 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	}
 
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	branchName := opts.BranchName
 	if branchName == "" {
@@ -51,14 +51,14 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 
 		// For remote branches, fetch metadata to show the latest info
 		if err := eng.Git().FetchMetadataRefs(); err != nil {
-			splog.Debug("Failed to fetch remote metadata: %v", err)
+			out.Debug("Failed to fetch remote metadata: %v", err)
 		} else {
 			if err := eng.LoadRemoteMetadataCache(); err != nil {
-				splog.Debug("Failed to load remote metadata cache: %v", err)
+				out.Debug("Failed to load remote metadata cache: %v", err)
 			} else {
 				// Apply remote metadata if available
 				if err := eng.ApplyRemoteMetadataIfExists(branchName); err != nil {
-					splog.Debug("Failed to apply remote metadata for %s: %v", branchName, err)
+					out.Debug("Failed to apply remote metadata for %s: %v", branchName, err)
 				}
 			}
 		}
@@ -203,8 +203,8 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 		}
 	}
 
-	splog.Page(strings.Join(outputLines, "\n"))
-	splog.Newline()
+	out.Print(strings.Join(outputLines, "\n"))
+	out.Newline()
 
 	return nil
 }

@@ -263,8 +263,8 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 		return fmt.Errorf("failed to marshal debug info: %w", err)
 	}
 
-	ctx.Splog.Page(string(jsonData))
-	ctx.Splog.Newline()
+	ctx.Output.Print(string(jsonData))
+	ctx.Output.Newline()
 
 	return nil
 }
