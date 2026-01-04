@@ -18,41 +18,31 @@ func NewStackTreeRendererWithFilter(eng engine.BranchReader, filter func(string)
 
 // NewStackTreeRendererWithStrategy creates a tree renderer with a specific sorting strategy and optional filter
 func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool) *tree.StackTreeRenderer {
-	currentBranch := eng.CurrentBranch()
-	currentBranchName := ""
-	if currentBranch != nil {
-		currentBranchName = currentBranch.GetName()
+	var branchFilter func(engine.Branch) bool
+	if filter != nil {
+		branchFilter = func(b engine.Branch) bool {
+			return filter(b.GetName())
+		}
 	}
 
-	trunk := eng.Trunk()
+	graph := engine.BuildStackGraph(eng, strategy, branchFilter)
 
 	return tree.NewStackTreeRenderer(
-		currentBranchName,
-		trunk.GetName(),
+		graph.Current,
+		graph.Trunk,
 		func(branchName string) []string {
-			branch := eng.GetBranch(branchName)
-			children := eng.GetChildrenWithStrategy(branch, strategy)
-			childNames := make([]string, 0, len(children))
-			for _, c := range children {
-				name := c.GetName()
-				if filter != nil && !filter(name) {
-					continue
-				}
-				childNames = append(childNames, name)
-			}
-			return childNames
+			return graph.Children(branchName)
 		},
 		func(branchName string) string {
-			branch := eng.GetBranch(branchName)
-			parent := branch.GetParent()
-			if parent == nil {
-				return ""
-			}
-			return parent.GetName()
+			return graph.Parent(branchName)
 		},
-		func(branchName string) bool { return eng.IsTrunk(eng.GetBranch(branchName)) },
+		func(branchName string) bool { return branchName == graph.Trunk },
 		func(branchName string) bool {
-			return eng.IsUpToDate(eng.GetBranch(branchName))
+			node := graph.Node(branchName)
+			if node == nil {
+				return false
+			}
+			return eng.IsUpToDate(node.Branch)
 		},
 	)
 }

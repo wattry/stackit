@@ -112,47 +112,8 @@ func (e *engineImpl) GetChildrenWithStrategy(branch Branch, strategy SortStrateg
 // GetRelativeStack returns the stack relative to a branch
 // Returns branches in order: ancestors (if RecursiveParents), current (if IncludeCurrent), descendants (if RecursiveChildren)
 func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	result := []Branch{}
-
-	// Add ancestors if RecursiveParents is true (excluding trunk)
-	if rng.RecursiveParents {
-		current := branch.GetName()
-		// Build ancestors in reverse order (append to end) for O(n) performance
-		// Then reverse at the end to get correct order
-		ancestors := []Branch{}
-		for {
-			if current == e.trunk {
-				break
-			}
-			parent, ok := e.parentMap[current]
-			if !ok || parent == e.trunk {
-				break
-			}
-			ancestors = append(ancestors, NewBranch(parent, e))
-			current = parent
-		}
-		// Reverse to get correct order (trunk -> branch)
-		for i, j := 0, len(ancestors)-1; i < j; i, j = i+1, j-1 {
-			ancestors[i], ancestors[j] = ancestors[j], ancestors[i]
-		}
-		result = append(result, ancestors...)
-	}
-
-	// Add current branch if IncludeCurrent is true
-	if rng.IncludeCurrent {
-		result = append(result, branch)
-	}
-
-	// Add descendants if RecursiveChildren is true
-	if rng.RecursiveChildren {
-		descendants := e.getRelativeStackUpstackInternal(branch.GetName())
-		result = append(result, descendants...)
-	}
-
-	return result
+	graph := BuildStackGraph(e, SortStrategyAlphabetical, nil)
+	return graph.Range(branch.GetName(), rng)
 }
 
 // FindMostRecentTrackedAncestors finds the most recent tracked ancestors of a branch
@@ -246,10 +207,10 @@ func (e *engineImpl) FindBranchForCommit(commitSHA string) (string, error) {
 
 // GetRelativeStackUpstack returns all branches in the upstack (descendants)
 func (e *engineImpl) GetRelativeStackUpstack(branch Branch) []Branch {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	return e.getRelativeStackUpstackInternal(branch.GetName())
+	graph := BuildStackGraph(e, SortStrategyAlphabetical, nil)
+	return graph.Range(branch.GetName(), StackRange{
+		RecursiveChildren: true,
+	})
 }
 
 // getRelativeStackUpstack is an internal method for Branch type
@@ -259,12 +220,10 @@ func (e *engineImpl) getRelativeStackUpstack(branch Branch) []Branch {
 
 // GetRelativeStackDownstack returns all branches in the downstack (ancestors)
 func (e *engineImpl) GetRelativeStackDownstack(branch Branch) []Branch {
-	rng := StackRange{
-		RecursiveParents:  true,
-		IncludeCurrent:    false,
-		RecursiveChildren: false,
-	}
-	return e.GetRelativeStack(branch, rng)
+	graph := BuildStackGraph(e, SortStrategyAlphabetical, nil)
+	return graph.Range(branch.GetName(), StackRange{
+		RecursiveParents: true,
+	})
 }
 
 // getRelativeStackDownstack is an internal method for Branch type
@@ -274,12 +233,12 @@ func (e *engineImpl) getRelativeStackDownstack(branch Branch) []Branch {
 
 // GetFullStack returns the entire stack containing the branch
 func (e *engineImpl) GetFullStack(branch Branch) []Branch {
-	rng := StackRange{
+	graph := BuildStackGraph(e, SortStrategyAlphabetical, nil)
+	return graph.Range(branch.GetName(), StackRange{
 		RecursiveParents:  true,
 		IncludeCurrent:    true,
 		RecursiveChildren: true,
-	}
-	return e.GetRelativeStack(branch, rng)
+	})
 }
 
 // getFullStack is an internal method for Branch type
