@@ -203,6 +203,7 @@ type Runner interface {
 
 	// Worktree management
 	WorktreeOperations
+	WorktreeRegistryOperations
 
 	// Repository status
 	StatusOperations

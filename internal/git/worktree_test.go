@@ -78,3 +78,96 @@ func TestWorktree(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestWorktreeRegistry(t *testing.T) {
+	t.Run("write and read worktree metadata", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+
+		// Write worktree metadata
+		meta := &git.WorktreeMeta{
+			Path:        "/path/to/worktree",
+			StackRoot:   "feature-branch",
+			MainRepoDir: scene.Repo.Dir,
+		}
+		err := runner.WriteWorktreeMeta("feature-branch", meta)
+		require.NoError(t, err)
+
+		// Read it back
+		readMeta, err := runner.ReadWorktreeMeta("feature-branch")
+		require.NoError(t, err)
+		require.NotNil(t, readMeta)
+		require.Equal(t, "/path/to/worktree", readMeta.Path)
+		require.Equal(t, "feature-branch", readMeta.StackRoot)
+		require.Equal(t, scene.Repo.Dir, readMeta.MainRepoDir)
+	})
+
+	t.Run("read non-existent worktree metadata returns nil", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+
+		// Read non-existent metadata
+		meta, err := runner.ReadWorktreeMeta("non-existent")
+		require.NoError(t, err)
+		require.Nil(t, meta)
+	})
+
+	t.Run("delete worktree metadata", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+
+		// Write worktree metadata
+		meta := &git.WorktreeMeta{
+			Path:      "/path/to/worktree",
+			StackRoot: "feature-branch",
+		}
+		err := runner.WriteWorktreeMeta("feature-branch", meta)
+		require.NoError(t, err)
+
+		// Delete it
+		err = runner.DeleteWorktreeMeta("feature-branch")
+		require.NoError(t, err)
+
+		// Verify it's gone
+		readMeta, err := runner.ReadWorktreeMeta("feature-branch")
+		require.NoError(t, err)
+		require.Nil(t, readMeta)
+	})
+
+	t.Run("list worktree metadata", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+
+		// Write multiple worktree metadata
+		meta1 := &git.WorktreeMeta{
+			Path:      "/path/to/worktree1",
+			StackRoot: "feature-1",
+		}
+		err := runner.WriteWorktreeMeta("feature-1", meta1)
+		require.NoError(t, err)
+
+		meta2 := &git.WorktreeMeta{
+			Path:      "/path/to/worktree2",
+			StackRoot: "feature-2",
+		}
+		err = runner.WriteWorktreeMeta("feature-2", meta2)
+		require.NoError(t, err)
+
+		// List all
+		metas, err := runner.ListWorktreeMetas()
+		require.NoError(t, err)
+		require.Len(t, metas, 2)
+		require.Contains(t, metas, "feature-1")
+		require.Contains(t, metas, "feature-2")
+		require.Equal(t, "/path/to/worktree1", metas["feature-1"].Path)
+		require.Equal(t, "/path/to/worktree2", metas["feature-2"].Path)
+	})
+}

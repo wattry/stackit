@@ -7,9 +7,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"stackit.dev/stackit/internal/git"
 )
+
+// timeNow is a variable for time.Now to allow mocking in tests
+var timeNow = time.Now
 
 // CreateBranch creates a new branch at the given start point
 func (e *engineImpl) CreateBranch(ctx context.Context, branchName string, startPoint string) error {
@@ -573,6 +577,92 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 	}
 
 	return worktreePath, cleanup, nil
+}
+
+// RegisterWorktree registers a worktree for a stack root in local git refs
+func (e *engineImpl) RegisterWorktree(stackRoot string, path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	meta := &git.WorktreeMeta{
+		Path:        absPath,
+		StackRoot:   stackRoot,
+		CreatedAt:   timeNow(),
+		MainRepoDir: e.repoRoot,
+	}
+
+	return e.git.WriteWorktreeMeta(stackRoot, meta)
+}
+
+// UnregisterWorktree removes worktree registration for a stack root
+func (e *engineImpl) UnregisterWorktree(stackRoot string) error {
+	return e.git.DeleteWorktreeMeta(stackRoot)
+}
+
+// GetWorktreeForStack returns worktree info for a stack root, or nil if none
+func (e *engineImpl) GetWorktreeForStack(stackRoot string) (*WorktreeInfo, error) {
+	meta, err := e.git.ReadWorktreeMeta(stackRoot)
+	if err != nil {
+		return nil, err
+	}
+	if meta == nil {
+		return nil, nil
+	}
+
+	return &WorktreeInfo{
+		Path:        meta.Path,
+		StackRoot:   meta.StackRoot,
+		CreatedAt:   meta.CreatedAt,
+		MainRepoDir: meta.MainRepoDir,
+	}, nil
+}
+
+// ListManagedWorktrees returns all stackit-managed worktrees
+func (e *engineImpl) ListManagedWorktrees() ([]WorktreeInfo, error) {
+	metas, err := e.git.ListWorktreeMetas()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]WorktreeInfo, 0, len(metas))
+	for _, meta := range metas {
+		result = append(result, WorktreeInfo{
+			Path:        meta.Path,
+			StackRoot:   meta.StackRoot,
+			CreatedAt:   meta.CreatedAt,
+			MainRepoDir: meta.MainRepoDir,
+		})
+	}
+
+	return result, nil
+}
+
+// GetStackRootForBranch returns the stack root for a given branch.
+// The stack root is the first ancestor branch whose parent is trunk.
+func (e *engineImpl) GetStackRootForBranch(branch Branch) string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	current := branch.GetName()
+	for {
+		parent, ok := e.parentMap[current]
+		if !ok {
+			// No parent tracked, this branch is either trunk or not tracked
+			if current == e.trunk {
+				return ""
+			}
+			return current
+		}
+
+		// If parent is trunk, current is the stack root
+		if parent == e.trunk {
+			return current
+		}
+
+		current = parent
+	}
 }
 
 // setParentInternal updates parent without locking (caller must hold lock)
