@@ -71,23 +71,8 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 
 	branch := eng.GetBranch(branchName)
 
-	// Check for cross-worktree checkout and warn if applicable
-	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil {
-		targetStackRoot := eng.GetStackRootForBranch(branch)
-		currentStackRoot := ctx.WorktreeInfo.StackRoot
-
-		// Warn if checking out a branch from a different stack
-		if targetStackRoot != "" && targetStackRoot != currentStackRoot {
-			// Check if the target stack has its own worktree
-			targetWorktree, err := eng.GetWorktreeForStack(targetStackRoot)
-			if err == nil && targetWorktree != nil {
-				out.Warn("Branch %s belongs to a different stack (%s) that has its own worktree.",
-					style.ColorBranchName(branchName, false),
-					style.ColorBranchName(targetStackRoot, false))
-				out.Tip("cd %s", targetWorktree.Path)
-			}
-		}
-	}
+	// Warn if checking out a branch from a different stack that has its own worktree
+	warnIfCrossWorktreeCheckout(ctx, branch, branchName)
 
 	if err := eng.CheckoutBranch(context, branch); err != nil {
 		if git.IsLocalChangesError(err) {
@@ -153,4 +138,27 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 			return
 		}
 	}
+}
+
+// warnIfCrossWorktreeCheckout warns if checking out a branch that belongs to a different
+// stack which has its own managed worktree.
+func warnIfCrossWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName string) {
+	if !ctx.InManagedWorktree || ctx.WorktreeInfo == nil {
+		return
+	}
+
+	targetStackRoot := ctx.Engine.GetStackRootForBranch(branch)
+	if targetStackRoot == "" || targetStackRoot == ctx.WorktreeInfo.StackRoot {
+		return
+	}
+
+	targetWorktree, err := ctx.Engine.GetWorktreeForStack(targetStackRoot)
+	if err != nil || targetWorktree == nil {
+		return
+	}
+
+	ctx.Output.Warn("Branch %s belongs to a different stack (%s) that has its own worktree.",
+		style.ColorBranchName(branchName, false),
+		style.ColorBranchName(targetStackRoot, false))
+	ctx.Output.Tip("cd %s", targetWorktree.Path)
 }
