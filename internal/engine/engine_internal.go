@@ -314,40 +314,6 @@ func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName st
 	return e.trunk
 }
 
-// getRelativeStackUpstackInternal is the internal implementation without lock
-// The caller MUST hold at least a read lock (e.mu.RLock())
-func (e *engineImpl) getRelativeStackUpstackInternal(branchName string) []Branch {
-	result := []Branch{}
-	visited := make(map[string]bool)
-
-	var collectDescendants func(string)
-	collectDescendants = func(branch string) {
-		if visited[branch] {
-			return
-		}
-		visited[branch] = true
-
-		// Don't include the starting branch
-		if branch != branchName {
-			result = append(result, NewBranch(branch, e))
-		}
-
-		// Access childrenMap directly since we already hold the lock
-		// This avoids re-acquiring the lock in GetChildren
-		if children, ok := e.childrenMap[branch]; ok {
-			// Copy child names to avoid modifying the internal map
-			childNames := make([]string, len(children))
-			copy(childNames, children)
-			for _, childName := range childNames {
-				collectDescendants(childName)
-			}
-		}
-	}
-
-	collectDescendants(branchName)
-	return result
-}
-
 // Helper functions
 func getStringValue(s *string) string {
 	if s == nil {
