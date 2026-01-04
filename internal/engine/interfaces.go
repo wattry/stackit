@@ -165,6 +165,9 @@ type WorktreeRegistry interface {
 	ListManagedWorktrees() ([]WorktreeInfo, error)
 	// GetStackRootForBranch returns the stack root for a given branch
 	GetStackRootForBranch(branch Branch) string
+	// IsInManagedWorktree checks if the current directory is a stackit-managed worktree
+	// Returns true and worktree info if in a managed worktree, false otherwise
+	IsInManagedWorktree() (bool, *WorktreeInfo, error)
 }
 
 // Initializer handles repository initialization operations

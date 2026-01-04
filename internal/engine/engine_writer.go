@@ -665,6 +665,57 @@ func (e *engineImpl) GetStackRootForBranch(branch Branch) string {
 	}
 }
 
+// IsInManagedWorktree checks if the current directory is a stackit-managed worktree.
+// Returns true and worktree info if in a managed worktree, false otherwise.
+func (e *engineImpl) IsInManagedWorktree() (bool, *WorktreeInfo, error) {
+	// Check if .git is a file (worktree) vs directory (main repo)
+	gitPath := filepath.Join(e.repoRoot, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil, nil // Not in a git repo
+		}
+		return false, nil, fmt.Errorf("failed to stat .git: %w", err)
+	}
+
+	// If .git is a directory, we're in the main repo, not a worktree
+	if info.IsDir() {
+		return false, nil, nil
+	}
+
+	// .git is a file - we're in a worktree. Now check if it's stackit-managed.
+	// Get the current working directory (worktree path)
+	currentPath, err := filepath.Abs(e.repoRoot)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// List all managed worktrees and check if current path matches
+	worktrees, err := e.ListManagedWorktrees()
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to list managed worktrees: %w", err)
+	}
+
+	for _, wt := range worktrees {
+		// Compare paths (normalize both)
+		wtPath, err := filepath.Abs(wt.Path)
+		if err != nil {
+			continue
+		}
+		if wtPath == currentPath {
+			return true, &WorktreeInfo{
+				Path:        wt.Path,
+				StackRoot:   wt.StackRoot,
+				CreatedAt:   wt.CreatedAt,
+				MainRepoDir: wt.MainRepoDir,
+			}, nil
+		}
+	}
+
+	// It's a worktree but not managed by stackit
+	return false, nil, nil
+}
+
 // setParentInternal updates parent without locking (caller must hold lock)
 func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, parentBranchName string) error {
 	if branchName == parentBranchName {

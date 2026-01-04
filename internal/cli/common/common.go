@@ -36,6 +36,15 @@ func Run(cmd *cobra.Command, fn func(ctx *app.Context) error) error {
 	if err != nil {
 		return err
 	}
+
+	// Populate worktree context
+	if ctx.Engine != nil {
+		if isManaged, wtInfo, err := ctx.Engine.IsInManagedWorktree(); err == nil && isManaged {
+			ctx.InManagedWorktree = true
+			ctx.WorktreeInfo = wtInfo
+		}
+	}
+
 	err = fn(ctx)
 	if err != nil {
 		return HandleCommandError(err)

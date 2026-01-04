@@ -70,6 +70,25 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	}
 
 	branch := eng.GetBranch(branchName)
+
+	// Check for cross-worktree checkout and warn if applicable
+	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil {
+		targetStackRoot := eng.GetStackRootForBranch(branch)
+		currentStackRoot := ctx.WorktreeInfo.StackRoot
+
+		// Warn if checking out a branch from a different stack
+		if targetStackRoot != "" && targetStackRoot != currentStackRoot {
+			// Check if the target stack has its own worktree
+			targetWorktree, err := eng.GetWorktreeForStack(targetStackRoot)
+			if err == nil && targetWorktree != nil {
+				out.Warn("Branch %s belongs to a different stack (%s) that has its own worktree.",
+					style.ColorBranchName(branchName, false),
+					style.ColorBranchName(targetStackRoot, false))
+				out.Tip("cd %s", targetWorktree.Path)
+			}
+		}
+	}
+
 	if err := eng.CheckoutBranch(context, branch); err != nil {
 		if git.IsLocalChangesError(err) {
 			return fmt.Errorf("cannot checkout branch %s because you have uncommitted changes that would be overwritten; please commit or stash your changes before switching branches", branchName)
