@@ -27,7 +27,7 @@ func SwitchBranchAction(direction Direction, ctx *app.Context) error {
 		return errors.ErrNotOnBranch
 	}
 
-	ctx.Splog.Info("%s", currentBranch.GetName())
+	ctx.Output.Info("%s", currentBranch.GetName())
 
 	var targetBranch string
 	var err error
@@ -49,7 +49,7 @@ func SwitchBranchAction(direction Direction, ctx *app.Context) error {
 		if direction == DirectionTop {
 			directionText = "top most"
 		}
-		ctx.Splog.Info("Already at the %s branch in the stack.", directionText)
+		ctx.Output.Info("Already at the %s branch in the stack.", directionText)
 		return nil
 	}
 
@@ -59,7 +59,7 @@ func SwitchBranchAction(direction Direction, ctx *app.Context) error {
 		return fmt.Errorf("failed to checkout branch %s: %w", targetBranch, err)
 	}
 
-	ctx.Splog.Info("Checked out %s.", targetBranch)
+	ctx.Output.Info("Checked out %s.", targetBranch)
 	return nil
 }
 
@@ -81,7 +81,7 @@ func traverseDownward(currentBranch string, ctx *app.Context) string {
 		return currentBranch
 	}
 
-	ctx.Splog.Info("⮑  %s", parent.GetName())
+	ctx.Output.Info("⮑  %s", parent.GetName())
 	return traverseDownward(parent.GetName(), ctx)
 }
 
@@ -112,7 +112,7 @@ func traverseUpward(currentBranch string, ctx *app.Context) (string, error) {
 		}
 	}
 
-	ctx.Splog.Info("⮑  %s", nextBranch)
+	ctx.Output.Info("⮑  %s", nextBranch)
 	return traverseUpward(nextBranch, ctx)
 }
 

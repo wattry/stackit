@@ -18,7 +18,7 @@ type RenameOptions struct {
 // RenameAction renames the current branch and updates metadata
 func RenameAction(ctx *app.Context, opts RenameOptions) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	currentBranch, err := eng.ValidateOnBranch()
 	if err != nil {
@@ -52,7 +52,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 	}
 
 	if newName == currentBranch {
-		splog.Info("Branch is already named %s.", newName)
+		out.Info("Branch is already named %s.", newName)
 		return nil
 	}
 
@@ -69,7 +69,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 		if !opts.Force {
 			return fmt.Errorf("branch %s is associated with PR #%d. Renaming it will remove this association. Use --force to proceed", currentBranch, *prInfo.Number())
 		}
-		splog.Info("Removing association with PR #%d as GitHub PR branch names are immutable.", *prInfo.Number())
+		out.Info("Removing association with PR #%d as GitHub PR branch names are immutable.", *prInfo.Number())
 		if err := eng.UpsertPrInfo(branch, nil); err != nil {
 			return fmt.Errorf("failed to update metadata: %w", err)
 		}
@@ -80,7 +80,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 		WithFlag(opts.Force, "--force"),
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		splog.Debug("Failed to take snapshot: %v", err)
+		out.Debug("Failed to take snapshot: %v", err)
 	}
 
 	oldBranchObj := eng.GetBranch(currentBranch)
@@ -89,7 +89,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 		return fmt.Errorf("failed to rename branch: %w", err)
 	}
 
-	splog.Info("Renamed %s to %s.", style.ColorBranchName(currentBranch, false), style.ColorBranchName(newName, true))
+	out.Info("Renamed %s to %s.", style.ColorBranchName(currentBranch, false), style.ColorBranchName(newName, true))
 
 	return nil
 }

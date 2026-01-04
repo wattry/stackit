@@ -14,7 +14,7 @@ import (
 func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handler, _ *Summary) error {
 	eng := ctx.PR()
 	nav := ctx.Navigator()
-	splog := ctx.Splog
+	out := ctx.Output
 	gctx := ctx.Context
 
 	// Sync PR info
@@ -80,7 +80,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 	// using the metadata already stored in the engine.
 	syncResult, err := ParentsFromGitHubBase(ctx)
 	if err != nil {
-		splog.Debug("Failed to sync parents from GitHub: %v", err)
+		out.Debug("Failed to sync parents from GitHub: %v", err)
 	} else if len(syncResult.BranchesReparented) > 0 {
 		// Add reparented branches to restack list
 		for _, branchName := range syncResult.BranchesReparented {
@@ -100,7 +100,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 // ParentsFromGitHubBase synchronizes local parents with GitHub PR base branches
 func ParentsFromGitHubBase(ctx *app.Context) (*ParentsResult, error) {
 	eng := ctx.Engine // Using Engine here because it needs multiple interfaces (Status, Navigator, Differ, Tracking)
-	splog := ctx.Splog
+	out := ctx.Output
 	gctx := ctx.Context
 
 	allBranches := eng.AllBranches()
@@ -145,7 +145,7 @@ func ParentsFromGitHubBase(ctx *app.Context) (*ParentsResult, error) {
 					// This handles the "submit" bug in diamond structures.
 					isEmpty, err := eng.IsBranchEmpty(gctx, branch.GetName())
 					if err == nil && isEmpty {
-						splog.Debug("GitHub PR for %s has base %s, which is an ancestor of local parent %s. "+
+						out.Debug("GitHub PR for %s has base %s, which is an ancestor of local parent %s. "+
 							"Branch is empty relative to its parent, so keeping the more specific local parent.",
 							branch.GetName(), githubBase, currentParentName)
 						continue
@@ -153,13 +153,13 @@ func ParentsFromGitHubBase(ctx *app.Context) (*ParentsResult, error) {
 				}
 			}
 
-			splog.Info("GitHub PR for %s has base %s, but local parent is %s. Updating local parent...",
+			out.Info("GitHub PR for %s has base %s, but local parent is %s. Updating local parent...",
 				style.ColorBranchName(branch.GetName(), false),
 				style.ColorBranchName(githubBase, false),
 				style.ColorBranchName(currentParentName, false))
 
 			if err := eng.SetParent(gctx, branch, eng.GetBranch(githubBase)); err != nil {
-				splog.Debug("Failed to update parent for %s: %v", branch.GetName(), err)
+				out.Debug("Failed to update parent for %s: %v", branch.GetName(), err)
 				continue
 			}
 

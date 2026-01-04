@@ -23,7 +23,7 @@ type CheckoutOptions struct {
 // CheckoutAction performs the checkout operation
 func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	context := ctx.Context
 
 	var branchName string
@@ -55,7 +55,7 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 				if currentBranch != nil {
 					currentBranchName = currentBranch.GetName()
 				}
-				splog.Info("No branch selected; staying on %s.", style.ColorBranchName(currentBranchName, true))
+				out.Info("No branch selected; staying on %s.", style.ColorBranchName(currentBranchName, true))
 				return nil
 			}
 			return err
@@ -64,7 +64,7 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 
 	currentBranch := eng.CurrentBranch()
 	if currentBranch != nil && branchName == currentBranch.GetName() {
-		splog.Info("Already on %s.", style.ColorBranchName(branchName, true))
+		out.Info("Already on %s.", style.ColorBranchName(branchName, true))
 		return nil
 	}
 
@@ -73,7 +73,7 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 		return fmt.Errorf("failed to checkout branch %s: %w", branchName, err)
 	}
 
-	splog.Info("Checked out %s.", style.ColorBranchName(branchName, false))
+	out.Info("Checked out %s.", style.ColorBranchName(branchName, false))
 
 	// Skip branch info in quiet mode for faster checkout
 	if !ctx.Quiet {
@@ -89,13 +89,13 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	}
 
 	if !branch.IsTracked() {
-		ctx.Splog.Info("This branch is not tracked by Stackit.")
+		ctx.Output.Info("This branch is not tracked by Stackit.")
 		return
 	}
 
 	if !branch.IsBranchUpToDate() {
 		parent := branch.GetParentPrecondition()
-		ctx.Splog.Info("This branch has fallen behind %s - you may want to %s.",
+		ctx.Output.Info("This branch has fallen behind %s - you may want to %s.",
 			style.ColorBranchName(parent, false),
 			style.ColorCyan("stackit upstack restack"))
 		return
@@ -122,7 +122,7 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 		ancestor := downstack[i]
 		if !ancestor.IsBranchUpToDate() {
 			parent := ancestor.GetParentPrecondition()
-			ctx.Splog.Info("The downstack branch %s has fallen behind %s - you may want to %s.",
+			ctx.Output.Info("The downstack branch %s has fallen behind %s - you may want to %s.",
 				style.ColorBranchName(ancestor.GetName(), false),
 				style.ColorBranchName(parent, false),
 				style.ColorCyan("stackit stack restack"))

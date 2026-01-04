@@ -42,7 +42,7 @@ type Result struct {
 // Action performs the split operation
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	context := ctx.Context
 
 	// Get current branch
@@ -135,14 +135,14 @@ func Action(ctx *app.Context, opts Options) error {
 	var result *Result
 	switch style {
 	case StyleCommit:
-		result, err = splitByCommit(ctx, currentBranch.GetName(), eng, splog, opts.BranchPattern)
+		result, err = splitByCommit(ctx, currentBranch.GetName(), eng, out, opts.BranchPattern)
 	case StyleHunk:
-		result, err = splitByHunk(context, *currentBranch, eng, splog)
+		result, err = splitByHunk(context, *currentBranch, eng, out)
 	case StyleFile:
 		pathspecs := opts.Pathspecs
 		// If no pathspecs provided, prompt interactively
 		if len(pathspecs) == 0 {
-			pathspecs, err = promptForFiles(context, *currentBranch, eng, splog)
+			pathspecs, err = promptForFiles(context, *currentBranch, eng, out)
 			if err != nil {
 				return err
 			}

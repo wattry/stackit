@@ -11,7 +11,7 @@ import (
 // UnfreezeAction unfreezes the specified branch and all branches upstack of it (recursive children)
 func UnfreezeAction(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	branch := eng.GetBranch(branchName)
 	if !branch.IsTracked() {
@@ -36,13 +36,13 @@ func UnfreezeAction(ctx *app.Context, branchName string) error {
 		res, err := eng.SetFrozen(branchesToUnfreeze, false)
 		if err != nil {
 			for name, branchErr := range res.Errors {
-				splog.Warn("Failed to unfreeze %s: %v", name, branchErr)
+				out.Warn("Failed to unfreeze %s: %v", name, branchErr)
 			}
 			return fmt.Errorf("failed to unfreeze branches: %w", err)
 		}
 
 		for _, name := range res.AffectedBranches {
-			splog.Info("Unfrozen %s locally.", style.ColorBranchName(name, name == branchName))
+			out.Info("Unfrozen %s locally.", style.ColorBranchName(name, name == branchName))
 		}
 	}
 

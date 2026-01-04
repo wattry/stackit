@@ -105,7 +105,7 @@ type GetOptions struct {
 // GetAction performs the get operation
 func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler GetHandler) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	gctx := ctx.Context
 
 	if ctx.Git().HasUncommittedChanges(gctx) {
@@ -256,7 +256,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			// Set initial metadata
 			if parent, ok := parentMap[branchName]; ok {
 				if err := eng.TrackBranch(gctx, branchName, parent); err != nil {
-					splog.Debug("Failed to track branch %s with parent %s: %v", branchName, parent, err)
+					out.Debug("Failed to track branch %s with parent %s: %v", branchName, parent, err)
 				}
 			}
 			// New branches are frozen by default unless --unfrozen
@@ -264,7 +264,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			branchFrozenStatus[branchName] = isFrozen
 			if isFrozen {
 				if _, err := eng.SetFrozen([]engine.Branch{eng.GetBranch(branchName)}, true); err != nil {
-					splog.Debug("Failed to freeze new branch %s: %v", branchName, err)
+					out.Debug("Failed to freeze new branch %s: %v", branchName, err)
 				}
 			}
 			branchesCreated++
@@ -291,7 +291,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			// Update parent if known
 			if parent, ok := parentMap[branchName]; ok {
 				if err := eng.SetParent(gctx, branch, eng.GetBranch(parent)); err != nil {
-					splog.Debug("Failed to update parent for %s: %v", branchName, err)
+					out.Debug("Failed to update parent for %s: %v", branchName, err)
 				}
 			}
 			branchesUpdated++
@@ -309,21 +309,21 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 
 	// Fetch and apply remote metadata for all branches in the stack
 	if err := eng.Git().FetchMetadataRefs(); err != nil {
-		splog.Debug("No remote metadata to fetch: %v", err)
+		out.Debug("No remote metadata to fetch: %v", err)
 	} else {
 		// Configure refspec so future git fetch commands also fetch metadata
 		if err := eng.Git().EnsureMetadataRefspecConfigured(); err != nil {
-			splog.Debug("Failed to configure metadata refspec: %v", err)
+			out.Debug("Failed to configure metadata refspec: %v", err)
 		}
 		if err := eng.LoadRemoteMetadataCache(); err != nil {
-			splog.Debug("Failed to load remote metadata cache: %v", err)
+			out.Debug("Failed to load remote metadata cache: %v", err)
 		} else {
 			for _, branchName := range branchesToSync {
 				if branchName == eng.Trunk().GetName() {
 					continue
 				}
 				if err := eng.ApplyRemoteMetadataIfExists(branchName); err != nil {
-					splog.Debug("Failed to apply metadata for %s: %v", branchName, err)
+					out.Debug("Failed to apply metadata for %s: %v", branchName, err)
 				}
 			}
 		}

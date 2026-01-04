@@ -49,7 +49,7 @@ func (c *ConsolidateMergeExecutor) SetProgressHandler(handler Handler, stepIndex
 
 // Execute performs stack consolidation merging
 func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOptions) (*ConsolidationResult, error) {
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 	splog.Info("🔀 Starting stack consolidation merge...")
 
 	if err := c.preValidateStack(ctx, opts.Force); err != nil {
@@ -114,7 +114,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 
 // preValidateStack ensures all PRs are ready for consolidation
 func (c *ConsolidateMergeExecutor) preValidateStack(ctx context.Context, force bool) error {
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 
 	// We trust the plan created by CreateMergePlan for PR status and remote matching
 	// unless --force is used to bypass those checks entirely.
@@ -143,7 +143,7 @@ func (c *ConsolidateMergeExecutor) preValidateStack(ctx context.Context, force b
 
 // createMergeBranch creates a branch containing all stack commits
 func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (string, error) {
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 	// Generate unique branch name
 	timestamp := time.Now().Unix()
 	scope := c.getStackScope()
@@ -209,7 +209,7 @@ func (c *ConsolidateMergeExecutor) createConsolidationPR(ctx context.Context, br
 // waitForConsolidationCI waits for CI checks to pass on the consolidation PR
 func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, branchName string, prNumber int) error {
 	githubClient := c.ctx.GitHubClient
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 	if githubClient == nil {
 		return fmt.Errorf("GitHub client not available")
 	}
@@ -279,7 +279,7 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, b
 
 // waitForConsolidationMerge waits for CI to pass and auto-merges the consolidation PR
 func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo) error {
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 	splog.Info("Consolidation PR:")
 	splog.Info("  ◉ %s PR #%d ⏳", branchName, pr.Number)
 	splog.Info("     %s", pr.HTMLURL)
@@ -306,13 +306,13 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 }
 
 func (c *ConsolidateMergeExecutor) postMergeCleanup(_ context.Context) {
-	c.ctx.Splog.Info("🧹 Updating individual PRs...")
+	c.ctx.Output.Info("🧹 Updating individual PRs...")
 
 	c.updateIndividualPRs()
 }
 
 func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 	ctx := c.ctx.Context
 	githubClient := c.ctx.GitHubClient
 
@@ -375,7 +375,7 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 }
 
 func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, consolidationBranch string) error {
-	splog := c.ctx.Splog
+	splog := c.ctx.Output
 	splog.Info("🔒 Locking individual PRs and updating status...")
 
 	branchesToLock := []engine.Branch{}

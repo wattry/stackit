@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // ConfigListAction prints all configuration values in a formatted way
 func ConfigListAction(repoRoot string, writer io.Writer) error {
-	splog := tui.NewSplogToWriter(writer)
+	out := output.NewConsoleOutput(writer, false)
 
 	cfg, err := config.LoadConfig(repoRoot)
 	if err != nil {
@@ -50,8 +50,8 @@ func ConfigListAction(repoRoot string, writer io.Writer) error {
 	lines = append(lines, fmt.Sprintf("%s: %s", style.ColorCyan("branch.pattern"), branchPattern))
 	lines = append(lines, fmt.Sprintf("%s: %v", style.ColorCyan("submit.footer"), submitFooter))
 
-	splog.Page(strings.Join(lines, "\n"))
-	splog.Newline()
+	out.Print(strings.Join(lines, "\n"))
+	out.Newline()
 
 	return nil
 }

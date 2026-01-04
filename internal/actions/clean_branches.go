@@ -7,7 +7,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -95,7 +95,7 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[string]string {
 	eng := ctx.Engine
 	c := ctx.Context
-	splog := ctx.Splog
+	out := ctx.Output
 
 	allTrackedBranches := eng.AllBranches()
 	branchesToProcessPool := []engine.Branch{}
@@ -118,17 +118,17 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[s
 
 	metadataMap, metaErrs := eng.Git().BatchReadMetadata(branchNames)
 	if len(metaErrs) > 0 {
-		splog.Debug("Failed to read metadata for some branches: %v", metaErrs)
+		out.Debug("Failed to read metadata for some branches: %v", metaErrs)
 	}
 
 	revisionsMap, revErrs := eng.Git().BatchGetRevisions(allRevisionsToFetch)
 	if len(revErrs) > 0 {
-		splog.Debug("Failed to get revisions for some branches: %v", revErrs)
+		out.Debug("Failed to get revisions for some branches: %v", revErrs)
 	}
 
 	mergedBranches, err := eng.Git().GetMergedBranches(c, eng.Trunk().GetName())
 	if err != nil {
-		splog.Debug("Failed to get merged branches: %v", err)
+		out.Debug("Failed to get merged branches: %v", err)
 	}
 
 	deleteStatuses := make(map[string]string) // name -> reason
@@ -152,7 +152,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[s
 // buildDeletionPlanAndReparent constructs the deletion hierarchy and updates parents of surviving branches.
 func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]string) (*deletionPlan, []string, error) {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	c := ctx.Context
 
 	plan := newDeletionPlan()
@@ -192,10 +192,10 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 				blockers[child.GetName()] = true
 			}
 			plan.add(branchName, reason, blockers)
-			splog.Debug("Marked %s for deletion. Reason: %s. Blockers: %v", branchName, reason, blockers)
+			out.Debug("Marked %s for deletion. Reason: %s. Blockers: %v", branchName, reason, blockers)
 		} else {
 			// Branch is NOT being deleted. Check if it needs a new parent.
-			newParentName, err := reparentBranchIfNecessary(c, branch, plan, eng, splog)
+			newParentName, err := reparentBranchIfNecessary(c, branch, plan, eng, out)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -211,7 +211,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 			// This branch is disconnected from the trunk hierarchy but should still be deleted
 			plan.add(branchName, reason, make(map[string]bool))
 			visited[branchName] = true
-			splog.Debug("Marked orphan branch %s for deletion. Reason: %s", branchName, reason)
+			out.Debug("Marked orphan branch %s for deletion. Reason: %s", branchName, reason)
 		}
 	}
 
@@ -221,7 +221,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 // executeDeletions greedily deletes unblocked branches from the plan.
 func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	c := ctx.Context
 
 	for {
@@ -252,12 +252,12 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 
 		// Batch delete remote metadata
 		if err := eng.Git().BatchDeleteRemoteMetadataRefs(batchNames); err != nil {
-			splog.Debug("Failed to batch delete remote metadata: %v", err)
+			out.Debug("Failed to batch delete remote metadata: %v", err)
 		}
 
 		// Cleanup plan and update parent blockers
 		for _, name := range batchNames {
-			splog.Info("Deleted branch %s", style.ColorBranchName(name, false))
+			out.Info("Deleted branch %s", style.ColorBranchName(name, false))
 			delete(plan.branches, name)
 
 			parentName := parents[name]
@@ -295,7 +295,7 @@ func findNonDeletingAncestor(startParent string, plan *deletionPlan, eng engine.
 
 // reparentBranchIfNecessary updates a branch's parent if its current parent is being deleted.
 // Returns the name of the new parent if changed, or empty string if not changed.
-func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *deletionPlan, eng engine.Engine, splog *tui.Splog) (string, error) {
+func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *deletionPlan, eng engine.Engine, out output.Output) (string, error) {
 	branchName := branch.GetName()
 	parentName := getParentName(branch, eng)
 
@@ -307,7 +307,7 @@ func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *
 		if err := eng.SetParent(ctx, branch, eng.GetBranch(newParentName)); err != nil {
 			return "", fmt.Errorf("failed to set parent for %s: %w", branchName, err)
 		}
-		splog.Info("Set parent of %s to %s.",
+		out.Info("Set parent of %s to %s.",
 			style.ColorBranchName(branchName, false),
 			style.ColorBranchName(newParentName, false))
 

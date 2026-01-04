@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/actions/foreach"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	foreachComponent "stackit.dev/stackit/internal/tui/components/foreach"
 	"stackit.dev/stackit/internal/tui/components/tree"
@@ -19,7 +20,7 @@ import (
 )
 
 // NewForeachHandler creates the appropriate handler based on TTY availability
-func NewForeachHandler(splog *tui.Splog, parallel bool) foreach.Handler {
+func NewForeachHandler(splog output.Output, parallel bool) foreach.Handler {
 	if tui.IsTTY() {
 		return NewInteractiveForeachHandler(splog)
 	}
@@ -28,7 +29,7 @@ func NewForeachHandler(splog *tui.Splog, parallel bool) foreach.Handler {
 
 // SimpleForeachHandler implements foreach.Handler with line-by-line output
 type SimpleForeachHandler struct {
-	splog         *tui.Splog
+	splog         output.Output
 	out           io.Writer
 	items         map[string]*foreachBranchItem
 	mu            sync.Mutex
@@ -42,7 +43,7 @@ type foreachBranchItem struct {
 }
 
 // NewSimpleForeachHandler creates a new simple foreach handler
-func NewSimpleForeachHandler(splog *tui.Splog, parallel bool) *SimpleForeachHandler {
+func NewSimpleForeachHandler(splog output.Output, parallel bool) *SimpleForeachHandler {
 	return &SimpleForeachHandler{
 		splog:    splog,
 		out:      os.Stdout,
@@ -70,7 +71,7 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 			}
 		}
 		if h.parallel {
-			h.splog.Page("Executing in parallel: ")
+			_, _ = fmt.Fprint(h.out, "Executing in parallel: ")
 		}
 
 	case foreach.BranchProgressEvent:
@@ -78,7 +79,7 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 		// while keeping the output deterministic for the final summary.
 		if h.parallel {
 			if ev.Status == foreach.StatusDone || ev.Status == foreach.StatusError {
-				h.splog.Page(".")
+				_, _ = fmt.Fprint(h.out, ".")
 			}
 			return
 		}
@@ -171,7 +172,7 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 
 // InteractiveForeachHandler implements foreach.Handler with bubbletea for animated progress
 type InteractiveForeachHandler struct {
-	splog       *tui.Splog
+	splog       output.Output
 	program     *tea.Program
 	model       *foreachComponent.Model
 	inExecPhase bool
@@ -182,7 +183,7 @@ type InteractiveForeachHandler struct {
 }
 
 // NewInteractiveForeachHandler creates a new interactive foreach handler
-func NewInteractiveForeachHandler(splog *tui.Splog) *InteractiveForeachHandler {
+func NewInteractiveForeachHandler(splog output.Output) *InteractiveForeachHandler {
 	return &InteractiveForeachHandler{splog: splog}
 }
 

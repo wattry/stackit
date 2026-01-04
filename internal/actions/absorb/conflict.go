@@ -38,23 +38,23 @@ func IsAbsorbInProgress(ctx *app.Context) bool {
 // ShowConflict shows information about what absorb would do and helps diagnose conflicts.
 // This is useful when absorb fails and you want to understand what was being attempted.
 func ShowConflict(ctx *app.Context) error {
-	splog := ctx.Splog
+	out := ctx.Output
 	eng := ctx.Engine
 
 	// Check if we're in a detached HEAD state (might be mid-absorb failure)
 	if eng.CurrentBranch() == nil {
-		splog.Warn("Repository is in detached HEAD state.")
-		splog.Info("This may be from a failed absorb. Run 'stackit absorb --abort' to recover.")
-		splog.Info("")
+		out.Warn("Repository is in detached HEAD state.")
+		out.Info("This may be from a failed absorb. Run 'stackit absorb --abort' to recover.")
+		out.Info("")
 
 		// Show unmerged files if any
 		unmerged, _ := eng.GetUnmergedFiles(ctx.Context)
 		if len(unmerged) > 0 {
-			splog.Info("Unmerged files:")
+			out.Info("Unmerged files:")
 			for _, file := range unmerged {
-				splog.Info("  - %s", file)
+				out.Info("  - %s", file)
 			}
-			splog.Info("")
+			out.Info("")
 		}
 		return nil
 	}
@@ -66,13 +66,13 @@ func ShowConflict(ctx *app.Context) error {
 	}
 
 	if !hasStaged {
-		splog.Info("No staged changes to analyze.")
-		splog.Info("Stage some changes first, then run 'stackit absorb --dry-run' to see where they would go.")
+		out.Info("No staged changes to analyze.")
+		out.Info("Stage some changes first, then run 'stackit absorb --dry-run' to see where they would go.")
 		return nil
 	}
 
 	// Show what absorb would do (dry run)
-	splog.Info("Analyzing staged changes...\n")
+	out.Info("Analyzing staged changes...\n")
 
 	// Parse staged hunks
 	hunks, err := eng.ParseStagedHunks(ctx.Context)
@@ -81,23 +81,23 @@ func ShowConflict(ctx *app.Context) error {
 	}
 
 	if len(hunks) == 0 {
-		splog.Info("No hunks found in staged changes.")
+		out.Info("No hunks found in staged changes.")
 		return nil
 	}
 
 	// Show the staged changes
-	splog.Info("Staged changes:")
+	out.Info("Staged changes:")
 	fileHunks := make(map[string][]git.Hunk)
 	for _, hunk := range hunks {
 		fileHunks[hunk.File] = append(fileHunks[hunk.File], hunk)
 	}
 	for file, hunks := range fileHunks {
-		splog.Info("  %s:", file)
+		out.Info("  %s:", file)
 		for _, hunk := range hunks {
-			splog.Info("    lines %d-%d", hunk.NewStart, hunk.NewStart+hunk.NewCount-1)
+			out.Info("    lines %d-%d", hunk.NewStart, hunk.NewStart+hunk.NewCount-1)
 		}
 	}
-	splog.Info("")
+	out.Info("")
 
 	// Get current branch info
 	currentBranchObj := eng.CurrentBranch()
@@ -109,31 +109,31 @@ func ShowConflict(ctx *app.Context) error {
 	downstackBranches := currentBranchObj.GetRelativeStackDownstack()
 	downstackBranches = append([]engine.Branch{*currentBranchObj}, downstackBranches...)
 
-	splog.Info("Stack (bottom to top):")
+	out.Info("Stack (bottom to top):")
 	for i := len(downstackBranches) - 1; i >= 0; i-- {
 		branch := downstackBranches[i]
 		marker := "  "
 		if branch.GetName() == currentBranchObj.GetName() {
 			marker = "* "
 		}
-		splog.Info("%s%s", marker, branch.GetName())
+		out.Info("%s%s", marker, branch.GetName())
 	}
-	splog.Info("")
+	out.Info("")
 
-	splog.Info("To see where changes would be absorbed:")
-	splog.Info("  stackit absorb --dry-run")
-	splog.Info("")
-	splog.Info("If absorb fails with conflicts, consider:")
-	splog.Info("  1. Manually checkout the target branch and apply the change")
-	splog.Info("  2. Split the change into smaller pieces with 'git add -p'")
-	splog.Info("  3. Create a new commit instead with 'stackit create'")
+	out.Info("To see where changes would be absorbed:")
+	out.Info("  stackit absorb --dry-run")
+	out.Info("")
+	out.Info("If absorb fails with conflicts, consider:")
+	out.Info("  1. Manually checkout the target branch and apply the change")
+	out.Info("  2. Split the change into smaller pieces with 'git add -p'")
+	out.Info("  3. Create a new commit instead with 'stackit create'")
 
 	return nil
 }
 
 // Abort cleans up from a failed absorb state
 func Abort(ctx *app.Context) error {
-	splog := ctx.Splog
+	out := ctx.Output
 	eng := ctx.Engine
 
 	// Check if we're in a detached HEAD state
@@ -141,24 +141,24 @@ func Abort(ctx *app.Context) error {
 		// Check for stashed changes from absorb
 		stashList, _ := eng.StashList(ctx.Context)
 		if strings.Contains(stashList, absorbStashMarker) {
-			splog.Info("Found stashed changes from previous absorb attempt.")
+			out.Info("Found stashed changes from previous absorb attempt.")
 			if err := eng.StashPop(ctx.Context); err != nil {
-				splog.Warn("Failed to restore stashed changes: %v", err)
+				out.Warn("Failed to restore stashed changes: %v", err)
 			} else {
-				splog.Info("Restored your staged changes from stash.")
+				out.Info("Restored your staged changes from stash.")
 			}
 			return nil
 		}
 
-		splog.Info("No absorb operation in progress.")
+		out.Info("No absorb operation in progress.")
 		return nil
 	}
 
-	splog.Info("Cleaning up failed absorb operation...")
+	out.Info("Cleaning up failed absorb operation...")
 
 	// Reset any uncommitted changes
 	if err := eng.ResetHard(ctx.Context, "HEAD"); err != nil {
-		splog.Warn("Failed to reset: %v", err)
+		out.Warn("Failed to reset: %v", err)
 	}
 
 	// Find the original branch from reflog
@@ -180,26 +180,26 @@ func Abort(ctx *app.Context) error {
 	if originalBranch != "" && originalBranch != "HEAD" {
 		branch := eng.GetBranch(originalBranch)
 		if err := eng.CheckoutBranch(ctx.Context, branch); err != nil {
-			splog.Warn("Failed to return to original branch %s: %v", originalBranch, err)
-			splog.Info("You can manually checkout your branch with: git checkout <branch-name>")
+			out.Warn("Failed to return to original branch %s: %v", originalBranch, err)
+			out.Info("You can manually checkout your branch with: git checkout <branch-name>")
 		} else {
-			splog.Info("Returned to branch %s", originalBranch)
+			out.Info("Returned to branch %s", originalBranch)
 		}
 	} else {
-		splog.Warn("Could not determine original branch from reflog.")
-		splog.Info("Use 'git checkout <branch-name>' to return to your branch.")
+		out.Warn("Could not determine original branch from reflog.")
+		out.Info("Use 'git checkout <branch-name>' to return to your branch.")
 	}
 
 	// Pop stash if there is one
 	stashList, _ := eng.StashList(ctx.Context)
 	if strings.Contains(stashList, absorbStashMarker) {
 		if err := eng.StashPop(ctx.Context); err != nil {
-			splog.Warn("Failed to restore stashed changes: %v", err)
+			out.Warn("Failed to restore stashed changes: %v", err)
 		} else {
-			splog.Info("Restored your staged changes from stash.")
+			out.Info("Restored your staged changes from stash.")
 		}
 	}
 
-	splog.Info("Abort complete.")
+	out.Info("Abort complete.")
 	return nil
 }

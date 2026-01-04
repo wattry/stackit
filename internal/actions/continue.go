@@ -18,7 +18,7 @@ type ContinueOptions struct {
 // ContinueAction performs the continue operation
 func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Check if rebase is in progress
 	if !eng.Git().IsRebaseInProgress(ctx.Context) {
@@ -32,7 +32,7 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 	if err != nil {
 		// No continuation state - this is okay, we can still continue the rebase
 		// but we won't be able to resume restacking
-		splog.Info("No continuation state found. Continuing rebase only.")
+		out.Info("No continuation state found. Continuing rebase only.")
 		// Try to continue the rebase anyway (user might have started it manually)
 		// But we need a rebasedBranchBase - try to get it from current branch's parent
 		currentBranch := eng.CurrentBranch()
@@ -93,7 +93,7 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 	}
 
 	// Success - inform user
-	splog.Info("Resolved rebase conflict for %s.", style.ColorBranchName(result.BranchName, true))
+	out.Info("Resolved rebase conflict for %s.", style.ColorBranchName(result.BranchName, true))
 
 	// Continue with remaining branches to restack
 	if len(continuation.BranchesToRestack) > 0 {
@@ -109,7 +109,7 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 
 	// Clear continuation state
 	if err := config.ClearContinuationState(ctx.RepoRoot); err != nil {
-		splog.Debug("Failed to clear continuation state: %v", err)
+		out.Debug("Failed to clear continuation state: %v", err)
 	}
 
 	return nil

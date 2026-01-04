@@ -17,14 +17,14 @@ type RestackOptions struct {
 // RestackAction performs the restack operation
 func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.RestackHandler) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Get branches to restack based on scope
 	branch := eng.GetBranch(opts.BranchName)
 	branches := branch.GetRelativeStack(opts.Scope)
 
 	if len(branches) == 0 {
-		splog.Info("No branches to restack.")
+		out.Info("No branches to restack.")
 		return nil
 	}
 
@@ -34,7 +34,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
-		splog.Debug("Failed to take snapshot: %v", err)
+		out.Debug("Failed to take snapshot: %v", err)
 	}
 
 	// If no handler provided, use NullRestackHandler (silent)

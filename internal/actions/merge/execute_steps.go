@@ -124,7 +124,7 @@ func executeUpdatePRBase(ctx *app.Context, eng mergeExecuteEngine, step PlanStep
 		currentRev, _ = eng.GetCurrentRevision(ctx.Context)
 	}
 
-	ctx.Splog.Debug("Rebasing %s onto trunk %s (old base %s)", step.BranchName, trunkName, oldParentRev)
+	ctx.Output.Debug("Rebasing %s onto trunk %s (old base %s)", step.BranchName, trunkName, oldParentRev)
 	gitResult, err := eng.Rebase(ctx.Context, step.BranchName, trunkName, oldParentRev)
 
 	// Restore original branch state
@@ -135,7 +135,7 @@ func executeUpdatePRBase(ctx *app.Context, eng mergeExecuteEngine, step PlanStep
 	}
 
 	if err != nil {
-		ctx.Splog.Debug("Rebase of %s onto %s failed: %v", step.BranchName, trunkName, err)
+		ctx.Output.Debug("Rebase of %s onto %s failed: %v", step.BranchName, trunkName, err)
 		return fmt.Errorf("failed to rebase %s onto %s: %w", step.BranchName, trunkName, err)
 	}
 
@@ -204,7 +204,7 @@ func executeConsolidation(ctx *app.Context, eng mergeExecuteEngine, stepIndex in
 // executeWaitCIWithProgress waits for CI checks with progress reporting
 func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecuteEngine, opts ExecuteOptions) error {
 	githubClient := ctx.GitHubClient
-	splog := ctx.Splog
+	out := ctx.Output
 
 	if githubClient == nil {
 		return fmt.Errorf("GitHub client not available")
@@ -249,7 +249,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 
 		if err != nil {
 			// Log error but continue polling (might be transient)
-			splog.Debug("Error checking CI status: %v", err)
+			out.Debug("Error checking CI status: %v", err)
 		} else if status != nil {
 			if !status.Passing {
 				// CI checks failed
@@ -261,7 +261,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 			if step.ExpectChecks && len(status.Checks) == 0 {
 				isReallyPending = true
 				if now.Sub(startTime) > 5*time.Second {
-					splog.Debug("No checks found yet for PR #%d, still waiting...", prNumber)
+					out.Debug("No checks found yet for PR #%d, still waiting...", prNumber)
 				}
 			}
 
