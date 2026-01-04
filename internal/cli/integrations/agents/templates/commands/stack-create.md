@@ -6,25 +6,25 @@ argument-hint: [optional-branch-name]
 
 # Stack Create
 
-Create a new stacked branch on top of the current branch. Branch name is optional - stackit will generate one from the commit message.
+Create a new stacked branch on top of the current branch. Branch name is optional—stackit will generate one from the commit message.
 
 ## Context
-- Current branch: !`git branch --show-current`
+- Repo initialized: `stackit init` already run? If not, prompt to run it.
+- Current branch: !`git branch --show-current` (warn if trunk: main/master)
 - Staged changes: !`git diff --cached --stat 2>/dev/null || echo 'No staged changes'`
 - Stack state: !`stackit log --no-interactive 2>/dev/null || echo 'Not initialized'`
+- Project guidelines: check `README.md` / `CONTRIBUTING.md` for commit and branch rules
 
 ## Arguments
 $ARGUMENTS
 
 ## Instructions
 
-1. Check if there are staged changes with `git diff --cached --stat`
-2. If no staged changes, ask user what to stage or use `--all` flag
-
+1. If no staged changes, ask what to stage or offer `git add --all`; abort if user declines.
+2. If on trunk, confirm proceeding or suggest switching to a feature branch first.
 3. **Generate commit message with validation loop**:
-   - Check for CONTRIBUTING.md or README.md for commit message guidelines
-   - Follow project's commit format conventions if documented
-   - Otherwise use conventional commit format: type(scope): description
+   - Read `README.md` / `CONTRIBUTING.md` for project-specific rules.
+   - Otherwise enforce Conventional Commit: `type(scope): description` with clear, non-empty description.
    - Examples: "feat(auth): add user authentication", "fix(api): handle timeout errors"
 
    **Validation loop:**
@@ -34,16 +34,18 @@ $ARGUMENTS
    - Only proceed when message meets quality standards
 
 4. **Branch name** (optional):
-   - If user provided branch name in arguments: use it
-   - Otherwise: stackit will auto-generate from commit message
+   - If user provided a branch name: use it
+   - Otherwise: allow stackit to auto-generate from the commit message (respects `stackit config branch.pattern`)
 
 5. **Run command using pipe** (preferred):
-   - With branch name: `echo "commit message" | stackit create branch-name --no-interactive`
-   - Auto-generate name: `echo "commit message" | stackit create --no-interactive`
+   - With name: `echo "commit message" | stackit create branch-name --no-interactive`
+   - Auto-name: `echo "commit message" | stackit create --no-interactive`
+   - Add `--no-verify` only if the user explicitly opts out of hooks.
 
 6. Show new stack state with `stackit log --no-interactive`
 
 ## Error Handling
-- If on trunk: warn user they should create from a feature branch or confirm
-- If uncommitted changes exist: suggest staging first
-- If create fails: show error and suggest fixes
+- If not initialized: prompt to run `stackit init`.
+- If on trunk: warn and confirm or suggest switching to a feature branch.
+- If unstaged changes remain: suggest staging first or abort.
+- If create fails: show error and suggest fixes (stage changes, leave trunk, resolve conflicts, or run `stackit doctor`).
