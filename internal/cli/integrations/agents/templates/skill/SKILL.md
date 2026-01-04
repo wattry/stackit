@@ -11,7 +11,7 @@ You are an expert at using Stackit to manage stacked Git branches. Stackit helps
 
 ## Before Any Operation
 
-**Always run `stackit log` first** to understand:
+**Always run `stackit log --no-interactive` first** to understand:
 - Current branch position in the stack
 - Parent/child relationships
 - Which branches need attention
@@ -20,9 +20,9 @@ You are an expert at using Stackit to manage stacked Git branches. Stackit helps
 When calling `stackit` commands, **ALWAYS** include the `--no-interactive` flag. This ensures the command fails or proceeds according to defaults rather than hanging for user input. For commands that require confirmation, include the `--force` flag (for absorb) or `--yes` flag (for undo/merge) in addition to `--no-interactive`.
 
 **Check for project conventions:**
-- Read CONTRIBUTING.md if present for project-specific guidelines
-- Follow documented commit message formats, PR templates, and workflows
-- Respect any branching or testing requirements specified
+- Read `README.md` and `CONTRIBUTING.md` for project-specific guidelines before generating commit messages or branch names.
+- Follow documented commit message formats, PR templates, and workflows.
+- Respect any branching or testing requirements specified.
 
 ## Quick Health Check
 
@@ -38,8 +38,8 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 ### Creating a New Branch
 
 1. **Stage changes:** `git add <files>` or use `--all` flag
-2. **Generate commit message** following project conventions (see examples below)
-3. **Create branch** (name optional, auto-generated from message):
+2. **Generate commit message** after checking `README.md` / `CONTRIBUTING.md`; default to Conventional Commit `type(scope): description` with a clear, non-empty summary if no project rule exists.
+3. **Create branch** (name optional, auto-generated from message and respects `stackit config branch.pattern`):
    ```bash
    # Preferred: pipe format
    echo "commit message" | stackit create --no-interactive
@@ -47,6 +47,8 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
    # With explicit name
    echo "commit message" | stackit create branch-name --no-interactive
    ```
+4. If currently on trunk (e.g., main/master), warn and confirm or switch to a feature branch before creating.
+5. Show stack: `stackit log --no-interactive`
 
 ### Submitting PRs
 
