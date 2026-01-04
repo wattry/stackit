@@ -66,7 +66,8 @@ func TestAbsorbScopeBoundaries(t *testing.T) {
 		require.Equal(t, "PROJ-123", currentScope.String())
 
 		// Get downstack branches as absorb would
-		downstackBranches := currentBranch.GetRelativeStackDownstack()
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		downstackBranches := graph.Range("scoped-b", engine.StackRange{RecursiveParents: true})
 		// Include current branch
 		downstackBranches = append([]engine.Branch{currentBranch}, downstackBranches...)
 
@@ -106,7 +107,8 @@ func TestAbsorbScopeBoundaries(t *testing.T) {
 		require.True(t, currentScope.IsEmpty())
 
 		// Get downstack branches as absorb would
-		downstackBranches := currentBranch.GetRelativeStackDownstack()
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		downstackBranches := graph.Range("branch-b", engine.StackRange{RecursiveParents: true})
 		// Include current branch
 		downstackBranches = append([]engine.Branch{currentBranch}, downstackBranches...)
 
@@ -159,7 +161,8 @@ func TestAbsorbScopeBoundaries(t *testing.T) {
 		require.Equal(t, "PROJ-123", currentScope.String())
 
 		// Get downstack branches as absorb would
-		downstackBranches := currentBranch.GetRelativeStackDownstack()
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		downstackBranches := graph.Range("scoped-b", engine.StackRange{RecursiveParents: true})
 		// Include current branch
 		downstackBranches = append([]engine.Branch{currentBranch}, downstackBranches...)
 

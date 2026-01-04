@@ -42,20 +42,11 @@ func TestMoveAction(t *testing.T) {
 		parent2After := branchparent2After.GetParent()
 		require.NotNil(t, parent2After)
 		require.Equal(t, "main", parent2After.GetName())
-		mainBranch := s.Engine.GetBranch("main")
-		mainChildren := mainBranch.GetChildren()
-		mainChildNames := make([]string, len(mainChildren))
-		for i, c := range mainChildren {
-			mainChildNames[i] = c.GetName()
-		}
-		require.Contains(t, mainChildNames, "branch2")
-		branch1Obj := s.Engine.GetBranch("branch1")
-		branch1Children := branch1Obj.GetChildren()
-		branch1ChildNames := make([]string, len(branch1Children))
-		for i, c := range branch1Children {
-			branch1ChildNames[i] = c.GetName()
-		}
-		require.NotContains(t, branch1ChildNames, "branch2")
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		mainChildren := graph.Children("main")
+		require.Contains(t, mainChildren, "branch2")
+		branch1Children := graph.Children("branch1")
+		require.NotContains(t, branch1Children, "branch2")
 
 		// Verify branch3 still has branch2 as parent (descendant relationship preserved)
 		branchparent3After := s.Engine.GetBranch("branch3")
@@ -84,20 +75,11 @@ func TestMoveAction(t *testing.T) {
 		parentA := branchparentA.GetParent()
 		require.NotNil(t, parentA)
 		require.Equal(t, "branchB", parentA.GetName())
-		branchBObj := s.Engine.GetBranch("branchB")
-		branchBChildren := branchBObj.GetChildren()
-		branchBChildNames := make([]string, len(branchBChildren))
-		for i, c := range branchBChildren {
-			branchBChildNames[i] = c.GetName()
-		}
-		require.Contains(t, branchBChildNames, "branchA")
-		mainBranch := s.Engine.GetBranch("main")
-		mainChildren := mainBranch.GetChildren()
-		mainChildNames := make([]string, len(mainChildren))
-		for i, c := range mainChildren {
-			mainChildNames[i] = c.GetName()
-		}
-		require.NotContains(t, mainChildNames, "branchA")
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		branchBChildren := graph.Children("branchB")
+		require.Contains(t, branchBChildren, "branchA")
+		mainChildren := graph.Children("main")
+		require.NotContains(t, mainChildren, "branchA")
 
 		// Verify branchA2 still has branchA as parent (descendant relationship preserved)
 		branchparentA2 := s.Engine.GetBranch("branchA2")
@@ -127,20 +109,11 @@ func TestMoveAction(t *testing.T) {
 		parentA2 := branchparentA2.GetParent()
 		require.NotNil(t, parentA2)
 		require.Equal(t, "branchB1", parentA2.GetName())
-		branchB1Obj := s.Engine.GetBranch("branchB1")
-		branchB1Children := branchB1Obj.GetChildren()
-		branchB1ChildNames := make([]string, len(branchB1Children))
-		for i, c := range branchB1Children {
-			branchB1ChildNames[i] = c.GetName()
-		}
-		require.Contains(t, branchB1ChildNames, "branchA2")
-		branchA1Obj := s.Engine.GetBranch("branchA1")
-		branchA1Children := branchA1Obj.GetChildren()
-		branchA1ChildNames := make([]string, len(branchA1Children))
-		for i, c := range branchA1Children {
-			branchA1ChildNames[i] = c.GetName()
-		}
-		require.NotContains(t, branchA1ChildNames, "branchA2")
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		branchB1Children := graph.Children("branchB1")
+		require.Contains(t, branchB1Children, "branchA2")
+		branchA1Children := graph.Children("branchA1")
+		require.NotContains(t, branchA1Children, "branchA2")
 	})
 
 	t.Run("defaults source to current branch", func(t *testing.T) {

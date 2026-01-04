@@ -18,8 +18,11 @@ func UnfreezeAction(ctx *app.Context, branchName string) error {
 		return fmt.Errorf("branch %s is not tracked by stackit", branchName)
 	}
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Get upstack (descendants including current)
-	branches := branch.GetRelativeStack(engine.StackRange{
+	branches := graph.Range(branchName, engine.StackRange{
 		IncludeCurrent:    true,
 		RecursiveChildren: true,
 	})

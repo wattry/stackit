@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -125,7 +126,8 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	}
 
 	// Restack upstack branches
-	upstackBranches := currentBranchObj.GetRelativeStackUpstack()
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	upstackBranches := graph.Range(currentBranch, engine.StackRange{RecursiveChildren: true})
 
 	if len(upstackBranches) > 0 {
 		out.Info("Restacking %d upstack branch(es)...", len(upstackBranches))
@@ -171,7 +173,8 @@ func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 	out.Info("Interactive rebase completed.")
 
 	// Restack upstack branches
-	upstackBranches := currentBranch.GetRelativeStackUpstack()
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	upstackBranches := graph.Range(currentBranch.GetName(), engine.StackRange{RecursiveChildren: true})
 
 	if len(upstackBranches) > 0 {
 		out.Info("Restacking %d upstack branch(es)...", len(upstackBranches))

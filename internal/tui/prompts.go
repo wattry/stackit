@@ -581,6 +581,9 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 	}
 	renderer.SetAnnotations(annotations)
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Calculate depth for each branch to create proper tree indentation
 	branchDepth := make(map[string]int)
 	branchDepth[trunk.GetName()] = 0
@@ -588,11 +591,10 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 	// Build depth map by traversing from trunk
 	var calculateDepth func(branchName string, depth int)
 	calculateDepth = func(branchName string, depth int) {
-		branch := eng.GetBranch(branchName)
-		children := branch.GetChildren()
-		for _, child := range children {
-			branchDepth[child.GetName()] = depth + 1
-			calculateDepth(child.GetName(), depth+1)
+		children := graph.Children(branchName)
+		for _, childName := range children {
+			branchDepth[childName] = depth + 1
+			calculateDepth(childName, depth+1)
 		}
 	}
 	calculateDepth(trunk.GetName(), 0)

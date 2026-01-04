@@ -121,6 +121,16 @@ func (g *StackGraph) Children(name string) []string {
 	return nil
 }
 
+// ChildBranches returns the child branches for the given branch name.
+func (g *StackGraph) ChildBranches(name string) []Branch {
+	names := g.Children(name)
+	branches := make([]Branch, len(names))
+	for i, n := range names {
+		branches[i] = g.Nodes[n].Branch
+	}
+	return branches
+}
+
 // Parent returns the parent branch name (empty string if none).
 func (g *StackGraph) Parent(name string) string {
 	if node := g.Nodes[name]; node != nil {

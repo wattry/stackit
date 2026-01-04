@@ -41,7 +41,13 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		return fmt.Errorf("not on a branch")
 	}
 
-	stackBranches := eng.GetFullStack(*currentBranch)
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	stackBranches := graph.Range(currentBranch.GetName(), engine.StackRange{
+		RecursiveParents:  true,
+		IncludeCurrent:    true,
+		RecursiveChildren: true,
+	})
 	result := make([]StackBranchInfo, 0, len(stackBranches))
 
 	for _, branch := range stackBranches {

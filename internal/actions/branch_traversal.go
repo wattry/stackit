@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
@@ -32,11 +33,13 @@ func SwitchBranchAction(direction Direction, ctx *app.Context) error {
 	var targetBranch string
 	var err error
 
+	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+
 	switch direction {
 	case DirectionBottom:
 		targetBranch = traverseDownward(currentBranch.GetName(), ctx)
 	case DirectionTop:
-		targetBranch, err = traverseUpward(currentBranch.GetName(), ctx)
+		targetBranch, err = traverseUpward(currentBranch.GetName(), ctx, graph)
 		if err != nil {
 			return err
 		}
@@ -86,9 +89,8 @@ func traverseDownward(currentBranch string, ctx *app.Context) string {
 }
 
 // traverseUpward walks up the children chain to find the tip branch
-func traverseUpward(currentBranch string, ctx *app.Context) (string, error) {
-	currentBranchObj := ctx.Engine.GetBranch(currentBranch)
-	children := currentBranchObj.GetChildren()
+func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackGraph) (string, error) {
+	children := graph.ChildBranches(currentBranch)
 	if len(children) == 0 {
 		// No children, we're at the tip
 		return currentBranch, nil
@@ -113,7 +115,7 @@ func traverseUpward(currentBranch string, ctx *app.Context) (string, error) {
 	}
 
 	ctx.Output.Info("⮑  %s", nextBranch)
-	return traverseUpward(nextBranch, ctx)
+	return traverseUpward(nextBranch, ctx, graph)
 }
 
 // handleMultipleChildren prompts the user to select a branch when multiple children exist

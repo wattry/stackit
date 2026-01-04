@@ -112,7 +112,8 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 		IncludeCurrent:    false,
 		RecursiveChildren: false,
 	}
-	downstack := branch.GetRelativeStack(rng)
+	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	downstack := graph.Range(branch.GetName(), rng)
 
 	// Limit the number of branches we check to avoid slow metadata reads
 	const maxDownstackChecks = 10

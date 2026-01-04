@@ -126,13 +126,13 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 		branchName = currentBranch.GetName()
 	}
 
-	branch := nav.GetBranch(branchName)
 	stackRange := opts.StackRange
 	// Default to downstack if StackRange is zero value (all fields false)
 	if !stackRange.RecursiveParents && !stackRange.IncludeCurrent && !stackRange.RecursiveChildren {
 		stackRange = StackRangeDownstack()
 	}
-	stackBranches := nav.GetRelativeStack(branch, stackRange)
+	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	stackBranches := graph.Range(branchName, stackRange)
 	allBranches := make([]string, len(stackBranches))
 	for i, b := range stackBranches {
 		allBranches[i] = b.GetName()

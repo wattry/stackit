@@ -76,10 +76,14 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return fmt.Errorf("failed to clean branches: %w", err)
 	}
 
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Add branches with new parents to restack list
 	for _, branchName := range cleanResult.BranchesWithNewParents {
 		branch := eng.GetBranch(branchName)
-		upstack := branch.GetRelativeStackUpstack()
+		upstack := graph.Range(branch.GetName(), engine.StackRange{
+			RecursiveChildren: true,
+		})
 		for _, b := range upstack {
 			branchesToRestack = append(branchesToRestack, b.GetName())
 		}

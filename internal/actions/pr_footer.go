@@ -20,6 +20,9 @@ func CreatePRBodyFooter(branch string, eng engine.BranchReader) string {
 	terminalParentName := findTerminalParent(branch, eng)
 	terminalParent := eng.GetBranch(terminalParentName)
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	var tree strings.Builder
 
 	// Add scope if present
@@ -63,7 +66,7 @@ func CreatePRBodyFooter(branch string, eng engine.BranchReader) string {
 
 	for branchObj, depth := range eng.BranchesDepthFirst(terminalParent) {
 		// Only include branches related to the PR branch
-		if branchObj.GetName() != branch && !isParentOrChild(eng, branchObj.GetName(), branch) {
+		if branchObj.GetName() != branch && !isParentOrChild(graph, branchObj.GetName(), branch) {
 			continue // skip but continue traversal
 		}
 
@@ -138,13 +141,13 @@ func buildLeaf(eng engine.BranchReader, branchName string, depth int, prBranch s
 }
 
 // isParentOrChild checks if branch1 is a parent or child of branch2
-func isParentOrChild(eng engine.BranchReader, branch1, branch2 string) bool {
+func isParentOrChild(graph *engine.StackGraph, branch1, branch2 string) bool {
 	visited := make(map[string]bool)
-	return isParentOrChildRecursive(eng, branch1, branch2, visited)
+	return isParentOrChildRecursive(graph, branch1, branch2, visited)
 }
 
 // isParentOrChildRecursive is the recursive helper with cycle detection
-func isParentOrChildRecursive(eng engine.BranchReader, branch1, branch2 string, visited map[string]bool) bool {
+func isParentOrChildRecursive(graph *engine.StackGraph, branch1, branch2 string, visited map[string]bool) bool {
 	// Prevent infinite recursion
 	if visited[branch1] {
 		return false
@@ -152,25 +155,23 @@ func isParentOrChildRecursive(eng engine.BranchReader, branch1, branch2 string, 
 	visited[branch1] = true
 
 	// Check if branch1 is parent of branch2
-	branch1Obj := eng.GetBranch(branch1)
-	children := branch1Obj.GetChildren()
+	children := graph.ChildBranches(branch1)
 	for _, child := range children {
 		if child.GetName() == branch2 {
 			return true
 		}
-		if isParentOrChildRecursive(eng, child.GetName(), branch2, visited) {
+		if isParentOrChildRecursive(graph, child.GetName(), branch2, visited) {
 			return true
 		}
 	}
 
 	// Check if branch1 is child of branch2
-	// branch1Obj already declared above
-	parent := branch1Obj.GetParent()
-	if parent != nil {
-		if parent.GetName() == branch2 {
+	parentName := graph.Parent(branch1)
+	if parentName != "" {
+		if parentName == branch2 {
 			return true
 		}
-		return isParentOrChildRecursive(eng, parent.GetName(), branch2, visited)
+		return isParentOrChildRecursive(graph, parentName, branch2, visited)
 	}
 
 	return false

@@ -63,6 +63,9 @@ func Action(ctx *app.Context, opts Options) error {
 		return err
 	}
 
+	// Build a StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Check if there are staged changes (before handling flags)
 	_, err := eng.HasStagedChanges(ctx.Context)
 	if err != nil {
@@ -101,8 +104,8 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Get all commits downstack from current branch
 	// We need commits from all branches downstack, not just current branch
-	downstackBranches := currentBranch.GetRelativeStackDownstack()
-	// Include current branch
+	downstackBranches := graph.Range(currentBranch.GetName(), engine.StackRange{RecursiveParents: true})
+	// Include current branch (prepend since Range returns ancestors oldest-to-nearest)
 	downstackBranches = append([]engine.Branch{*currentBranch}, downstackBranches...)
 
 	// Terminate downstack search if a scope boundary is hit
@@ -277,8 +280,9 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Restack all branches above the oldest modified branch
 	if oldestModifiedBranch != "" {
-		branch := eng.GetBranch(oldestModifiedBranch)
-		upstackBranches := branch.GetRelativeStackUpstack()
+		// Rebuild graph with fresh engine state
+		graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		upstackBranches := graph.Range(oldestModifiedBranch, engine.StackRange{RecursiveChildren: true})
 
 		if len(upstackBranches) > 0 {
 			if err := actions.RestackBranches(ctx, upstackBranches); err != nil {

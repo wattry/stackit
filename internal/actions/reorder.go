@@ -39,9 +39,11 @@ func ReorderAction(ctx *app.Context) error {
 		return fmt.Errorf("cannot reorder trunk branch")
 	}
 
+	// Build StackGraph for efficient traversals
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Collect branches: get ancestors from trunk to current branch
-	currentBranchBranch := eng.GetBranch(currentBranch)
-	stack := currentBranchBranch.GetRelativeStack(engine.StackRange{
+	stack := graph.Range(currentBranch, engine.StackRange{
 		RecursiveParents:  true,
 		IncludeCurrent:    true,
 		RecursiveChildren: false,
@@ -109,10 +111,9 @@ func ReorderAction(ctx *app.Context) error {
 
 	// Identify affected branches: find the first branch that moved or changed parent
 	firstAffectedBranchName := findFirstAffectedBranch(eng, originalOrder, newOrder)
-	firstAffectedBranch := eng.GetBranch(firstAffectedBranchName)
 
 	// Get all affected branches (first affected and all its descendants)
-	affectedBranches := firstAffectedBranch.GetRelativeStack(engine.StackRange{
+	affectedBranches := graph.Range(firstAffectedBranchName, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,

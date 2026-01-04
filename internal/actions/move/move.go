@@ -25,6 +25,8 @@ func Action(ctx *app.Context, opts Options) error {
 	out := ctx.Output
 	gctx := ctx.Context
 
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Default source to current branch
 	source := opts.Source
 	if source == "" {
@@ -86,7 +88,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Cycle detection: ensure onto is not a descendant of source
 	sourceBranch = eng.GetBranch(source)
-	descendants := sourceBranch.GetRelativeStack(engine.StackRange{
+	descendants := graph.Range(sourceBranch.GetName(), engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,
@@ -138,6 +140,9 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("failed to set parent: %w", err)
 	}
 
+	// Rebuild graph after parent change for downstream traversals
+	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
 	// Restore old divergence point if it's still a valid ancestor
 	if oldParentRev != "" {
 		if isAncestor, _ := eng.Git().IsAncestor(oldParentRev, source); isAncestor {
@@ -151,7 +156,7 @@ func Action(ctx *app.Context, opts Options) error {
 		style.ColorBranchName(onto, false))
 
 	// Get all branches that need restacking: source and all its descendants
-	branchesToRestack := sourceBranch.GetRelativeStack(engine.StackRange{
+	branchesToRestack := graph.Range(sourceBranch.GetName(), engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,
