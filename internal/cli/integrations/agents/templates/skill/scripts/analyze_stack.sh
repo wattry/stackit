@@ -50,7 +50,7 @@ fi
 
 # Check for branches without PRs
 # Count branches marked with ● (no PR) in stackit log output
-branches_no_pr=$(stackit log 2>/dev/null | grep -c "●" 2>/dev/null || echo "0")
+branches_no_pr=$(stackit log 2>/dev/null | grep -c "●" || true)
 if [ "$branches_no_pr" -gt 0 ]; then
     echo -e "${YELLOW}ℹ️  $branches_no_pr branch(es) without PRs${NC}"
     echo "→ Run: stackit submit --stack"
