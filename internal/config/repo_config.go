@@ -156,6 +156,33 @@ func (c *Config) SetUndoStackDepth(depth int) {
 	c.data.UndoStackDepth = &depth
 }
 
+// WorktreeBasePath returns the base path for worktrees, or empty string for default
+// Default is "../{repo-name}-stacks" relative to the repository root
+func (c *Config) WorktreeBasePath() string {
+	if c.data.WorktreeBasePath != nil {
+		return *c.data.WorktreeBasePath
+	}
+	return ""
+}
+
+// SetWorktreeBasePath sets the base path for worktrees
+func (c *Config) SetWorktreeBasePath(path string) {
+	c.data.WorktreeBasePath = &path
+}
+
+// WorktreeAutoClean returns whether worktrees should be auto-cleaned during sync, true by default
+func (c *Config) WorktreeAutoClean() bool {
+	if c.data.WorktreeAutoClean != nil {
+		return *c.data.WorktreeAutoClean
+	}
+	return true
+}
+
+// SetWorktreeAutoClean sets whether worktrees should be auto-cleaned during sync
+func (c *Config) SetWorktreeAutoClean(enabled bool) {
+	c.data.WorktreeAutoClean = &enabled
+}
+
 // GetBranchPattern returns the branch name pattern as a BranchPattern type
 func (c *Config) GetBranchPattern() BranchPattern {
 	return c.data.GetBranchPattern()
@@ -169,6 +196,8 @@ type RepoConfig struct {
 	BranchNamePattern          *string  `json:"branchNamePattern,omitempty"`
 	SubmitFooter               *bool    `json:"submit.footer,omitempty"`
 	UndoStackDepth             *int     `json:"undo.stackDepth,omitempty"`
+	WorktreeBasePath           *string  `json:"worktree.basePath,omitempty"`
+	WorktreeAutoClean          *bool    `json:"worktree.autoClean,omitempty"`
 }
 
 // GetBranchPattern returns the branch name pattern as a BranchPattern type

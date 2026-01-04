@@ -564,3 +564,19 @@ func (d *demoGitRunner) BatchDeleteRemoteMetadataRefs(_ []string) error {
 func (d *demoGitRunner) TestRemoteRefCompatibility() error {
 	return nil
 }
+
+func (d *demoGitRunner) ReadWorktreeMeta(_ string) (*git.WorktreeMeta, error) {
+	return nil, nil
+}
+
+func (d *demoGitRunner) WriteWorktreeMeta(_ string, _ *git.WorktreeMeta) error {
+	return nil
+}
+
+func (d *demoGitRunner) DeleteWorktreeMeta(_ string) error {
+	return nil
+}
+
+func (d *demoGitRunner) ListWorktreeMetas() (map[string]*git.WorktreeMeta, error) {
+	return make(map[string]*git.WorktreeMeta), nil
+}

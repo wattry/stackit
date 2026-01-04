@@ -174,6 +174,14 @@ type WorktreeOperations interface {
 	ListWorktrees(ctx context.Context) ([]string, error)
 }
 
+// WorktreeRegistryOperations handles stackit-managed worktree tracking (local-only refs).
+type WorktreeRegistryOperations interface {
+	ReadWorktreeMeta(stackRoot string) (*WorktreeMeta, error)
+	WriteWorktreeMeta(stackRoot string, meta *WorktreeMeta) error
+	DeleteWorktreeMeta(stackRoot string) error
+	ListWorktreeMetas() (map[string]*WorktreeMeta, error)
+}
+
 // StatusOperations provides repository status information.
 type StatusOperations interface {
 	GetStatusPorcelain(ctx context.Context) (string, error)
