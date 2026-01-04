@@ -496,7 +496,7 @@ func handlePostMergeFollowUp(ctx *app.Context) error {
 			out.Info("  (3) Sync your workspace: %s", style.ColorCyan("stackit sync --restack"))
 			return nil // Return nil so we don't show the error twice at the top level
 		}
-		handler := NewSyncHandler(ctx.Output)
+		handler := NewSyncHandler(ctx.Output, ctx.Logger)
 		return sync.Action(ctx, sync.Options{
 			Restack: true,
 		}, handler)

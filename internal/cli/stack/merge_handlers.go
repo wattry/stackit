@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"stackit.dev/stackit/internal/actions/merge"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -70,6 +72,7 @@ func (h *SimpleMergeHandler) Complete(result *merge.ConsolidationResult) {
 // InteractiveMergeHandler provides a TUI for merge operations
 type InteractiveMergeHandler struct {
 	ctx         *app.Context
+	logger      output.Logger
 	reporter    *tui.ChannelMergeProgressReporter
 	done        chan bool
 	errChan     chan error
@@ -81,7 +84,8 @@ type InteractiveMergeHandler struct {
 // NewInteractiveMergeHandler creates a new InteractiveMergeHandler
 func NewInteractiveMergeHandler(ctx *app.Context) *InteractiveMergeHandler {
 	return &InteractiveMergeHandler{
-		ctx: ctx,
+		ctx:    ctx,
+		logger: ctx.Logger,
 	}
 }
 
@@ -119,6 +123,15 @@ func (h *InteractiveMergeHandler) startTUI(plan *merge.Plan) {
 	}()
 
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				stack := string(debug.Stack())
+				h.logger.Error("Merge TUI panic: %v\n%s", p, stack)
+				fmt.Fprintf(os.Stderr, "\nstackit merge TUI crashed: %v\n", p)
+				h.Cleanup()
+			}
+		}()
+
 		err := tui.RunMergeTUI(groups, stepDescriptions, h.reporter.Updates(), h.done)
 		if err != nil {
 			h.errChan <- err

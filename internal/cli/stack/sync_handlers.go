@@ -2,13 +2,8 @@ package stack
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 	stdsync "sync"
-	"syscall"
-
-	tea "github.com/charmbracelet/bubbletea"
 
 	syncAction "stackit.dev/stackit/internal/actions/sync"
 	"stackit.dev/stackit/internal/engine"
@@ -25,11 +20,11 @@ const (
 )
 
 // NewSyncHandler creates the appropriate handler based on TTY availability
-func NewSyncHandler(splog output.Output) syncAction.Handler {
+func NewSyncHandler(out output.Output, logger output.Logger) syncAction.Handler {
 	if tui.IsTTY() {
-		return NewInteractiveSyncHandler(splog)
+		return NewInteractiveSyncHandler(out, logger)
 	}
-	return NewSimpleSyncHandler(splog)
+	return NewSimpleSyncHandler(out)
 }
 
 // SimpleSyncHandler provides streaming text output for non-TTY environments
@@ -285,20 +280,21 @@ func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts 
 
 // InteractiveSyncHandler provides bubbletea TUI for TTY environments
 type InteractiveSyncHandler struct {
-	splog        output.Output
-	program      *tea.Program
+	out          output.Output
+	logger       output.Logger
+	runner       *tui.Runner
 	model        *syncComponent.Model
 	mu           stdsync.Mutex
 	totalOps     int
 	completedOps int
 	currentPhase syncAction.Phase
-	cleanupDone  bool
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
-func NewInteractiveSyncHandler(splog output.Output) *InteractiveSyncHandler {
+func NewInteractiveSyncHandler(out output.Output, logger output.Logger) *InteractiveSyncHandler {
 	return &InteractiveSyncHandler{
-		splog: splog,
+		out:    out,
+		logger: logger,
 	}
 }
 
@@ -309,36 +305,13 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 
 	h.totalOps = totalOps
 	h.completedOps = 0
-	h.cleanupDone = false
 
 	// Initialize model
 	h.model = syncComponent.NewModel(totalOps)
 
-	// Quiet the splog so it doesn't interfere with the TUI
-	h.splog.SetQuiet(true)
-
-	// Start bubbletea program
-	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
-
-	// Set up signal handler to ensure terminal is restored on interrupt
-	// Use a buffered channel and only register if not already registered
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		h.Cleanup()
-		// Re-raise the signal so the process can exit properly
-		signal.Stop(sigChan)
-	}()
-
-	// Run program in background
-	go func() {
-		if _, err := h.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running sync TUI: %v\n", err)
-		}
-		// Ensure cleanup happens when program exits
-		h.Cleanup()
-	}()
+	// Create and start TUI runner
+	h.runner = tui.NewRunner(h.model, h.out, h.logger)
+	h.runner.Start()
 }
 
 // EmitEvent handles progress updates
@@ -346,14 +319,14 @@ func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.program == nil {
+	if h.runner == nil {
 		return
 	}
 
 	// Handle phase transitions
 	if event.Type == syncAction.EventStarted && event.Phase != h.currentPhase {
 		h.currentPhase = event.Phase
-		h.program.Send(syncComponent.PhaseStartMsg{
+		h.runner.Send(syncComponent.PhaseStartMsg{
 			Phase: syncComponent.Phase(event.Phase),
 		})
 		return
@@ -362,7 +335,7 @@ func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 	// Build detail message
 	detail := h.formatEventDetail(event)
 	if detail != "" {
-		h.program.Send(syncComponent.PhaseDetailMsg{
+		h.runner.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(event.Phase),
 			Message: detail,
 		})
@@ -370,7 +343,7 @@ func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 
 	// Update progress
 	h.completedOps++
-	h.program.Send(syncComponent.ProgressTickMsg{
+	h.runner.Send(syncComponent.ProgressTickMsg{
 		Completed: h.completedOps,
 		Total:     h.totalOps,
 	})
@@ -448,7 +421,7 @@ func (h *InteractiveSyncHandler) Complete(summary syncAction.Summary) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.program == nil {
+	if h.runner == nil {
 		return
 	}
 
@@ -456,13 +429,9 @@ func (h *InteractiveSyncHandler) Complete(summary syncAction.Summary) {
 	summaryMsg := h.formatSummary(summary)
 
 	// Send complete message and wait for program to quit
-	h.program.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
-	h.program.Wait()
-	h.program = nil
-
-	// Restore splog
-	h.splog.SetQuiet(false)
-	h.cleanupDone = true
+	h.runner.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
+	h.runner.Wait()
+	h.runner.Cleanup()
 }
 
 // formatSummary formats the sync summary
@@ -493,39 +462,16 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 
 	h.totalOps = branchCount
 	h.completedOps = 0
-	h.cleanupDone = false
 
 	// Initialize model for restack (reusing sync model with just restack phase)
 	h.model = syncComponent.NewModel(branchCount)
 
-	// Quiet the splog so it doesn't interfere with the TUI
-	h.splog.SetQuiet(true)
-
-	// Start bubbletea program
-	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
-
-	// Set up signal handler to ensure terminal is restored on interrupt
-	// Use a buffered channel and only register if not already registered
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		h.Cleanup()
-		// Re-raise the signal so the process can exit properly
-		signal.Stop(sigChan)
-	}()
-
-	// Run program in background
-	go func() {
-		if _, err := h.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running restack TUI: %v\n", err)
-		}
-		// Ensure cleanup happens when program exits
-		h.Cleanup()
-	}()
+	// Create and start TUI runner
+	h.runner = tui.NewRunner(h.model, h.out, h.logger)
+	h.runner.Start()
 
 	// Start restack phase
-	h.program.Send(syncComponent.PhaseStartMsg{
+	h.runner.Send(syncComponent.PhaseStartMsg{
 		Phase: syncComponent.Phase(syncAction.PhaseRestack),
 	})
 }
@@ -535,7 +481,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.program == nil {
+	if h.runner == nil {
 		return
 	}
 
@@ -545,7 +491,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 		if reparented {
 			detail = fmt.Sprintf("Reparented %s -> %s. %s", oldParent, newParent, detail)
 		}
-		h.program.Send(syncComponent.PhaseDetailMsg{
+		h.runner.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(syncAction.PhaseRestack),
 			Message: detail,
 		})
@@ -553,7 +499,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 
 	// Update progress
 	h.completedOps++
-	h.program.Send(syncComponent.ProgressTickMsg{
+	h.runner.Send(syncComponent.ProgressTickMsg{
 		Completed: h.completedOps,
 		Total:     h.totalOps,
 	})
@@ -602,7 +548,7 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.program == nil {
+	if h.runner == nil {
 		return
 	}
 
@@ -610,39 +556,16 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 	summaryMsg := h.formatRestackSummary(restacked, skipped, conflicts)
 
 	// Send complete message and wait for program to quit
-	h.program.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
-	h.program.Wait()
-	h.program = nil
-
-	// Restore splog
-	h.splog.SetQuiet(false)
-	h.cleanupDone = true
+	h.runner.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
+	h.runner.Wait()
+	h.runner.Cleanup()
 }
 
-// Cleanup ensures the terminal is restored to normal mode
-// This should be called on interrupt or error to prevent leaving the terminal in raw mode
+// Cleanup ensures the terminal is restored to normal mode.
 func (h *InteractiveSyncHandler) Cleanup() {
-	h.mu.Lock()
-	if h.cleanupDone {
-		h.mu.Unlock()
-		return
+	if h.runner != nil {
+		h.runner.Cleanup()
 	}
-
-	p := h.program
-	h.mu.Unlock()
-
-	if p != nil {
-		// Quit the program and wait for it to restore terminal state
-		p.Quit()
-		p.Wait()
-	}
-
-	h.mu.Lock()
-	h.program = nil
-	// Restore splog
-	h.splog.SetQuiet(false)
-	h.cleanupDone = true
-	h.mu.Unlock()
 }
 
 // formatRestackSummary formats the restack summary

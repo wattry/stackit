@@ -2,14 +2,10 @@
 package stack
 
 import (
-	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/submit"
@@ -123,7 +119,7 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 		}
 
 		// Create the appropriate handler based on TTY availability
-		handler := NewSubmitHandler(ctx.Output)
+		handler := NewSubmitHandler(ctx.Output, ctx.Logger)
 		return submit.Action(ctx, opts, handler)
 	})
 }
@@ -171,11 +167,11 @@ func NewSsCmd() *cobra.Command {
 }
 
 // NewSubmitHandler creates the appropriate handler based on TTY availability
-func NewSubmitHandler(splog output.Output) submit.Handler {
+func NewSubmitHandler(out output.Output, logger output.Logger) submit.Handler {
 	if tui.IsTTY() {
-		return NewInteractiveSubmitHandler(splog)
+		return NewInteractiveSubmitHandler(out, logger)
 	}
-	return NewSimpleSubmitHandler(splog)
+	return NewSimpleSubmitHandler(out)
 }
 
 // SimpleSubmitHandler implements submit.Handler with line-by-line output
@@ -294,19 +290,18 @@ func (h *SimpleSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 
 // InteractiveSubmitHandler implements submit.Handler with bubbletea for animated progress
 type InteractiveSubmitHandler struct {
-	splog         output.Output
-	program       *tea.Program
+	out           output.Output
+	logger        output.Logger
+	runner        *tui.Runner
 	model         *submitComponent.Model
 	inSubmitPhase bool
-	mu            sync.Mutex
 	stack         *tree.StackTree
 	fixedMap      map[string]bool
-	cleanupDone   bool
 }
 
 // NewInteractiveSubmitHandler creates a new interactive submit handler
-func NewInteractiveSubmitHandler(splog output.Output) *InteractiveSubmitHandler {
-	return &InteractiveSubmitHandler{splog: splog}
+func NewInteractiveSubmitHandler(out output.Output, logger output.Logger) *InteractiveSubmitHandler {
+	return &InteractiveSubmitHandler{out: out, logger: logger}
 }
 
 // findRootBranch finds the root branch of the stack (the one whose parent is trunk)
@@ -332,10 +327,7 @@ func (h *InteractiveSubmitHandler) findRootBranch() string {
 }
 
 func (h *InteractiveSubmitHandler) ensureProgramStarted() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.program != nil {
+	if h.runner != nil {
 		return
 	}
 
@@ -344,56 +336,15 @@ func (h *InteractiveSubmitHandler) ensureProgramStarted() {
 		h.model = submitComponent.NewModel(nil)
 	}
 
-	// Quiet the splog so it doesn't interfere with the TUI
-	h.splog.SetQuiet(true)
-
-	h.program = tea.NewProgram(h.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
-	h.cleanupDone = false
-
-	// Set up signal handler to ensure terminal is restored on interrupt
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		h.Cleanup()
-		// Re-raise the signal so the process can exit properly
-		signal.Stop(sigChan)
-	}()
-
-	// Run program in background
-	go func() {
-		if _, err := h.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running submit TUI: %v\n", err)
-		}
-		// Ensure cleanup happens when program exits
-		h.Cleanup()
-	}()
+	h.runner = tui.NewRunner(h.model, h.out, h.logger)
+	h.runner.Start()
 }
 
-// Cleanup ensures the terminal is restored to normal mode
-// This should be called on interrupt or error to prevent leaving the terminal in raw mode
+// Cleanup ensures the terminal is restored to normal mode.
 func (h *InteractiveSubmitHandler) Cleanup() {
-	h.mu.Lock()
-	if h.cleanupDone {
-		h.mu.Unlock()
-		return
+	if h.runner != nil {
+		h.runner.Cleanup()
 	}
-
-	p := h.program
-	h.mu.Unlock()
-
-	if p != nil {
-		// Quit the program and wait for it to restore terminal state
-		p.Quit()
-		p.Wait()
-	}
-
-	h.mu.Lock()
-	h.program = nil
-	// Restore splog
-	h.splog.SetQuiet(false)
-	h.cleanupDone = true
-	h.mu.Unlock()
 }
 
 // OnEvent handles events from the submit action
@@ -443,18 +394,18 @@ func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 	case submit.RestackEvent:
 		h.ensureProgramStarted()
 		if ev.Started {
-			h.program.Send(submitComponent.GlobalMessageMsg("Restacking branches..."))
+			h.runner.Send(submitComponent.GlobalMessageMsg("Restacking branches..."))
 		} else if ev.Completed {
-			h.program.Send(submitComponent.GlobalMessageMsg(""))
+			h.runner.Send(submitComponent.GlobalMessageMsg(""))
 		}
 
 	case submit.PreparingEvent:
 		h.ensureProgramStarted()
-		h.program.Send(submitComponent.GlobalMessageMsg("Preparing branches..."))
+		h.runner.Send(submitComponent.GlobalMessageMsg("Preparing branches..."))
 
 	case submit.BranchPlanEvent:
 		h.ensureProgramStarted()
-		h.program.Send(submitComponent.PlanUpdateMsg{
+		h.runner.Send(submitComponent.PlanUpdateMsg{
 			BranchName: ev.BranchName,
 			Action:     ev.Action,
 			IsCurrent:  ev.IsCurrent,
@@ -487,15 +438,15 @@ func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 			}
 		}
 
-		h.program.Send(submitComponent.GlobalMessageMsg("Submitting..."))
+		h.runner.Send(submitComponent.GlobalMessageMsg("Submitting..."))
 
 	case submit.BranchProgressEvent:
-		if !h.inSubmitPhase || h.program == nil {
+		if !h.inSubmitPhase || h.runner == nil {
 			return
 		}
 
 		status := string(ev.Status)
-		h.program.Send(submitComponent.ProgressUpdateMsg{
+		h.runner.Send(submitComponent.ProgressUpdateMsg{
 			BranchName: ev.BranchName,
 			Status:     status,
 			URL:        ev.URL,
@@ -503,16 +454,16 @@ func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 		})
 
 	case submit.CompletionEvent:
-		if h.program == nil {
+		if h.runner == nil {
 			return
 		}
 
 		if ev.Message != "" && ev.Message != "Submit complete" {
-			h.program.Send(submitComponent.GlobalMessageMsg(ev.Message))
+			h.runner.Send(submitComponent.GlobalMessageMsg(ev.Message))
 		} else {
-			h.program.Send(submitComponent.GlobalMessageMsg(""))
+			h.runner.Send(submitComponent.GlobalMessageMsg(""))
 		}
-		h.program.Send(submitComponent.ProgressCompleteMsg{})
+		h.runner.Send(submitComponent.ProgressCompleteMsg{})
 		h.complete()
 	}
 }
@@ -520,17 +471,15 @@ func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 // Confirm prompts for user confirmation
 func (h *InteractiveSubmitHandler) Confirm(message string, defaultYes bool) (bool, error) {
 	// Pause TUI for prompt
-	if h.program != nil {
-		_ = h.program.ReleaseTerminal()
-		h.splog.SetQuiet(false)
+	if h.runner != nil {
+		h.runner.Pause()
 	}
 
 	confirmed, err := tui.PromptConfirm(message, defaultYes)
 
 	// Resume TUI
-	if h.program != nil {
-		h.splog.SetQuiet(true)
-		_ = h.program.RestoreTerminal()
+	if h.runner != nil {
+		h.runner.Resume()
 	}
 
 	return confirmed, err
@@ -538,11 +487,10 @@ func (h *InteractiveSubmitHandler) Confirm(message string, defaultYes bool) (boo
 
 // complete finalizes the display
 func (h *InteractiveSubmitHandler) complete() {
-	if h.program == nil {
+	if h.runner == nil {
 		return
 	}
 
-	h.program.Wait()
-	h.program = nil
-	h.splog.SetQuiet(false)
+	h.runner.Wait()
+	h.runner.Cleanup()
 }
