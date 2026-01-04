@@ -34,12 +34,8 @@ func TestTrackBranch(t *testing.T) {
 		require.Equal(t, "main", parent.GetName())
 
 		// Verify children relationship
-		mainBranch := s.Engine.GetBranch("main")
-		children := mainBranch.GetChildren()
-		childNames := make([]string, len(children))
-		for i, c := range children {
-			childNames[i] = c.GetName()
-		}
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		childNames := graph.Children("main")
 		require.Contains(t, childNames, "feature")
 	})
 
@@ -71,19 +67,10 @@ func TestTrackBranch(t *testing.T) {
 		parent2 := branch2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "branch1", parent2.GetName())
-		mainBranch := s.Engine.GetBranch("main")
-		mainChildren := mainBranch.GetChildren()
-		mainChildNames := make([]string, len(mainChildren))
-		for i, c := range mainChildren {
-			mainChildNames[i] = c.GetName()
-		}
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		mainChildNames := graph.Children("main")
 		require.Contains(t, mainChildNames, "branch1")
-		branch1Obj := s.Engine.GetBranch("branch1")
-		branch1Children := branch1Obj.GetChildren()
-		branch1ChildNames := make([]string, len(branch1Children))
-		for i, c := range branch1Children {
-			branch1ChildNames[i] = c.GetName()
-		}
+		branch1ChildNames := graph.Children("branch1")
 		require.Contains(t, branch1ChildNames, "branch2")
 	})
 
@@ -151,19 +138,10 @@ func TestSetParent(t *testing.T) {
 		parent2After := branchparent2After.GetParent()
 		require.NotNil(t, parent2After)
 		require.Equal(t, "main", parent2After.GetName())
-		mainBranch := s.Engine.GetBranch("main")
-		mainChildren := mainBranch.GetChildren()
-		mainChildNames := make([]string, len(mainChildren))
-		for i, c := range mainChildren {
-			mainChildNames[i] = c.GetName()
-		}
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		mainChildNames := graph.Children("main")
 		require.Contains(t, mainChildNames, "branch2")
-		branch1Obj := s.Engine.GetBranch("branch1")
-		branch1Children := branch1Obj.GetChildren()
-		branch1ChildNames := make([]string, len(branch1Children))
-		for i, c := range branch1Children {
-			branch1ChildNames[i] = c.GetName()
-		}
+		branch1ChildNames := graph.Children("branch1")
 		require.NotContains(t, branch1ChildNames, "branch2")
 	})
 }
@@ -193,12 +171,8 @@ func TestDeleteBranch(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify initial state
-		branch1Obj := s.Engine.GetBranch("branch1")
-		branch1Children := branch1Obj.GetChildren()
-		branch1ChildNames := make([]string, len(branch1Children))
-		for i, c := range branch1Children {
-			branch1ChildNames[i] = c.GetName()
-		}
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		branch1ChildNames := graph.Children("branch1")
 		require.Contains(t, branch1ChildNames, "branch2")
 		require.Contains(t, branch1ChildNames, "branch3")
 
@@ -224,12 +198,8 @@ func TestDeleteBranch(t *testing.T) {
 		parent3 := branchparent3.GetParent()
 		require.NotNil(t, parent3)
 		require.Equal(t, "main", parent3.GetName())
-		mainBranch := s.Engine.GetBranch("main")
-		mainChildren := mainBranch.GetChildren()
-		mainChildNames := make([]string, len(mainChildren))
-		for i, c := range mainChildren {
-			mainChildNames[i] = c.GetName()
-		}
+		graph = engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		mainChildNames := graph.Children("main")
 		require.Contains(t, mainChildNames, "branch2")
 		require.Contains(t, mainChildNames, "branch3")
 	})
@@ -292,12 +262,8 @@ func TestDeleteBranch(t *testing.T) {
 		require.Equal(t, "C3", parentGC3.GetName())
 
 		// Verify main's children list contains C1, C2, C3
-		mainBranch := s.Engine.GetBranch("main")
-		mainChildren := mainBranch.GetChildren()
-		mainChildNames := make([]string, len(mainChildren))
-		for i, c := range mainChildren {
-			mainChildNames[i] = c.GetName()
-		}
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		mainChildNames := graph.Children("main")
 		require.Contains(t, mainChildNames, "C1")
 		require.Contains(t, mainChildNames, "C2")
 		require.Contains(t, mainChildNames, "C3")
@@ -313,7 +279,7 @@ func TestDeleteBranch(t *testing.T) {
 	})
 }
 
-func TestGetRelativeStack(t *testing.T) {
+func TestStackGraphRange(t *testing.T) {
 	t.Parallel()
 	t.Run("returns downstack (ancestors) excluding trunk", func(t *testing.T) {
 		t.Parallel()
@@ -324,9 +290,8 @@ func TestGetRelativeStack(t *testing.T) {
 			})
 
 		// Get downstack from branch2 - should NOT include trunk (main)
-		rng := engine.StackRange{RecursiveParents: true}
-		branch2 := s.Engine.GetBranch("branch2")
-		stack := s.Engine.GetRelativeStack(branch2, rng)
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		stack := graph.Range("branch2", engine.StackRange{RecursiveParents: true})
 		stackNames := make([]string, len(stack))
 		for i, b := range stack {
 			stackNames[i] = b.GetName()
@@ -345,9 +310,8 @@ func TestGetRelativeStack(t *testing.T) {
 			})
 
 		// Get upstack from branch1
-		rng := engine.StackRange{RecursiveChildren: true}
-		branch1 := s.Engine.GetBranch("branch1")
-		stack := s.Engine.GetRelativeStack(branch1, rng)
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		stack := graph.Range("branch1", engine.StackRange{RecursiveChildren: true})
 		stackNames := make([]string, len(stack))
 		for i, b := range stack {
 			stackNames[i] = b.GetName()
@@ -364,9 +328,8 @@ func TestGetRelativeStack(t *testing.T) {
 				"branch1": "main",
 			})
 
-		rng := engine.StackRange{IncludeCurrent: true}
-		branch1 := s.Engine.GetBranch("branch1")
-		stack := s.Engine.GetRelativeStack(branch1, rng)
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		stack := graph.Range("branch1", engine.StackRange{IncludeCurrent: true})
 		stackNames := make([]string, len(stack))
 		for i, b := range stack {
 			stackNames[i] = b.GetName()
@@ -384,13 +347,12 @@ func TestGetRelativeStack(t *testing.T) {
 			})
 
 		// Get full stack from branch2 - should NOT include trunk (main)
-		rng := engine.StackRange{
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		stack := graph.Range("branch2", engine.StackRange{
 			RecursiveParents:  true,
 			IncludeCurrent:    true,
 			RecursiveChildren: true,
-		}
-		branch2 := s.Engine.GetBranch("branch2")
-		stack := s.Engine.GetRelativeStack(branch2, rng)
+		})
 		stackNames := make([]string, len(stack))
 		for i, b := range stack {
 			stackNames[i] = b.GetName()
@@ -413,9 +375,8 @@ func TestGetRelativeStack(t *testing.T) {
 			})
 
 		// Get all descendants from trunk
-		rng := engine.StackRange{RecursiveChildren: true}
-		trunk := s.Engine.Trunk()
-		stack := s.Engine.GetRelativeStack(trunk, rng)
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		stack := graph.Range("main", engine.StackRange{RecursiveChildren: true})
 
 		// Should have all 4 branches
 		require.Len(t, stack, 4)
@@ -753,30 +714,6 @@ func TestUpsertPrInfo(t *testing.T) {
 	})
 }
 
-func TestGetRelativeStackUpstack(t *testing.T) {
-	t.Parallel()
-	t.Run("returns all descendants", func(t *testing.T) {
-		t.Parallel()
-		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
-			WithStack(map[string]string{
-				"branch1": "main",
-				"branch2": "branch1",
-				"branch3": "branch1",
-			})
-
-		branch := s.Engine.GetBranch("branch1")
-		upstack := branch.GetRelativeStackUpstack()
-		upstackNames := make([]string, len(upstack))
-		for i, b := range upstack {
-			upstackNames[i] = b.GetName()
-		}
-		require.Contains(t, upstackNames, "branch2")
-		require.Contains(t, upstackNames, "branch3")
-		require.Len(t, upstack, 2)
-		require.NotContains(t, upstack, "branch1") // Should not include starting branch
-	})
-}
-
 func TestReset(t *testing.T) {
 	t.Parallel()
 	t.Run("resets engine with new trunk", func(t *testing.T) {
@@ -816,7 +753,8 @@ func TestConcurrentAccess(t *testing.T) {
 			go func() {
 				branch := s.Engine.GetBranch("branch1")
 				_ = branch.GetParent()
-				_ = s.Engine.GetBranch("main").GetChildren()
+				graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+				_ = graph.Children("main")
 				_ = s.Engine.GetBranch("branch1").IsTracked()
 				_ = s.Engine.AllBranches()
 				done <- true
@@ -1062,8 +1000,8 @@ func TestEdgeCases(t *testing.T) {
 		}
 
 		// Verify all are children of main
-		mainBranch := s.Engine.GetBranch("main")
-		children := mainBranch.GetChildren()
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+		children := graph.Children("main")
 		require.Len(t, children, 5)
 	})
 }
