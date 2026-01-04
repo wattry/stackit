@@ -9,6 +9,7 @@ import (
 	"stackit.dev/stackit/internal/actions/submit"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -16,7 +17,7 @@ import (
 // Action locks the specified branch and all branches downstack of it
 func Action(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	branch := eng.GetBranch(branchName)
 	if branch.IsTrunk() {
@@ -50,9 +51,9 @@ func Action(ctx *app.Context, branchName string) error {
 	}
 
 	if len(unpushedBranches) > 0 && ctx.Interactive {
-		splog.Warn("The following branches have unpushed commits:")
+		out.Warn("The following branches have unpushed commits:")
 		for _, b := range unpushedBranches {
-			splog.Warn("  - %s", b)
+			out.Warn("  - %s", b)
 		}
 		confirm, err := tui.PromptConfirm("Would you like to submit these changes before locking?", true)
 		if err == nil && confirm {
@@ -61,7 +62,7 @@ func Action(ctx *app.Context, branchName string) error {
 				StackRange: submit.StackRangeDownstack(),
 				Confirm:    false,
 			}
-			handler := &lockSubmitHandler{splog: splog}
+			handler := &lockSubmitHandler{splog: out}
 			if err := submit.Action(ctx, submitOpts, handler); err != nil {
 				return fmt.Errorf("failed to submit before locking: %w", err)
 			}
@@ -75,7 +76,7 @@ func Action(ctx *app.Context, branchName string) error {
 			continue
 		}
 		if b.IsLocked() {
-			splog.Info("Branch %s is already locked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+			out.Info("Branch %s is already locked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
 			continue
 		}
 		branchesToLock = append(branchesToLock, b)
@@ -86,20 +87,20 @@ func Action(ctx *app.Context, branchName string) error {
 		if err != nil {
 			// Report specific errors if some failed
 			for name, branchErr := range res.Errors {
-				splog.Warn("Failed to lock %s: %v", name, branchErr)
+				out.Warn("Failed to lock %s: %v", name, branchErr)
 			}
 			return fmt.Errorf("failed to lock branches: %w", err)
 		}
 
 		for _, name := range res.AffectedBranches {
-			splog.Info("Locked %s.", style.ColorBranchName(name, name == branchName))
+			out.Info("Locked %s.", style.ColorBranchName(name, name == branchName))
 			affectedBranches = append(affectedBranches, name)
 		}
 	}
 
 	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
 	if err := actions.PushMetadataAndSyncPRs(ctx, affectedBranches); err != nil {
-		splog.Debug("Failed to push metadata changes: %v", err)
+		out.Debug("Failed to push metadata changes: %v", err)
 	}
 
 	return nil
@@ -108,7 +109,7 @@ func Action(ctx *app.Context, branchName string) error {
 // Unlock unlocks the specified branch and all branches upstack of it
 func Unlock(ctx *app.Context, branchName string) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	branch := eng.GetBranch(branchName)
 	if !branch.IsTracked() {
@@ -158,7 +159,7 @@ func Unlock(ctx *app.Context, branchName string) error {
 			continue
 		}
 		if !b.IsLocked() {
-			splog.Info("Branch %s is already unlocked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
+			out.Info("Branch %s is already unlocked.", style.ColorBranchName(b.GetName(), b.GetName() == branchName))
 			continue
 		}
 		branchesToUnlock = append(branchesToUnlock, b)
@@ -169,27 +170,27 @@ func Unlock(ctx *app.Context, branchName string) error {
 		if err != nil {
 			// Report specific errors if some failed
 			for name, branchErr := range res.Errors {
-				splog.Warn("Failed to unlock %s: %v", name, branchErr)
+				out.Warn("Failed to unlock %s: %v", name, branchErr)
 			}
 			return fmt.Errorf("failed to unlock branches: %w", err)
 		}
 
 		for _, name := range res.AffectedBranches {
-			splog.Info("Unlocked %s.", style.ColorBranchName(name, name == branchName))
+			out.Info("Unlocked %s.", style.ColorBranchName(name, name == branchName))
 			affectedBranches = append(affectedBranches, name)
 		}
 	}
 
 	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
 	if err := actions.PushMetadataAndSyncPRs(ctx, affectedBranches); err != nil {
-		splog.Debug("Failed to push metadata changes: %v", err)
+		out.Debug("Failed to push metadata changes: %v", err)
 	}
 
 	return nil
 }
 
 type lockSubmitHandler struct {
-	splog *tui.Splog
+	splog output.Output
 }
 
 func (h *lockSubmitHandler) OnEvent(e submit.Event) {

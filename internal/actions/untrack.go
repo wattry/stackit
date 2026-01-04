@@ -43,7 +43,7 @@ func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
 		}
 
 		if selected != yesResponse {
-			ctx.Splog.Info("Untrack canceled.")
+			ctx.Output.Info("Untrack canceled.")
 			return nil
 		}
 	}
@@ -54,13 +54,13 @@ func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
 		if err := eng.UntrackBranch(descendant.GetName()); err != nil {
 			return fmt.Errorf("failed to untrack descendant %s: %w", descendant.GetName(), err)
 		}
-		ctx.Splog.Info("Stopped tracking %s.", style.ColorBranchName(descendant.GetName(), false))
+		ctx.Output.Info("Stopped tracking %s.", style.ColorBranchName(descendant.GetName(), false))
 	}
 
 	if err := eng.UntrackBranch(branchName); err != nil {
 		return fmt.Errorf("failed to untrack branch %s: %w", branchName, err)
 	}
-	ctx.Splog.Info("Stopped tracking %s.", style.ColorBranchName(branchName, false))
+	ctx.Output.Info("Stopped tracking %s.", style.ColorBranchName(branchName, false))
 
 	return nil
 }

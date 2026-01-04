@@ -82,7 +82,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch, handler Handler) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	currentBranch := eng.CurrentBranch()
 	originalBranchName := ""
@@ -94,7 +94,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 		// Always try to return to the original branch
 		if originalBranchName != "" {
 			if err := eng.CheckoutBranch(ctx.Context, eng.GetBranch(originalBranchName)); err != nil {
-				splog.Error("Failed to return to original branch %s: %v", originalBranchName, err)
+				out.Error("Failed to return to original branch %s: %v", originalBranchName, err)
 			}
 		}
 	}()

@@ -32,7 +32,7 @@ type Options struct {
 // Action creates a new branch stacked on top of the current branch
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Get current branch
 	currentBranch, err := eng.ValidateOnBranch()
@@ -52,7 +52,7 @@ func Action(ctx *app.Context, opts Options) error {
 	)
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
-		splog.Debug("Failed to take snapshot: %v", err)
+		out.Debug("Failed to take snapshot: %v", err)
 	}
 
 	// Handle staging first if we might need the message to name the branch
@@ -133,13 +133,13 @@ func Action(ctx *app.Context, opts Options) error {
 			return fmt.Errorf("failed to commit: %w", err)
 		}
 	} else {
-		splog.Info("No staged changes; created a branch with no commit.")
+		out.Info("No staged changes; created a branch with no commit.")
 	}
 
 	// Track the branch with current branch as parent
 	if err := eng.TrackBranch(ctx.Context, branchName, currentBranch); err != nil {
 		// Log error but don't fail - branch is created, just not tracked
-		splog.Info("Warning: failed to track branch: %v", err)
+		out.Info("Warning: failed to track branch: %v", err)
 	}
 
 	// Set scope: use provided scope if given, otherwise let it inherit from parent naturally
@@ -147,7 +147,7 @@ func Action(ctx *app.Context, opts Options) error {
 		// Set explicit scope if provided
 		newScope := engine.NewScope(opts.Scope)
 		if err := eng.SetScope(branch, newScope); err != nil {
-			splog.Info("Warning: failed to set scope: %v", err)
+			out.Info("Warning: failed to set scope: %v", err)
 		}
 	}
 	// If no scope provided, don't set anything - it will inherit from parent automatically
@@ -155,15 +155,15 @@ func Action(ctx *app.Context, opts Options) error {
 	// Handle insert logic
 	if opts.Insert {
 		if err := handleInsert(ctx.Context, branchName, currentBranch, ctx, &opts); err != nil {
-			splog.Info("Warning: failed to insert branch: %v", err)
+			out.Info("Warning: failed to insert branch: %v", err)
 		}
 
 		// DX Improvement: Return to the original branch after insertion
 		originalBranch := eng.GetBranch(currentBranch)
 		if err := eng.CheckoutBranch(ctx.Context, originalBranch); err != nil {
-			splog.Info("Warning: failed to return to original branch %s: %v", currentBranch, err)
+			out.Info("Warning: failed to return to original branch %s: %v", currentBranch, err)
 		} else {
-			splog.Info("Inserted %s and returned to %s.", branchName, currentBranch)
+			out.Info("Inserted %s and returned to %s.", branchName, currentBranch)
 		}
 	}
 

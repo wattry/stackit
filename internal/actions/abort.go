@@ -16,7 +16,7 @@ type AbortOptions struct {
 // AbortAction cancels an in-progress operation
 func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	rebaseInProgress := eng.Git().IsRebaseInProgress(ctx.Context)
 	mergeInProgress := eng.Git().IsMergeInProgress(ctx.Context)
@@ -28,7 +28,7 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	}
 
 	if !rebaseInProgress && !mergeInProgress && !hasContinuation {
-		splog.Info("No operation in progress to abort.")
+		out.Info("No operation in progress to abort.")
 		return nil
 	}
 
@@ -40,20 +40,20 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 			return fmt.Errorf("failed to get confirmation: %w", err)
 		}
 		if !confirmed {
-			splog.Info("Abort canceled.")
+			out.Info("Abort canceled.")
 			return nil
 		}
 	}
 
 	// Abort Git operations
 	if rebaseInProgress {
-		splog.Info("Aborting rebase...")
+		out.Info("Aborting rebase...")
 		if err := eng.Git().RebaseAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort rebase: %w", err)
 		}
 	}
 	if mergeInProgress {
-		splog.Info("Aborting merge...")
+		out.Info("Aborting merge...")
 		if err := eng.Git().MergeAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort merge: %w", err)
 		}
@@ -62,7 +62,7 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	// Clear continuation state
 	if hasContinuation {
 		if err := config.ClearContinuationState(ctx.RepoRoot); err != nil {
-			splog.Debug("Failed to clear continuation state: %v", err)
+			out.Debug("Failed to clear continuation state: %v", err)
 		}
 	}
 
@@ -73,14 +73,14 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 	}
 
 	if len(snapshots) > 0 {
-		splog.Info("Restoring to state before the command started...")
+		out.Info("Restoring to state before the command started...")
 		// The latest snapshot should be the one taken before the command that halted
 		if err := eng.RestoreSnapshot(ctx.Context, snapshots[0].ID); err != nil {
 			return fmt.Errorf("failed to restore snapshot: %w", err)
 		}
-		splog.Info("Successfully aborted and restored repository state.")
+		out.Info("Successfully aborted and restored repository state.")
 	} else {
-		splog.Info("Operation aborted. No undo history found to restore state.")
+		out.Info("Operation aborted. No undo history found to restore state.")
 	}
 
 	return nil

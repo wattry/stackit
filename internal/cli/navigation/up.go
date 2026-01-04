@@ -63,10 +63,10 @@ the --to flag is used to specify a target branch to navigate towards.`,
 					children := targetBranchObj.GetChildren()
 					if len(children) == 0 {
 						if i == 0 {
-							ctx.Splog.Info("Already at the top of the stack.")
+							ctx.Output.Info("Already at the top of the stack.")
 							return nil
 						}
-						ctx.Splog.Info("Stopped at %s (no further children after %d step(s)).", style.ColorBranchName(targetBranch, false), i)
+						ctx.Output.Info("Stopped at %s (no further children after %d step(s)).", style.ColorBranchName(targetBranch, false), i)
 						break
 					}
 
@@ -95,7 +95,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 								nextBranch = candidates[0]
 							case 0:
 								// --to is not a descendant of any child
-								ctx.Splog.Warn("Branch %s is not a descendant of %s.", style.ColorBranchName(toBranch, false), style.ColorBranchName(targetBranch, false))
+								ctx.Output.Warn("Branch %s is not a descendant of %s.", style.ColorBranchName(toBranch, false), style.ColorBranchName(targetBranch, false))
 								fallthrough
 							default:
 								// Still ambiguous even with --to (shouldn't happen in a tree)
@@ -120,7 +120,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 						}
 					}
 
-					ctx.Splog.Info("⮑  %s", nextBranch)
+					ctx.Output.Info("⮑  %s", nextBranch)
 					targetBranch = nextBranch
 				}
 
@@ -135,7 +135,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 					return fmt.Errorf("failed to checkout branch %s: %w", targetBranch, err)
 				}
 
-				ctx.Splog.Info("Checked out %s.", style.ColorBranchName(targetBranch, false))
+				ctx.Output.Info("Checked out %s.", style.ColorBranchName(targetBranch, false))
 				return nil
 			})
 		},

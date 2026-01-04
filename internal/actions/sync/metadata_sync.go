@@ -14,22 +14,22 @@ import (
 // syncRemoteMetadata fetches and processes remote metadata
 func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 	eng := ctx.RemoteMetadata()
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Fetch remote metadata refs
 	if err := eng.FetchRemoteMetadata(ctx.Context); err != nil {
 		// Non-fatal: remote may not have metadata yet
-		splog.Debug("No remote metadata to fetch: %v", err)
+		out.Debug("No remote metadata to fetch: %v", err)
 	}
 
 	// Configure refspec so future git fetch commands also fetch metadata
 	if err := eng.ConfigureRemoteMetadataSync(ctx.Context); err != nil {
-		splog.Debug("Failed to configure metadata refspec: %v", err)
+		out.Debug("Failed to configure metadata refspec: %v", err)
 	}
 
 	// Load remote metadata into cache
 	if err := eng.LoadRemoteMetadataCache(); err != nil {
-		splog.Debug("Failed to load remote metadata cache: %v", err)
+		out.Debug("Failed to load remote metadata cache: %v", err)
 	}
 
 	// Handle orphaned local metadata (dual-checkout scenario or manual branch deletion)
@@ -49,7 +49,7 @@ func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 
 	// Handle --dry-run flag
 	if opts.DryRun {
-		printMetadataDiffs(diffs, splog)
+		printMetadataDiffs(diffs, out)
 		return nil
 	}
 
@@ -66,11 +66,11 @@ func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 // handleOrphanedMetadata handles branches where remote metadata was deleted but local exists
 func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	orphaned, err := eng.FindOrphanedLocalMetadata()
 	if err != nil {
-		splog.Debug("Failed to find orphaned metadata: %v", err)
+		out.Debug("Failed to find orphaned metadata: %v", err)
 		return nil
 	}
 
@@ -80,15 +80,15 @@ func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 
 	// Handle --dry-run flag
 	if opts.DryRun {
-		splog.Info("\n=== Orphaned metadata (dry run) ===")
+		out.Info("\n=== Orphaned metadata (dry run) ===")
 		for _, info := range orphaned {
 			switch {
 			case !info.ExistsLocally:
-				splog.Info("  %s: local branch gone, would delete metadata", style.ColorBranchName(info.BranchName, false))
+				out.Info("  %s: local branch gone, would delete metadata", style.ColorBranchName(info.BranchName, false))
 			case info.HasLocalChanges:
-				splog.Info("  %s: has local changes, would prompt", style.ColorBranchName(info.BranchName, false))
+				out.Info("  %s: has local changes, would prompt", style.ColorBranchName(info.BranchName, false))
 			default:
-				splog.Info("  %s: no local changes, would delete sync state", style.ColorBranchName(info.BranchName, false))
+				out.Info("  %s: no local changes, would delete sync state", style.ColorBranchName(info.BranchName, false))
 			}
 		}
 		return nil
@@ -99,10 +99,10 @@ func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 			// No local changes - silently remove sync state or delete ref if branch is gone
 			if !info.ExistsLocally {
 				if err := eng.DeleteMetadata(ctx.Context, info.BranchName); err != nil {
-					splog.Debug("Failed to delete orphaned metadata ref for %s: %v", info.BranchName, err)
+					out.Debug("Failed to delete orphaned metadata ref for %s: %v", info.BranchName, err)
 				}
 			} else if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
-				splog.Debug("Failed to delete metadata hash for %s: %v", info.BranchName, err)
+				out.Debug("Failed to delete metadata hash for %s: %v", info.BranchName, err)
 			}
 		} else {
 			// Has local changes - prompt user
@@ -118,15 +118,15 @@ func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 // promptOrphanedMetadata prompts the user about orphaned metadata with local changes
 func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
-	splog.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
+	out.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
 		style.ColorBranchName(info.BranchName, false))
 	if info.LocalMeta.LockReason.IsLocked() {
-		splog.Info("  lockReason: %s", info.LocalMeta.LockReason)
+		out.Info("  lockReason: %s", info.LocalMeta.LockReason)
 	}
 	if info.LocalMeta.Scope != nil {
-		splog.Info("  scope: %s", *info.LocalMeta.Scope)
+		out.Info("  scope: %s", *info.LocalMeta.Scope)
 	}
 
 	accept, err := promptYesNo("Push your local metadata to remote?")
@@ -142,17 +142,17 @@ func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) 
 	if accept {
 		// Push local metadata to remote
 		if err := eng.SetLastModifiedBy(info.BranchName); err != nil {
-			splog.Debug("Failed to set last modified by: %v", err)
+			out.Debug("Failed to set last modified by: %v", err)
 		}
 		if err := actions.PushMetadataAndSyncPRs(ctx, []string{info.BranchName}); err != nil {
-			splog.Debug("Failed to push metadata: %v", err)
+			out.Debug("Failed to push metadata: %v", err)
 		} else {
-			splog.Info("Pushed metadata for %s", style.ColorBranchName(info.BranchName, false))
+			out.Info("Pushed metadata for %s", style.ColorBranchName(info.BranchName, false))
 		}
 	} else {
 		// Accept deletion - remove sync state
 		if err := eng.DeleteLocalMetadataHash(info.BranchName); err != nil {
-			splog.Debug("Failed to delete metadata hash: %v", err)
+			out.Debug("Failed to delete metadata hash: %v", err)
 		}
 	}
 
@@ -174,15 +174,15 @@ func printMetadataDiffs(diffs []*engine.MetadataDiff, splog interface{ Info(stri
 // promptAndResolveConflict prompts the user to accept or reject remote metadata
 func promptAndResolveConflict(ctx *app.Context, diff *engine.MetadataDiff) error {
 	eng := ctx.RemoteMetadata()
-	splog := ctx.Splog
+	out := ctx.Output
 
 	// Display field-level diff
-	splog.Info("\nMetadata differs for branch '%s':", style.ColorBranchName(diff.Branch, false))
+	out.Info("\nMetadata differs for branch '%s':", style.ColorBranchName(diff.Branch, false))
 	for _, fd := range diff.Differences {
-		splog.Info("  %s: %v (local) → %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
+		out.Info("  %s: %v (local) → %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
 	}
 	if diff.RemoteMeta.LastModifiedBy != nil {
-		splog.Info("  Last modified by: %s <%s>",
+		out.Info("  Last modified by: %s <%s>",
 			diff.RemoteMeta.LastModifiedBy.GitName,
 			diff.RemoteMeta.LastModifiedBy.GitEmail)
 	}

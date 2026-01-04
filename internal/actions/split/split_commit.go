@@ -8,7 +8,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -36,7 +36,7 @@ type branchGroup struct {
 //  3. For remaining commits, iteratively group them into new branches.
 //  4. Auto-derive names for single-commit branches, prompt for multi-commit branches.
 //  5. Detach HEAD and return the branch names and points.
-func splitByCommit(ctx *app.Context, branchToSplit string, eng splitByCommitEngine, splog *tui.Splog, pattern config.BranchPattern) (*Result, error) {
+func splitByCommit(ctx *app.Context, branchToSplit string, eng splitByCommitEngine, splog output.Output, pattern config.BranchPattern) (*Result, error) {
 	// Get commits in both readable and subject formats
 	branchToSplitObj := eng.GetBranch(branchToSplit)
 	readableCommits, err := branchToSplitObj.GetAllCommits(engine.CommitFormatReadable)
@@ -193,7 +193,7 @@ func groupRemainingCommits(
 	pattern config.BranchPattern,
 	eng splitByCommitEngine,
 	originalBranch string,
-	splog *tui.Splog,
+	splog output.Output,
 ) ([]branchGroup, error) {
 	if len(readableCommits) == 0 {
 		return nil, nil

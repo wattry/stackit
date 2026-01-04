@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/components/submit"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
@@ -50,7 +51,7 @@ type SubmitUI interface {
 }
 
 // NewSubmitUI creates the appropriate UI based on TTY availability
-func NewSubmitUI(splog *Splog) SubmitUI {
+func NewSubmitUI(splog output.Output) SubmitUI {
 	if IsTTY() {
 		return NewTTYSubmitUI(splog)
 	}
@@ -59,7 +60,7 @@ func NewSubmitUI(splog *Splog) SubmitUI {
 
 // SimpleSubmitUI implements SubmitUI with line-by-line output
 type SimpleSubmitUI struct {
-	splog     *Splog
+	splog     output.Output
 	items     []submit.Item
 	completed int
 	failed    int
@@ -67,7 +68,7 @@ type SimpleSubmitUI struct {
 }
 
 // NewSimpleSubmitUI creates a new simple submit UI
-func NewSimpleSubmitUI(splog *Splog) *SimpleSubmitUI {
+func NewSimpleSubmitUI(splog output.Output) *SimpleSubmitUI {
 	return &SimpleSubmitUI{splog: splog}
 }
 
@@ -211,7 +212,7 @@ func (u *SimpleSubmitUI) Complete() {
 
 // TTYSubmitUI implements SubmitUI with bubbletea for animated progress
 type TTYSubmitUI struct {
-	splog         *Splog
+	splog         output.Output
 	program       *tea.Program
 	model         *submit.Model
 	inSubmitPhase bool
@@ -219,7 +220,7 @@ type TTYSubmitUI struct {
 }
 
 // NewTTYSubmitUI creates a new TTY submit UI
-func NewTTYSubmitUI(splog *Splog) *TTYSubmitUI {
+func NewTTYSubmitUI(splog output.Output) *TTYSubmitUI {
 	return &TTYSubmitUI{splog: splog}
 }
 

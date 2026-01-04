@@ -10,6 +10,7 @@ import (
 	initaction "stackit.dev/stackit/internal/actions/init"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -50,7 +51,7 @@ func (h *cliInitHandler) SelectTrunk(_ context.Context, branchNames []string, in
 }
 
 func (h *cliInitHandler) OnSuccess(trunkName string, wasInitialized bool, isReset bool) {
-	splog := tui.NewSplogToWriter(h.writer)
+	splog := output.NewConsoleOutput(h.writer, false)
 
 	if wasInitialized {
 		splog.Info("Reinitializing Stackit...")
@@ -95,7 +96,7 @@ func EnsureInitialized(ctx context.Context, writer io.Writer) (string, error) {
 
 	cfg, _ := config.LoadConfig(repoRoot)
 	if !cfg.IsInitialized() {
-		splog := tui.NewSplogToWriter(writer)
+		splog := output.NewConsoleOutput(writer, false)
 		splog.Info("Stackit has not been initialized, attempting to setup now...")
 
 		handler := &cliInitHandler{noInteractive: true, writer: writer}

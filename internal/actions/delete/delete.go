@@ -21,7 +21,7 @@ type Options struct {
 // Action deletes a branch and its metadata
 func Action(ctx *app.Context, opts Options) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 
 	branchName := opts.BranchName
 	if branchName == "" {
@@ -95,16 +95,16 @@ func Action(ctx *app.Context, opts Options) error {
 		branchNames[i] = b.GetName()
 	}
 	if err := eng.Git().BatchDeleteRemoteMetadataRefs(branchNames); err != nil {
-		splog.Debug("Failed to batch delete remote metadata: %v", err)
+		out.Debug("Failed to batch delete remote metadata: %v", err)
 	}
 
 	for _, name := range branchNames {
-		splog.Info("Deleted branch %s", style.ColorBranchName(name, false))
+		out.Info("Deleted branch %s", style.ColorBranchName(name, false))
 	}
 
 	// Restack children if any
 	if len(childrenToRestack) > 0 {
-		splog.Info("Restacking children of deleted %s...", actions.Pluralize("branch", len(toDelete)))
+		out.Info("Restacking children of deleted %s...", actions.Pluralize("branch", len(toDelete)))
 		// Convert []string to []Branch for RestackBranches
 		branches := make([]engine.Branch, len(childrenToRestack))
 		for i, name := range childrenToRestack {

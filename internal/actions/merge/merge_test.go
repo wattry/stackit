@@ -185,7 +185,7 @@ func TestAction(t *testing.T) {
 		s.Context.GitHubClient = githubClient
 
 		// Execute merge plan (merge branch-a)
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Force:    true,
 		})

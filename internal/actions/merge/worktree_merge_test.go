@@ -50,7 +50,7 @@ func TestExecuteInWorktree(t *testing.T) {
 		s.Checkout("branch-a")
 		s.Context.GitHubClient = githubClient
 
-		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Splog, s.Context.GitHubClient, merge.CreatePlanOptions{
+		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
 			Strategy: merge.StrategyBottomUp,
 			Force:    true,
 		})

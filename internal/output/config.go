@@ -1,5 +1,4 @@
-// Package splog provides structured logging and output.
-package splog
+package output
 
 import (
 	"os"
@@ -20,8 +19,5 @@ func GetLogFilePath() string {
 		return "stackit.log"
 	}
 
-	logDir := filepath.Join(homeDir, ".stackit", "logs")
-	logFile := filepath.Join(logDir, "stackit.log")
-
-	return logFile
+	return filepath.Join(homeDir, ".stackit", "logs", "stackit.log")
 }

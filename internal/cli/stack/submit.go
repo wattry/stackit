@@ -17,6 +17,7 @@ import (
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	submitComponent "stackit.dev/stackit/internal/tui/components/submit"
 	"stackit.dev/stackit/internal/tui/components/tree"
@@ -122,7 +123,7 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 		}
 
 		// Create the appropriate handler based on TTY availability
-		handler := NewSubmitHandler(ctx.Splog)
+		handler := NewSubmitHandler(ctx.Output)
 		return submit.Action(ctx, opts, handler)
 	})
 }
@@ -170,7 +171,7 @@ func NewSsCmd() *cobra.Command {
 }
 
 // NewSubmitHandler creates the appropriate handler based on TTY availability
-func NewSubmitHandler(splog *tui.Splog) submit.Handler {
+func NewSubmitHandler(splog output.Output) submit.Handler {
 	if tui.IsTTY() {
 		return NewInteractiveSubmitHandler(splog)
 	}
@@ -179,7 +180,7 @@ func NewSubmitHandler(splog *tui.Splog) submit.Handler {
 
 // SimpleSubmitHandler implements submit.Handler with line-by-line output
 type SimpleSubmitHandler struct {
-	splog   *tui.Splog
+	splog   output.Output
 	out     io.Writer
 	items   map[string]*branchItem
 	mu      sync.Mutex
@@ -192,7 +193,7 @@ type branchItem struct {
 }
 
 // NewSimpleSubmitHandler creates a new simple submit handler
-func NewSimpleSubmitHandler(splog *tui.Splog) *SimpleSubmitHandler {
+func NewSimpleSubmitHandler(splog output.Output) *SimpleSubmitHandler {
 	return &SimpleSubmitHandler{
 		splog: splog,
 		out:   os.Stdout,
@@ -293,7 +294,7 @@ func (h *SimpleSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 
 // InteractiveSubmitHandler implements submit.Handler with bubbletea for animated progress
 type InteractiveSubmitHandler struct {
-	splog         *tui.Splog
+	splog         output.Output
 	program       *tea.Program
 	model         *submitComponent.Model
 	inSubmitPhase bool
@@ -304,7 +305,7 @@ type InteractiveSubmitHandler struct {
 }
 
 // NewInteractiveSubmitHandler creates a new interactive submit handler
-func NewInteractiveSubmitHandler(splog *tui.Splog) *InteractiveSubmitHandler {
+func NewInteractiveSubmitHandler(splog output.Output) *InteractiveSubmitHandler {
 	return &InteractiveSubmitHandler{splog: splog}
 }
 

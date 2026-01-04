@@ -38,7 +38,7 @@ If no branch is provided, sync the current stack.`,
 				}
 
 				// Create handler based on TTY availability
-				handler := NewGetHandler(ctx.Splog)
+				handler := NewGetHandler(ctx.Output)
 
 				return actions.GetAction(ctx, branchOrPR, actions.GetOptions{
 					Downstack: downstack,

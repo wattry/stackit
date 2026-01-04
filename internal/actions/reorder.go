@@ -14,7 +14,7 @@ import (
 // ReorderAction performs the reorder operation
 func ReorderAction(ctx *app.Context) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	gctx := ctx.Context
 
 	// Pre-checks: validate on branch
@@ -74,7 +74,7 @@ func ReorderAction(ctx *app.Context) error {
 		newOrder, err = tui.RunReorderTUI(branches)
 		if err != nil {
 			if err.Error() == "reorder canceled" {
-				splog.Info("Reorder canceled.")
+				out.Info("Reorder canceled.")
 				return nil
 			}
 			return fmt.Errorf("TUI failed: %w", err)
@@ -98,7 +98,7 @@ func ReorderAction(ctx *app.Context) error {
 
 	// Check if order actually changed
 	if slices.Equal(originalOrder, newOrder) {
-		splog.Info("Branch order unchanged. No action taken.")
+		out.Info("Branch order unchanged. No action taken.")
 		return nil
 	}
 
@@ -123,7 +123,7 @@ func ReorderAction(ctx *app.Context) error {
 		return fmt.Errorf("failed to restack branches: %w", err)
 	}
 
-	splog.Info("Reordered and restacked branches.")
+	out.Info("Reordered and restacked branches.")
 	return nil
 }
 

@@ -31,7 +31,7 @@ type ModifyOptions struct {
 // ModifyAction performs the modify operation
 func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	gctx := ctx.Context
 
 	currentBranch, err := eng.ValidateOnBranch()
@@ -68,7 +68,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 		if isEmpty {
 			// If branch is empty, we must create a new commit
 			opts.CreateCommit = true
-			splog.Info("Branch has no commits, creating new commit instead of amending.")
+			out.Info("Branch has no commits, creating new commit instead of amending.")
 		}
 	}
 
@@ -119,16 +119,16 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 
 	// Log success
 	if opts.CreateCommit {
-		splog.Info("Created new commit in %s.", style.ColorBranchName(currentBranch, true))
+		out.Info("Created new commit in %s.", style.ColorBranchName(currentBranch, true))
 	} else {
-		splog.Info("Amended commit in %s.", style.ColorBranchName(currentBranch, true))
+		out.Info("Amended commit in %s.", style.ColorBranchName(currentBranch, true))
 	}
 
 	// Restack upstack branches
 	upstackBranches := currentBranchObj.GetRelativeStackUpstack()
 
 	if len(upstackBranches) > 0 {
-		splog.Info("Restacking %d upstack branch(es)...", len(upstackBranches))
+		out.Info("Restacking %d upstack branch(es)...", len(upstackBranches))
 		if err := RestackBranches(ctx, upstackBranches); err != nil {
 			return fmt.Errorf("failed to restack upstack branches: %w", err)
 		}
@@ -140,7 +140,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 // interactiveRebaseAction performs an interactive rebase on the branch's commits
 func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 	eng := ctx.Engine
-	splog := ctx.Splog
+	out := ctx.Output
 	gctx := ctx.Context
 
 	currentBranch := eng.CurrentBranch()
@@ -154,7 +154,7 @@ func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 		parentName = parent.GetName()
 	}
 
-	splog.Info("Starting interactive rebase for %s onto %s...",
+	out.Info("Starting interactive rebase for %s onto %s...",
 		style.ColorBranchName(currentBranch.GetName(), true),
 		style.ColorBranchName(parentName, false))
 
@@ -168,13 +168,13 @@ func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 		return nil
 	}
 
-	splog.Info("Interactive rebase completed.")
+	out.Info("Interactive rebase completed.")
 
 	// Restack upstack branches
 	upstackBranches := currentBranch.GetRelativeStackUpstack()
 
 	if len(upstackBranches) > 0 {
-		splog.Info("Restacking %d upstack branch(es)...", len(upstackBranches))
+		out.Info("Restacking %d upstack branch(es)...", len(upstackBranches))
 		if err := RestackBranches(ctx, upstackBranches); err != nil {
 			return fmt.Errorf("failed to restack upstack branches: %w", err)
 		}

@@ -30,19 +30,19 @@ and seeing which branch the current branch is based on.`,
 
 				// Check if on trunk
 				if currentBranch.IsTrunk() {
-					ctx.Splog.Info("%s is trunk and has no parent.", style.ColorBranchName(currentBranch.GetName(), true))
+					ctx.Output.Info("%s is trunk and has no parent.", style.ColorBranchName(currentBranch.GetName(), true))
 					return nil
 				}
 
 				// Get parent
 				parent := currentBranch.GetParent()
 				if parent == nil {
-					ctx.Splog.Info("%s has no parent (untracked branch).", style.ColorBranchName(currentBranch.GetName(), true))
+					ctx.Output.Info("%s has no parent (untracked branch).", style.ColorBranchName(currentBranch.GetName(), true))
 					return nil
 				}
 
 				// Print parent
-				ctx.Splog.Info("%s", parent.GetName())
+				ctx.Output.Info("%s", parent.GetName())
 				return nil
 			})
 		},
