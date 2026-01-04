@@ -32,8 +32,14 @@ func (r *runner) PullBranch(ctx context.Context, remote, branchName string) (Pul
 		return PullConflict, fmt.Errorf("failed to get local revision for %s: %w", branchName, err)
 	}
 
-	// Fetch first
-	_, _ = r.RunGitCommandWithContext(ctx, "fetch", remote, branchName)
+	// Fetch with explicit refspec to update the remote-tracking branch
+	// This ensures refs/remotes/origin/<branch> is actually updated
+	refspec := fmt.Sprintf("refs/heads/%s:refs/remotes/%s/%s", branchName, remote, branchName)
+	_, _ = r.RunGitCommandWithContext(ctx, "fetch", remote, refspec)
+
+	// Force-reload the git repository object to ensure we see newly fetched commits
+	// This clears the go-git cache so it re-scans for new objects on disk
+	_ = r.ReloadRepository()
 
 	// Get the SHA of the remote branch
 	remoteRev, err := r.RunGitCommandWithContext(ctx, "rev-parse", fmt.Sprintf("%s/%s", remote, branchName))

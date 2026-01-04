@@ -272,6 +272,14 @@ func (r *runner) ensureRepo() (*Repository, error) {
 	return repo, nil
 }
 
+func (r *runner) ReloadRepository() error {
+	r.repoMu.Lock()
+	r.repo = nil // Clearing the cache forces the next ensureRepo() to re-open the repo
+	r.repoMu.Unlock()
+	_, err := r.ensureRepo()
+	return err
+}
+
 func (r *runner) InitDefaultRepo() error {
 	_, err := r.ensureRepo()
 	return err
