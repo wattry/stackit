@@ -107,6 +107,10 @@ func (e *engineImpl) restackBranch(
 	rebuildAfterRestack bool,
 ) (RestackBranchResult, error) {
 	branchName := branch.GetName()
+	if e.IsTrunk(branch) {
+		return RestackBranchResult{Result: RestackUnneeded}, nil
+	}
+
 	e.mu.RLock()
 	parent, ok := e.parentMap[branchName]
 	e.mu.RUnlock()
