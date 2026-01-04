@@ -50,6 +50,9 @@ type BranchAnnotation struct {
 	LinesAdded   int
 	LinesDeleted int
 	PRState      string // "OPEN", "MERGED", "CLOSED"
+
+	// WorktreePath is set if this branch is the stack root of a managed worktree
+	WorktreePath string
 }
 
 // RenderOptions configures rendering behavior
@@ -648,6 +651,11 @@ func (r *StackTreeRenderer) formatSummaryLine(annotation BranchAnnotation, isTru
 	var prParts []string
 	var statsParts []string
 	var actionParts []string
+
+	// Worktree indicator (if this stack root has a managed worktree)
+	if annotation.WorktreePath != "" {
+		prParts = append(prParts, style.ColorDim("📂 worktree"))
+	}
 
 	// PR number (colored by state)
 	if annotation.PRNumber != nil {

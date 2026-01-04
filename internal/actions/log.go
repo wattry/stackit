@@ -174,5 +174,13 @@ func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOpti
 		}
 	}
 
+	// Check if this branch is a stack root with a managed worktree
+	stackRoot := ctx.Engine.GetStackRootForBranch(branchObj)
+	if stackRoot == branchObj.GetName() {
+		if wtInfo, err := ctx.Engine.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+			annotation.WorktreePath = wtInfo.Path
+		}
+	}
+
 	return annotation
 }

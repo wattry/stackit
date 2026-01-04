@@ -12,6 +12,45 @@ import (
 	"stackit.dev/stackit/testhelpers/scenario"
 )
 
+func TestIsInManagedWorktree_MainRepo(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	s.WithInitialCommit()
+
+	// When running from the main repo, IsInManagedWorktree should return false
+	isManaged, info, err := s.Engine.IsInManagedWorktree()
+	require.NoError(t, err)
+	assert.False(t, isManaged)
+	assert.Nil(t, info)
+}
+
+func TestWorktreeRegistry_StackRootForBranch(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	s.WithInitialCommit()
+
+	// Create a stack: main -> branch1 -> branch2
+	s.CreateBranch("branch1").Commit("branch1 change")
+	s.TrackBranch("branch1", "main")
+	s.CreateBranch("branch2").Commit("branch2 change")
+	s.TrackBranch("branch2", "branch1")
+
+	// Register a worktree for branch1 (as if it were the stack root)
+	err := s.Engine.RegisterWorktree("branch1", "/tmp/test-worktree-branch1")
+	require.NoError(t, err)
+
+	// Stack root for branch2 should be branch1 (the first branch whose parent is trunk)
+	branch2 := s.Engine.GetBranch("branch2")
+	stackRoot := s.Engine.GetStackRootForBranch(branch2)
+	assert.Equal(t, "branch1", stackRoot)
+
+	// Stack root for branch1 should be branch1 itself (its parent is trunk)
+	branch1 := s.Engine.GetBranch("branch1")
+	stackRoot = s.Engine.GetStackRootForBranch(branch1)
+	assert.Equal(t, "branch1", stackRoot)
+
+	// Clean up
+	_ = s.Engine.UnregisterWorktree("branch1")
+}
+
 func TestCreateTemporaryWorktree(t *testing.T) {
 	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
