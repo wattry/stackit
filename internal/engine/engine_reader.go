@@ -159,6 +159,10 @@ func (e *engineImpl) GetRelativeStack(branch Branch, rng StackRange) []Branch {
 // by checking the branch's commit history against tracked branch tips.
 // Returns a slice of branch names that point to the most recent tracked commit in history.
 func (e *engineImpl) FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error) {
+	if e.IsTrunk(e.GetBranch(branchName)) {
+		return nil, nil
+	}
+
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 

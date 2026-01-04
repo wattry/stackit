@@ -129,10 +129,6 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 
 // UntrackBranch stops tracking a branch by deleting its metadata
 func (e *engineImpl) UntrackBranch(branchName string) error {
-	if e.IsTrunk(NewBranch(branchName, e)) {
-		return fmt.Errorf("cannot untrack trunk branch")
-	}
-
 	// Delete metadata
 	if err := e.git.DeleteMetadata(branchName); err != nil {
 		return fmt.Errorf("failed to delete metadata ref: %w", err)

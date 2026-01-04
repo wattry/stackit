@@ -38,8 +38,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 		if !seen[branchName] {
 			seen[branchName] = true
 			branch := nav.GetBranch(branchName)
-			// Only include branches that exist and are tracked
-			if branch.IsTracked() {
+			// Only include branches that exist, are tracked, and are not trunks
+			if branch.IsTracked() && !branch.IsTrunk() {
 				uniqueBranches = append(uniqueBranches, branch)
 			}
 		}
