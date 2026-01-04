@@ -9,6 +9,7 @@ import (
 	"stackit.dev/stackit/internal/cli/integrations"
 	"stackit.dev/stackit/internal/cli/navigation"
 	"stackit.dev/stackit/internal/cli/stack"
+	"stackit.dev/stackit/internal/cli/worktree"
 )
 
 // NewRootCmd creates the root cobra command
@@ -118,6 +119,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(branch.NewUnfreezeCmd())
 	rootCmd.AddCommand(branch.NewUnlockCmd())
 	rootCmd.AddCommand(newConfigCmd())
+	rootCmd.AddCommand(worktree.NewWorktreeCmd())
 
 	rootCmd.AddCommand(stack.NewSsCmd())
 
