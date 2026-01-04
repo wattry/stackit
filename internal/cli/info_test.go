@@ -310,6 +310,10 @@ func TestInfoCommand(t *testing.T) {
 		// Initialize git
 		require.NoError(t, s.Scene.Repo.RunGitCommand("init", tmpDir, "-b", "main"))
 
+		// Configure git user
+		require.NoError(t, s.Scene.Repo.RunGitCommand("-C", tmpDir, "config", "user.email", "actions@github.com"))
+		require.NoError(t, s.Scene.Repo.RunGitCommand("-C", tmpDir, "config", "user.name", "GitHub Actions"))
+
 		// Create a commit
 		require.NoError(t, s.Scene.Repo.RunGitCommand("-C", tmpDir, "commit", "--allow-empty", "-m", "initial"))
 
