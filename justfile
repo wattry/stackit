@@ -4,7 +4,7 @@ default: check
 # Setup the development environment (install tools, dependencies, and build)
 setup: install-tools deps build
 	@echo "✅ Setup complete! You can now run 'just check' to verify everything is working."
-	@if [ ! -f ./stackit ]; then \
+	@if [ ! -f ./bin/stackit ]; then \
 		echo "Warning: stackit binary not found. Try running 'just build'."; \
 	fi
 
@@ -130,21 +130,43 @@ check:
 	@echo "🧪 Testing..."
 	@just test
 
-# Build the stackit binary
+# Build the stackit binary with local version info
 build:
-	go build -o stackit ./cmd/stackit
-	@if [ ! -L ./st ] && [ ! -f ./st ]; then \
-		ln -s ./stackit ./st; \
-		echo "Created symlink: st -> stackit"; \
-	elif [ -L ./st ]; then \
-		echo "Symlink st already exists"; \
-	else \
-		echo "Warning: st already exists as a regular file, skipping symlink creation"; \
+	#!/bin/bash
+	mkdir -p bin
+	COMMIT=$(git rev-parse --short HEAD)
+	DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	go build -ldflags "-X main.version=dev-local -X main.commit=$COMMIT -X main.date=$DATE" -o bin/stackit ./cmd/stackit
+	if [ ! -L ./bin/st ] && [ ! -f ./bin/st ]; then
+		ln -s stackit ./bin/st
+		echo "Created symlink: bin/st -> stackit"
+	elif [ -L ./bin/st ]; then
+		echo "Symlink bin/st already exists"
+	else
+		echo "Warning: bin/st already exists as a regular file, skipping symlink creation"
 	fi
 
-# Install stackit binary (builds and copies to current directory)
-install: build
-	@echo "Built stackit binary in current directory"
+# Install shims to repo root for local development (. in PATH)
+install-shims: build
+	cp scripts/stackit-shim.sh ./stackit
+	cp scripts/st-shim.sh ./st
+	chmod +x ./stackit ./st
+	@echo "Dev shims installed to repo root"
+
+# Install binary to ~/.local/bin (with distinct version)
+install:
+	#!/bin/bash
+	mkdir -p ~/.local/bin
+	COMMIT=$(git rev-parse --short HEAD)
+	DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	go build -ldflags "-X main.version=dev-installed -X main.commit=$COMMIT -X main.date=$DATE" -o ~/.local/bin/stackit ./cmd/stackit
+	ln -sf stackit ~/.local/bin/st
+	echo "Installed to ~/.local/bin"
+
+# Remove installed binary from ~/.local/bin
+uninstall:
+	rm -f ~/.local/bin/stackit ~/.local/bin/st
+	@echo "Removed from ~/.local/bin"
 
 # Run stackit command (builds first, then runs)
 # Usage: just run log
@@ -152,13 +174,13 @@ install: build
 run cmd:
 	@echo "Building stackit..."; \
 	just build
-	./stackit {{cmd}}
+	./bin/stackit {{cmd}}
 
 # Initialize stackit in this repository
 init:
-	@if [ ! -f ./stackit ]; then \
+	@if [ ! -f ./bin/stackit ]; then \
 		echo "Building stackit..."; \
 		just build; \
 	fi
-	./stackit init
+	./bin/stackit init
 
