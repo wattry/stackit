@@ -12,6 +12,10 @@ type RepositoryReader interface {
 	GetConfigAll(key string) ([]string, error)
 	GetRepoRoot() string
 	DiscoverRepoRoot() (string, error)
+	// GetGitCommonDir returns the path to the shared .git directory.
+	// For regular repos this is the same as .git, but for worktrees it returns
+	// the main repository's .git directory (where config is stored).
+	GetGitCommonDir() (string, error)
 	IsInsideRepo() bool
 	GetUserName(ctx context.Context) (string, error)
 	GetRepoInfo(ctx context.Context) (string, string, error)

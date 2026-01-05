@@ -348,6 +348,10 @@ func (r *runner) GetRepoRoot() string {
 	return r.repoRoot
 }
 
+func (r *runner) GetGitCommonDir() (string, error) {
+	return r.runGitCommandInternal("rev-parse", "--git-common-dir")
+}
+
 func (r *runner) GetUserName(ctx context.Context) (string, error) {
 	return r.RunGitCommandWithContext(ctx, "config", "user.name")
 }

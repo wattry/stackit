@@ -71,6 +71,10 @@ func (d *demoGitRunner) GetRepoRoot() string {
 	return "/demo/repo"
 }
 
+func (d *demoGitRunner) GetGitCommonDir() (string, error) {
+	return "/demo/repo/.git", nil
+}
+
 func (d *demoGitRunner) EnsureMetadataRefspecConfigured() error {
 	return nil
 }
