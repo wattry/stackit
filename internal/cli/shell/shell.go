@@ -82,7 +82,8 @@ __stackit_wrap() {
     local output exit_code cd_path checkout_branch
 
     # Run the real stackit command and capture output
-    output=$(command stackit "$@")
+    # Set env var so stackit knows shell integration is available
+    output=$(STACKIT_SHELL_INTEGRATION=1 command stackit "$@")
     exit_code=$?
 
     # Print output, filtering out directives
@@ -126,7 +127,8 @@ __stackit_wrap() {
     local output exit_code cd_path checkout_branch
 
     # Run the real stackit command and capture output
-    output=$(command stackit "$@")
+    # Set env var so stackit knows shell integration is available
+    output=$(STACKIT_SHELL_INTEGRATION=1 command stackit "$@")
     exit_code=$?
 
     # Print output, filtering out directives
@@ -167,7 +169,8 @@ const fishIntegration = `# stackit shell integration for fish
 # This wraps the stackit command to enable auto-cd into worktrees
 
 function stackit --wraps=stackit --description 'stackit with auto-cd support'
-    set -l output (command stackit $argv)
+    # Set env var so stackit knows shell integration is available
+    set -l output (env STACKIT_SHELL_INTEGRATION=1 command stackit $argv)
     set -l exit_code $status
 
     # Print output, filtering out directives
