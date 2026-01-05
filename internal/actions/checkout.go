@@ -143,26 +143,69 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	}
 }
 
-// handleWorktreeCheckout checks if the target branch belongs to a stack with a worktree.
-// If shell integration is available, emits DirectiveCD + DirectiveCheckout for the shell wrapper.
+// handleWorktreeCheckout checks if the target branch belongs to a stack with a worktree,
+// or if we need to switch back to the main repo from a worktree.
+// If shell integration is available, emits DirectiveCD + DirectiveRerun for the shell wrapper.
 // Otherwise, shows a warning with cd tip.
 // Returns true if handled via directives (caller should skip git checkout).
 func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName string) bool {
 	// Get target branch's stack root
 	targetStackRoot := ctx.Engine.GetStackRootForBranch(branch)
+
+	// Case 1: We're in a worktree and checking out a branch NOT in this worktree's stack
+	// (either trunk, or a branch from a different stack)
+	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil {
+		currentStackRoot := ctx.WorktreeInfo.StackRoot
+
+		// Check if target is in a different location than current worktree
+		needsSwitch := false
+		var switchTarget string
+		var switchMessage string
+
+		if targetStackRoot == "" {
+			// Target is trunk or untracked - switch to main repo
+			needsSwitch = true
+			switchTarget = ctx.WorktreeInfo.MainRepoDir
+			switchMessage = "Switching to main repository."
+		} else if targetStackRoot != currentStackRoot {
+			// Target is in a different stack - check if that stack has a worktree
+			targetWorktree, err := ctx.Engine.GetWorktreeForStack(targetStackRoot)
+			if err == nil && targetWorktree != nil {
+				needsSwitch = true
+				switchTarget = targetWorktree.Path
+				switchMessage = fmt.Sprintf("Switching to worktree for stack %s.", style.ColorBranchName(targetStackRoot, false))
+			} else {
+				// Target stack has no worktree - switch to main repo
+				needsSwitch = true
+				switchTarget = ctx.WorktreeInfo.MainRepoDir
+				switchMessage = "Switching to main repository."
+			}
+		}
+
+		if needsSwitch {
+			if !hasShellIntegration() {
+				ctx.Output.Warn("Branch %s is not in this worktree's stack.", style.ColorBranchName(branchName, false))
+				ctx.Output.Tip("cd %s && stackit co %s", switchTarget, branchName)
+				return false
+			}
+			ctx.Output.Info(switchMessage)
+			ctx.Output.DirectiveCD(switchTarget)
+			ctx.Output.DirectiveRerun("co", branchName)
+			return true
+		}
+		// Target is in current worktree's stack - proceed with normal checkout
+		return false
+	}
+
+	// Case 2: We're in main repo and checking out a branch that has a worktree
 	if targetStackRoot == "" {
-		return false // Not a tracked branch or is trunk
+		return false // Target is trunk or untracked, no worktree needed
 	}
 
 	// Check if this stack has a registered worktree
 	targetWorktree, err := ctx.Engine.GetWorktreeForStack(targetStackRoot)
 	if err != nil || targetWorktree == nil {
 		return false // No worktree for this stack
-	}
-
-	// Check if we're already in the target worktree (prevents recursion)
-	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil && ctx.WorktreeInfo.StackRoot == targetStackRoot {
-		return false // Already in correct worktree, proceed with normal checkout
 	}
 
 	// Verify worktree path exists
@@ -187,7 +230,7 @@ func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName s
 	// Emit directives for shell wrapper to handle
 	ctx.Output.Info("Switching to worktree for stack %s.", style.ColorBranchName(targetStackRoot, false))
 	ctx.Output.DirectiveCD(targetWorktree.Path)
-	ctx.Output.DirectiveRerun()
+	ctx.Output.DirectiveRerun("co", branchName)
 	return true
 }
 

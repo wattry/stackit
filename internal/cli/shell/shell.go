@@ -79,7 +79,7 @@ const zshIntegration = `# stackit shell integration for zsh
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local exit_code cd_path rerun directive_file
+    local exit_code cd_path rerun_line rerun_args directive_file
 
     # Create temp file for directives (preserves TTY for interactive commands)
     directive_file=$(mktemp)
@@ -92,16 +92,25 @@ __stackit_wrap() {
     # Read directives from temp file
     if [[ -f "$directive_file" ]]; then
         cd_path=$(grep '^__STACKIT_CD__:' "$directive_file" 2>/dev/null | head -1 | cut -d: -f2-)
-        rerun=$(grep -q '^__STACKIT_RERUN__$' "$directive_file" 2>/dev/null && echo 1)
+        rerun_line=$(grep '^__STACKIT_RERUN__' "$directive_file" 2>/dev/null | head -1)
         rm -f "$directive_file"
     fi
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
-        # Re-run original command if requested
-        if [[ -n "$rerun" ]]; then
-            STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit "$@"
+        # Run follow-up command if requested
+        if [[ -n "$rerun_line" ]]; then
+            # Extract args after __STACKIT_RERUN__: (if present)
+            rerun_args="${rerun_line#__STACKIT_RERUN__}"
+            rerun_args="${rerun_args#:}"
+            if [[ -n "$rerun_args" ]]; then
+                # Use specific args provided by stackit
+                eval "STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE='' command stackit $rerun_args"
+            else
+                # No args: re-run original command
+                STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit "$@"
+            fi
         fi
     fi
 
@@ -117,7 +126,7 @@ const bashIntegration = `# stackit shell integration for bash
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local exit_code cd_path rerun directive_file
+    local exit_code cd_path rerun_line rerun_args directive_file
 
     # Create temp file for directives (preserves TTY for interactive commands)
     directive_file=$(mktemp)
@@ -130,16 +139,25 @@ __stackit_wrap() {
     # Read directives from temp file
     if [[ -f "$directive_file" ]]; then
         cd_path=$(grep '^__STACKIT_CD__:' "$directive_file" 2>/dev/null | head -1 | cut -d: -f2-)
-        rerun=$(grep -q '^__STACKIT_RERUN__$' "$directive_file" 2>/dev/null && echo 1)
+        rerun_line=$(grep '^__STACKIT_RERUN__' "$directive_file" 2>/dev/null | head -1)
         rm -f "$directive_file"
     fi
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
-        # Re-run original command if requested
-        if [[ -n "$rerun" ]]; then
-            STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit "$@"
+        # Run follow-up command if requested
+        if [[ -n "$rerun_line" ]]; then
+            # Extract args after __STACKIT_RERUN__: (if present)
+            rerun_args="${rerun_line#__STACKIT_RERUN__}"
+            rerun_args="${rerun_args#:}"
+            if [[ -n "$rerun_args" ]]; then
+                # Use specific args provided by stackit
+                eval "STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE='' command stackit $rerun_args"
+            else
+                # No args: re-run original command
+                STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit "$@"
+            fi
         fi
     fi
 
@@ -165,21 +183,27 @@ function __stackit_wrap --description 'stackit wrapper with auto-cd support'
 
     # Read directives from temp file
     set -l cd_path ""
-    set -l rerun 0
+    set -l rerun_line ""
     if test -f "$directive_file"
         set cd_path (grep '^__STACKIT_CD__:' "$directive_file" 2>/dev/null | head -1 | cut -d: -f2-)
-        if grep -q '^__STACKIT_RERUN__$' "$directive_file" 2>/dev/null
-            set rerun 1
-        end
+        set rerun_line (grep '^__STACKIT_RERUN__' "$directive_file" 2>/dev/null | head -1)
         rm -f "$directive_file"
     end
 
     # Change directory if path was found and exists
     if test -n "$cd_path" -a -d "$cd_path"
         cd $cd_path
-        # Re-run original command if requested
-        if test $rerun -eq 1
-            env STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit $argv
+        # Run follow-up command if requested
+        if test -n "$rerun_line"
+            # Extract args after __STACKIT_RERUN__: (if present)
+            set -l rerun_args (string replace '__STACKIT_RERUN__:' '' -- $rerun_line)
+            if test -n "$rerun_args" -a "$rerun_args" != "$rerun_line"
+                # Use specific args provided by stackit
+                eval "env STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE='' command stackit $rerun_args"
+            else
+                # No args: re-run original command
+                env STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit $argv
+            end
         end
     end
 
