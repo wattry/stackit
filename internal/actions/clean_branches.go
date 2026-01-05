@@ -14,13 +14,16 @@ import (
 
 // CleanBranchesOptions contains options for cleaning branches
 type CleanBranchesOptions struct {
-	Force bool
+	Force             bool
+	InManagedWorktree bool   // True if running from a stackit-managed worktree
+	CurrentBranch     string // Name of the current branch (used to skip deletion in worktree)
 }
 
 // CleanBranchesResult contains the result of cleaning branches
 type CleanBranchesResult struct {
 	DeletedBranches        map[string]string // name -> reason
 	BranchesWithNewParents []string
+	SkippedInWorktree      []string // branches that couldn't be deleted from worktree
 }
 
 // branchDeletionInfo stores information about a branch marked for deletion
@@ -66,7 +69,7 @@ func (p *deletionPlan) removeBlocker(branchName, blockerName string) {
 // 4. Execute the deletions in batches (greedy iterative approach).
 func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesResult, error) {
 	// Phase 1: Identify candidates for deletion
-	deleteStatuses := identifyBranchesToDelete(ctx, opts)
+	deleteStatuses, skippedInWorktree := identifyBranchesToDelete(ctx, opts)
 
 	// Phase 2: Build deletion plan
 	plan, branchesWithNewParents, err := buildDeletionPlanAndReparent(ctx, deleteStatuses)
@@ -88,11 +91,13 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 	return &CleanBranchesResult{
 		DeletedBranches:        deletedBranches,
 		BranchesWithNewParents: branchesWithNewParents,
+		SkippedInWorktree:      skippedInWorktree,
 	}, nil
 }
 
 // identifyBranchesToDelete pre-calculates deletion status for all tracked branches in parallel.
-func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[string]string {
+// Returns the branches to delete and any branches that were skipped due to being in a worktree.
+func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[string]string, []string) {
 	eng := ctx.Engine
 	c := ctx.Context
 	out := ctx.Output
@@ -132,6 +137,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[s
 	}
 
 	deleteStatuses := make(map[string]string) // name -> reason
+	var skippedInWorktree []string
 	var mu sync.Mutex
 
 	if len(branchesToProcessPool) > 0 {
@@ -139,6 +145,13 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[s
 			name := branch.GetName()
 			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, metadataMap[name], revisionsMap, mergedBranches)
 			if shouldDelete {
+				// Skip current branch if in a managed worktree (can't checkout trunk to delete it)
+				if opts.InManagedWorktree && name == opts.CurrentBranch {
+					mu.Lock()
+					skippedInWorktree = append(skippedInWorktree, name)
+					mu.Unlock()
+					return
+				}
 				mu.Lock()
 				deleteStatuses[name] = reason
 				mu.Unlock()
@@ -146,7 +159,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) map[s
 		})
 	}
 
-	return deleteStatuses
+	return deleteStatuses, skippedInWorktree
 }
 
 // buildDeletionPlanAndReparent constructs the deletion hierarchy and updates parents of surviving branches.

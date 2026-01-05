@@ -3,6 +3,7 @@ package sync
 import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // cleanBranches handles cleaning merged/closed branches
@@ -21,8 +22,16 @@ func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Su
 		handler.EmitEvent(Event{Phase: PhaseClean, Type: EventStarted})
 	}
 
+	// Get current branch name for worktree detection
+	currentBranchName := ""
+	if currentBranch := ctx.Engine.CurrentBranch(); currentBranch != nil {
+		currentBranchName = currentBranch.GetName()
+	}
+
 	result, err := actions.CleanBranches(ctx, actions.CleanBranchesOptions{
-		Force: opts.Force,
+		Force:             opts.Force,
+		InManagedWorktree: ctx.InManagedWorktree,
+		CurrentBranch:     currentBranchName,
 	})
 
 	if err != nil {
@@ -38,6 +47,12 @@ func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Su
 			Message: reason,
 		})
 		summary.BranchesDeleted++
+	}
+
+	// Warn about branches that couldn't be deleted from worktree
+	for _, name := range result.SkippedInWorktree {
+		ctx.Output.Warn("Cannot delete %s from worktree. Run sync from the main repository to clean up.",
+			style.ColorBranchName(name, true))
 	}
 
 	return result, nil
