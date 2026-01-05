@@ -3,6 +3,7 @@ package delete
 
 import (
 	"fmt"
+	"os"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
@@ -105,6 +106,20 @@ func Action(ctx *app.Context, opts Options) error {
 		out.Info("Deleted branch %s", style.ColorBranchName(name, false))
 	}
 
+	// Identify stack roots that were deleted (branches whose parent is trunk)
+	// and clean up any associated worktrees
+	deletedStackRoots := []string{}
+	trunkName := eng.Trunk().GetName()
+	for _, b := range toDelete {
+		parent := b.GetParent()
+		if parent == nil || parent.GetName() == trunkName {
+			deletedStackRoots = append(deletedStackRoots, b.GetName())
+		}
+	}
+	if len(deletedStackRoots) > 0 {
+		cleanupWorktreesForDeletedStacks(ctx, deletedStackRoots)
+	}
+
 	// Restack children if any
 	if len(childrenToRestack) > 0 {
 		out.Info("Restacking children of deleted %s...", actions.Pluralize("branch", len(toDelete)))
@@ -119,4 +134,35 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 
 	return nil
+}
+
+// cleanupWorktreesForDeletedStacks removes worktrees for stack roots that have been deleted.
+// This is best-effort - errors are logged but don't fail the delete operation.
+func cleanupWorktreesForDeletedStacks(ctx *app.Context, deletedStackRoots []string) {
+	for _, stackRoot := range deletedStackRoots {
+		wt, err := ctx.Engine.GetWorktreeForStack(stackRoot)
+		if err != nil || wt == nil {
+			continue // No worktree registered for this stack
+		}
+
+		// Check if user is in this worktree - emit CD directive to navigate back to main repo
+		if ctx.InManagedWorktree && ctx.WorktreeInfo != nil &&
+			ctx.WorktreeInfo.StackRoot == stackRoot {
+			ctx.Output.DirectiveCD(wt.MainRepoDir)
+		}
+
+		ctx.Output.Info("Removing worktree for deleted stack %s", style.ColorBranchName(stackRoot, false))
+
+		// Remove worktree directory if it exists
+		if _, statErr := os.Stat(wt.Path); statErr == nil {
+			if removeErr := ctx.Engine.RemoveWorktree(ctx.Context, wt.Path); removeErr != nil {
+				ctx.Output.Debug("Failed to remove worktree at %s: %v", wt.Path, removeErr)
+			}
+		}
+
+		// Unregister the worktree from the registry
+		if unregErr := ctx.Engine.UnregisterWorktree(stackRoot); unregErr != nil {
+			ctx.Output.Debug("Failed to unregister worktree for %s: %v", stackRoot, unregErr)
+		}
+	}
 }

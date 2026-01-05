@@ -79,7 +79,7 @@ const zshIntegration = `# stackit shell integration for zsh
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local output exit_code cd_path checkout_branch
+    local output exit_code cd_path rerun
 
     # Run the real stackit command and capture output
     # Set env var so stackit knows shell integration is available
@@ -88,27 +88,24 @@ __stackit_wrap() {
 
     # Print output, filtering out directives
     echo "$output" | while IFS= read -r line; do
-        if [[ "$line" == __STACKIT_CD__:* ]]; then
-            : # skip
-        elif [[ "$line" == __STACKIT_CHECKOUT__:* ]]; then
-            : # skip
+        if [[ "$line" == __STACKIT_CD__:* ]] || [[ "$line" == __STACKIT_RERUN__ ]]; then
+            : # skip directives
         else
             echo "$line"
         fi
     done
 
-    # Extract directives from output (in case the while loop runs in a subshell)
+    # Extract directives from output
     cd_path=$(echo "$output" | grep '^__STACKIT_CD__:' | head -1 | cut -d: -f2-)
-    checkout_branch=$(echo "$output" | grep '^__STACKIT_CHECKOUT__:' | head -1 | cut -d: -f2-)
+    rerun=$(echo "$output" | grep -q '^__STACKIT_RERUN__$' && echo 1)
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
-    fi
-
-    # Checkout branch if specified (after cd)
-    if [[ -n "$checkout_branch" ]]; then
-        command stackit co "$checkout_branch"
+        # Re-run original command if requested
+        if [[ -n "$rerun" ]]; then
+            STACKIT_SHELL_INTEGRATION=1 command stackit "$@"
+        fi
     fi
 
     return $exit_code
@@ -124,7 +121,7 @@ const bashIntegration = `# stackit shell integration for bash
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local output exit_code cd_path checkout_branch
+    local output exit_code cd_path rerun
 
     # Run the real stackit command and capture output
     # Set env var so stackit knows shell integration is available
@@ -133,27 +130,24 @@ __stackit_wrap() {
 
     # Print output, filtering out directives
     echo "$output" | while IFS= read -r line; do
-        if [[ "$line" == __STACKIT_CD__:* ]]; then
-            : # skip
-        elif [[ "$line" == __STACKIT_CHECKOUT__:* ]]; then
-            : # skip
+        if [[ "$line" == __STACKIT_CD__:* ]] || [[ "$line" == __STACKIT_RERUN__ ]]; then
+            : # skip directives
         else
             echo "$line"
         fi
     done
 
-    # Extract directives from output (in case the while loop runs in a subshell)
+    # Extract directives from output
     cd_path=$(echo "$output" | grep '^__STACKIT_CD__:' | head -1 | cut -d: -f2-)
-    checkout_branch=$(echo "$output" | grep '^__STACKIT_CHECKOUT__:' | head -1 | cut -d: -f2-)
+    rerun=$(echo "$output" | grep -q '^__STACKIT_RERUN__$' && echo 1)
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
-    fi
-
-    # Checkout branch if specified (after cd)
-    if [[ -n "$checkout_branch" ]]; then
-        command stackit co "$checkout_branch"
+        # Re-run original command if requested
+        if [[ -n "$rerun" ]]; then
+            STACKIT_SHELL_INTEGRATION=1 command stackit "$@"
+        fi
     fi
 
     return $exit_code
@@ -175,12 +169,12 @@ function stackit --wraps=stackit --description 'stackit with auto-cd support'
 
     # Print output, filtering out directives
     set -l cd_path ""
-    set -l checkout_branch ""
+    set -l rerun 0
     for line in $output
         if string match -q '__STACKIT_CD__:*' -- $line
             set cd_path (string replace '__STACKIT_CD__:' '' -- $line)
-        else if string match -q '__STACKIT_CHECKOUT__:*' -- $line
-            set checkout_branch (string replace '__STACKIT_CHECKOUT__:' '' -- $line)
+        else if test "$line" = "__STACKIT_RERUN__"
+            set rerun 1
         else
             echo $line
         end
@@ -189,11 +183,10 @@ function stackit --wraps=stackit --description 'stackit with auto-cd support'
     # Change directory if path was found and exists
     if test -n "$cd_path" -a -d "$cd_path"
         cd $cd_path
-    end
-
-    # Checkout branch if specified (after cd)
-    if test -n "$checkout_branch"
-        command stackit co $checkout_branch
+        # Re-run original command if requested
+        if test $rerun -eq 1
+            env STACKIT_SHELL_INTEGRATION=1 command stackit $argv
+        end
     end
 
     return $exit_code
