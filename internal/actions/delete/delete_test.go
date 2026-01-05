@@ -3,8 +3,10 @@ package delete
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
 
@@ -141,5 +143,102 @@ func TestDelete(t *testing.T) {
 		parent2 := branchparent2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "main", parent2.GetName())
+	})
+}
+
+func TestDeleteCleansUpWorktrees(t *testing.T) {
+	t.Run("cleans worktree when stack root is deleted", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a stack root branch
+		s.CreateBranch("feature-branch").Commit("feature change")
+		s.TrackBranch("feature-branch", "main")
+
+		// Register a fake worktree for this stack root
+		err := s.Engine.RegisterWorktree("feature-branch", "/tmp/fake-worktree-path")
+		require.NoError(t, err)
+
+		// Verify worktree is registered
+		wt, err := s.Engine.GetWorktreeForStack("feature-branch")
+		require.NoError(t, err)
+		require.NotNil(t, wt)
+
+		// Delete the stack root
+		s.Checkout("main")
+		err = Action(s.Context, Options{
+			BranchName: "feature-branch",
+			Force:      true,
+		})
+		require.NoError(t, err)
+
+		// Verify worktree registration was cleaned up
+		wt, err = s.Engine.GetWorktreeForStack("feature-branch")
+		require.NoError(t, err)
+		assert.Nil(t, wt, "worktree registration should be removed when stack root is deleted")
+	})
+
+	t.Run("does not clean worktree when non-root branch is deleted", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a stack with two branches
+		s.CreateBranch("stack-root").Commit("root change")
+		s.TrackBranch("stack-root", "main")
+		s.CreateBranch("child-branch").Commit("child change")
+		s.TrackBranch("child-branch", "stack-root")
+
+		// Register a worktree for the stack root
+		err := s.Engine.RegisterWorktree("stack-root", "/tmp/fake-worktree-path")
+		require.NoError(t, err)
+
+		// Verify worktree is registered
+		wt, err := s.Engine.GetWorktreeForStack("stack-root")
+		require.NoError(t, err)
+		require.NotNil(t, wt)
+
+		// Delete the child branch (not the stack root)
+		s.Checkout("stack-root")
+		err = Action(s.Context, Options{
+			BranchName: "child-branch",
+			Force:      true,
+		})
+		require.NoError(t, err)
+
+		// Verify worktree registration is preserved
+		wt, err = s.Engine.GetWorktreeForStack("stack-root")
+		require.NoError(t, err)
+		assert.NotNil(t, wt, "worktree registration should be preserved when non-root branch is deleted")
+	})
+
+	t.Run("cleans worktree when upstack deletes entire stack including root", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a stack with multiple branches
+		s.CreateBranch("stack-root").Commit("root change")
+		s.TrackBranch("stack-root", "main")
+		s.CreateBranch("child-branch").Commit("child change")
+		s.TrackBranch("child-branch", "stack-root")
+
+		// Register a worktree for the stack root
+		err := s.Engine.RegisterWorktree("stack-root", "/tmp/fake-worktree-path")
+		require.NoError(t, err)
+
+		// Verify worktree is registered
+		wt, err := s.Engine.GetWorktreeForStack("stack-root")
+		require.NoError(t, err)
+		require.NotNil(t, wt)
+
+		// Delete upstack from stack root (deletes all branches in the stack)
+		s.Checkout("main")
+		err = Action(s.Context, Options{
+			BranchName: "stack-root",
+			Upstack:    true,
+			Force:      true,
+		})
+		require.NoError(t, err)
+
+		// Verify worktree registration was cleaned up
+		wt, err = s.Engine.GetWorktreeForStack("stack-root")
+		require.NoError(t, err)
+		assert.Nil(t, wt, "worktree registration should be removed when entire stack is deleted with --upstack")
 	})
 }

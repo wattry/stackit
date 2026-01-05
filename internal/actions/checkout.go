@@ -187,7 +187,7 @@ func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName s
 	// Emit directives for shell wrapper to handle
 	ctx.Output.Info("Switching to worktree for stack %s.", style.ColorBranchName(targetStackRoot, false))
 	ctx.Output.DirectiveCD(targetWorktree.Path)
-	ctx.Output.DirectiveCheckout(branchName)
+	ctx.Output.DirectiveRerun()
 	return true
 }
 
