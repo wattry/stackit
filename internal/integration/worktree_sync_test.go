@@ -4,6 +4,61 @@ import (
 	"testing"
 )
 
+// TestWorktreeWorkingDirAfterRestack tests that when a branch is restacked
+// from a different context, the worktree's working directory is properly updated.
+func TestWorktreeWorkingDirAfterRestack(t *testing.T) {
+	t.Run("worktree working dir updated after restack from main repo", func(t *testing.T) {
+		// This test reproduces a bug where:
+		// 1. Branch B is checked out in Worktree W
+		// 2. Main advances with new commits
+		// 3. Sync runs from main repo (not the worktree)
+		// 4. Branch B is rebased (ref updated via UpdateBranchRef)
+		// 5. But Worktree W's working directory is NOT updated
+		// 6. Result: git shows staged changes that "revert" the new content
+
+		sh := NewTestShellWithRemoteInProcess(t)
+
+		// Create a branch with worktree
+		sh.Log("Creating branch with worktree...")
+		sh.WriteFile("feature.txt", "feature content").
+			Run("create feature -w -m 'feature branch'").
+			OnBranch("main")
+
+		// Get worktree path
+		worktreePath := sh.GetWorktreePath("feature")
+		shW := sh.InWorktree(worktreePath)
+		shW.OnBranch("feature")
+
+		// Advance main with a change to a file that the worktree will see after restack
+		sh.Log("Advancing main with new file...")
+		sh.WriteFile("new-from-main.txt", "content from main").
+			Git("add new-from-main.txt").
+			Git("commit -m 'Add new file from main'").
+			Git("push origin main")
+
+		// Run sync from main repo - this will restack feature onto new main
+		sh.Log("Running sync from main repo...")
+		sh.Run("sync")
+
+		// Check worktree status - it should be clean after restack
+		sh.Log("Checking worktree status...")
+		shW.Git("status --porcelain")
+		output := shW.Output()
+
+		// The bug: worktree shows staged changes reverting main's content
+		// After fix: worktree should be clean
+		if output != "" {
+			t.Errorf("Worktree should be clean after sync, but has changes:\n%s", output)
+		}
+
+		// Verify the new file exists in worktree after restack
+		shW.Git("ls-files new-from-main.txt")
+		if shW.Output() == "" {
+			t.Error("New file from main should exist in worktree after sync/restack")
+		}
+	})
+}
+
 // TestSyncWithMultipleWorktrees tests the sync command behavior when working
 // with multiple worktrees and stacked branches.
 func TestSyncWithMultipleWorktrees(t *testing.T) {

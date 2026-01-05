@@ -176,6 +176,8 @@ type WorktreeOperations interface {
 	AddWorktree(ctx context.Context, path string, branch string, detach bool) error
 	RemoveWorktree(ctx context.Context, path string) error
 	ListWorktrees(ctx context.Context) ([]string, error)
+	GetWorktreePathForBranch(ctx context.Context, branchName string) (string, error)
+	ResetWorktreeWorkingDir(ctx context.Context, worktreePath string) error
 }
 
 // WorktreeRegistryOperations handles stackit-managed worktree tracking (local-only refs).
