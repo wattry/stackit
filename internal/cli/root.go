@@ -8,6 +8,7 @@ import (
 	"stackit.dev/stackit/internal/cli/branch"
 	"stackit.dev/stackit/internal/cli/integrations"
 	"stackit.dev/stackit/internal/cli/navigation"
+	"stackit.dev/stackit/internal/cli/shell"
 	"stackit.dev/stackit/internal/cli/stack"
 	"stackit.dev/stackit/internal/cli/worktree"
 )
@@ -107,6 +108,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(branch.NewSplitCmd())
 	rootCmd.AddCommand(branch.NewSquashCmd())
 	rootCmd.AddCommand(newScopeCmd())
+	rootCmd.AddCommand(shell.NewShellCmd())
 	rootCmd.AddCommand(stack.NewSubmitCmd())
 	rootCmd.AddCommand(stack.NewSyncCmd())
 	rootCmd.AddCommand(navigation.NewTopCmd())

@@ -22,6 +22,9 @@ type Output interface {
 	Println(content string)
 	Newline()
 
+	// Shell integration directives (always output, parsed by shell wrapper)
+	DirectiveCD(path string) // Output __STACKIT_CD__:<path> for shell integration
+
 	// Quiet mode for TUI coordination
 	SetQuiet(quiet bool)
 	IsQuiet() bool
@@ -118,6 +121,12 @@ func (c *ConsoleOutput) Newline() {
 		return
 	}
 	_, _ = fmt.Fprintln(c.writer)
+}
+
+// DirectiveCD outputs a shell integration directive for changing directory.
+// This is always output (even in quiet mode) as the shell wrapper needs to parse it.
+func (c *ConsoleOutput) DirectiveCD(path string) {
+	_, _ = fmt.Fprintf(c.writer, "__STACKIT_CD__:%s\n", path)
 }
 
 // SetQuiet enables or disables quiet mode.
