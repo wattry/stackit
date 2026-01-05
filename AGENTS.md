@@ -46,6 +46,28 @@ Use **Conventional Commits**:
 - `fix: resolve merge conflict detection issue`
 - `refactor: simplify merge plan logic`
 
+## Using Stackit for Commits and PRs
+
+This repo uses stackit for managing stacked changes. **Always use stackit commands instead of raw git for branch operations:**
+
+| Instead of | Use |
+|------------|-----|
+| `git checkout -b` + `git commit` | `stackit create` |
+| `gh pr create` | `stackit submit` |
+| `git rebase` | `stackit restack` |
+
+**Workflow:**
+1. Run `stackit log` to understand current stack state before making changes
+2. Use `stackit create` to create new branches with commits (auto-generates branch names)
+3. Use `stackit submit` to push and create/update PRs
+4. Use `stackit sync` to pull latest from trunk and cleanup merged branches
+
+**Available skills:** Run `/stackit` for the full guide, or use specific commands:
+- `/stack-create` - Create a stacked branch
+- `/stack-submit` - Submit PRs
+- `/stack-status` - View stack health
+- `/stack-fix` - Diagnose and fix issues
+
 ## Implementation Details
 
 ### Metadata Handling

@@ -29,6 +29,7 @@ type LogOptions struct {
 	BranchName    string
 	ShowUntracked bool
 	Interactive   bool
+	ShowSHAs      bool // Show commit SHAs next to branch names
 }
 
 // LogAction displays the branch tree
@@ -96,9 +97,10 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	renderer.SetAnnotations(annotations)
 
 	stackLines := renderer.RenderStack(opts.BranchName, tree.RenderOptions{
-		Short:   false, // We want the full tree characters with stats
-		Reverse: opts.Reverse,
-		Steps:   opts.Steps,
+		Short:    false, // We want the full tree characters with stats
+		Reverse:  opts.Reverse,
+		Steps:    opts.Steps,
+		ShowSHAs: opts.ShowSHAs,
 	})
 
 	// Add summary footer

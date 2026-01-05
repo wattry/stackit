@@ -64,6 +64,11 @@ func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.Bra
 		ExplicitScope: branch.GetExplicitScope().String(),
 	}
 
+	// Get short SHA for the branch
+	if sha, err := branch.GetRevision(); err == nil && len(sha) >= 7 {
+		ann.LocalSHA = sha[:7]
+	}
+
 	if !branch.IsTrunk() {
 		// PR info (local metadata)
 		if prInfo, _ := branch.GetPrInfo(); prInfo != nil {

@@ -23,6 +23,13 @@ func prepareBranchesForSubmit(ctx *app.Context, branches []engine.Branch, opts O
 		prNumber := status.PRNumber
 		prInfo := status.PRInfo
 
+		// If PR is closed or merged, treat as a new PR creation
+		// This allows recovery when a PR was closed (e.g., due to deleted base branch)
+		if prInfo != nil && (prInfo.State() == "CLOSED" || prInfo.State() == "MERGED") {
+			action = "create"
+			prNumber = nil
+		}
+
 		isCurrent := branchName == currentBranch
 
 		// Check if we should skip

@@ -53,6 +53,9 @@ type BranchAnnotation struct {
 
 	// WorktreePath is set if this branch is the stack root of a managed worktree
 	WorktreePath string
+
+	// LocalSHA is the short commit SHA of the branch head (for debugging/diagnostics)
+	LocalSHA string
 }
 
 // RenderOptions configures rendering behavior
@@ -64,6 +67,7 @@ type RenderOptions struct {
 	OmitCurrentBranch bool
 	NoStyleBranchName bool
 	HideStats         bool
+	ShowSHAs          bool // Show commit SHAs next to branch names
 	SelectedBranch    string
 	Collapsed         map[string]bool
 	SearchQuery       string          // Search query for filtering
@@ -152,6 +156,7 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		omitCurrentBranch: opts.OmitCurrentBranch,
 		noStyleBranchName: opts.NoStyleBranchName,
 		hideStats:         opts.HideStats,
+		showSHAs:          opts.ShowSHAs,
 		overallIndent:     &overallIndent,
 		selectedBranch:    opts.SelectedBranch,
 		collapsed:         opts.Collapsed,
@@ -194,6 +199,7 @@ type treeRenderArgs struct {
 	omitCurrentBranch bool
 	noStyleBranchName bool
 	hideStats         bool
+	showSHAs          bool
 	skipBranchingLine bool
 	overallIndent     *int
 	selectedBranch    string
@@ -260,6 +266,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 			omitCurrentBranch: args.omitCurrentBranch,
 			noStyleBranchName: args.noStyleBranchName,
 			hideStats:         args.hideStats,
+			showSHAs:          args.showSHAs,
 			overallIndent:     args.overallIndent,
 			selectedBranch:    args.selectedBranch,
 			collapsed:         args.collapsed,
@@ -328,6 +335,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 			branchName:        branchName,
 			indentLevel:       args.indentLevel,
 			parentScopes:      args.parentScopes,
+			showSHAs:          args.showSHAs,
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
 			selectedBranch:    args.selectedBranch,
@@ -599,7 +607,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	var result []string
 
-	// LINE 1: Symbol + Branch Name (bold if current) + Scope + Actionable Warnings
+	// LINE 1: Symbol + Branch Name (bold if current) + SHA + Scope + Actionable Warnings
 	branchName := args.branchName
 	coloredBranchName := style.ColorBranchNameBoldWithTrunk(branchName, isCurrent, isTrunk)
 
@@ -608,6 +616,11 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	} else if !matchesSearch && args.searchQuery != "" {
 		// Gray out non-matching branches
 		coloredBranchName = style.ColorDim(branchName)
+	}
+
+	// Add SHA if requested (useful for debugging/diagnostics)
+	if args.showSHAs && annotation.LocalSHA != "" {
+		coloredBranchName += " " + style.ColorDim("("+annotation.LocalSHA+")")
 	}
 
 	// Add scope (colored to match tree)

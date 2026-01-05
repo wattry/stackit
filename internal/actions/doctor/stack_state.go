@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -10,7 +11,7 @@ import (
 )
 
 // checkStackState performs stack state and metadata integrity checks
-func checkStackState(eng engine.Engine, out output.Output, warnings []string, errors []string, fix bool) ([]string, []string) {
+func checkStackState(ctx context.Context, eng engine.Engine, out output.Output, warnings []string, errors []string, fix bool) ([]string, []string) {
 	// Get all branches
 	allBranches, err := eng.Git().GetAllBranchNames()
 	if err != nil {
@@ -121,7 +122,47 @@ func checkStackState(eng engine.Engine, out output.Output, warnings []string, er
 		out.Info("  ✅ All parent branches exist")
 	}
 
+	// Check for empty branches (branches with no commits vs their parent)
+	emptyBranches := checkEmptyBranches(ctx, eng)
+	if len(emptyBranches) > 0 {
+		for _, branch := range emptyBranches {
+			warnings = append(warnings, fmt.Sprintf("branch '%s' has no commits (same as parent)", branch))
+		}
+		out.Warn("  Found %d empty branch(es) with no commits vs parent:", len(emptyBranches))
+		for _, branch := range emptyBranches {
+			out.Warn("    - %s", style.ColorBranchName(branch, false))
+		}
+		out.Warn("  Consider running 'stackit delete <branch>' to remove empty branches")
+	} else {
+		out.Info("  ✅ No empty branches found")
+	}
+
 	return warnings, errors
+}
+
+// checkEmptyBranches finds branches that have no commits compared to their parent
+func checkEmptyBranches(ctx context.Context, eng engine.Engine) []string {
+	var emptyBranches []string
+	trunk := eng.Trunk()
+	trunkName := trunk.GetName()
+
+	for _, branch := range eng.AllBranches() {
+		branchName := branch.GetName()
+		if branchName == trunkName {
+			continue
+		}
+
+		isEmpty, err := eng.IsBranchEmpty(ctx, branchName)
+		if err != nil {
+			// Skip branches we can't check
+			continue
+		}
+		if isEmpty {
+			emptyBranches = append(emptyBranches, branchName)
+		}
+	}
+
+	return emptyBranches
 }
 
 // detectCycles detects cycles in the branch parent graph using DFS
