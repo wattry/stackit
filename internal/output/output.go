@@ -23,7 +23,8 @@ type Output interface {
 	Newline()
 
 	// Shell integration directives (always output, parsed by shell wrapper)
-	DirectiveCD(path string) // Output __STACKIT_CD__:<path> for shell integration
+	DirectiveCD(path string)         // Output __STACKIT_CD__:<path> for shell integration
+	DirectiveCheckout(branch string) // Output __STACKIT_CHECKOUT__:<branch> for shell integration
 
 	// Quiet mode for TUI coordination
 	SetQuiet(quiet bool)
@@ -127,6 +128,13 @@ func (c *ConsoleOutput) Newline() {
 // This is always output (even in quiet mode) as the shell wrapper needs to parse it.
 func (c *ConsoleOutput) DirectiveCD(path string) {
 	_, _ = fmt.Fprintf(c.writer, "__STACKIT_CD__:%s\n", path)
+}
+
+// DirectiveCheckout outputs a shell integration directive for checking out a branch.
+// Used in combination with DirectiveCD for cross-worktree checkouts.
+// This is always output (even in quiet mode) as the shell wrapper needs to parse it.
+func (c *ConsoleOutput) DirectiveCheckout(branch string) {
+	_, _ = fmt.Fprintf(c.writer, "__STACKIT_CHECKOUT__:%s\n", branch)
 }
 
 // SetQuiet enables or disables quiet mode.

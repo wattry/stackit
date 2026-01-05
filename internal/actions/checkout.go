@@ -2,6 +2,7 @@ package actions
 
 import (
 	"fmt"
+	"os"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
@@ -71,8 +72,10 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions) error {
 
 	branch := eng.GetBranch(branchName)
 
-	// Warn if checking out a branch from a different stack that has its own worktree
-	warnIfCrossWorktreeCheckout(ctx, branch, branchName)
+	// Handle checkout via worktree directives if the branch belongs to a stack with a worktree
+	if handleWorktreeCheckout(ctx, branch, branchName) {
+		return nil // Checkout handled via shell directives
+	}
 
 	if err := eng.CheckoutBranch(context, branch); err != nil {
 		if git.IsLocalChangesError(err) {
@@ -140,25 +143,38 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	}
 }
 
-// warnIfCrossWorktreeCheckout warns if checking out a branch that belongs to a different
-// stack which has its own managed worktree.
-func warnIfCrossWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName string) {
-	if !ctx.InManagedWorktree || ctx.WorktreeInfo == nil {
-		return
-	}
-
+// handleWorktreeCheckout checks if the target branch belongs to a stack with a worktree.
+// If so, emits DirectiveCD + DirectiveCheckout for the shell wrapper to handle.
+// Returns true if handled via directives (caller should skip git checkout).
+func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName string) bool {
+	// Get target branch's stack root
 	targetStackRoot := ctx.Engine.GetStackRootForBranch(branch)
-	if targetStackRoot == "" || targetStackRoot == ctx.WorktreeInfo.StackRoot {
-		return
+	if targetStackRoot == "" {
+		return false // Not a tracked branch or is trunk
 	}
 
+	// Check if this stack has a registered worktree
 	targetWorktree, err := ctx.Engine.GetWorktreeForStack(targetStackRoot)
 	if err != nil || targetWorktree == nil {
-		return
+		return false // No worktree for this stack
 	}
 
-	ctx.Output.Warn("Branch %s belongs to a different stack (%s) that has its own worktree.",
-		style.ColorBranchName(branchName, false),
-		style.ColorBranchName(targetStackRoot, false))
-	ctx.Output.Tip("cd %s", targetWorktree.Path)
+	// Check if we're already in the target worktree (prevents recursion)
+	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil && ctx.WorktreeInfo.StackRoot == targetStackRoot {
+		return false // Already in correct worktree, proceed with normal checkout
+	}
+
+	// Verify worktree path exists
+	if _, err := os.Stat(targetWorktree.Path); os.IsNotExist(err) {
+		ctx.Output.Warn("Worktree for stack %s is registered but path does not exist: %s",
+			style.ColorBranchName(targetStackRoot, false), targetWorktree.Path)
+		ctx.Output.Tip("stackit worktree remove %s", targetStackRoot)
+		return false // Fall back to normal checkout
+	}
+
+	// Emit directives for shell wrapper to handle
+	ctx.Output.Info("Switching to worktree for stack %s.", style.ColorBranchName(targetStackRoot, false))
+	ctx.Output.DirectiveCD(targetWorktree.Path)
+	ctx.Output.DirectiveCheckout(branchName)
+	return true
 }

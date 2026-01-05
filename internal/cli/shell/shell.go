@@ -79,27 +79,35 @@ const zshIntegration = `# stackit shell integration for zsh
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local output exit_code cd_path
+    local output exit_code cd_path checkout_branch
 
     # Run the real stackit command and capture output
     output=$(command stackit "$@")
     exit_code=$?
 
-    # Print output, filtering out the __STACKIT_CD__ directive
+    # Print output, filtering out directives
     echo "$output" | while IFS= read -r line; do
         if [[ "$line" == __STACKIT_CD__:* ]]; then
-            cd_path="${line#__STACKIT_CD__:}"
+            : # skip
+        elif [[ "$line" == __STACKIT_CHECKOUT__:* ]]; then
+            : # skip
         else
             echo "$line"
         fi
     done
 
-    # Extract cd path from output (in case the while loop runs in a subshell)
+    # Extract directives from output (in case the while loop runs in a subshell)
     cd_path=$(echo "$output" | grep '^__STACKIT_CD__:' | head -1 | cut -d: -f2-)
+    checkout_branch=$(echo "$output" | grep '^__STACKIT_CHECKOUT__:' | head -1 | cut -d: -f2-)
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
+    fi
+
+    # Checkout branch if specified (after cd)
+    if [[ -n "$checkout_branch" ]]; then
+        command stackit co "$checkout_branch"
     fi
 
     return $exit_code
@@ -115,27 +123,35 @@ const bashIntegration = `# stackit shell integration for bash
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local output exit_code cd_path
+    local output exit_code cd_path checkout_branch
 
     # Run the real stackit command and capture output
     output=$(command stackit "$@")
     exit_code=$?
 
-    # Print output, filtering out the __STACKIT_CD__ directive
+    # Print output, filtering out directives
     echo "$output" | while IFS= read -r line; do
         if [[ "$line" == __STACKIT_CD__:* ]]; then
-            cd_path="${line#__STACKIT_CD__:}"
+            : # skip
+        elif [[ "$line" == __STACKIT_CHECKOUT__:* ]]; then
+            : # skip
         else
             echo "$line"
         fi
     done
 
-    # Extract cd path from output (in case the while loop runs in a subshell)
+    # Extract directives from output (in case the while loop runs in a subshell)
     cd_path=$(echo "$output" | grep '^__STACKIT_CD__:' | head -1 | cut -d: -f2-)
+    checkout_branch=$(echo "$output" | grep '^__STACKIT_CHECKOUT__:' | head -1 | cut -d: -f2-)
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
+    fi
+
+    # Checkout branch if specified (after cd)
+    if [[ -n "$checkout_branch" ]]; then
+        command stackit co "$checkout_branch"
     fi
 
     return $exit_code
@@ -154,11 +170,14 @@ function stackit --wraps=stackit --description 'stackit with auto-cd support'
     set -l output (command stackit $argv)
     set -l exit_code $status
 
-    # Print output, filtering out the __STACKIT_CD__ directive
+    # Print output, filtering out directives
     set -l cd_path ""
+    set -l checkout_branch ""
     for line in $output
         if string match -q '__STACKIT_CD__:*' -- $line
             set cd_path (string replace '__STACKIT_CD__:' '' -- $line)
+        else if string match -q '__STACKIT_CHECKOUT__:*' -- $line
+            set checkout_branch (string replace '__STACKIT_CHECKOUT__:' '' -- $line)
         else
             echo $line
         end
@@ -167,6 +186,11 @@ function stackit --wraps=stackit --description 'stackit with auto-cd support'
     # Change directory if path was found and exists
     if test -n "$cd_path" -a -d "$cd_path"
         cd $cd_path
+    end
+
+    # Checkout branch if specified (after cd)
+    if test -n "$checkout_branch"
+        command stackit co $checkout_branch
     end
 
     return $exit_code
