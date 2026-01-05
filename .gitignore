@@ -22,6 +22,9 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
+
+# Built binaries and dev shims
+bin/
 stackit
 st
 
