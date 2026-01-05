@@ -28,8 +28,14 @@ func TestShellZshOutput(t *testing.T) {
 	if !strings.Contains(output, "stackit()") {
 		t.Error("expected output to contain stackit function wrapper")
 	}
+	if !strings.Contains(output, "st()") {
+		t.Error("expected output to contain st function wrapper")
+	}
 	if !strings.Contains(output, "command stackit") {
 		t.Error("expected output to call command stackit")
+	}
+	if !strings.Contains(output, "STACKIT_DIRECTIVE_FILE") {
+		t.Error("expected output to use STACKIT_DIRECTIVE_FILE for TTY preservation")
 	}
 }
 
@@ -52,6 +58,12 @@ func TestShellBashOutput(t *testing.T) {
 	if !strings.Contains(output, "__STACKIT_CD__") {
 		t.Error("expected output to contain __STACKIT_CD__ directive parsing")
 	}
+	if !strings.Contains(output, "st()") {
+		t.Error("expected output to contain st function wrapper")
+	}
+	if !strings.Contains(output, "STACKIT_DIRECTIVE_FILE") {
+		t.Error("expected output to use STACKIT_DIRECTIVE_FILE for TTY preservation")
+	}
 }
 
 func TestShellFishOutput(t *testing.T) {
@@ -70,10 +82,16 @@ func TestShellFishOutput(t *testing.T) {
 	if !strings.Contains(output, "function stackit") {
 		t.Error("expected output to contain function stackit")
 	}
+	if !strings.Contains(output, "function st") {
+		t.Error("expected output to contain function st")
+	}
 	if !strings.Contains(output, "__STACKIT_CD__") {
 		t.Error("expected output to contain __STACKIT_CD__ directive parsing")
 	}
 	if !strings.Contains(output, "command stackit") {
 		t.Error("expected output to call command stackit")
+	}
+	if !strings.Contains(output, "STACKIT_DIRECTIVE_FILE") {
+		t.Error("expected output to use STACKIT_DIRECTIVE_FILE for TTY preservation")
 	}
 }
