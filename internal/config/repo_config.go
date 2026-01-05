@@ -12,14 +12,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // Config represents a repository configuration with getters and setters
 type Config struct {
 	repoRoot string
 	data     *RepoConfig
+}
+
+// resolveGitDir returns the path to the shared .git directory.
+// For regular repos this is repoRoot/.git, but for worktrees it returns
+// the main repository's .git directory (where config should be stored).
+func resolveGitDir(repoRoot string) string {
+	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
+	cmd.Dir = repoRoot
+	out, err := cmd.Output()
+	if err != nil {
+		// Fallback to traditional path if git command fails
+		return filepath.Join(repoRoot, ".git")
+	}
+	gitDir := strings.TrimSpace(string(out))
+	// git may return a relative path, make it absolute
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repoRoot, gitDir)
+	}
+	return gitDir
 }
 
 // LoadConfig creates a new Config instance from a repository root
@@ -37,7 +58,8 @@ func LoadConfig(repoRoot string) (*Config, error) {
 
 // Save persists the configuration to disk
 func (c *Config) Save() error {
-	configPath := filepath.Join(c.repoRoot, ".git", ".stackit_config")
+	gitDir := resolveGitDir(c.repoRoot)
+	configPath := filepath.Join(gitDir, ".stackit_config")
 
 	configJSON, err := json.MarshalIndent(c.data, "", "  ")
 	if err != nil {
@@ -216,7 +238,8 @@ func (c *RepoConfig) GetBranchPattern() BranchPattern {
 
 // GetRepoConfig reads the repository configuration
 func GetRepoConfig(repoRoot string) (*RepoConfig, error) {
-	configPath := filepath.Join(repoRoot, ".git", ".stackit_config")
+	gitDir := resolveGitDir(repoRoot)
+	configPath := filepath.Join(gitDir, ".stackit_config")
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {

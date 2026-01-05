@@ -163,6 +163,78 @@ func TestConfigSetSubmitFooter(t *testing.T) {
 	})
 }
 
+func TestConfigWorktreeSupport(t *testing.T) {
+	t.Parallel()
+
+	t.Run("loads config from worktree using main repo git dir", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, testhelpers.BasicSceneSetup)
+
+		// Create and save config in main repo
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		cfg.SetTrunk("main")
+		cfg.SetSubmitFooter(false)
+		err = cfg.Save()
+		require.NoError(t, err)
+
+		// Create a branch for the worktree
+		err = scene.Repo.CreateBranch("feature-branch")
+		require.NoError(t, err)
+
+		// Create worktree (normalize path for macOS /var -> /private/var symlink)
+		tmpDir := t.TempDir()
+		worktreePath, err := filepath.EvalSymlinks(tmpDir)
+		require.NoError(t, err)
+		worktreePath = filepath.Join(worktreePath, "worktree")
+		err = scene.Repo.RunGitCommand("worktree", "add", worktreePath, "feature-branch")
+		require.NoError(t, err)
+
+		// Load config from worktree - should find main repo's config
+		worktreeCfg, err := LoadConfig(worktreePath)
+		require.NoError(t, err)
+		require.True(t, worktreeCfg.IsInitialized())
+		require.Equal(t, "main", worktreeCfg.Trunk())
+		require.False(t, worktreeCfg.SubmitFooter())
+	})
+
+	t.Run("saves config from worktree to main repo git dir", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, testhelpers.BasicSceneSetup)
+
+		// Initialize config in main repo
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		cfg.SetTrunk("main")
+		err = cfg.Save()
+		require.NoError(t, err)
+
+		// Create a branch for the worktree
+		err = scene.Repo.CreateBranch("feature-branch")
+		require.NoError(t, err)
+
+		// Create worktree (normalize path for macOS /var -> /private/var symlink)
+		tmpDir := t.TempDir()
+		worktreePath, err := filepath.EvalSymlinks(tmpDir)
+		require.NoError(t, err)
+		worktreePath = filepath.Join(worktreePath, "worktree")
+		err = scene.Repo.RunGitCommand("worktree", "add", worktreePath, "feature-branch")
+		require.NoError(t, err)
+
+		// Modify config from worktree
+		worktreeCfg, err := LoadConfig(worktreePath)
+		require.NoError(t, err)
+		worktreeCfg.SetSubmitFooter(false)
+		err = worktreeCfg.Save()
+		require.NoError(t, err)
+
+		// Verify change is visible from main repo
+		mainCfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.False(t, mainCfg.SubmitFooter())
+	})
+}
+
 // Helper function to create string pointer
 func stringPtr(s string) *string {
 	return &s
