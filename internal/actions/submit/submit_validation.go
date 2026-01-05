@@ -125,7 +125,7 @@ func validateNoEmptyBranches(ctx context.Context, branches []string, nav engine.
 	}
 
 	hasMultiple := len(emptyBranches) > 1
-	runtimeCtx.Output.Warn("The following branch%s have no changes:", actions.PluralSuffix(hasMultiple))
+	runtimeCtx.Output.Warn("The following branch%s have no changes:", actions.PluralSuffix("branch", hasMultiple))
 	for _, b := range emptyBranches {
 		runtimeCtx.Output.Warn("▸ %s", b)
 	}
@@ -158,7 +158,7 @@ func validateNoMergedOrClosedBranches(branches []string, eng engine.BranchStatus
 
 	hasMultiple := len(mergedOrClosedBranches) > 1
 	ctx.Output.Tip("You can use 'stackit sync' to find and delete all merged/closed branches automatically and rebase their children.")
-	ctx.Output.Warn("PR%s for the following branch%s already been merged or closed:", actions.PluralSuffix(hasMultiple), actions.PluralSuffix(hasMultiple))
+	ctx.Output.Warn("PR%s for the following branch%s already been merged or closed:", actions.PluralSuffix("PR", hasMultiple), actions.PluralSuffix("branch", hasMultiple))
 	for _, b := range mergedOrClosedBranches {
 		ctx.Output.Warn("▸ %s", b)
 	}

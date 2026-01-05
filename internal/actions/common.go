@@ -18,12 +18,16 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gertd/go-pluralize"
+
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
+
+var pluralizeClient = pluralize.NewClient()
 
 // Restacker is a minimal interface needed for restacking branches
 type Restacker interface {
@@ -197,20 +201,24 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	return nil
 }
 
-// PluralSuffix returns "es" if plural is true, otherwise empty string
-func PluralSuffix(plural bool) string {
-	if plural {
-		return "es"
+// PluralSuffix returns the appropriate plural suffix for the given word if plural is true, otherwise empty string
+func PluralSuffix(word string, plural bool) string {
+	if !plural {
+		return ""
 	}
-	return ""
+	pluralized := pluralizeClient.Plural(word)
+	if len(pluralized) > len(word) {
+		return pluralized[len(word):]
+	}
+	return "s" // fallback
 }
 
-// Pluralize returns the word with "ren" suffix if count != 1 (specific to "child" -> "children")
+// Pluralize returns the plural form of word if count != 1, otherwise returns the singular form
 func Pluralize(word string, count int) string {
 	if count == 1 {
 		return word
 	}
-	return word + "ren" // "child" -> "children"
+	return pluralizeClient.Plural(word)
 }
 
 // ShouldDeleteBranch checks if a branch should be deleted
