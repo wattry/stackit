@@ -47,6 +47,8 @@ Stackit manages the complexity of this workflow—automatically handling rebases
 - 🤖 **AI assistant integration** — Generate integration files for Cursor and Claude Code
 - 🐙 **GitHub Integration** — Install CI checks to prevent merging locked PRs
 - ⚓ **Git Hooks** — Automatically validate branch state before committing with `precommit`
+- 📂 **Worktrees** — Work on multiple stacks in parallel with dedicated directories
+
 ---
 
 ## Installation
@@ -171,7 +173,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 ### Branch Management
 | Command | Description |
 |:---|:---|
-| `stackit create [name]` | Create a new branch on top of current |
+| `stackit create [name]` | Create a new branch on top of current (use `-w` to create with worktree) |
 | `stackit modify` | Amend the current commit (like `git commit --amend`) |
 | `stackit absorb` | Intelligently amend changes to the correct commits in the stack |
 | `stackit split` | Split the current branch's commits into multiple branches |
@@ -185,6 +187,13 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit unlock [branch]` | Unlock a branch and its upstack (allow local changes) |
 | `stackit freeze [branch]` | Freeze a branch (prevent local changes, local only) |
 | `stackit unfreeze [branch]` | Unfreeze a branch |
+
+### Worktree Management
+| Command | Description |
+|:---|:---|
+| `stackit worktree list` | List all managed worktrees |
+| `stackit worktree remove <stack>` | Remove a worktree and unregister it |
+| `stackit worktree open <stack>` | Print path to worktree (for `cd $(st worktree open foo)`) |
 
 ### Stack Operations
 | Command | Description |
@@ -252,6 +261,22 @@ stackit sync
 ```
 This pulls the latest changes from `main`, deletes branches that have already been merged, and restacks your remaining branches on top of the new `main`.
 
+### Working on Multiple Stacks in Parallel
+To work on separate features simultaneously, each in their own directory:
+```bash
+# Create a new stack with its own worktree
+stackit create my-feature -m "feat: start new feature" -w
+
+# This creates:
+# - A new branch 'my-feature' tracked by stackit
+# - A worktree at ../your-repo-stacks/my-feature/
+```
+Navigate to the worktree with:
+```bash
+cd $(stackit worktree open my-feature)
+```
+Worktrees are automatically cleaned up during `stackit sync` when their stack is merged.
+
 ### Collaborating on Stacks
 To work on a stack created by someone else or on another machine:
 ```bash
@@ -298,6 +323,8 @@ Stackit supports several configuration options that can be managed via `stackit 
 |:---|:---|:---|
 | `branch.pattern` | Customize how branch names are generated when not explicitly specified | `stackit config set branch.pattern "{username}/{date}/{message}"` |
 | `submit.footer` | Control whether PRs include a footer linking back to the stack | `stackit config set submit.footer true` |
+| `worktree.basePath` | Customize where worktrees are created | `stackit config set worktree.basePath "../my-stacks"` |
+| `worktree.autoClean` | Auto-remove worktrees for merged stacks during sync (default: true) | `stackit config set worktree.autoClean false` |
 
 ### Interactive Configuration
 Use the interactive TUI to manage all settings:
