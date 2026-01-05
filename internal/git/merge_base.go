@@ -8,20 +8,37 @@ import (
 )
 
 func (r *runner) getMergeBase(repo *Repository, branch1, branch2 string) (string, error) {
-	return r.getMergeBaseByRef(repo, "refs/heads/"+branch1, "refs/heads/"+branch2)
+	result, err := r.getMergeBaseByRef(repo, "refs/heads/"+branch1, "refs/heads/"+branch2)
+	if err != nil {
+		// Fallback to raw git for worktree compatibility
+		return r.getMergeBaseGitFallback(branch1, branch2)
+	}
+	return result, nil
 }
 
 func (r *runner) getMergeBaseByRef(repo *Repository, ref1Name, ref2Name string) (string, error) {
 	hash1, err := r.resolveRefHash(repo, ref1Name)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve ref1: %w", err)
+		// Fallback to raw git for worktree compatibility
+		return r.getMergeBaseGitFallback(ref1Name, ref2Name)
 	}
 
 	hash2, err := r.resolveRefHash(repo, ref2Name)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve ref2: %w", err)
+		// Fallback to raw git for worktree compatibility
+		return r.getMergeBaseGitFallback(ref1Name, ref2Name)
 	}
 
+	// Try go-git first, fallback to git command if it fails
+	result, err := r.getMergeBaseGoGit(repo, hash1, hash2)
+	if err != nil {
+		// Fallback to raw git for worktree compatibility
+		return r.getMergeBaseGitFallback(ref1Name, ref2Name)
+	}
+	return result, nil
+}
+
+func (r *runner) getMergeBaseGoGit(repo *Repository, hash1, hash2 plumbing.Hash) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
 	goGitMu.Lock()
 	defer goGitMu.Unlock()
@@ -47,6 +64,18 @@ func (r *runner) getMergeBaseByRef(repo *Repository, ref1Name, ref2Name string) 
 	}
 
 	return mergeBases[0].Hash.String(), nil
+}
+
+// getMergeBaseGitFallback uses the git merge-base command as a fallback
+// when go-git fails. This is especially important for worktrees where go-git
+// might not find all refs/objects because it doesn't handle the 'commondir'
+// redirection properly.
+func (r *runner) getMergeBaseGitFallback(ref1, ref2 string) (string, error) {
+	output, err := r.RunGitCommandWithContext(context.Background(), "merge-base", ref1, ref2)
+	if err != nil {
+		return "", fmt.Errorf("failed to get merge base via git: %w", err)
+	}
+	return output, nil
 }
 
 func (r *runner) isAncestor(repo *Repository, ancestor, descendant string) (bool, error) {
