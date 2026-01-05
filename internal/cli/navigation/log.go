@@ -52,6 +52,7 @@ type logFlags struct {
 	steps         int
 	showUntracked bool
 	interactive   bool
+	showSHAs      bool
 }
 
 func addLogFlags(cmd *cobra.Command, f *logFlags) {
@@ -60,6 +61,7 @@ func addLogFlags(cmd *cobra.Command, f *logFlags) {
 	cmd.Flags().IntVarP(&f.steps, "steps", "n", 0, "Only show this many levels upstack and downstack. Implies --stack")
 	cmd.Flags().BoolVarP(&f.showUntracked, "show-untracked", "u", false, "Include untracked branches in interactive selection")
 	cmd.Flags().BoolVarP(&f.interactive, "interactive", "i", false, "Enable interactive mode with scrolling and collapsing")
+	cmd.Flags().BoolVar(&f.showSHAs, "shas", false, "Show commit SHAs next to branch names (useful for debugging)")
 }
 
 func executeLog(cmd *cobra.Command, f *logFlags, style string) error {
@@ -84,6 +86,7 @@ func executeLog(cmd *cobra.Command, f *logFlags, style string) error {
 			BranchName:    branchName,
 			ShowUntracked: f.showUntracked,
 			Interactive:   f.interactive,
+			ShowSHAs:      f.showSHAs,
 		}
 
 		if f.steps > 0 {

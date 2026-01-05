@@ -42,7 +42,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	// Stack state checks
 	out.Info("Stack State:")
-	warnings, errors = checkStackState(eng, out, warnings, errors, opts.Fix)
+	warnings, errors = checkStackState(ctx.Context, eng, out, warnings, errors, opts.Fix)
 
 	// Summary
 	out.Newline()
