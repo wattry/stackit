@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Output handles user-facing console messages.
@@ -23,8 +24,8 @@ type Output interface {
 	Newline()
 
 	// Shell integration directives (always output, parsed by shell wrapper)
-	DirectiveCD(path string) // Output __STACKIT_CD__:<path> for shell integration
-	DirectiveRerun()         // Output __STACKIT_RERUN__ to re-run command after cd
+	DirectiveCD(path string)       // Output __STACKIT_CD__:<path> for shell integration
+	DirectiveRerun(args ...string) // Output __STACKIT_RERUN__[:args] to run command after cd
 
 	// Quiet mode for TUI coordination
 	SetQuiet(quiet bool)
@@ -132,12 +133,35 @@ func (c *ConsoleOutput) DirectiveCD(path string) {
 	writeDirective(c.writer, directive)
 }
 
-// DirectiveRerun outputs a shell integration directive to re-run the original command.
-// Used in combination with DirectiveCD when the command should be retried after cd.
+// DirectiveRerun outputs a shell integration directive to run a command after cd.
+// If args are provided, runs "stackit <args...>". Otherwise re-runs the original command.
 // This is always output (even in quiet mode) as the shell wrapper needs to parse it.
 // If STACKIT_DIRECTIVE_FILE is set, writes to that file instead of stdout.
-func (c *ConsoleOutput) DirectiveRerun() {
-	writeDirective(c.writer, "__STACKIT_RERUN__\n")
+func (c *ConsoleOutput) DirectiveRerun(args ...string) {
+	if len(args) == 0 {
+		writeDirective(c.writer, "__STACKIT_RERUN__\n")
+	} else {
+		// Join args with spaces for shell to parse
+		directive := fmt.Sprintf("__STACKIT_RERUN__:%s\n", joinArgs(args))
+		writeDirective(c.writer, directive)
+	}
+}
+
+// joinArgs joins arguments, quoting any that contain spaces.
+func joinArgs(args []string) string {
+	var result string
+	for i, arg := range args {
+		if i > 0 {
+			result += " "
+		}
+		// Quote args containing spaces
+		if strings.Contains(arg, " ") {
+			result += fmt.Sprintf("%q", arg)
+		} else {
+			result += arg
+		}
+	}
+	return result
 }
 
 // writeDirective writes a directive to the directive file if set, otherwise to the writer.
