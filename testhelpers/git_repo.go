@@ -32,6 +32,14 @@ func NewGitRepoFromURL(dir string, repoURL string) (*GitRepo, error) {
 	return newGitRepoInternal(dir, &gitRepoOptions{repoURL: repoURL})
 }
 
+// NewGitRepoFromExisting wraps an existing Git repository directory (e.g., a worktree).
+// This does not initialize or clone - it assumes the directory is already a valid git repo.
+func NewGitRepoFromExisting(t interface{ Helper() }, dir string) *GitRepo {
+	t.Helper()
+	repo, _ := newGitRepoInternal(dir, &gitRepoOptions{existingRepo: true})
+	return repo
+}
+
 // gitRepoOptions holds options for creating a GitRepo.
 type gitRepoOptions struct {
 	existingRepo bool

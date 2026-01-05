@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -412,4 +413,149 @@ func countNonEmptyLines(s string) int {
 		}
 	}
 	return count
+}
+
+// =============================================================================
+// Worktree Helpers
+// =============================================================================
+
+// GetWorktreePath returns the path to a worktree for a given stack root.
+// This reads from refs/stackit/worktrees/{stackRoot} metadata.
+func (s *TestShell) GetWorktreePath(stackRoot string) string {
+	s.t.Helper()
+	// Use git to read the worktree metadata ref
+	refName := "refs/stackit/worktrees/" + stackRoot
+	cmd := exec.Command("git", "show-ref", "-s", refName)
+	cmd.Dir = s.scene.Dir
+	shaOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to get worktree ref for %s", stackRoot)
+
+	sha := strings.TrimSpace(string(shaOutput))
+	cmd = exec.Command("git", "cat-file", "-p", sha)
+	cmd.Dir = s.scene.Dir
+	blobOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to read worktree metadata blob")
+
+	// Parse JSON to extract path
+	var meta struct {
+		Path string `json:"path"`
+	}
+	err = json.Unmarshal(blobOutput, &meta)
+	require.NoError(s.t, err, "failed to parse worktree metadata")
+	require.NotEmpty(s.t, meta.Path, "worktree path is empty for %s", stackRoot)
+
+	return meta.Path
+}
+
+// InWorktree creates a new TestShell operating in the specified worktree path.
+// This allows running commands in the worktree context.
+func (s *TestShell) InWorktree(worktreePath string) *TestShell {
+	s.t.Helper()
+
+	// Create a new scene pointing to the worktree directory
+	worktreeScene := &testhelpers.Scene{
+		Dir:  worktreePath,
+		Repo: testhelpers.NewGitRepoFromExisting(s.t, worktreePath),
+	}
+
+	return &TestShell{
+		t:            s.t,
+		scene:        worktreeScene,
+		binaryPath:   s.binaryPath,
+		inProcessCLI: s.inProcessCLI,
+	}
+}
+
+// SetPrState sets the PR state in metadata for a branch.
+// State can be "OPEN", "MERGED", "CLOSED", etc.
+func (s *TestShell) SetPrState(branch, state string) *TestShell {
+	s.t.Helper()
+
+	// Read existing metadata
+	refName := "refs/stackit/metadata/" + branch
+	cmd := exec.Command("git", "show-ref", "-s", refName)
+	cmd.Dir = s.scene.Dir
+	shaOutput, err := cmd.Output()
+
+	var meta map[string]interface{}
+	if err == nil {
+		// Ref exists, read it
+		sha := strings.TrimSpace(string(shaOutput))
+		cmd = exec.Command("git", "cat-file", "-p", sha)
+		cmd.Dir = s.scene.Dir
+		blobOutput, err := cmd.Output()
+		require.NoError(s.t, err, "failed to read metadata blob for %s", branch)
+		err = json.Unmarshal(blobOutput, &meta)
+		require.NoError(s.t, err, "failed to parse metadata for %s", branch)
+	} else {
+		// No existing metadata
+		meta = make(map[string]interface{})
+	}
+
+	// Update PR state
+	prInfo, ok := meta["prInfo"].(map[string]interface{})
+	if !ok {
+		prInfo = make(map[string]interface{})
+	}
+	prInfo["state"] = state
+	meta["prInfo"] = prInfo
+
+	// Write back
+	jsonData, err := json.Marshal(meta)
+	require.NoError(s.t, err, "failed to marshal metadata")
+
+	// Create blob
+	cmd = exec.Command("git", "hash-object", "-w", "--stdin")
+	cmd.Dir = s.scene.Dir
+	cmd.Stdin = strings.NewReader(string(jsonData))
+	newShaOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to create metadata blob")
+
+	// Update ref
+	newSha := strings.TrimSpace(string(newShaOutput))
+	cmd = exec.Command("git", "update-ref", refName, newSha)
+	cmd.Dir = s.scene.Dir
+	err = cmd.Run()
+	require.NoError(s.t, err, "failed to update metadata ref")
+
+	return s
+}
+
+// ExpectBranchParent asserts a branch has the expected parent in its metadata.
+func (s *TestShell) ExpectBranchParent(branch, expectedParent string) *TestShell {
+	s.t.Helper()
+
+	// Read metadata
+	refName := "refs/stackit/metadata/" + branch
+	cmd := exec.Command("git", "show-ref", "-s", refName)
+	cmd.Dir = s.scene.Dir
+	shaOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to get metadata ref for %s", branch)
+
+	sha := strings.TrimSpace(string(shaOutput))
+	cmd = exec.Command("git", "cat-file", "-p", sha)
+	cmd.Dir = s.scene.Dir
+	blobOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to read metadata blob for %s", branch)
+
+	var meta struct {
+		ParentBranchName *string `json:"parentBranchName"`
+	}
+	err = json.Unmarshal(blobOutput, &meta)
+	require.NoError(s.t, err, "failed to parse metadata for %s", branch)
+
+	require.NotNil(s.t, meta.ParentBranchName, "branch %s has no parent", branch)
+	require.Equal(s.t, expectedParent, *meta.ParentBranchName,
+		"branch %s expected parent %s, got %s", branch, expectedParent, *meta.ParentBranchName)
+
+	return s
+}
+
+// ExpectStackStructure asserts the entire stack structure matches expected parent-child relationships.
+func (s *TestShell) ExpectStackStructure(expected map[string]string) *TestShell {
+	s.t.Helper()
+	for branch, expectedParent := range expected {
+		s.ExpectBranchParent(branch, expectedParent)
+	}
+	return s
 }
