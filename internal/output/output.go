@@ -126,15 +126,33 @@ func (c *ConsoleOutput) Newline() {
 
 // DirectiveCD outputs a shell integration directive for changing directory.
 // This is always output (even in quiet mode) as the shell wrapper needs to parse it.
+// If STACKIT_DIRECTIVE_FILE is set, writes to that file instead of stdout.
 func (c *ConsoleOutput) DirectiveCD(path string) {
-	_, _ = fmt.Fprintf(c.writer, "__STACKIT_CD__:%s\n", path)
+	directive := fmt.Sprintf("__STACKIT_CD__:%s\n", path)
+	writeDirective(c.writer, directive)
 }
 
 // DirectiveRerun outputs a shell integration directive to re-run the original command.
 // Used in combination with DirectiveCD when the command should be retried after cd.
 // This is always output (even in quiet mode) as the shell wrapper needs to parse it.
+// If STACKIT_DIRECTIVE_FILE is set, writes to that file instead of stdout.
 func (c *ConsoleOutput) DirectiveRerun() {
-	_, _ = fmt.Fprintln(c.writer, "__STACKIT_RERUN__")
+	writeDirective(c.writer, "__STACKIT_RERUN__\n")
+}
+
+// writeDirective writes a directive to the directive file if set, otherwise to the writer.
+func writeDirective(fallback io.Writer, directive string) {
+	if directiveFile := os.Getenv("STACKIT_DIRECTIVE_FILE"); directiveFile != "" {
+		// Append to directive file for shell wrapper to read
+		f, err := os.OpenFile(directiveFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		if err == nil {
+			_, _ = f.WriteString(directive)
+			_ = f.Close()
+			return
+		}
+		// Fall through to stdout on error
+	}
+	_, _ = fmt.Fprint(fallback, directive)
 }
 
 // SetQuiet enables or disables quiet mode.

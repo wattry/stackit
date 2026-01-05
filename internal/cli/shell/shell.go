@@ -79,105 +79,99 @@ const zshIntegration = `# stackit shell integration for zsh
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local output exit_code cd_path rerun
+    local exit_code cd_path rerun directive_file
 
-    # Run the real stackit command and capture output
-    # Set env var so stackit knows shell integration is available
-    output=$(STACKIT_SHELL_INTEGRATION=1 command stackit "$@")
+    # Create temp file for directives (preserves TTY for interactive commands)
+    directive_file=$(mktemp)
+
+    # Run the real stackit command with full TTY access
+    # Set env vars so stackit knows shell integration is available
+    STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="$directive_file" command stackit "$@"
     exit_code=$?
 
-    # Print output, filtering out directives
-    echo "$output" | while IFS= read -r line; do
-        if [[ "$line" == __STACKIT_CD__:* ]] || [[ "$line" == __STACKIT_RERUN__ ]]; then
-            : # skip directives
-        else
-            echo "$line"
-        fi
-    done
-
-    # Extract directives from output
-    cd_path=$(echo "$output" | grep '^__STACKIT_CD__:' | head -1 | cut -d: -f2-)
-    rerun=$(echo "$output" | grep -q '^__STACKIT_RERUN__$' && echo 1)
+    # Read directives from temp file
+    if [[ -f "$directive_file" ]]; then
+        cd_path=$(grep '^__STACKIT_CD__:' "$directive_file" 2>/dev/null | head -1 | cut -d: -f2-)
+        rerun=$(grep -q '^__STACKIT_RERUN__$' "$directive_file" 2>/dev/null && echo 1)
+        rm -f "$directive_file"
+    fi
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
         # Re-run original command if requested
         if [[ -n "$rerun" ]]; then
-            STACKIT_SHELL_INTEGRATION=1 command stackit "$@"
+            STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit "$@"
         fi
     fi
 
     return $exit_code
 }
 
-# Create wrapper function for stackit
-stackit() {
-    __stackit_wrap "$@"
-}
+# Create wrapper functions for stackit and st
+stackit() { __stackit_wrap "$@"; }
+st() { __stackit_wrap "$@"; }
 `
 
 const bashIntegration = `# stackit shell integration for bash
 # This wraps the stackit command to enable auto-cd into worktrees
 
 __stackit_wrap() {
-    local output exit_code cd_path rerun
+    local exit_code cd_path rerun directive_file
 
-    # Run the real stackit command and capture output
-    # Set env var so stackit knows shell integration is available
-    output=$(STACKIT_SHELL_INTEGRATION=1 command stackit "$@")
+    # Create temp file for directives (preserves TTY for interactive commands)
+    directive_file=$(mktemp)
+
+    # Run the real stackit command with full TTY access
+    # Set env vars so stackit knows shell integration is available
+    STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="$directive_file" command stackit "$@"
     exit_code=$?
 
-    # Print output, filtering out directives
-    echo "$output" | while IFS= read -r line; do
-        if [[ "$line" == __STACKIT_CD__:* ]] || [[ "$line" == __STACKIT_RERUN__ ]]; then
-            : # skip directives
-        else
-            echo "$line"
-        fi
-    done
-
-    # Extract directives from output
-    cd_path=$(echo "$output" | grep '^__STACKIT_CD__:' | head -1 | cut -d: -f2-)
-    rerun=$(echo "$output" | grep -q '^__STACKIT_RERUN__$' && echo 1)
+    # Read directives from temp file
+    if [[ -f "$directive_file" ]]; then
+        cd_path=$(grep '^__STACKIT_CD__:' "$directive_file" 2>/dev/null | head -1 | cut -d: -f2-)
+        rerun=$(grep -q '^__STACKIT_RERUN__$' "$directive_file" 2>/dev/null && echo 1)
+        rm -f "$directive_file"
+    fi
 
     # Change directory if path was found and exists
     if [[ -n "$cd_path" && -d "$cd_path" ]]; then
         cd "$cd_path"
         # Re-run original command if requested
         if [[ -n "$rerun" ]]; then
-            STACKIT_SHELL_INTEGRATION=1 command stackit "$@"
+            STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit "$@"
         fi
     fi
 
     return $exit_code
 }
 
-# Create wrapper function for stackit
-stackit() {
-    __stackit_wrap "$@"
-}
+# Create wrapper functions for stackit and st
+stackit() { __stackit_wrap "$@"; }
+st() { __stackit_wrap "$@"; }
 `
 
 const fishIntegration = `# stackit shell integration for fish
 # This wraps the stackit command to enable auto-cd into worktrees
 
-function stackit --wraps=stackit --description 'stackit with auto-cd support'
-    # Set env var so stackit knows shell integration is available
-    set -l output (env STACKIT_SHELL_INTEGRATION=1 command stackit $argv)
+function __stackit_wrap --description 'stackit wrapper with auto-cd support'
+    # Create temp file for directives (preserves TTY for interactive commands)
+    set -l directive_file (mktemp)
+
+    # Run the real stackit command with full TTY access
+    # Set env vars so stackit knows shell integration is available
+    env STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="$directive_file" command stackit $argv
     set -l exit_code $status
 
-    # Print output, filtering out directives
+    # Read directives from temp file
     set -l cd_path ""
     set -l rerun 0
-    for line in $output
-        if string match -q '__STACKIT_CD__:*' -- $line
-            set cd_path (string replace '__STACKIT_CD__:' '' -- $line)
-        else if test "$line" = "__STACKIT_RERUN__"
+    if test -f "$directive_file"
+        set cd_path (grep '^__STACKIT_CD__:' "$directive_file" 2>/dev/null | head -1 | cut -d: -f2-)
+        if grep -q '^__STACKIT_RERUN__$' "$directive_file" 2>/dev/null
             set rerun 1
-        else
-            echo $line
         end
+        rm -f "$directive_file"
     end
 
     # Change directory if path was found and exists
@@ -185,10 +179,19 @@ function stackit --wraps=stackit --description 'stackit with auto-cd support'
         cd $cd_path
         # Re-run original command if requested
         if test $rerun -eq 1
-            env STACKIT_SHELL_INTEGRATION=1 command stackit $argv
+            env STACKIT_SHELL_INTEGRATION=1 STACKIT_DIRECTIVE_FILE="" command stackit $argv
         end
     end
 
     return $exit_code
+end
+
+# Create wrapper functions for stackit and st
+function stackit --wraps=stackit --description 'stackit with auto-cd support'
+    __stackit_wrap $argv
+end
+
+function st --wraps=stackit --description 'stackit with auto-cd support'
+    __stackit_wrap $argv
 end
 `
