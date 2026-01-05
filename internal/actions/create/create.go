@@ -168,7 +168,7 @@ func Action(ctx *app.Context, opts Options) error {
 			return fmt.Errorf("failed to create worktree: %w", err)
 		}
 		out.Info("Created worktree at %s", worktreePath)
-		out.Tip("cd %s", worktreePath)
+		out.DirectiveCD(worktreePath)
 	}
 
 	// Set scope: use provided scope if given, otherwise let it inherit from parent naturally

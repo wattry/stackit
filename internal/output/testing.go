@@ -71,6 +71,9 @@ func (n *NullOutput) Println(_ string) {}
 // Newline does nothing.
 func (n *NullOutput) Newline() {}
 
+// DirectiveCD discards the directive.
+func (n *NullOutput) DirectiveCD(_ string) {}
+
 // SetQuiet does nothing.
 func (n *NullOutput) SetQuiet(_ bool) {}
 
