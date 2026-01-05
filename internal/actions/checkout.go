@@ -144,7 +144,8 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 }
 
 // handleWorktreeCheckout checks if the target branch belongs to a stack with a worktree.
-// If so, emits DirectiveCD + DirectiveCheckout for the shell wrapper to handle.
+// If shell integration is available, emits DirectiveCD + DirectiveCheckout for the shell wrapper.
+// Otherwise, shows a warning with cd tip.
 // Returns true if handled via directives (caller should skip git checkout).
 func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName string) bool {
 	// Get target branch's stack root
@@ -172,9 +173,26 @@ func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName s
 		return false // Fall back to normal checkout
 	}
 
+	// Check if shell integration is available
+	if !hasShellIntegration() {
+		// No shell integration - show warning and cd tip, but don't emit directives
+		ctx.Output.Warn("Branch %s belongs to stack %s which has a worktree.",
+			style.ColorBranchName(branchName, false),
+			style.ColorBranchName(targetStackRoot, false))
+		ctx.Output.Tip("cd %s && stackit co %s", targetWorktree.Path, branchName)
+		ctx.Output.Tip("For automatic worktree switching, enable shell integration: eval \"$(stackit shell zsh)\"")
+		return false // Fall back to normal checkout (will result in detached HEAD)
+	}
+
 	// Emit directives for shell wrapper to handle
 	ctx.Output.Info("Switching to worktree for stack %s.", style.ColorBranchName(targetStackRoot, false))
 	ctx.Output.DirectiveCD(targetWorktree.Path)
 	ctx.Output.DirectiveCheckout(branchName)
 	return true
+}
+
+// hasShellIntegration checks if stackit shell integration is installed.
+// The shell wrapper sets STACKIT_SHELL_INTEGRATION=1 when running commands.
+func hasShellIntegration() bool {
+	return os.Getenv("STACKIT_SHELL_INTEGRATION") == "1"
 }
