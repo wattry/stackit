@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // ContinuationState represents the state of a command that was interrupted by a rebase conflict
@@ -17,7 +19,8 @@ type ContinuationState struct {
 
 // GetContinuationState reads the continuation state from disk
 func GetContinuationState(repoRoot string) (*ContinuationState, error) {
-	configPath := filepath.Join(repoRoot, ".git", ".stackit_continue")
+	gitDir := git.GetGitDir(repoRoot)
+	configPath := filepath.Join(gitDir, ".stackit_continue")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -35,7 +38,8 @@ func GetContinuationState(repoRoot string) (*ContinuationState, error) {
 
 // PersistContinuationState writes the continuation state to disk
 func PersistContinuationState(repoRoot string, state *ContinuationState) error {
-	configPath := filepath.Join(repoRoot, ".git", ".stackit_continue")
+	gitDir := git.GetGitDir(repoRoot)
+	configPath := filepath.Join(gitDir, ".stackit_continue")
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal continuation state: %w", err)
@@ -45,7 +49,8 @@ func PersistContinuationState(repoRoot string, state *ContinuationState) error {
 
 // ClearContinuationState removes the continuation state file
 func ClearContinuationState(repoRoot string) error {
-	configPath := filepath.Join(repoRoot, ".git", ".stackit_continue")
+	gitDir := git.GetGitDir(repoRoot)
+	configPath := filepath.Join(gitDir, ".stackit_continue")
 	err := os.Remove(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to clear continuation state: %w", err)
