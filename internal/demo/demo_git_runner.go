@@ -421,6 +421,14 @@ func (d *demoGitRunner) ListWorktrees(_ context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
+func (d *demoGitRunner) GetWorktreePathForBranch(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
+func (d *demoGitRunner) ResetWorktreeWorkingDir(_ context.Context, _ string) error {
+	return nil
+}
+
 func (d *demoGitRunner) UpdateRefWithLog(_ context.Context, _, _, _ string) error {
 	return nil
 }

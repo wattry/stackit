@@ -117,6 +117,52 @@ func (r *runner) DeleteWorktreeMeta(stackRoot string) error {
 	return r.DeleteRef(refName)
 }
 
+// GetWorktreePathForBranch returns the worktree path where a branch is checked out.
+// Returns empty string if the branch is not checked out in any worktree.
+func (r *runner) GetWorktreePathForBranch(ctx context.Context, branchName string) (string, error) {
+	output, err := r.RunGitCommandWithContext(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	if output == "" {
+		return "", nil
+	}
+
+	// Parse porcelain output to find worktree with this branch
+	// Format:
+	// worktree /path/to/worktree
+	// HEAD abc123
+	// branch refs/heads/branchname
+	// (blank line)
+	lines := strings.Split(output, "\n")
+	var currentWorktree string
+	targetRef := "refs/heads/" + branchName
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "worktree ") {
+			currentWorktree = strings.TrimPrefix(line, "worktree ")
+		} else if strings.HasPrefix(line, "branch ") {
+			branch := strings.TrimPrefix(line, "branch ")
+			if branch == targetRef && currentWorktree != "" {
+				return currentWorktree, nil
+			}
+		}
+	}
+
+	return "", nil
+}
+
+// ResetWorktreeWorkingDir resets a worktree's working directory to match HEAD.
+// This is used after updating a branch ref to sync the worktree's working directory.
+func (r *runner) ResetWorktreeWorkingDir(ctx context.Context, worktreePath string) error {
+	_, err := r.RunGitCommandWithContext(ctx, "-C", worktreePath, "reset", "--hard", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to reset worktree at %s: %w", worktreePath, err)
+	}
+	return nil
+}
+
 // ListWorktreeMetas lists all registered worktree metadata
 func (r *runner) ListWorktreeMetas() (map[string]*WorktreeMeta, error) {
 	refs, err := r.ListRefs(WorktreeRefPrefix)

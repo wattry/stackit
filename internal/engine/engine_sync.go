@@ -156,11 +156,16 @@ func (e *engineImpl) restackBranch(
 				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to update branch ref for frozen branch %s: %w", branchName, err)
 			}
 
-			// If the branch is currently checked out, we also need to reset the working tree
+			// If the branch is currently checked out in this context, reset the working tree
 			current := e.CurrentBranch()
 			if current != nil && current.GetName() == branchName {
 				if err := e.git.HardReset(ctx, "HEAD"); err != nil {
 					return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to reset working tree for frozen branch %s: %w", branchName, err)
+				}
+			} else {
+				// If the branch is checked out in a different worktree, reset that worktree
+				if worktreePath, err := e.git.GetWorktreePathForBranch(ctx, branchName); err == nil && worktreePath != "" {
+					_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath)
 				}
 			}
 
@@ -343,6 +348,14 @@ func (e *engineImpl) restackBranch(
 			OldParent:         oldParent,
 			NewParent:         parent,
 		}, fmt.Errorf("failed to update branch reference %s: %w", branchName, err)
+	}
+
+	// If this branch is checked out in a worktree, reset that worktree's working directory
+	// to match the new branch content. Without this, the worktree would have stale content
+	// that appears as staged changes reverting the rebased commits.
+	if worktreePath, err := e.git.GetWorktreePathForBranch(ctx, branchName); err == nil && worktreePath != "" {
+		// Best-effort: don't fail restack if worktree reset fails
+		_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath)
 	}
 
 	// Update metadata
