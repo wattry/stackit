@@ -206,92 +206,9 @@ func (c *ConsolidateMergeExecutor) createConsolidationPR(ctx context.Context, br
 	return pr, nil
 }
 
-// waitForConsolidationCI waits for CI checks to pass on the consolidation PR
-func (c *ConsolidateMergeExecutor) waitForConsolidationCI(ctx context.Context, branchName string, prNumber int) error {
-	githubClient := c.ctx.GitHubClient
-	splog := c.ctx.Output
-	if githubClient == nil {
-		return fmt.Errorf("GitHub client not available")
-	}
-
-	timeout := 10 * time.Minute // Default timeout for consolidation CI
-	pollInterval := 15 * time.Second
-	startTime := time.Now()
-	deadline := startTime.Add(timeout)
-
-	expectChecks := AnyPRHasChecks(c.plan.BranchesToMerge)
-	if expectChecks {
-		splog.Info("   Waiting for CI checks to register...")
-		// Give GitHub a moment to register the PR and start CI
-		time.Sleep(5 * time.Second)
-	}
-
-	splog.Info("   Waiting for CI checks (timeout: %v)...", timeout)
-
-	lastProgressReport := startTime
-
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for CI checks on consolidation PR #%d after %v", prNumber, timeout)
-		}
-
-		now := time.Now()
-		status, err := githubClient.GetPRChecksStatus(ctx, branchName)
-
-		// Report progress to handler if available
-		if c.handler != nil && status != nil {
-			elapsed := now.Sub(startTime)
-			// Only update if it's been at least a second or if we have new status
-			if now.Sub(lastProgressReport) >= 1*time.Second {
-				c.handler.StepWaiting(c.stepIndex, elapsed, timeout, status.Checks)
-				lastProgressReport = now
-			}
-		}
-
-		if err != nil {
-			splog.Debug("Error checking CI status: %v", err)
-		} else if status != nil {
-			if !status.Passing {
-				return fmt.Errorf("CI checks failed on consolidation PR #%d", prNumber)
-			}
-
-			// If we expect checks but none have appeared yet, treat as pending
-			isReallyPending := status.Pending
-			if expectChecks && len(status.Checks) == 0 {
-				isReallyPending = true
-				splog.Debug("No checks found yet for PR #%d, still waiting...", prNumber)
-			}
-
-			if !isReallyPending {
-				elapsed := time.Since(startTime)
-				splog.Info("✅ CI checks passed on consolidation PR #%d after %v", prNumber, elapsed.Round(time.Second))
-				return nil
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(pollInterval):
-		}
-	}
-}
-
 // waitForConsolidationMerge waits for CI to pass and auto-merges the consolidation PR
 func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo) error {
-	splog := c.ctx.Output
-	splog.Info("Consolidation PR:")
-	splog.Info("  ◉ %s PR #%d ⏳", branchName, pr.Number)
-	splog.Info("     %s", pr.HTMLURL)
-	splog.Info("     Waiting for CI checks to pass...")
-
-	if err := c.waitForConsolidationCI(ctx, branchName, pr.Number); err != nil {
-		return fmt.Errorf("CI checks failed for consolidation PR: %w", err)
-	}
-
-	splog.Info("Consolidation PR:")
-	splog.Info("  ◉ %s PR #%d ✓", branchName, pr.Number)
-	splog.Info("     Auto-merging...")
+	expectChecks := AnyPRHasChecks(c.plan.BranchesToMerge)
 
 	// Get merge method (prompts user if not configured)
 	mergeMethod, err := getMergeMethod(c.ctx, c.ctx.GitHubClient)
@@ -299,16 +216,13 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 		return fmt.Errorf("failed to get merge method: %w", err)
 	}
 
-	if err := c.ctx.GitHubClient.MergePullRequest(ctx, branchName, mergeMethod); err != nil {
-		return fmt.Errorf("failed to auto-merge consolidation PR #%d: %w", pr.Number, err)
-	}
+	waiter := NewCIWaiter(CIWaiterOptions{
+		Client: c.ctx.GitHubClient,
+		Output: c.ctx.Output,
+	})
+	waiter.SetProgressHandler(c.handler, c.stepIndex)
 
-	splog.Info("✅ Consolidation PR #%d has been merged automatically!", pr.Number)
-
-	splog.Info("Consolidation complete:")
-	splog.Info("  ✓ %s (merged)", branchName)
-
-	return nil
+	return waiter.WaitAndMerge(ctx, branchName, pr, expectChecks, mergeMethod)
 }
 
 func (c *ConsolidateMergeExecutor) postMergeCleanup(_ context.Context) {

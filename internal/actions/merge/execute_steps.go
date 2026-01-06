@@ -203,24 +203,6 @@ func executeConsolidation(ctx *app.Context, eng mergeExecuteEngine, stepIndex in
 
 // executeWaitCIWithProgress waits for CI checks with progress reporting
 func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecuteEngine, opts ExecuteOptions) error {
-	githubClient := ctx.GitHubClient
-	out := ctx.Output
-
-	if githubClient == nil {
-		return fmt.Errorf("GitHub client not available")
-	}
-
-	timeout := step.WaitTimeout
-	if timeout == 0 {
-		timeout = 10 * time.Minute // Default timeout
-	}
-
-	pollInterval := 15 * time.Second    // Poll every 15 seconds
-	progressInterval := 1 * time.Second // Report progress every second
-	startTime := time.Now()
-	deadline := startTime.Add(timeout)
-	lastProgressReport := startTime
-
 	// Get PR info for better error messages
 	branch := eng.GetBranch(step.BranchName)
 	prInfo, err := branch.GetPrInfo()
@@ -232,64 +214,27 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 		prNumber = *prInfo.Number()
 	}
 
-	for {
-		// Check if we've exceeded the timeout
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for CI checks on PR #%d (%s) after %v", prNumber, step.BranchName, timeout)
-		}
-
-		// Report progress periodically
-		now := time.Now()
-		status, err := githubClient.GetPRChecksStatus(ctx.Context, step.BranchName)
-		if err == nil && status != nil && now.Sub(lastProgressReport) >= progressInterval {
-			elapsed := now.Sub(startTime)
-			opts.Handler.StepWaiting(stepIndex, elapsed, timeout, status.Checks)
-			lastProgressReport = now
-		}
-
-		if err != nil {
-			// Log error but continue polling (might be transient)
-			out.Debug("Error checking CI status: %v", err)
-		} else if status != nil {
-			if !status.Passing {
-				// CI checks failed
-				return fmt.Errorf("CI checks failed on PR #%d (%s)", prNumber, step.BranchName)
-			}
-
-			// If we expect checks but none have appeared yet, treat as pending
-			isReallyPending := status.Pending
-			if step.ExpectChecks && len(status.Checks) == 0 {
-				isReallyPending = true
-				if now.Sub(startTime) > 5*time.Second {
-					out.Debug("No checks found yet for PR #%d, still waiting...", prNumber)
-				}
-			}
-
-			if !isReallyPending {
-				// All checks passed and none are pending
-				var maxDuration time.Duration
-				for _, check := range status.Checks {
-					if !check.FinishedAt.IsZero() && !check.StartedAt.IsZero() {
-						d := check.FinishedAt.Sub(check.StartedAt)
-						if d > maxDuration {
-							maxDuration = d
-						}
-					}
-				}
-				if maxDuration > 0 {
-					opts.Handler.SetEstimatedDuration(maxDuration)
-				}
-
-				return nil
-			}
-		}
-
-		// Wait before next poll
-		remaining := time.Until(deadline)
-		if remaining < pollInterval {
-			time.Sleep(remaining)
-		} else {
-			time.Sleep(pollInterval)
-		}
+	timeout := step.WaitTimeout
+	if timeout == 0 {
+		timeout = 10 * time.Minute // Default timeout
 	}
+
+	waiter := NewCIWaiter(CIWaiterOptions{
+		Client:  ctx.GitHubClient,
+		Output:  ctx.Output,
+		Timeout: timeout,
+	})
+	waiter.SetProgressHandler(opts.Handler, stepIndex)
+
+	result, err := waiter.WaitForChecks(ctx.Context, step.BranchName, prNumber, step.ExpectChecks)
+	if err != nil {
+		return fmt.Errorf("CI checks failed on PR #%d (%s): %w", prNumber, step.BranchName, err)
+	}
+
+	// Set estimated duration for future progress reporting
+	if result.MaxDuration > 0 {
+		opts.Handler.SetEstimatedDuration(result.MaxDuration)
+	}
+
+	return nil
 }
