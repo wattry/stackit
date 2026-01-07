@@ -61,6 +61,29 @@ brew install getstackit/tap/stackit
 
 After installation, you can use either `stackit` or `st` (short alias).
 
+### Shell Integration (Recommended)
+
+Enable shell integration to automatically change directories when creating worktrees with `stackit create -w`. Add one of the following to your shell configuration:
+
+```bash
+# For zsh (~/.zshrc):
+eval "$(stackit shell zsh)"
+
+# For bash (~/.bashrc):
+eval "$(stackit shell bash)"
+
+# For fish (~/.config/fish/config.fish):
+stackit shell fish | source
+```
+
+This is separate from shell completions. You likely want both:
+
+```bash
+# zsh example:
+eval "$(stackit completion zsh)"
+eval "$(stackit shell zsh)"
+```
+
 ---
 
 ## Getting Started
