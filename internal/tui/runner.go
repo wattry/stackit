@@ -175,3 +175,57 @@ func (r *Runner) IsRunning() bool {
 	defer r.mu.Unlock()
 	return r.started && !r.stopped
 }
+
+// PanicError is sent when a tea.Cmd panics during execution.
+// Models can handle this to show an error message or recover gracefully.
+type PanicError struct {
+	Source string // Name of the operation that panicked
+	Err    error  // The panic value wrapped as an error
+	Stack  string // Stack trace at the time of panic
+}
+
+func (p PanicError) Error() string {
+	return fmt.Sprintf("%s panicked: %v", p.Source, p.Err)
+}
+
+// SafeCmd wraps a tea.Cmd with panic recovery.
+// If the command panics, it logs the error and returns a PanicError message.
+// This is useful for commands that perform IO or call external APIs.
+func SafeCmd(name string, logger output.Logger, cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		defer func() {
+			if p := recover(); p != nil {
+				stack := string(debug.Stack())
+				err := fmt.Errorf("%v", p)
+				if logger != nil {
+					logger.Error("%s panicked: %v\n%s", name, p, stack)
+				}
+				// We can't return from inside defer, so we re-panic with a wrapped error
+				// that will be caught by the outer recovery
+				panic(PanicError{Source: name, Err: err, Stack: stack})
+			}
+		}()
+		return cmd()
+	}
+}
+
+// SafeCmdFunc wraps a function that returns tea.Msg with panic recovery.
+// If the function panics, it logs the error and returns a PanicError message.
+func SafeCmdFunc(name string, logger output.Logger, fn func() tea.Msg) tea.Cmd {
+	return func() (result tea.Msg) {
+		defer func() {
+			if p := recover(); p != nil {
+				stack := string(debug.Stack())
+				err := fmt.Errorf("%v", p)
+				if logger != nil {
+					logger.Error("%s panicked: %v\n%s", name, p, stack)
+				}
+				result = PanicError{Source: name, Err: err, Stack: stack}
+			}
+		}()
+		return fn()
+	}
+}
