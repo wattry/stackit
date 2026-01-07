@@ -10,14 +10,11 @@ Quick reference for all stackit commands. For detailed documentation, see:
 
 ## Utility Scripts
 
-Run these helper scripts for analysis and validation:
+Run these helper scripts for analysis:
 
 ```bash
 # Analyze stack health and get suggestions
 bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
-
-# Validate PR metadata before submission
-bash ~/.claude/skills/stackit/scripts/validate_pr.sh "PR Title" "PR Body"
 ```
 
 ## Navigation Commands
@@ -95,13 +92,20 @@ bash ~/.claude/skills/stackit/scripts/validate_pr.sh "PR Title" "PR Body"
 ### Start a new feature
 ```bash
 git add .
-stackit create --no-interactive feature-name -m "feat: add new feature"
+echo "feat: add new feature" | stackit create --no-interactive
 ```
 
 ### Stack another change
 ```bash
 git add .
-stackit create --no-interactive next-part -m "feat: extend feature"
+echo "feat: extend feature" | stackit create --no-interactive
+```
+
+### Add more commits to current branch
+```bash
+# A stacked branch can have multiple commits - no need to create a new branch
+git add .
+git commit -m "test: add tests for feature"
 ```
 
 ### Submit for review

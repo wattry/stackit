@@ -37,18 +37,35 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 
 ### Creating a New Branch
 
+**Key difference from git:** Unlike git where you create a branch first then commit, stackit creates the branch and commits in one step. This allows automatic branch name generation from the commit message.
+
 1. **Stage changes:** `git add <files>` or use `--all` flag
 2. **Generate commit message** after checking `README.md` / `CONTRIBUTING.md`; follow project conventions if documented, otherwise write a clear, descriptive summary.
-3. **Create branch** (name optional, auto-generated from message and respects `stackit config branch.pattern`):
+3. **Create branch with commit** (branch name auto-generated from message, respects `branch.pattern` config):
    ```bash
-   # Preferred: pipe format
-   echo "commit message" | stackit create --no-interactive
+   # Preferred: pipe format (handles multi-line messages and special characters)
+   echo "feat: add user authentication" | stackit create --no-interactive
 
-   # With explicit name
-   echo "commit message" | stackit create branch-name --no-interactive
+   # With explicit branch name
+   echo "feat: add user authentication" | stackit create my-branch --no-interactive
+
+   # Stage all changes and create in one command
+   echo "feat: add user authentication" | stackit create --all --no-interactive
    ```
 4. If currently on trunk (e.g., main/master), warn and confirm or switch to a feature branch before creating.
 5. Show stack: `stackit log --no-interactive`
+
+### Adding More Commits to a Branch
+
+**A stacked branch can have multiple commits.** You don't need to create a new branch for every commit:
+
+- **Add another commit:** Make changes, stage them, then use `git commit` as normal
+- **Amend the current commit:** `stackit modify` (like `git commit --amend`)
+- **Absorb changes into the right commits:** Stage fixes across multiple commits, then `stackit absorb` automatically amends each change to the correct commit
+
+When to use multiple commits vs new branches:
+- **Same logical change:** Multiple commits in one branch (e.g., implementation + tests)
+- **Separate reviewable units:** Create a new stacked branch with `stackit create`
 
 ### Submitting PRs
 
@@ -136,7 +153,7 @@ When generating commit messages:
 1. Check README.md and CONTRIBUTING.md for project guidelines
 2. Follow documented conventions if available
 3. If no conventions documented, write a clear, descriptive message
-4. **Always use pipe format:** `echo "message" | stackit create --no-interactive`
+4. **Use pipe format:** `echo "message" | stackit create --no-interactive`
 
 **Validation loop:**
 - Generate message
@@ -160,11 +177,10 @@ When generating PR descriptions:
    [Additional sections per project templates]
    ```
 
-**Validation before submission:**
+**Validation before submission:** 
 - Title is clear and descriptive?
 - Body has meaningful content (not placeholders)?
 - Test plan is specific?
-- Use `bash ~/.claude/skills/stackit/scripts/validate_pr.sh "title" "body"` to validate
 
 ## Important Rules
 
@@ -180,7 +196,7 @@ When generating PR descriptions:
 New features:
 - Progressive disclosure with organized reference files
 - Workflow checklists for complex operations (fix-absorb, conflict resolution)
-- Utility scripts for stack analysis and PR validation
+- Utility scripts for stack analysis
 - Enhanced slash commands with validation loops
 - New `/stack-absorb` and `/stack-fold` commands
 - Expanded commit message examples

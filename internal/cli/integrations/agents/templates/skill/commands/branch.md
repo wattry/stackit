@@ -34,11 +34,27 @@ Commands for creating, modifying, and managing individual branches.
 ## Common Flag Patterns
 
 ### stackit create
-- `-m "message"` - Commit message
 - `--all` - Stage all changes first
 - `--insert` - Insert between current and child
+- `-w` - Create with a dedicated worktree
 
-**Preferred usage:** `echo "commit message" | stackit create [optional-name]`
+**Preferred usage (pipe format):**
+```bash
+# Branch name auto-generated from commit message
+echo "feat: add user authentication" | stackit create --no-interactive
+
+# With explicit branch name
+echo "feat: add user authentication" | stackit create my-branch --no-interactive
+
+# Stage all and create
+echo "feat: add user authentication" | stackit create --all --no-interactive
+```
+
+### Multiple commits per branch
+**A stacked branch can have multiple commits.** You don't need a new branch for every commit:
+- Add another commit: `git add . && git commit -m "message"`
+- Amend current commit: `stackit modify --no-interactive`
+- Absorb fixes to correct commits: `stackit absorb --no-interactive`
 
 ### stackit modify
 - Similar to `git commit --amend` but updates stack metadata

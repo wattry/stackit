@@ -183,7 +183,6 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	// Write script files
 	scriptFiles := []string{
 		"analyze_stack.sh",
-		"validate_pr.sh",
 	}
 
 	for _, filename := range scriptFiles {
@@ -265,7 +264,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/reference.md\n", getDisplayPath(baseDir, local))
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/commands/ (4 reference files)\n", getDisplayPath(baseDir, local))
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/workflows/ (4 workflow guides)\n", getDisplayPath(baseDir, local))
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/scripts/ (2 utility scripts)\n", getDisplayPath(baseDir, local))
+	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/scripts/ (1 utility script)\n", getDisplayPath(baseDir, local))
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Slash commands:")
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/commands/stack-*.md (8 commands)\n", getDisplayPath(baseDir, local))

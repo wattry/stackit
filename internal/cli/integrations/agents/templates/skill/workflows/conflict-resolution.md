@@ -319,12 +319,16 @@ stackit undo --no-interactive --yes
 
 ### 1. Keep Changes Focused
 
-Smaller, focused branches = fewer conflicts
+Smaller, focused branches = fewer conflicts. A branch can have multiple related commits.
 
 ```bash
-# Good: Small, focused changes
+# Good: Small, focused changes (one branch per logical unit)
 echo "feat: add email validation" | stackit create --no-interactive
 echo "feat: add phone validation" | stackit create --no-interactive
+
+# Also good: Multiple commits in one branch for related work
+echo "feat: add validation helpers" | stackit create --no-interactive
+git add . && git commit -m "test: add validation tests"
 
 # Risky: Large, sweeping changes
 echo "feat: refactor entire validation system" | stackit create --no-interactive
