@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,6 +14,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/keys"
 	"stackit.dev/stackit/internal/tui/style"
@@ -43,6 +45,7 @@ type LogModel struct {
 	width        int
 	height       int
 	ready        bool
+	logger       output.Logger
 
 	// Keys
 	logKeys    keys.LogKeyMap
@@ -70,19 +73,72 @@ type LogModel struct {
 
 // NewLogModel creates a new LogModel
 func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client, opts LogOptions) *LogModel {
+	logger := opts.Logger
+	logDebug := func(msg string, args ...any) {
+		if logger != nil {
+			logger.Debug(msg, args...)
+		}
+	}
+
+	initStart := time.Now()
+	logDebug("NewLogModel started")
+
+	// Build filter function
+	var filter func(string) bool
+	if len(opts.Exclude) > 0 {
+		filter = func(name string) bool {
+			return !opts.Exclude[name]
+		}
+	}
+
+	// Create renderer synchronously for instant display
+	start := time.Now()
+	renderer := NewStackTreeRendererWithStrategy(eng, engine.SortStrategySmart, filter)
+	logDebug("NewStackTreeRendererWithStrategy completed in %v", time.Since(start))
+
+	// Build minimal annotations synchronously (includes worktree info, no git/network calls)
+	start = time.Now()
+	annotations := make(map[string]tree.BranchAnnotation)
+	for _, b := range eng.AllBranches() {
+		annotations[b.GetName()] = GetMinimalAnnotationWithWorktree(eng, b)
+	}
+	renderer.SetAnnotations(annotations)
+	logDebug("Minimal annotations with worktree completed in %v", time.Since(start))
+
+	// Set initial selection
+	start = time.Now()
+	selectedBranch := ""
+	if current := eng.CurrentBranch(); current != nil {
+		selectedBranch = current.GetName()
+	} else {
+		selectedBranch = eng.Trunk().GetName()
+	}
+	logDebug("Initial selection completed in %v", time.Since(start))
+
+	// Initialize search matches (all branches match when no search query)
+	searchMatches := make(map[string]bool)
+	for _, b := range eng.AllBranches() {
+		searchMatches[b.GetName()] = true
+	}
+
+	logDebug("NewLogModel completed in %v", time.Since(initStart))
+
 	m := &LogModel{
-		context:       ctx,
-		engine:        eng,
-		githubClient:  ghClient,
-		logKeys:       keys.DefaultLog,
-		selectKeys:    keys.DefaultSelect,
-		style:         opts.Style,
-		reverse:       opts.Reverse,
-		showUntracked: opts.ShowUntracked,
-		exclude:       opts.Exclude,
-		collapsed:     make(map[string]bool),
-		searchMatches: make(map[string]bool),
-		mode:          LogModeView,
+		context:        ctx,
+		engine:         eng,
+		githubClient:   ghClient,
+		logger:         opts.Logger,
+		renderer:       renderer,
+		selectedBranch: selectedBranch,
+		logKeys:        keys.DefaultLog,
+		selectKeys:     keys.DefaultSelect,
+		style:          opts.Style,
+		reverse:        opts.Reverse,
+		showUntracked:  opts.ShowUntracked,
+		exclude:        opts.Exclude,
+		collapsed:      make(map[string]bool),
+		searchMatches:  searchMatches,
+		mode:           LogModeView,
 	}
 
 	return m
@@ -97,20 +153,63 @@ func newLogSelectModel(ctx context.Context, eng engine.Engine, ghClient github.C
 
 // Init initializes the bubbletea model
 func (m *LogModel) Init() tea.Cmd {
-	return m.refresh()
+	// Renderer is already created with minimal data in NewLogModel.
+	// Only run enrichment in the background.
+	return m.enrichData()
 }
 
-func (m *LogModel) refresh() tea.Cmd {
+// log logs a message if logger is available
+func (m *LogModel) log(msg string, args ...any) {
+	if m.logger != nil {
+		m.logger.Debug(msg, args...)
+	}
+}
+
+// enrichData returns a command that fetches full annotation data in the background.
+// This includes git operations and network calls (remote SHAs, CI status).
+func (m *LogModel) enrichData() tea.Cmd {
+	// Capture values needed by the goroutine to avoid races on struct fields
+	ctx := m.context
+	eng := m.engine
+	ghClient := m.githubClient
+	style := m.style
+	logger := m.logger
+
+	logDebug := func(msg string, args ...any) {
+		if logger != nil {
+			logger.Debug(msg, args...)
+		}
+	}
+
 	return func() tea.Msg {
-		// Populate remote SHAs if needed
-		if m.style == logStyleFull {
-			_ = m.engine.PopulateRemoteShas()
+		enrichStart := time.Now()
+		logDebug("TUI enrichment started")
+
+		allBranches := eng.AllBranches()
+
+		// Channels for parallel results (buffered so goroutines don't block)
+		type ciResult struct {
+			statuses map[string]*github.CheckStatus
+			err      error
+		}
+		ciChan := make(chan ciResult, 1)
+		remoteShasDone := make(chan struct{}, 1)
+
+		// Run PopulateRemoteShas and BatchGetPRChecksStatus in parallel
+		if style == logStyleFull {
+			go func() {
+				start := time.Now()
+				if err := eng.PopulateRemoteShas(); err != nil {
+					logDebug("PopulateRemoteShas failed: %v", err)
+				}
+				logDebug("PopulateRemoteShas completed in %v", time.Since(start))
+				remoteShasDone <- struct{}{}
+			}()
+		} else {
+			remoteShasDone <- struct{}{}
 		}
 
-		// Prefetch CI status in batch if in FULL style
-		var ciStatuses map[string]*github.CheckStatus
-		allBranches := m.engine.AllBranches()
-		if m.style == logStyleFull && m.githubClient != nil {
+		if style == logStyleFull && ghClient != nil {
 			branchNames := make([]string, 0, len(allBranches))
 			for _, b := range allBranches {
 				if !b.IsTrunk() {
@@ -118,16 +217,33 @@ func (m *LogModel) refresh() tea.Cmd {
 				}
 			}
 			if len(branchNames) > 0 {
-				ciStatuses, _ = m.githubClient.BatchGetPRChecksStatus(m.context, branchNames)
+				go func() {
+					start := time.Now()
+					statuses, err := ghClient.BatchGetPRChecksStatus(ctx, branchNames)
+					if err != nil {
+						logDebug("BatchGetPRChecksStatus failed: %v", err)
+					}
+					logDebug("BatchGetPRChecksStatus for %d branches completed in %v", len(branchNames), time.Since(start))
+					ciChan <- ciResult{statuses: statuses, err: err}
+				}()
+			} else {
+				ciChan <- ciResult{}
 			}
+		} else {
+			ciChan <- ciResult{}
 		}
 
-		// Collect annotations
+		// Wait for both operations to complete
+		<-remoteShasDone
+		ciStatuses := (<-ciChan).statuses
+
+		// Collect full annotations
+		start := time.Now()
 		annotations := make(map[string]tree.BranchAnnotation)
 		utils.Run(allBranches, func(b engine.Branch) {
-			ann := GetBranchAnnotation(m.engine, b)
-			// Add CI status if available
-			if m.style == logStyleFull && !b.IsTrunk() && ciStatuses != nil {
+			ann := GetBranchAnnotation(eng, b)
+			// Add CI status and review status if available
+			if style == logStyleFull && !b.IsTrunk() && ciStatuses != nil {
 				if status := ciStatuses[b.GetName()]; status != nil {
 					ann.CheckStatus = tree.CheckStatusPassing
 					if status.Pending {
@@ -135,23 +251,35 @@ func (m *LogModel) refresh() tea.Cmd {
 					} else if !status.Passing {
 						ann.CheckStatus = tree.CheckStatusFailing
 					}
+
+					// Map review decision to display format
+					switch status.ReviewDecision {
+					case "APPROVED":
+						ann.ReviewStatus = "Approved"
+					case "CHANGES_REQUESTED":
+						ann.ReviewStatus = "Changes Requested"
+					}
 				}
 			}
 			// Check if this branch is a stack root with a managed worktree
-			stackRoot := m.engine.GetStackRootForBranch(b)
+			stackRoot := eng.GetStackRootForBranch(b)
 			if stackRoot == b.GetName() {
-				if wtInfo, err := m.engine.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+				if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
 					ann.WorktreePath = wtInfo.Path
 				}
 			}
 			annotations[b.GetName()] = ann
 		})
+		logDebug("Collected full annotations for %d branches in %v", len(allBranches), time.Since(start))
 
-		return refreshLogMsg{annotations: annotations}
+		logDebug("TUI enrichment completed in %v", time.Since(enrichStart))
+
+		return enrichDataMsg{annotations: annotations}
 	}
 }
 
-type refreshLogMsg struct {
+// enrichDataMsg is sent when full annotation data (including git/network) is ready
+type enrichDataMsg struct {
 	annotations map[string]tree.BranchAnnotation
 }
 
@@ -247,43 +375,34 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		firstRender := !m.ready
 		if !m.ready {
 			m.viewport = viewport.New(msg.Width, msg.Height-2)
 			m.ready = true
+			m.updateSearchMatches()
 		} else {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - 2
 		}
 		m.renderTree()
 
-	case refreshLogMsg:
-		trunk := m.engine.Trunk()
-		var filter func(string) bool
-		if len(m.exclude) > 0 {
-			filter = func(name string) bool {
-				return !m.exclude[name]
-			}
-		}
-		m.renderer = NewStackTreeRendererWithStrategy(m.engine, engine.SortStrategySmart, filter)
-		m.renderer.SetAnnotations(msg.annotations)
-		m.updateSearchMatches()
-		m.renderTree()
-
-		// Initial selection
-		if m.selectedBranch == "" {
-			current := m.engine.CurrentBranch()
-			if current != nil {
-				m.selectedBranch = current.GetName()
-			} else {
-				m.selectedBranch = trunk.GetName()
-			}
-			// Find index
+		// Find selectedIndex on first render
+		if firstRender && m.selectedBranch != "" {
 			for i, b := range m.branches {
 				if b.Name == m.selectedBranch {
 					m.selectedIndex = i
 					break
 				}
 			}
+		}
+
+	case enrichDataMsg:
+		// Slow path: update with full enriched data
+		m.log("enrichDataMsg received, ready=%v, renderer=%v", m.ready, m.renderer != nil)
+		if m.renderer != nil {
+			m.renderer.SetAnnotations(msg.annotations)
+			m.renderTree()
+			m.log("Tree re-rendered with enriched data")
 		}
 	}
 
@@ -296,6 +415,10 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// renderTree updates the viewport content with the current tree state.
+// This requires the viewport to be ready (initialized via WindowSizeMsg).
+// Note: View() has its own fallback rendering for the !ready case to ensure
+// immediate visual feedback before the viewport is initialized.
 func (m *LogModel) renderTree() {
 	if m.renderer == nil || !m.ready {
 		return
@@ -379,8 +502,7 @@ func (m *LogModel) moveToFirstMatch() {
 
 // View renders the bubbletea model
 func (m *LogModel) View() string {
-	if !m.ready || m.renderer == nil {
-		// Skip loading indicator - initialization is fast enough now
+	if m.renderer == nil {
 		return ""
 	}
 
@@ -397,10 +519,33 @@ func (m *LogModel) View() string {
 
 	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.engine.AllBranches()), help))
 
+	// If viewport not ready yet, render tree directly without scrolling
+	var content string
+	if m.ready {
+		content = m.viewport.View()
+	} else {
+		// Render tree directly for immediate display
+		trunk := m.engine.Trunk().GetName()
+		opts := tree.RenderOptions{
+			Reverse:        m.reverse,
+			SelectedBranch: m.selectedBranch,
+			Collapsed:      m.collapsed,
+			SingleLine:     m.mode == LogModeSelect,
+			SearchQuery:    m.searchQuery,
+			SearchMatches:  m.searchMatches,
+		}
+		branches := m.renderer.RenderStackDetailed(trunk, opts)
+		var lines []string
+		for _, b := range branches {
+			lines = append(lines, b.Lines...)
+		}
+		content = strings.Join(lines, "\n")
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		"",
-		m.viewport.View(),
+		content,
 	)
 }
 
@@ -432,4 +577,5 @@ type LogOptions struct {
 	Reverse       bool
 	ShowUntracked bool
 	Exclude       map[string]bool // Branches to exclude from selection
+	Logger        output.Logger   // Optional logger for IO timing diagnostics
 }
