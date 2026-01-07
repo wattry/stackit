@@ -36,10 +36,12 @@ func newGithubInstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install GitHub Action for stackit lock check",
-		Long: `Install a GitHub Action workflow that prevents merging locked PRs.
-		
-This will create .github/workflows/stackit-lock-check.yml in your repository.`,
+		Short: "Install GitHub Action workflows for stackit",
+		Long: `Install GitHub Action workflow for stackit CI checks.
+
+This will create .github/workflows/stackit.yml which includes:
+  - Lock check: Prevents merging locked PRs
+  - Stack order check: Prevents merging PRs that are not at the bottom of the stack`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
@@ -56,6 +58,10 @@ This will create .github/workflows/stackit-lock-check.yml in your repository.`,
 	return cmd
 }
 
+var githubWorkflows = []string{
+	"stackit.yml",
+}
+
 func runGithubInstall(runner git.Runner, force bool, out io.Writer) error {
 	repoRoot, err := runner.DiscoverRepoRoot()
 	if err != nil {
@@ -67,21 +73,23 @@ func runGithubInstall(runner git.Runner, force bool, out io.Writer) error {
 		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
 	}
 
-	workflowPath := filepath.Join(workflowDir, "stackit-lock-check.yml")
-	if _, err := os.Stat(workflowPath); err == nil && !force {
-		return fmt.Errorf("file already exists: %s. Use --force to overwrite", workflowPath)
-	}
+	for _, workflow := range githubWorkflows {
+		workflowPath := filepath.Join(workflowDir, workflow)
+		if _, err := os.Stat(workflowPath); err == nil && !force {
+			return fmt.Errorf("file already exists: %s. Use --force to overwrite", workflowPath)
+		}
 
-	content, err := githubTemplates.ReadFile("github/templates/stackit-lock-check.yml")
-	if err != nil {
-		return fmt.Errorf("failed to read template: %w", err)
-	}
+		content, err := githubTemplates.ReadFile("github/templates/" + workflow)
+		if err != nil {
+			return fmt.Errorf("failed to read template: %w", err)
+		}
 
-	if err := os.WriteFile(workflowPath, content, 0600); err != nil {
-		return fmt.Errorf("failed to write %s: %w", workflowPath, err)
-	}
+		if err := os.WriteFile(workflowPath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", workflowPath, err)
+		}
 
-	_, _ = fmt.Fprintf(out, "✓ Installed GitHub Action workflow: %s\n", filepath.Join(".github", "workflows", "stackit-lock-check.yml"))
+		_, _ = fmt.Fprintf(out, "✓ Installed GitHub Action workflow: %s\n", filepath.Join(".github", "workflows", workflow))
+	}
 
 	return nil
 }
