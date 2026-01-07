@@ -2,6 +2,7 @@ package sync
 
 import (
 	"os"
+	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
@@ -25,7 +26,9 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 	}
 
 	// Check if auto-clean is enabled
+	configStart := time.Now()
 	cfg, err := config.LoadConfig(ctx.RepoRoot)
+	ctx.Logger.Info("load config for worktree cleanup completed durationMs=%d", time.Since(configStart).Milliseconds())
 	if err != nil {
 		// If config can't be loaded, skip cleanup but don't fail
 		ctx.Output.Debug("Failed to load config for worktree cleanup: %v", err)
@@ -38,7 +41,9 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 	}
 
 	// Get all managed worktrees
+	listStart := time.Now()
 	worktrees, err := ctx.Engine.ListManagedWorktrees()
+	ctx.Logger.Info("list managed worktrees completed durationMs=%d worktreeCount=%d", time.Since(listStart).Milliseconds(), len(worktrees))
 	if err != nil {
 		ctx.Output.Debug("Failed to list managed worktrees: %v", err)
 		return result

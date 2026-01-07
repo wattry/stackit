@@ -2,6 +2,7 @@ package sync
 
 import (
 	"fmt"
+	"time"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
@@ -57,6 +58,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 
 	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
+		restackStart := time.Now()
 		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool, isCurrent bool, _ bool, _, _ string) {
 			prNumber := getPRNumber(ctx.Status(), branchName)
 
@@ -113,6 +115,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 		}); err != nil {
 			return fmt.Errorf("failed to restack branches: %w", err)
 		}
+		ctx.Logger.Info("restack branches completed durationMs=%d branchCount=%d", time.Since(restackStart).Milliseconds(), len(sortedBranches))
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"fmt"
+	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
@@ -16,7 +17,9 @@ func syncTrunk(ctx *app.Context, opts *Options, handler Handler, summary *Summar
 	trunk := nav.Trunk()
 	trunkName := trunk.GetName()
 
+	pullStart := time.Now()
 	pullResult, err := eng.PullTrunk(gctx)
+	ctx.Logger.Info("pull trunk completed durationMs=%d", time.Since(pullStart).Milliseconds())
 	if err != nil {
 		return fmt.Errorf("failed to pull trunk: %w", err)
 	}
@@ -53,9 +56,11 @@ func syncTrunk(ctx *app.Context, opts *Options, handler Handler, summary *Summar
 		}
 
 		if shouldReset {
+			resetStart := time.Now()
 			if err := eng.ResetTrunkToRemote(gctx); err != nil {
 				return fmt.Errorf("failed to reset trunk: %w", err)
 			}
+			ctx.Logger.Info("reset trunk to remote completed durationMs=%d", time.Since(resetStart).Milliseconds())
 			trunk := nav.Trunk()
 			rev, _ := trunk.GetRevision()
 			revShort := rev

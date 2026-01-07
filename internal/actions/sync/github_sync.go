@@ -2,6 +2,7 @@ package sync
 
 import (
 	"fmt"
+	"time"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
@@ -30,6 +31,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 	}
 	if repoOwner != "" && repoName != "" {
 		prsUpdated := 0
+		syncPrStart := time.Now()
 		if err := github.SyncPrInfo(gctx, ctx.Git(), branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
 			branch := nav.GetBranch(name)
 
@@ -53,6 +55,7 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 			// GitHub failure aborts sync (per spec)
 			return fmt.Errorf("failed to sync PR info from GitHub: %w", err)
 		}
+		ctx.Logger.Info("sync pr info from github completed durationMs=%d prsUpdated=%d", time.Since(syncPrStart).Milliseconds(), prsUpdated)
 
 		// Emit completion event with count
 		if prsUpdated > 0 {
@@ -71,14 +74,18 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 
 		// Update PR body footers if needed
 		if ctx.GitHubClient != nil {
+			updateMetaStart := time.Now()
 			actions.UpdateStackPRMetadata(ctx, branchNames, repoOwner, repoName)
+			ctx.Logger.Info("update stack pr metadata completed durationMs=%d", time.Since(updateMetaStart).Milliseconds())
 		}
 	}
 
 	// Synchronize local parents with GitHub PR base branches
 	// This can happen even if we couldn't sync with GitHub just now,
 	// using the metadata already stored in the engine.
+	parentsStart := time.Now()
 	syncResult, err := ParentsFromGitHubBase(ctx)
+	ctx.Logger.Info("sync parents from github base completed durationMs=%d", time.Since(parentsStart).Milliseconds())
 	if err != nil {
 		out.Debug("Failed to sync parents from GitHub: %v", err)
 	} else if len(syncResult.BranchesReparented) > 0 {
