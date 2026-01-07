@@ -19,6 +19,7 @@ require (
 require (
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 )
 
 require (

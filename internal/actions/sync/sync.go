@@ -8,6 +8,8 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Options contains options for the sync command
@@ -55,23 +57,68 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 	handler.Start(totalOps)
 
-	// Phase 1: Pull trunk
+	// Phase 1: Parallel network operations
+	// Run trunk pull, metadata fetch, and GitHub PR info sync concurrently
 	handler.EmitEvent(Event{Phase: PhaseTrunk, Type: EventStarted})
-	if err := syncTrunk(ctx, &opts, handler, summary); err != nil {
-		return err
-	}
-
-	// Clean branches (delete merged/closed)
-	branchesToRestack := []string{}
-
-	// Phase 2: Sync PR info from GitHub
 	handler.EmitEvent(Event{Phase: PhaseGitHub, Type: EventStarted})
-	if err := syncGitHubInfo(ctx, &branchesToRestack, handler, summary); err != nil {
-		return err
+
+	var trunkSummary Summary
+	var githubSyncResult *GitHubSyncResult
+	var metadataFetchErr error
+	var trunkErr error
+	var githubErr error
+
+	g, _ := errgroup.WithContext(gctx)
+
+	// Goroutine 1: Pull trunk
+	g.Go(func() error {
+		trunkErr = syncTrunk(ctx, &opts, handler, &trunkSummary)
+		return nil // Don't fail the group, handle error after Wait
+	})
+
+	// Goroutine 2: Fetch remote metadata refs (network operation only)
+	g.Go(func() error {
+		metadataFetchErr = ctx.RemoteMetadata().FetchRemoteMetadata(gctx)
+		return nil
+	})
+
+	// Goroutine 3: Sync PR info from GitHub (network operation only)
+	g.Go(func() error {
+		var err error
+		githubSyncResult, err = syncGitHubPRInfo(ctx)
+		githubErr = err
+		return nil
+	})
+
+	_ = g.Wait()
+
+	// Handle errors from parallel operations
+	if trunkErr != nil {
+		return trunkErr
 	}
 
-	// Sync remote metadata (internal, not a visible phase unless conflicts)
-	if err := syncRemoteMetadata(ctx, &opts); err != nil {
+	// Merge trunk summary
+	summary.TrunkUpdated = trunkSummary.TrunkUpdated
+	summary.TrunkRevision = trunkSummary.TrunkRevision
+
+	// GitHub failure aborts sync (per spec)
+	if githubErr != nil {
+		return githubErr
+	}
+
+	// Process GitHub PR info results (sequential - depends on PR info)
+	branchesToRestack := []string{}
+	if githubSyncResult != nil {
+		if err := processGitHubSyncResult(ctx, githubSyncResult, &branchesToRestack, handler); err != nil {
+			return err
+		}
+	}
+
+	// Process remote metadata (sequential - depends on fetch)
+	if metadataFetchErr != nil {
+		out.Debug("No remote metadata to fetch: %v", metadataFetchErr)
+	}
+	if err := processRemoteMetadata(ctx, &opts); err != nil {
 		return err
 	}
 
