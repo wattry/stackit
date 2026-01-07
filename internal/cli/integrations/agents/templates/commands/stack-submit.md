@@ -41,7 +41,6 @@ $ARGUMENTS
    - Body has meaningful description (not just TODOs)?
    - Test plan is specific (not empty placeholders)?
    - If validation fails: revise and re-validate
-   - Optional: Use `bash ~/.claude/skills/stackit/scripts/validate_pr.sh "title" "body"` for automated validation
    - Only proceed when PR meets quality standards
 
 5. Run submit command:

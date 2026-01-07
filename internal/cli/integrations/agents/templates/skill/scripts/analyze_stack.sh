@@ -83,6 +83,55 @@ if [ "$current_branch" = "$trunk_branch" ]; then
     echo
 fi
 
+# Check for large branches that might need splitting
+echo -e "${BLUE}Branch Size Analysis:${NC}"
+large_branch_found=false
+
+# Get list of tracked branches (non-trunk branches in the stack)
+tracked_branches=$(stackit log --no-interactive 2>/dev/null | grep -oE '[a-zA-Z0-9_/-]+' | grep -v "^main$\|^master$\|^$trunk_branch$" | sort -u)
+
+for branch in $tracked_branches; do
+    # Skip if branch doesn't exist
+    if ! git rev-parse --verify "$branch" > /dev/null 2>&1; then
+        continue
+    fi
+
+    # Get parent branch (the branch this one is based on)
+    parent=$(git log --format=%D "$branch" -1 2>/dev/null | grep -oE 'origin/[^,]+' | head -1 | sed 's|origin/||' || echo "$trunk_branch")
+    if [ -z "$parent" ]; then
+        parent="$trunk_branch"
+    fi
+
+    # Calculate diff stats against merge-base with trunk
+    merge_base=$(git merge-base "$trunk_branch" "$branch" 2>/dev/null || echo "")
+    if [ -n "$merge_base" ]; then
+        # Get stats: files changed, insertions, deletions
+        stats=$(git diff --shortstat "$merge_base".."$branch" 2>/dev/null || echo "")
+        if [ -n "$stats" ]; then
+            files_changed=$(echo "$stats" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo "0")
+            insertions=$(echo "$stats" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+            deletions=$(echo "$stats" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
+            total_lines=$((insertions + deletions))
+
+            # Warn if branch is large (>500 lines or >10 files)
+            if [ "$total_lines" -gt 500 ] || [ "$files_changed" -gt 10 ]; then
+                if [ "$large_branch_found" = false ]; then
+                    large_branch_found=true
+                fi
+                echo -e "${YELLOW}⚠️  Large branch: $branch${NC}"
+                echo "   $files_changed files, +$insertions/-$deletions lines ($total_lines total)"
+                echo "→ Consider: stackit split (to break into smaller PRs)"
+                echo
+            fi
+        fi
+    fi
+done
+
+if [ "$large_branch_found" = false ]; then
+    echo -e "${GREEN}✓ All branches are reasonably sized${NC}"
+    echo
+fi
+
 # Run stackit doctor for additional diagnostics
 echo -e "${BLUE}Running stackit doctor:${NC}"
 if stackit doctor > /dev/null 2>&1; then

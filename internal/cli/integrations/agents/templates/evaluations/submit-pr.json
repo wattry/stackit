@@ -19,7 +19,6 @@
     "  - Title is clear and descriptive",
     "  - Body has real content (not 'TODO' or 'TBD')",
     "  - Test plan has specific steps",
-    "Optionally runs validate_pr.sh script for validation",
     "Only proceeds when validation passes",
     "Uses 'stackit submit --stack' to submit all branches",
     "Reports created/updated PR URLs"
