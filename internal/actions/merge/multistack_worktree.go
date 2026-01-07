@@ -1,4 +1,4 @@
-package combine
+package merge
 
 import (
 	"context"
@@ -8,24 +8,24 @@ import (
 	"stackit.dev/stackit/internal/output"
 )
 
-// WorktreeResult contains the result of merging stacks in a worktree
-type WorktreeResult struct {
-	MergedStacks   []StackInfo     // Stacks that were successfully merged
-	ConflictStacks []ExcludedStack // Stacks that conflicted
-	WorktreePath   string          // Path to the worktree
-	WorktreeEngine engine.Engine   // Engine for the worktree
-	Cleanup        func()          // Function to clean up the worktree
+// MultiStackWorktreeResult contains the result of merging stacks in a worktree
+type MultiStackWorktreeResult struct {
+	MergedStacks   []MultiStackInfo     // Stacks that were successfully merged
+	ConflictStacks []MultiStackExcluded // Stacks that conflicted
+	WorktreePath   string               // Path to the worktree
+	WorktreeEngine engine.Engine        // Engine for the worktree
+	Cleanup        func()               // Function to clean up the worktree
 }
 
-// WorktreeExecutor handles merging stacks in a worktree
-type WorktreeExecutor struct {
+// MultiStackWorktreeExecutor handles merging stacks in a worktree
+type MultiStackWorktreeExecutor struct {
 	eng    engine.Engine
 	output output.Output
 }
 
-// NewWorktreeExecutor creates a new worktree executor
-func NewWorktreeExecutor(eng engine.Engine, out output.Output) *WorktreeExecutor {
-	return &WorktreeExecutor{
+// NewMultiStackWorktreeExecutor creates a new worktree executor for multi-stack merge
+func NewMultiStackWorktreeExecutor(eng engine.Engine, out output.Output) *MultiStackWorktreeExecutor {
+	return &MultiStackWorktreeExecutor{
 		eng:    eng,
 		output: out,
 	}
@@ -34,11 +34,11 @@ func NewWorktreeExecutor(eng engine.Engine, out output.Output) *WorktreeExecutor
 // ExecuteInWorktree creates a worktree at trunk and attempts to merge all stacks.
 // For each stack, it merges all branches in order. If any branch in a stack
 // conflicts, the entire stack is skipped.
-func (w *WorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []StackInfo) (*WorktreeResult, error) {
+func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []MultiStackInfo) (*MultiStackWorktreeResult, error) {
 	trunk := w.eng.Trunk()
 
 	// Create temporary worktree at trunk
-	worktreePath, cleanup, err := w.eng.CreateTemporaryWorktree(ctx, trunk.GetName(), "stackit-combine-*")
+	worktreePath, cleanup, err := w.eng.CreateTemporaryWorktree(ctx, trunk.GetName(), "stackit-multistack-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
@@ -49,16 +49,16 @@ func (w *WorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []Stack
 	worktreeEng, err := engine.NewEngine(engine.Options{
 		RepoRoot:          worktreePath,
 		Trunk:             trunk.GetName(),
-		MaxUndoStackDepth: 0, // No undo needed for combine
+		MaxUndoStackDepth: 0, // No undo needed for multi-stack
 	})
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to initialize worktree engine: %w", err)
 	}
 
-	result := &WorktreeResult{
-		MergedStacks:   make([]StackInfo, 0),
-		ConflictStacks: make([]ExcludedStack, 0),
+	result := &MultiStackWorktreeResult{
+		MergedStacks:   make([]MultiStackInfo, 0),
+		ConflictStacks: make([]MultiStackExcluded, 0),
 		WorktreePath:   worktreePath,
 		WorktreeEngine: worktreeEng,
 		Cleanup:        cleanup,
@@ -69,7 +69,7 @@ func (w *WorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []Stack
 		err := w.tryMergeStack(ctx, worktreeEng, stack)
 		if err != nil {
 			w.output.Debug("Stack %s conflicts: %v", stack.RootBranch, err)
-			result.ConflictStacks = append(result.ConflictStacks, ExcludedStack{
+			result.ConflictStacks = append(result.ConflictStacks, MultiStackExcluded{
 				Stack:  stack,
 				Reason: "conflict",
 			})
@@ -84,10 +84,10 @@ func (w *WorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []Stack
 
 // tryMergeStack attempts to merge all branches of a stack in order.
 // Returns error if ANY branch conflicts (entire stack is skipped on conflict).
-func (w *WorktreeExecutor) tryMergeStack(ctx context.Context, eng engine.Engine, stack StackInfo) error {
+func (w *MultiStackWorktreeExecutor) tryMergeStack(ctx context.Context, eng engine.Engine, stack MultiStackInfo) error {
 	for _, branchName := range stack.AllBranches {
 		// Create a merge commit message
-		msg := fmt.Sprintf("Merge %s for combine", branchName)
+		msg := fmt.Sprintf("Merge %s for multi-stack", branchName)
 
 		err := eng.Merge(ctx, branchName, engine.MergeOptions{
 			NoFF:    true,
@@ -110,7 +110,7 @@ func (w *WorktreeExecutor) tryMergeStack(ctx context.Context, eng engine.Engine,
 
 // ResetToTrunk resets the worktree to trunk, discarding all merges.
 // This is used by binary search to try different combinations.
-func (w *WorktreeExecutor) ResetToTrunk(ctx context.Context, eng engine.Engine) error {
+func (w *MultiStackWorktreeExecutor) ResetToTrunk(ctx context.Context, eng engine.Engine) error {
 	trunk := w.eng.Trunk()
 	return eng.ResetHard(ctx, trunk.GetName())
 }
