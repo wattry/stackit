@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // IsRemoteSyncEnabled checks if metadata compatibility has been verified and sync is enabled
@@ -39,6 +41,47 @@ func (e *engineImpl) SetLastModifiedBy(branchName string) error {
 		GitEmail: email,
 	}
 
+	return e.setLastModifiedByInternal(branchName, modifiedBy)
+}
+
+// BatchSetLastModifiedBy updates metadata for multiple branches in parallel
+// with a single git config lookup
+func (e *engineImpl) BatchSetLastModifiedBy(branchNames []string) error {
+	if len(branchNames) == 0 {
+		return nil
+	}
+
+	// Fetch git config once
+	name, err := e.git.GetConfig("user.name")
+	if err != nil {
+		return fmt.Errorf("git user.name is required but not set: %w", err)
+	}
+	email, _ := e.git.GetConfig("user.email")
+
+	modifiedBy := &git.ModifiedBy{
+		GitName:  name,
+		GitEmail: email,
+	}
+
+	// Parallel metadata updates
+	var firstErr error
+	var errMu sync.Mutex
+
+	utils.Run(branchNames, func(branchName string) {
+		if err := e.setLastModifiedByInternal(branchName, modifiedBy); err != nil {
+			errMu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			errMu.Unlock()
+		}
+	})
+
+	return firstErr
+}
+
+// setLastModifiedByInternal updates metadata for a single branch with pre-fetched user info
+func (e *engineImpl) setLastModifiedByInternal(branchName string, modifiedBy *git.ModifiedBy) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -64,20 +107,36 @@ func (e *engineImpl) LoadRemoteMetadataCache() error {
 		return err
 	}
 
-	cache := make(map[string]*git.Meta)
+	// Collect refs into a slice for parallel processing
+	type refInfo struct {
+		branch string
+		sha    string
+	}
+	refs := make([]refInfo, 0, len(remoteRefs))
 	for refName, sha := range remoteRefs {
-		branchName := refName[len("refs/stackit/remote-metadata/"):]
-		content, err := e.git.ReadBlob(sha)
+		branch := refName[len("refs/stackit/remote-metadata/"):]
+		refs = append(refs, refInfo{branch, sha})
+	}
+
+	// Parallel blob reads
+	cache := make(map[string]*git.Meta)
+	var cacheMu sync.Mutex
+
+	utils.Run(refs, func(ref refInfo) {
+		content, err := e.git.ReadBlob(ref.sha)
 		if err != nil {
-			continue
+			return
 		}
 
 		var meta git.Meta
 		if err := json.Unmarshal([]byte(content), &meta); err != nil {
-			continue
+			return
 		}
-		cache[branchName] = &meta
-	}
+
+		cacheMu.Lock()
+		cache[ref.branch] = &meta
+		cacheMu.Unlock()
+	})
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

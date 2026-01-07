@@ -2,6 +2,7 @@ package sync
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
@@ -11,14 +12,21 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
-// syncGitHubInfo synchronizes PR information from GitHub and updates local parents
-func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handler, _ *Summary) error {
-	eng := ctx.PR()
+// GitHubSyncResult holds the results from GitHub PR info sync (network operation)
+type GitHubSyncResult struct {
+	BranchNames []string
+	RepoOwner   string
+	RepoName    string
+	PRInfos     map[string]*github.PullRequestInfo
+	mu          sync.Mutex
+}
+
+// syncGitHubPRInfo fetches PR info from GitHub (network operation only)
+// This is designed to run in parallel with other network operations
+func syncGitHubPRInfo(ctx *app.Context) (*GitHubSyncResult, error) {
 	nav := ctx.Navigator()
-	out := ctx.Output
 	gctx := ctx.Context
 
-	// Sync PR info
 	allBranches := nav.AllBranches()
 	branchNames := make([]string, len(allBranches))
 	for i, b := range allBranches {
@@ -27,62 +35,90 @@ func syncGitHubInfo(ctx *app.Context, branchesToRestack *[]string, handler Handl
 
 	repoOwner, repoName, err := nav.GetRepoInfo(gctx)
 	if err != nil {
-		return fmt.Errorf("failed to get repository info: %w", err)
+		return nil, fmt.Errorf("failed to get repository info: %w", err)
 	}
-	if repoOwner != "" && repoName != "" {
-		prsUpdated := 0
-		syncPrStart := time.Now()
-		if err := github.SyncPrInfo(gctx, ctx.Git(), branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
-			branch := nav.GetBranch(name)
 
-			// Try to preserve existing locked status
-			lockReason := engine.LockReasonNone
-			if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
-				lockReason = existing.LockReason()
-			}
+	result := &GitHubSyncResult{
+		BranchNames: branchNames,
+		RepoOwner:   repoOwner,
+		RepoName:    repoName,
+		PRInfos:     make(map[string]*github.PullRequestInfo),
+	}
 
-			_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
-				&prInfo.Number,
-				prInfo.Title,
-				prInfo.Body,
-				prInfo.State,
-				prInfo.Base,
-				prInfo.HTMLURL,
-				prInfo.Draft,
-			).WithLockReason(lockReason))
-			prsUpdated++
-		}); err != nil {
-			// GitHub failure aborts sync (per spec)
-			return fmt.Errorf("failed to sync PR info from GitHub: %w", err)
+	if repoOwner == "" || repoName == "" {
+		return result, nil
+	}
+
+	// Sync PR info from GitHub (this is already parallelized internally)
+	syncPrStart := time.Now()
+	if err := github.SyncPrInfo(gctx, ctx.Git(), branchNames, repoOwner, repoName, func(name string, prInfo *github.PullRequestInfo) {
+		result.mu.Lock()
+		result.PRInfos[name] = prInfo
+		result.mu.Unlock()
+	}); err != nil {
+		return nil, fmt.Errorf("failed to sync PR info from GitHub: %w", err)
+	}
+	ctx.Logger.Info("sync pr info from github completed durationMs=%d prsUpdated=%d", time.Since(syncPrStart).Milliseconds(), len(result.PRInfos))
+
+	return result, nil
+}
+
+// processGitHubSyncResult processes GitHub PR info after the network operation completes
+// This must run after syncGitHubPRInfo completes
+//
+//nolint:unparam // error return is for future error handling
+func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branchesToRestack *[]string, handler Handler) error {
+	eng := ctx.PR()
+	nav := ctx.Navigator()
+	out := ctx.Output
+
+	prsUpdated := 0
+
+	// Update local PR info from GitHub results
+	for name, prInfo := range result.PRInfos {
+		branch := nav.GetBranch(name)
+
+		// Try to preserve existing locked status
+		lockReason := engine.LockReasonNone
+		if existing, err := branch.GetPrInfo(); err == nil && existing != nil {
+			lockReason = existing.LockReason()
 		}
-		ctx.Logger.Info("sync pr info from github completed durationMs=%d prsUpdated=%d", time.Since(syncPrStart).Milliseconds(), prsUpdated)
 
-		// Emit completion event with count
-		if prsUpdated > 0 {
-			handler.EmitEvent(Event{
-				Phase:   PhaseGitHub,
-				Type:    EventCompleted,
-				Message: fmt.Sprintf("Updated PR info for %d branches", prsUpdated),
-			})
-		} else {
-			handler.EmitEvent(Event{
-				Phase:   PhaseGitHub,
-				Type:    EventCompleted,
-				Message: "PR info up to date",
-			})
-		}
+		_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
+			&prInfo.Number,
+			prInfo.Title,
+			prInfo.Body,
+			prInfo.State,
+			prInfo.Base,
+			prInfo.HTMLURL,
+			prInfo.Draft,
+		).WithLockReason(lockReason))
+		prsUpdated++
+	}
 
-		// Update PR body footers if needed
-		if ctx.GitHubClient != nil {
-			updateMetaStart := time.Now()
-			actions.UpdateStackPRMetadata(ctx, branchNames, repoOwner, repoName)
-			ctx.Logger.Info("update stack pr metadata completed durationMs=%d", time.Since(updateMetaStart).Milliseconds())
-		}
+	// Emit completion event with count
+	if prsUpdated > 0 {
+		handler.EmitEvent(Event{
+			Phase:   PhaseGitHub,
+			Type:    EventCompleted,
+			Message: fmt.Sprintf("Updated PR info for %d branches", prsUpdated),
+		})
+	} else {
+		handler.EmitEvent(Event{
+			Phase:   PhaseGitHub,
+			Type:    EventCompleted,
+			Message: "PR info up to date",
+		})
+	}
+
+	// Update PR body footers if needed
+	if ctx.GitHubClient != nil && result.RepoOwner != "" && result.RepoName != "" {
+		updateMetaStart := time.Now()
+		actions.UpdateStackPRMetadata(ctx, result.BranchNames, result.RepoOwner, result.RepoName)
+		ctx.Logger.Info("update stack pr metadata completed durationMs=%d", time.Since(updateMetaStart).Milliseconds())
 	}
 
 	// Synchronize local parents with GitHub PR base branches
-	// This can happen even if we couldn't sync with GitHub just now,
-	// using the metadata already stored in the engine.
 	parentsStart := time.Now()
 	syncResult, err := ParentsFromGitHubBase(ctx)
 	ctx.Logger.Info("sync parents from github base completed durationMs=%d", time.Since(parentsStart).Milliseconds())

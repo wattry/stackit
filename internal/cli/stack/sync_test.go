@@ -36,10 +36,11 @@ func TestSyncCommand(t *testing.T) {
 		output, err := s.RunCliAndGetOutput("sync", "--no-restack")
 		require.NoError(t, err, "sync --no-restack failed: %s", output)
 		normalized := testhelpers.NormalizeOutput(output)
+		// Note: trunk and GitHub operations run in parallel, so their output interleaves
 		require.Equal(t, testhelpers.NormalizeOutput(`
 📥 Pulling from remote...
-  main is up to date
 🔄 Fetching PR info from GitHub...
+  main is up to date
   PR info up to date
 🧹 Cleaning branches...
 💡 Try the --restack flag to automatically restack the current stack.
@@ -50,10 +51,11 @@ func TestSyncCommand(t *testing.T) {
 		output, err = s.RunCliAndGetOutput("sync", "--restack")
 		require.NoError(t, err, "sync --restack (not needed) failed: %s", output)
 		normalized = testhelpers.NormalizeOutput(output)
+		// Note: trunk and GitHub operations run in parallel, so their output interleaves
 		require.Equal(t, testhelpers.NormalizeOutput(`
 📥 Pulling from remote...
-  main is up to date
 🔄 Fetching PR info from GitHub...
+  main is up to date
   PR info up to date
 🧹 Cleaning branches...
 📚 Restacking branches...
@@ -99,10 +101,11 @@ Error: you have uncommitted changes. Please commit or stash them before syncing
 
 		output, err = s.RunCliAndGetOutput("sync", "--no-restack")
 		require.NoError(t, err, "sync --no-restack failed: %s", output)
+		// Note: trunk and GitHub operations run in parallel, so their output interleaves
 		require.Equal(t, testhelpers.NormalizeOutput(`
 📥 Pulling from remote...
-  main is up to date
 🔄 Fetching PR info from GitHub...
+  main is up to date
   PR info up to date
 💡 Try the --restack flag to automatically restack the current stack.
 ✨ Everything is up to date!

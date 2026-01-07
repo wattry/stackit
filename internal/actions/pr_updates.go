@@ -92,12 +92,9 @@ func PushMetadataAndSyncPRs(ctx *app.Context, branchNames []string) error {
 	eng := ctx.Engine
 	out := ctx.Output
 
-	// Update LastModifiedBy for each branch
-	for _, branchName := range branchNames {
-		if err := eng.SetLastModifiedBy(branchName); err != nil {
-			out.Debug("Failed to update metadata for %s: %v", branchName, err)
-			continue
-		}
+	// Update LastModifiedBy for all branches (parallel with config caching)
+	if err := eng.BatchSetLastModifiedBy(branchNames); err != nil {
+		out.Debug("Failed to update metadata: %v", err)
 	}
 
 	// Check if remote sync is enabled; if not, run compatibility test first

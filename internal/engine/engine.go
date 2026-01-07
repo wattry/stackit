@@ -64,6 +64,7 @@ type RemoteMetadataManager interface {
 	IsRemoteSyncEnabled() bool
 	SetRemoteSyncEnabled(enabled bool)
 	SetLastModifiedBy(branchName string) error
+	BatchSetLastModifiedBy(branchNames []string) error
 	LoadRemoteMetadataCache() error
 	ApplyRemoteMetadataIfExists(branchName string) error
 	GetRemoteMetadataCache() map[string]*git.Meta
