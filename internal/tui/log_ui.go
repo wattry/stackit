@@ -181,7 +181,14 @@ func (m *LogModel) enrichData() tea.Cmd {
 		}
 	}
 
-	return func() tea.Msg {
+	logError := func(msg string, args ...any) {
+		if logger != nil {
+			logger.Error(msg, args...)
+		}
+	}
+
+	// Wrap with panic recovery
+	return SafeCmdFunc("TUI enrichment", logger, func() tea.Msg {
 		enrichStart := time.Now()
 		logDebug("TUI enrichment started")
 
@@ -198,12 +205,17 @@ func (m *LogModel) enrichData() tea.Cmd {
 		// Run PopulateRemoteShas and BatchGetPRChecksStatus in parallel
 		if style == logStyleFull {
 			go func() {
+				defer func() {
+					if p := recover(); p != nil {
+						logError("PopulateRemoteShas panicked: %v", p)
+					}
+					remoteShasDone <- struct{}{}
+				}()
 				start := time.Now()
 				if err := eng.PopulateRemoteShas(); err != nil {
-					logDebug("PopulateRemoteShas failed: %v", err)
+					logError("PopulateRemoteShas failed: %v", err)
 				}
 				logDebug("PopulateRemoteShas completed in %v", time.Since(start))
-				remoteShasDone <- struct{}{}
 			}()
 		} else {
 			remoteShasDone <- struct{}{}
@@ -218,10 +230,17 @@ func (m *LogModel) enrichData() tea.Cmd {
 			}
 			if len(branchNames) > 0 {
 				go func() {
+					defer func() {
+						if p := recover(); p != nil {
+							logError("BatchGetPRChecksStatus panicked: %v", p)
+							ciChan <- ciResult{err: fmt.Errorf("panicked: %v", p)}
+							return
+						}
+					}()
 					start := time.Now()
 					statuses, err := ghClient.BatchGetPRChecksStatus(ctx, branchNames)
 					if err != nil {
-						logDebug("BatchGetPRChecksStatus failed: %v", err)
+						logError("BatchGetPRChecksStatus failed: %v", err)
 					}
 					logDebug("BatchGetPRChecksStatus for %d branches completed in %v", len(branchNames), time.Since(start))
 					ciChan <- ciResult{statuses: statuses, err: err}
@@ -235,7 +254,11 @@ func (m *LogModel) enrichData() tea.Cmd {
 
 		// Wait for both operations to complete
 		<-remoteShasDone
-		ciStatuses := (<-ciChan).statuses
+		ciRes := <-ciChan
+		if ciRes.err != nil {
+			logError("CI status fetch failed, skipping CI annotations: %v", ciRes.err)
+		}
+		ciStatuses := ciRes.statuses
 
 		// Collect full annotations
 		start := time.Now()
@@ -275,7 +298,7 @@ func (m *LogModel) enrichData() tea.Cmd {
 		logDebug("TUI enrichment completed in %v", time.Since(enrichStart))
 
 		return enrichDataMsg{annotations: annotations}
-	}
+	})
 }
 
 // enrichDataMsg is sent when full annotation data (including git/network) is ready
@@ -404,6 +427,11 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.renderTree()
 			m.log("Tree re-rendered with enriched data")
 		}
+
+	case PanicError:
+		// A background command panicked - log it and continue gracefully
+		// The error was already logged by SafeCmdFunc, but we note it here too
+		m.log("Recovered from panic in %s: %v", msg.Source, msg.Err)
 	}
 
 	if m.ready {

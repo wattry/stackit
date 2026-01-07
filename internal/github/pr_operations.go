@@ -492,14 +492,20 @@ func BatchGetPRChecksStatusGraphQL(ctx context.Context, runner git.Runner, owner
 		}
 
 		// Parse pullRequests response
-		prData := data.(map[string]interface{})
+		prData, ok := data.(map[string]interface{})
+		if !ok {
+			continue
+		}
 		prNodes, ok := prData["nodes"].([]interface{})
 		if !ok || len(prNodes) == 0 {
 			// No open PR for this branch
 			continue
 		}
 
-		prNode := prNodes[0].(map[string]interface{})
+		prNode, ok := prNodes[0].(map[string]interface{})
+		if !ok {
+			continue
+		}
 
 		// Extract review decision
 		var reviewDecision string
@@ -520,7 +526,11 @@ func BatchGetPRChecksStatusGraphQL(ctx context.Context, runner git.Runner, owner
 			continue
 		}
 
-		commitNode := commitNodes[0].(map[string]interface{})
+		commitNode, ok := commitNodes[0].(map[string]interface{})
+		if !ok {
+			results[branchName] = &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision}
+			continue
+		}
 		commit, ok := commitNode["commit"].(map[string]interface{})
 		if !ok {
 			results[branchName] = &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision}
@@ -543,38 +553,52 @@ func BatchGetPRChecksStatusGraphQL(ctx context.Context, runner git.Runner, owner
 			nodes, ok := contexts["nodes"].([]interface{})
 			if ok {
 				for _, node := range nodes {
-					n := node.(map[string]interface{})
+					n, ok := node.(map[string]interface{})
+					if !ok {
+						continue
+					}
 					detail := CheckDetail{}
-					typeName := n["__typename"].(string)
+					typeName, ok := n["__typename"].(string)
+					if !ok {
+						continue
+					}
 
 					if typeName == "CheckRun" {
-						detail.Name = n["name"].(string)
-						detail.Status = strings.ToUpper(n["status"].(string))
-						if n["conclusion"] != nil {
-							detail.Conclusion = strings.ToUpper(n["conclusion"].(string))
+						if name, ok := n["name"].(string); ok {
+							detail.Name = name
 						}
-						if n["startedAt"] != nil {
-							t, _ := time.Parse(time.RFC3339, n["startedAt"].(string))
+						if status, ok := n["status"].(string); ok {
+							detail.Status = strings.ToUpper(status)
+						}
+						if conclusion, ok := n["conclusion"].(string); ok {
+							detail.Conclusion = strings.ToUpper(conclusion)
+						}
+						if startedAt, ok := n["startedAt"].(string); ok {
+							t, _ := time.Parse(time.RFC3339, startedAt)
 							detail.StartedAt = t
 						}
-						if n["completedAt"] != nil {
-							t, _ := time.Parse(time.RFC3339, n["completedAt"].(string))
+						if completedAt, ok := n["completedAt"].(string); ok {
+							t, _ := time.Parse(time.RFC3339, completedAt)
 							detail.FinishedAt = t
 						}
 					} else if typeName == "StatusContext" {
-						detail.Name = n["context"].(string)
-						detail.Status = "COMPLETED"
-						state := strings.ToUpper(n["state"].(string))
-						switch state {
-						case checkStatePending:
-							detail.Status = checkStatusInProgress
-						case checkStateFailure, checkStateError:
-							detail.Conclusion = checkConclusionFailure
-						case "SUCCESS":
-							detail.Conclusion = "SUCCESS"
+						if context, ok := n["context"].(string); ok {
+							detail.Name = context
 						}
-						if n["createdAt"] != nil {
-							t, _ := time.Parse(time.RFC3339, n["createdAt"].(string))
+						detail.Status = "COMPLETED"
+						if state, ok := n["state"].(string); ok {
+							state = strings.ToUpper(state)
+							switch state {
+							case checkStatePending:
+								detail.Status = checkStatusInProgress
+							case checkStateFailure, checkStateError:
+								detail.Conclusion = checkConclusionFailure
+							case "SUCCESS":
+								detail.Conclusion = "SUCCESS"
+							}
+						}
+						if createdAt, ok := n["createdAt"].(string); ok {
+							t, _ := time.Parse(time.RFC3339, createdAt)
 							detail.StartedAt = t
 							detail.FinishedAt = t
 						}
