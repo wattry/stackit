@@ -3,6 +3,7 @@ package sync
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
@@ -17,28 +18,38 @@ func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 	out := ctx.Output
 
 	// Fetch remote metadata refs
+	fetchStart := time.Now()
 	if err := eng.FetchRemoteMetadata(ctx.Context); err != nil {
 		// Non-fatal: remote may not have metadata yet
 		out.Debug("No remote metadata to fetch: %v", err)
 	}
+	ctx.Logger.Info("fetch remote metadata completed durationMs=%d", time.Since(fetchStart).Milliseconds())
 
 	// Configure refspec so future git fetch commands also fetch metadata
+	configStart := time.Now()
 	if err := eng.ConfigureRemoteMetadataSync(ctx.Context); err != nil {
 		out.Debug("Failed to configure metadata refspec: %v", err)
 	}
+	ctx.Logger.Info("configure remote metadata sync completed durationMs=%d", time.Since(configStart).Milliseconds())
 
 	// Load remote metadata into cache
+	loadCacheStart := time.Now()
 	if err := eng.LoadRemoteMetadataCache(); err != nil {
 		out.Debug("Failed to load remote metadata cache: %v", err)
 	}
+	ctx.Logger.Info("load remote metadata cache completed durationMs=%d", time.Since(loadCacheStart).Milliseconds())
 
 	// Handle orphaned local metadata (dual-checkout scenario or manual branch deletion)
+	orphanedStart := time.Now()
 	if err := handleOrphanedMetadata(ctx, opts); err != nil {
 		return err
 	}
+	ctx.Logger.Info("handle orphaned metadata completed durationMs=%d", time.Since(orphanedStart).Milliseconds())
 
 	// Compute diffs
+	diffsStart := time.Now()
 	diffs, err := eng.ComputeAllMetadataDiffs()
+	ctx.Logger.Info("compute all metadata diffs completed durationMs=%d diffCount=%d", time.Since(diffsStart).Milliseconds(), len(diffs))
 	if err != nil {
 		return fmt.Errorf("failed to compute metadata diffs: %w", err)
 	}

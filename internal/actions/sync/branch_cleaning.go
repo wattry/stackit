@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"time"
+
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/tui/style"
@@ -28,11 +30,13 @@ func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Su
 		currentBranchName = currentBranch.GetName()
 	}
 
+	cleanStart := time.Now()
 	result, err := actions.CleanBranches(ctx, actions.CleanBranchesOptions{
 		Force:             opts.Force,
 		InManagedWorktree: ctx.InManagedWorktree,
 		CurrentBranch:     currentBranchName,
 	})
+	ctx.Logger.Info("clean branches completed durationMs=%d deletedCount=%d", time.Since(cleanStart).Milliseconds(), len(result.DeletedBranches))
 
 	if err != nil {
 		return result, err
