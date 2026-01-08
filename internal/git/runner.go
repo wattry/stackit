@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,6 +166,45 @@ func (r *runner) runGitInternal(ctx context.Context, input string, env []string,
 		result = strings.TrimSpace(result)
 	}
 	return result, nil
+}
+
+// runGitStreaming runs a git command and streams output to the terminal (if interactive)
+// while also capturing it for error handling. This is useful for commands like commit
+// where hook output should be visible to the user.
+func (r *runner) runGitStreaming(ctx context.Context, args ...string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultCommandTimeout)
+		defer cancel()
+	}
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if r.repoRoot != "" {
+		cmd.Dir = r.repoRoot
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+
+	if utils.IsInteractive() {
+		// Stream to terminal AND capture for error handling
+		cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	} else {
+		// Non-interactive: just capture (same as runGitInternal)
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+	}
+
+	err := cmd.Run()
+	if err != nil {
+		return "", NewCommandError("git", args, stdoutBuf.String(), stderrBuf.String(), err)
+	}
+
+	return strings.TrimSpace(stdoutBuf.String()), nil
 }
 
 func (r *runner) RunGHCommandWithContext(ctx context.Context, args ...string) (string, error) {
