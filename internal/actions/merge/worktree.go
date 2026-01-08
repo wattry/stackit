@@ -30,7 +30,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		}
 	}()
 
-	// 4. Create a new engine for the worktree
+	// 3. Create a new engine for the worktree
 	maxUndoDepth := opts.UndoStackDepth
 	if maxUndoDepth <= 0 {
 		maxUndoDepth = engine.DefaultMaxUndoStackDepth
@@ -54,7 +54,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	worktreeCtx.Engine = worktreeEng
 	worktreeCtx.RepoRoot = worktreePath
 
-	// 5. Pre-flight operations in the worktree
+	// 4. Pre-flight operations in the worktree
 	// Populate remote SHAs so we can accurately check if branches match remote
 	if err := worktreeEng.PopulateRemoteShas(); err != nil {
 		out.Debug("Failed to populate remote SHAs in worktree: %v", err)
@@ -75,7 +75,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		}
 	}
 
-	// 6. Create or Validate the plan
+	// 5. Create or Validate the plan
 	plan := opts.Plan
 	if plan == nil {
 		// Create plan in worktree
@@ -94,7 +94,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		opts.Plan = plan
 	}
 
-	// 8. Execute the plan in the worktree
+	// 6. Execute the plan in the worktree
 	err = Execute(&worktreeCtx, worktreeEng, opts)
 
 	if err != nil {

@@ -3,7 +3,6 @@ package merge
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
@@ -216,7 +215,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 
 	timeout := step.WaitTimeout
 	if timeout == 0 {
-		timeout = 10 * time.Minute // Default timeout
+		timeout = DefaultCITimeout
 	}
 
 	waiter := NewCIWaiter(CIWaiterOptions{

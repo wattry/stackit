@@ -1,219 +1,481 @@
 package stack
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"os/signal"
-	"runtime/debug"
+	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"stackit.dev/stackit/internal/actions/merge"
-	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/github"
+	sterrors "stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
+	mergeComponent "stackit.dev/stackit/internal/tui/components/merge"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
-// NewMergeHandler creates the appropriate handler based on TTY availability
-func NewMergeHandler(ctx *app.Context) merge.Handler {
+// NewMergeUI creates a runner and handler pair for merge operations.
+// The runner manages terminal state; the handler processes events.
+// Caller must defer runner.Cleanup() to restore terminal on exit.
+func NewMergeUI(out output.Output, logger output.Logger) (*tui.Runner, merge.EventHandler) {
 	if tui.IsTTY() {
-		return NewInteractiveMergeHandler(ctx)
+		model := mergeComponent.NewModel()
+		runner := tui.NewRunner(model, out, logger)
+		runner.Start()
+		return runner, NewInteractiveMergeEventHandler(runner, model)
 	}
-	return NewSimpleMergeHandler(ctx)
+	return nil, NewSimpleMergeEventHandler(out)
 }
 
-// SimpleMergeHandler provides plain text output for merge operations
-type SimpleMergeHandler struct {
-	ctx *app.Context
+// SimpleMergeEventHandler provides plain text output for merge operations
+type SimpleMergeEventHandler struct {
+	out output.Output
+	mu  sync.Mutex
 }
 
-// NewSimpleMergeHandler creates a new SimpleMergeHandler
-func NewSimpleMergeHandler(ctx *app.Context) *SimpleMergeHandler {
-	return &SimpleMergeHandler{ctx: ctx}
+// NewSimpleMergeEventHandler creates a new SimpleMergeEventHandler
+func NewSimpleMergeEventHandler(out output.Output) *SimpleMergeEventHandler {
+	return &SimpleMergeEventHandler{out: out}
 }
 
-// Start implements merge.Handler.
-func (h *SimpleMergeHandler) Start(_ *merge.Plan) {}
+// Start implements EventHandler.
+func (h *SimpleMergeEventHandler) Start(_ *merge.Plan) {}
 
-// StepStarted implements merge.Handler.
-func (h *SimpleMergeHandler) StepStarted(_ int, description string) {
-	h.ctx.Output.Info("Starting: %s", description)
-}
+// EmitEvent implements EventHandler.
+func (h *SimpleMergeEventHandler) EmitEvent(event merge.Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-// StepCompleted implements merge.Handler.
-func (h *SimpleMergeHandler) StepCompleted(_ int) {
-	// Simple completion message handled by next step or final summary
-}
-
-// StepFailed implements merge.Handler.
-func (h *SimpleMergeHandler) StepFailed(_ int, err error) {
-	h.ctx.Output.Error("Step failed: %v", err)
-}
-
-// StepWaiting implements merge.Handler.
-func (h *SimpleMergeHandler) StepWaiting(_ int, elapsed, _ time.Duration, _ []github.CheckDetail) {
-	if int(elapsed.Seconds())%30 == 0 {
-		h.ctx.Output.Info("  ... still waiting (%v elapsed)", elapsed.Round(time.Second))
-	}
-}
-
-// SetEstimatedDuration implements merge.Handler.
-func (h *SimpleMergeHandler) SetEstimatedDuration(_ time.Duration) {}
-
-// Complete implements merge.Handler.
-func (h *SimpleMergeHandler) Complete(result *merge.ConsolidationResult) {
-	if result != nil {
-		h.ctx.Output.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)
+	switch event.Type {
+	case merge.EventStarted:
+		if event.Message != "" {
+			h.out.Info("Starting: %s", event.Message)
+		}
+	case merge.EventFailed:
+		if event.Error != nil {
+			h.out.Error("Step failed: %v", event.Error)
+		}
+	case merge.EventWaiting:
+		// Only report every 30 seconds to avoid spam
+		if int(event.Elapsed.Seconds())%30 == 0 {
+			h.out.Info("  ... still waiting (%v elapsed)", event.Elapsed.Round(time.Second))
+		}
+	case merge.EventProgress:
+		// Estimated duration updates are not shown in simple mode
+	case merge.EventCompleted:
+		// Simple completion, not shown
 	}
 }
 
-// InteractiveMergeHandler provides a TUI for merge operations
-type InteractiveMergeHandler struct {
-	ctx         *app.Context
-	logger      output.Logger
-	reporter    *tui.ChannelMergeProgressReporter
-	done        chan bool
-	errChan     chan error
-	plan        *merge.Plan
-	cleanupDone bool
-	mu          sync.Mutex
-}
+// Complete implements EventHandler.
+func (h *SimpleMergeEventHandler) Complete(result *merge.Result) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-// NewInteractiveMergeHandler creates a new InteractiveMergeHandler
-func NewInteractiveMergeHandler(ctx *app.Context) *InteractiveMergeHandler {
-	return &InteractiveMergeHandler{
-		ctx:    ctx,
-		logger: ctx.Logger,
+	if result != nil && result.ConsolidationResult != nil {
+		h.out.Info("✅ Created consolidation PR #%d: %s",
+			result.ConsolidationResult.PRNumber,
+			result.ConsolidationResult.PRURL)
 	}
 }
 
-// Start implements merge.Handler.
-func (h *InteractiveMergeHandler) Start(plan *merge.Plan) {
-	h.startTUI(plan)
+// Cleanup implements EventHandler. No-op for non-TTY handler.
+func (h *SimpleMergeEventHandler) Cleanup() {}
+
+// IsInteractive implements InteractiveHandler. Returns false for non-TTY handler.
+func (h *SimpleMergeEventHandler) IsInteractive() bool {
+	return false
 }
 
-func (h *InteractiveMergeHandler) startTUI(plan *merge.Plan) {
+// PromptMergeType implements InteractiveHandler. Returns error in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptMergeType(_ []string, _ []merge.MultiStackInfo) (merge.MergeType, error) {
+	return "", fmt.Errorf("interactive mode required for merge type selection")
+}
+
+// PromptScope implements InteractiveHandler. Returns error in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptScope(_ []string) (string, error) {
+	return "", fmt.Errorf("interactive mode required for scope selection")
+}
+
+// PromptStacks implements InteractiveHandler. Returns error in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptStacks(_ []merge.MultiStackInfo) ([]string, error) {
+	return nil, fmt.Errorf("interactive mode required for stack selection")
+}
+
+// PromptStrategy implements InteractiveHandler. Returns error in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptStrategy(_ *merge.Plan, _ merge.Strategy) (merge.StrategyChoice, error) {
+	return merge.StrategyChoice{}, fmt.Errorf("interactive mode required for strategy selection")
+}
+
+// PromptConfirm implements InteractiveHandler. Returns error in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptConfirm(_ string, _ bool) (bool, error) {
+	return false, fmt.Errorf("interactive mode required for confirmation")
+}
+
+// ShowPlan implements InteractiveHandler. Displays plan as text output.
+func (h *SimpleMergeEventHandler) ShowPlan(plan *merge.Plan, validation *merge.PlanValidation) {
+	planText := merge.FormatMergePlan(plan, validation)
+	h.out.Print(planText)
+}
+
+// ShowMidStackWarning implements InteractiveHandler.
+func (h *SimpleMergeEventHandler) ShowMidStackWarning(scope string, upstackBranchesInScope []string) {
+	h.out.Warn("⚠️  You're mid-stack in scope [%s]", scope)
+	h.out.Warn("   Branches above in the same scope won't be merged: %s", strings.Join(upstackBranchesInScope, ", "))
+	h.out.Info("   💡 To merge the entire scope, use: stackit merge --scope=%s", scope)
+}
+
+// PromptPostMerge implements InteractiveHandler. Returns Done in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptPostMerge(_ bool, _ string) (merge.PostMergeAction, error) {
+	return merge.PostMergeDone, nil
+}
+
+// InteractiveMergeEventHandler provides a TUI for merge operations using runner.Send()
+type InteractiveMergeEventHandler struct {
+	runner *tui.Runner
+	model  *mergeComponent.Model
+	mu     sync.Mutex
+	plan   *merge.Plan
+}
+
+// NewInteractiveMergeEventHandler creates a new InteractiveMergeEventHandler
+func NewInteractiveMergeEventHandler(runner *tui.Runner, model *mergeComponent.Model) *InteractiveMergeEventHandler {
+	return &InteractiveMergeEventHandler{
+		runner: runner,
+		model:  model,
+	}
+}
+
+// Start implements EventHandler.
+func (h *InteractiveMergeEventHandler) Start(plan *merge.Plan) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.plan = plan
-	h.reporter = tui.NewChannelMergeProgressReporter()
-	h.done = make(chan bool, 1)
-	h.errChan = make(chan error, 1)
-	h.cleanupDone = false
 
+	// Calculate groups for the TUI
 	groups := CalculateMergeGroups(plan)
 	stepDescriptions := make([]string, len(plan.Steps))
 	for i, step := range plan.Steps {
 		stepDescriptions[i] = step.Description
 	}
 
-	h.ctx.Output.SetQuiet(true)
-
-	// Set up signal handler to ensure terminal is restored on interrupt
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		h.Cleanup()
-		// Re-raise the signal so the process can exit properly
-		signal.Stop(sigChan)
-	}()
-
-	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				stack := string(debug.Stack())
-				h.logger.Error("Merge TUI panic: %v\n%s", p, stack)
-				fmt.Fprintf(os.Stderr, "\nstackit merge TUI crashed: %v\n", p)
-				h.Cleanup()
-			}
-		}()
-
-		err := tui.RunMergeTUI(groups, stepDescriptions, h.reporter.Updates(), h.done)
-		if err != nil {
-			h.errChan <- err
+	// Convert to TUI component groups
+	componentGroups := make([]mergeComponent.Group, len(groups))
+	for i, g := range groups {
+		componentGroups[i] = mergeComponent.Group{
+			Label:       g.Label,
+			StepIndices: g.StepIndices,
 		}
-		h.Cleanup()
-	}()
+	}
+
+	// Send plan to the TUI
+	h.runner.Send(mergeComponent.PlanLoadedMsg{
+		Groups:           componentGroups,
+		StepDescriptions: stepDescriptions,
+	})
 }
 
-// Cleanup ensures the terminal is restored to normal mode
-func (h *InteractiveMergeHandler) Cleanup() {
+// EmitEvent implements EventHandler.
+func (h *InteractiveMergeEventHandler) EmitEvent(event merge.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.cleanupDone {
-		return
-	}
-
-	if h.reporter != nil {
-		h.reporter.Close()
-	}
-
-	if h.done != nil {
-		// Wait for TUI to finish and restore terminal
-		// Use a timeout to avoid hanging indefinitely if something goes wrong
-		select {
-		case <-h.done:
-		case <-time.After(2 * time.Second):
+	switch event.Type {
+	case merge.EventStarted:
+		h.runner.Send(mergeComponent.StepStartMsg{
+			StepIndex:   event.StepIndex,
+			Description: event.Message,
+		})
+	case merge.EventCompleted:
+		h.runner.Send(mergeComponent.StepCompleteMsg{
+			StepIndex: event.StepIndex,
+		})
+	case merge.EventFailed:
+		h.runner.Send(mergeComponent.StepFailedMsg{
+			StepIndex: event.StepIndex,
+			Error:     event.Error,
+		})
+	case merge.EventWaiting:
+		h.runner.Send(mergeComponent.StepWaitingMsg{
+			StepIndex: event.StepIndex,
+			Elapsed:   event.Elapsed,
+			Timeout:   event.Timeout,
+			Checks:    event.Checks,
+		})
+	case merge.EventProgress:
+		if event.EstimatedDuration > 0 {
+			h.runner.Send(mergeComponent.EstimatedDurationMsg(event.EstimatedDuration))
 		}
-		h.done = nil
-	}
-
-	h.ctx.Output.SetQuiet(false)
-	h.cleanupDone = true
-}
-
-// StepStarted implements merge.Handler.
-func (h *InteractiveMergeHandler) StepStarted(stepIndex int, description string) {
-	if h.reporter != nil {
-		h.reporter.StepStarted(stepIndex, description)
 	}
 }
 
-// StepCompleted implements merge.Handler.
-func (h *InteractiveMergeHandler) StepCompleted(stepIndex int) {
-	if h.reporter != nil {
-		h.reporter.StepCompleted(stepIndex)
+// Complete implements EventHandler.
+func (h *InteractiveMergeEventHandler) Complete(result *merge.Result) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	summary := ""
+	if result != nil && result.ConsolidationResult != nil {
+		summary = fmt.Sprintf("✅ Created consolidation PR #%d: %s",
+			result.ConsolidationResult.PRNumber,
+			result.ConsolidationResult.PRURL)
+	}
+
+	h.runner.Send(mergeComponent.CompleteMsg{Summary: summary})
+}
+
+// Cleanup implements EventHandler. No-op since runner cleanup is handled by defer.
+func (h *InteractiveMergeEventHandler) Cleanup() {}
+
+// IsInteractive implements InteractiveHandler. Returns true for TTY handler.
+func (h *InteractiveMergeEventHandler) IsInteractive() bool {
+	return true
+}
+
+// PromptMergeType implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptMergeType(availableScopes []string, availableStacks []merge.MultiStackInfo) (merge.MergeType, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	options := []tui.SelectOption{
+		{Label: "🌿 This branch — Merge the current branch and its stack", Value: "this"},
+	}
+	if len(availableScopes) > 0 {
+		options = append(options, tui.SelectOption{
+			Label: "🏷️ Select a scope — Merge all branches in a specific scope", Value: "scope",
+		})
+	}
+	if len(availableStacks) > 0 {
+		options = append(options, tui.SelectOption{
+			Label: "📚 Select stack(s) — Merge one or more stacks (multi-select)", Value: "stack",
+		})
+	}
+
+	selected, err := tui.PromptSelect("What would you like to merge?", options, 0)
+	if err != nil {
+		return "", err
+	}
+
+	switch selected {
+	case "this":
+		return merge.MergeTypeThis, nil
+	case "scope":
+		return merge.MergeTypeScope, nil
+	case "stack":
+		return merge.MergeTypeStacks, nil
+	default:
+		return merge.MergeTypeThis, nil
 	}
 }
 
-// StepFailed implements merge.Handler.
-func (h *InteractiveMergeHandler) StepFailed(stepIndex int, err error) {
-	if h.reporter != nil {
-		h.reporter.StepFailed(stepIndex, err)
+// PromptScope implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptScope(availableScopes []string) (string, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	if len(availableScopes) == 0 {
+		return "", fmt.Errorf("no branches with scopes found")
+	}
+
+	options := make([]tui.SelectOption, len(availableScopes))
+	for i, s := range availableScopes {
+		options[i] = tui.SelectOption{Label: s, Value: s}
+	}
+
+	return tui.PromptSelect("Select scope to merge:", options, 0)
+}
+
+// PromptStacks implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptStacks(availableStacks []merge.MultiStackInfo) ([]string, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	if len(availableStacks) == 0 {
+		return nil, fmt.Errorf("no stacks found rooted at trunk")
+	}
+
+	// If only one stack, return it directly
+	if len(availableStacks) == 1 {
+		return []string{availableStacks[0].RootBranch}, nil
+	}
+
+	// Track selected stacks in order
+	var selectedStacks []string
+	selectedSet := make(map[string]bool)
+
+	// Loop-based multi-select
+	for {
+		var options []tui.SelectOption
+
+		// Add "Done" option if at least one stack is selected
+		if len(selectedStacks) > 0 {
+			doneLabel := fmt.Sprintf("✓ Done — Merge %d selected stack(s)", len(selectedStacks))
+			options = append(options, tui.SelectOption{Label: doneLabel, Value: "done"})
+		}
+
+		// Add unselected stacks
+		for _, stack := range availableStacks {
+			if !selectedSet[stack.RootBranch] {
+				label := "  " + merge.FormatStackLabel(stack)
+				options = append(options, tui.SelectOption{Label: label, Value: stack.RootBranch})
+			}
+		}
+
+		// If all stacks selected, only show Done
+		if len(options) == 1 && len(selectedStacks) > 0 {
+			break
+		}
+
+		selected, err := tui.PromptSelect("Select a stack (or Done to proceed):", options, 0)
+		if err != nil {
+			// User canceled - always propagate the error, even if some stacks were selected
+			return nil, err
+		}
+
+		if selected == "done" {
+			break
+		}
+
+		// Add the selected stack
+		selectedStacks = append(selectedStacks, selected)
+		selectedSet[selected] = true
+	}
+
+	return selectedStacks, nil
+}
+
+// PromptStrategy implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptStrategy(plan *merge.Plan, recommended merge.Strategy) (merge.StrategyChoice, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	var strategyOptions []tui.SelectOption
+	var defaultIndex int
+
+	// Build options based on recommended strategy
+	if recommended == merge.StrategyConsolidate {
+		strategyOptions = []tui.SelectOption{
+			{Label: "🔀 Consolidate — Create single PR with all stack commits for atomic merge (recommended)", Value: "consolidate"},
+			{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom", Value: "bottom-up"},
+			{Label: "📦 Top-down — Squash all changes into one PR, merge once", Value: "top-down"},
+		}
+		defaultIndex = 0
+	} else {
+		strategyOptions = []tui.SelectOption{
+			{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom (recommended)", Value: "bottom-up"},
+			{Label: "📦 Top-down — Squash all changes into one PR, merge once", Value: "top-down"},
+			{Label: "🔀 Consolidate — Create single PR with all stack commits for atomic merge", Value: "consolidate"},
+		}
+		defaultIndex = 0
+	}
+
+	// Build prompt with branch count for context
+	prompt := "Select merge strategy:"
+	if plan != nil && len(plan.BranchesToMerge) > 0 {
+		prompt = fmt.Sprintf("Select merge strategy for %d branches:", len(plan.BranchesToMerge))
+	}
+
+	selectedStrategy, err := tui.PromptSelect(prompt, strategyOptions, defaultIndex)
+	if err != nil {
+		return merge.StrategyChoice{}, fmt.Errorf("strategy selection canceled: %w", err)
+	}
+
+	var strategy merge.Strategy
+	var wait bool
+
+	switch selectedStrategy {
+	case "bottom-up":
+		strategy = merge.StrategyBottomUp
+	case "top-down":
+		strategy = merge.StrategyTopDown
+	case "consolidate":
+		strategy = merge.StrategyConsolidate
+		// Prompt for wait if consolidating
+		wait, err = tui.PromptConfirm("Wait for CI and automatically merge the consolidated PR?", false)
+		if err != nil {
+			return merge.StrategyChoice{}, fmt.Errorf("wait selection canceled: %w", err)
+		}
+	}
+
+	return merge.StrategyChoice{Strategy: strategy, Wait: wait}, nil
+}
+
+// PromptConfirm implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptConfirm(message string, defaultYes bool) (bool, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	return tui.PromptConfirm(message, defaultYes)
+}
+
+// ShowPlan implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) ShowPlan(plan *merge.Plan, validation *merge.PlanValidation) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	// Use the plan formatting from the merge package
+	planText := merge.FormatMergePlan(plan, validation)
+	fmt.Print(planText)
+}
+
+// ShowMidStackWarning implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) ShowMidStackWarning(scope string, upstackBranchesInScope []string) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	fmt.Printf("⚠️  You're mid-stack in scope [%s]\n", scope)
+	fmt.Printf("   Branches above in the same scope won't be merged: %s\n", strings.Join(upstackBranchesInScope, ", "))
+	fmt.Printf("   💡 To merge the entire scope, use: stackit merge --scope=%s\n\n", scope)
+}
+
+// PromptPostMerge implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptPostMerge(hasUncommittedChanges bool, trunkName string) (merge.PostMergeAction, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	fmt.Println()
+	fmt.Println("🎉 Merge completed successfully in the temporary worktree!")
+	fmt.Println("Your main workspace remains untouched.")
+
+	trunkLabel := fmt.Sprintf("🔄 Switch to trunk and sync (%s)", trunkName)
+	if hasUncommittedChanges {
+		trunkLabel += " " + style.ColorYellow("(warning: you have local changes)")
+	}
+
+	options := []tui.SelectOption{
+		{Label: trunkLabel, Value: "trunk-sync"},
+		{Label: "Done", Value: "done"},
+	}
+
+	selected, err := tui.PromptSelect("What would you like to do in your main workspace?", options, 0)
+	if err != nil {
+		if errors.Is(err, sterrors.ErrCanceled) {
+			return merge.PostMergeDone, nil
+		}
+		return merge.PostMergeDone, err
+	}
+
+	switch selected {
+	case "trunk-sync":
+		return merge.PostMergeSyncTrunk, nil
+	default:
+		return merge.PostMergeDone, nil
 	}
 }
 
-// StepWaiting implements merge.Handler.
-func (h *InteractiveMergeHandler) StepWaiting(stepIndex int, elapsed, timeout time.Duration, checks []github.CheckDetail) {
-	if h.reporter != nil {
-		h.reporter.StepWaiting(stepIndex, elapsed, timeout, checks)
-	}
-}
-
-// SetEstimatedDuration implements merge.Handler.
-func (h *InteractiveMergeHandler) SetEstimatedDuration(duration time.Duration) {
-	if h.reporter != nil {
-		h.reporter.SetEstimatedDuration(duration)
-	}
-}
-
-// Complete implements merge.Handler.
-func (h *InteractiveMergeHandler) Complete(result *merge.ConsolidationResult) {
-	h.Cleanup()
-
-	if result != nil {
-		h.ctx.Output.Info("✅ Created consolidation PR #%d: %s", result.PRNumber, result.PRURL)
-	}
+// MergeGroup represents a group of steps that should be displayed as a single line.
+// Exported for use by the TUI component.
+type MergeGroup struct {
+	Label       string
+	StepIndices []int
 }
 
 // CalculateMergeGroups calculates groups for the TUI
-func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
-	var groups []tui.MergeGroup
+func CalculateMergeGroups(plan *merge.Plan) []MergeGroup {
+	// Pre-allocate groups: at minimum we'll have branches to merge + upstack + remaining
+	groups := make([]MergeGroup, 0, len(plan.BranchesToMerge)+len(plan.UpstackBranches)+len(plan.Steps))
 	assigned := make(map[int]bool)
 
 	// 0. If consolidation, create a special group for it first
@@ -226,7 +488,7 @@ func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
 			}
 		}
 		if len(consolidationIndices) > 0 {
-			groups = append(groups, tui.MergeGroup{
+			groups = append(groups, MergeGroup{
 				Label:       "Consolidate branches into single PR and wait for merge",
 				StepIndices: consolidationIndices,
 			})
@@ -243,7 +505,7 @@ func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
 			}
 		}
 		if len(indices) > 0 {
-			groups = append(groups, tui.MergeGroup{
+			groups = append(groups, MergeGroup{
 				Label:       fmt.Sprintf("PR #%d (%s)", branchInfo.PRNumber, branchInfo.BranchName),
 				StepIndices: indices,
 			})
@@ -266,7 +528,7 @@ func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
 			}
 		}
 		if len(indices) > 0 {
-			groups = append(groups, tui.MergeGroup{
+			groups = append(groups, MergeGroup{
 				Label:       "Restack upstack branches",
 				StepIndices: indices,
 			})
@@ -274,7 +536,7 @@ func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
 	}
 
 	// 3. Remaining steps (like PullTrunk)
-	for i := 0; i < len(plan.Steps); i++ {
+	for i := range len(plan.Steps) {
 		if assigned[i] {
 			continue
 		}
@@ -284,7 +546,7 @@ func CalculateMergeGroups(plan *merge.Plan) []tui.MergeGroup {
 			label = "Sync trunk"
 		}
 
-		groups = append(groups, tui.MergeGroup{
+		groups = append(groups, MergeGroup{
 			Label:       label,
 			StepIndices: []int{i},
 		})

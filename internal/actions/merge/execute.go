@@ -265,7 +265,6 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		}
 		switch pullResult {
 		case engine.PullDone:
-			trunk := eng.Trunk()
 			rev, _ := trunk.GetRevision()
 			revShort := rev
 			if len(rev) > 7 {
@@ -383,9 +382,9 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		}
 
 	case StepWaitCI:
-		// StepWaitCI should be handled by executeStepWithProgress, not executeStep
-		// This case should never be reached.
-		panic("StepWaitCI should be handled by executeStepWithProgress")
+		// StepWaitCI should be handled by executeStepWithProgress, not executeStep.
+		// If we reach here, it's a programming error.
+		return fmt.Errorf("internal error: StepWaitCI should be handled by executeStepWithProgress, not executeStep")
 
 	default:
 		return fmt.Errorf("unknown step type: %s", step.StepType)

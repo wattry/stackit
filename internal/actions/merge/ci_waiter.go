@@ -34,12 +34,12 @@ type CIWaiterOptions struct {
 func NewCIWaiter(opts CIWaiterOptions) *CIWaiter {
 	timeout := opts.Timeout
 	if timeout == 0 {
-		timeout = 10 * time.Minute
+		timeout = DefaultCITimeout
 	}
 
 	pollInterval := opts.PollInterval
 	if pollInterval == 0 {
-		pollInterval = 15 * time.Second
+		pollInterval = DefaultCIPollInterval
 	}
 
 	return &CIWaiter{
@@ -79,7 +79,7 @@ func (w *CIWaiter) WaitForChecks(ctx context.Context, branchName string, prNumbe
 		if w.output != nil {
 			w.output.Info("   Waiting for CI checks to register...")
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(CIRegistrationDelay)
 	}
 
 	if w.output != nil {
