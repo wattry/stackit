@@ -55,6 +55,39 @@ func TestUpdatePRBodyFooter(t *testing.T) {
 		// UpdatePRBodyFooter should find the block start and replace it.
 		assert.Equal(t, "Description"+footer, result)
 	})
+
+	t.Run("appends footer to external PR body without markers", func(t *testing.T) {
+		// Simulates a PR created outside stackit with typical content
+		body := "## Summary\nThis PR adds a new feature.\n\n## Testing\n- Manual testing done"
+		result := UpdatePRBodyFooter(body, footer)
+
+		// Original content should be preserved
+		assert.Contains(t, result, "## Summary")
+		assert.Contains(t, result, "This PR adds a new feature.")
+		assert.Contains(t, result, "## Testing")
+		// Footer should be appended
+		assert.Contains(t, result, sectionStart)
+		assert.Contains(t, result, sectionEnd)
+		// Should only have one footer
+		assert.Equal(t, 1, strings.Count(result, sectionStart))
+	})
+
+	t.Run("handles body with trailing whitespace", func(t *testing.T) {
+		body := "Description\n\n\n"
+		result := UpdatePRBodyFooter(body, footer)
+
+		// Trailing newlines should be trimmed before appending footer
+		assert.True(t, strings.HasPrefix(result, "Description"))
+		assert.Contains(t, result, sectionStart)
+	})
+
+	t.Run("handles body with only whitespace", func(t *testing.T) {
+		body := "   \n\n   "
+		result := UpdatePRBodyFooter(body, footer)
+
+		// Whitespace-only body should still get footer appended
+		assert.Contains(t, result, sectionStart)
+	})
 }
 
 func TestCreatePRBodyFooter(t *testing.T) {
