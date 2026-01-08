@@ -176,3 +176,18 @@ func (c *GitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames [
 
 	return results, nil
 }
+
+// ClosePullRequest simulates closing a pull request
+func (c *GitHubClient) ClosePullRequest(_ context.Context, _, _ string, prNumber int) error {
+	simulateDelay(delayShort)
+
+	// Find the PR by number and close it
+	for _, pr := range c.prs {
+		if pr.Number == prNumber {
+			pr.State = "closed"
+			return nil
+		}
+	}
+
+	return nil
+}

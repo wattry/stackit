@@ -145,3 +145,13 @@ func (c *StackitGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branch
 	// Use GraphQL for efficiency and rate limit safety
 	return BatchGetPRChecksStatusGraphQL(ctx, c.runner, c.owner, c.repo, branchNames)
 }
+
+// ClosePullRequest closes a pull request
+func (c *StackitGitHubClient) ClosePullRequest(ctx context.Context, owner, repo string, prNumber int) error {
+	state := "closed"
+	_, _, err := c.client.PullRequests.Edit(ctx, owner, repo, prNumber, &github.PullRequest{State: &state})
+	if err != nil {
+		return fmt.Errorf("failed to close PR #%d: %w", prNumber, err)
+	}
+	return nil
+}
