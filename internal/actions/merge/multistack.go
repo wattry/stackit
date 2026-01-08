@@ -1,4 +1,4 @@
-package combine
+package merge
 
 import (
 	"errors"
@@ -8,10 +8,10 @@ import (
 	"stackit.dev/stackit/internal/config"
 )
 
-// Action performs the multi-stack combine operation.
+// ExecuteMultiStack performs the multi-stack merge operation.
 // It merges multiple independent stacks into a single consolidated branch,
 // handling conflicts by skipping entire stacks that conflict.
-func Action(ctx *app.Context, opts Options) (*Result, error) {
+func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackResult, error) {
 	eng := ctx.Engine
 
 	// 1. Discover available stacks
@@ -37,15 +37,8 @@ func Action(ctx *app.Context, opts Options) (*Result, error) {
 		ctx.Output.Info("  - %s (%d branches)", stack.RootBranch, len(stack.AllBranches))
 	}
 
-	if opts.DryRun {
-		ctx.Output.Info("[dry-run] Would combine %d stacks", len(stacks))
-		return &Result{
-			IncludedStacks: stacks,
-		}, nil
-	}
-
 	// 3. Execute in worktree to merge stacks
-	executor := NewWorktreeExecutor(eng, ctx.Output)
+	executor := NewMultiStackWorktreeExecutor(eng, ctx.Output)
 	worktreeResult, err := executor.ExecuteInWorktree(ctx.Context, stacks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute in worktree: %w", err)
@@ -70,18 +63,18 @@ func Action(ctx *app.Context, opts Options) (*Result, error) {
 		}
 	}
 
-	result := &Result{
+	result := &MultiStackResult{
 		IncludedStacks: worktreeResult.MergedStacks,
 		ExcludedStacks: worktreeResult.ConflictStacks,
 	}
 
 	// 5. Run CI validation if not skipped
-	if !opts.SkipCI {
+	if !opts.SkipLocalCI {
 		cfg, err := config.LoadConfig(ctx.RepoRoot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config: %w", err)
 		}
-		validator := NewCIValidator(cfg, ctx.Output)
+		validator := NewLocalCIValidator(cfg, ctx.Output)
 		if !validator.IsConfigured() {
 			ctx.Output.Warn("CI validation skipped (no combine.ciCommand configured)")
 		} else {
@@ -117,8 +110,8 @@ func Action(ctx *app.Context, opts Options) (*Result, error) {
 	}
 
 	// 6. Create consolidated PR
-	prCreator := NewPRCreator(ctx, worktreeResult.WorktreeEngine, worktreeResult.WorktreePath)
-	branchName := GenerateBranchName()
+	prCreator := NewMultiStackPRCreator(ctx, worktreeResult.WorktreeEngine, worktreeResult.WorktreePath)
+	branchName := GenerateMultiStackBranchName()
 
 	ctx.Output.Info("Creating combined branch: %s", branchName)
 	if err := prCreator.CreateAndPushBranch(ctx.Context, branchName); err != nil {

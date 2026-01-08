@@ -1,4 +1,4 @@
-package combine
+package merge
 
 import (
 	"stackit.dev/stackit/internal/engine"
@@ -7,7 +7,7 @@ import (
 // DiscoverStacks returns all independent stacks rooted at trunk.
 // Each stack is represented by its root branch (direct child of trunk)
 // and includes all branches in the stack in topological order.
-func DiscoverStacks(eng engine.BranchReader) ([]StackInfo, error) {
+func DiscoverStacks(eng engine.BranchReader) ([]MultiStackInfo, error) {
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 	trunk := eng.Trunk()
 
@@ -17,7 +17,7 @@ func DiscoverStacks(eng engine.BranchReader) ([]StackInfo, error) {
 		return nil, nil // No trunk found
 	}
 
-	stacks := make([]StackInfo, 0, len(trunkNode.Children))
+	stacks := make([]MultiStackInfo, 0, len(trunkNode.Children))
 	for _, rootName := range trunkNode.Children {
 		rootNode := graph.Nodes[rootName]
 		if rootNode == nil {
@@ -36,7 +36,7 @@ func DiscoverStacks(eng engine.BranchReader) ([]StackInfo, error) {
 			scope = s.String()
 		}
 
-		stacks = append(stacks, StackInfo{
+		stacks = append(stacks, MultiStackInfo{
 			RootBranch:  rootName,
 			AllBranches: branches,
 			PRCount:     prCount,
@@ -80,7 +80,7 @@ func countPRs(eng engine.BranchReader, branches []string) int {
 
 // FilterStacks filters stacks based on selected root branch names.
 // If selectedRoots is empty, returns all stacks.
-func FilterStacks(stacks []StackInfo, selectedRoots []string) []StackInfo {
+func FilterStacks(stacks []MultiStackInfo, selectedRoots []string) []MultiStackInfo {
 	if len(selectedRoots) == 0 {
 		return stacks
 	}
@@ -90,7 +90,7 @@ func FilterStacks(stacks []StackInfo, selectedRoots []string) []StackInfo {
 		selectedSet[root] = true
 	}
 
-	var filtered []StackInfo
+	var filtered []MultiStackInfo
 	for _, stack := range stacks {
 		if selectedSet[stack.RootBranch] {
 			filtered = append(filtered, stack)

@@ -31,6 +31,9 @@ func NewMergeCmd() *cobra.Command {
 		scope       string
 		consolidate bool
 		wait        bool
+		multiStack  bool
+		stacks      []string
+		skipLocalCI bool
 	)
 
 	cmd := &cobra.Command{
@@ -45,6 +48,11 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
+				// Handle --multi-stack flag
+				if multiStack {
+					return runMultiStackMerge(ctx, stacks, skipLocalCI, wait)
+				}
+
 				// Handle 'stackit merge this'
 				if len(args) > 0 && args[0] == "this" {
 					return runInteractiveMergeWizard(ctx, dryRun, force, "")
@@ -156,6 +164,11 @@ If no flags or arguments are provided, an interactive wizard will guide you thro
 	cmd.Flags().StringVar(&scope, "scope", "", "Bulk-merge all branches within the specified scope")
 	cmd.Flags().BoolVarP(&consolidate, "consolidate", "c", false, "Use consolidate strategy (shortcut for --strategy=consolidate)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for CI checks and automatically merge (for consolidate strategy)")
+
+	// Multi-stack flags
+	cmd.Flags().BoolVar(&multiStack, "multi-stack", false, "Combine multiple independent stacks into a single PR")
+	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Stack roots to include in multi-stack merge (comma-separated)")
+	cmd.Flags().BoolVar(&skipLocalCI, "skip-local-ci", false, "Skip local CI validation for multi-stack merge")
 
 	return cmd
 }
@@ -517,6 +530,16 @@ func runMergeTypeSelector(ctx *app.Context, dryRun bool, force bool) error {
 		{Label: "📚 Select an entire stack — Merge a stack from its top branch", Value: "stack"},
 	}
 
+	// Auto-detect: Add multi-stack option when on trunk with multiple stacks
+	currentBranch := eng.CurrentBranch()
+	if currentBranch != nil && eng.IsTrunk(*currentBranch) {
+		availableStacks, _ := merge.DiscoverStacks(eng)
+		if len(availableStacks) > 1 {
+			multiStackLabel := fmt.Sprintf("📦 Multi-stack — Combine %d stacks into a single PR", len(availableStacks))
+			options = append(options, tui.SelectOption{Label: multiStackLabel, Value: "multi-stack"})
+		}
+	}
+
 	selected, err := tui.PromptSelect("What would you like to merge?", options, 0)
 	if err != nil {
 		return err
@@ -576,6 +599,72 @@ func runMergeTypeSelector(ctx *app.Context, dryRun bool, force bool) error {
 		}
 
 		return runInteractiveMergeWizardForBranch(ctx, dryRun, force, "", selectedBranch)
+
+	case "multi-stack":
+		return runMultiStackMerge(ctx, nil, false, false)
+	}
+
+	return nil
+}
+
+// runMultiStackMerge runs the multi-stack merge operation
+func runMultiStackMerge(ctx *app.Context, selectedStacks []string, skipLocalCI bool, wait bool) error {
+	out := ctx.Output
+
+	// Discover available stacks for preview
+	availableStacks, err := merge.DiscoverStacks(ctx.Engine)
+	if err != nil {
+		return fmt.Errorf("failed to discover stacks: %w", err)
+	}
+
+	if len(availableStacks) == 0 {
+		return fmt.Errorf("no independent stacks found rooted at trunk")
+	}
+
+	// Show available stacks
+	out.Info("Available stacks:")
+	for _, stack := range availableStacks {
+		label := fmt.Sprintf("  • %s (%d branches", stack.RootBranch, len(stack.AllBranches))
+		if stack.PRCount > 0 {
+			label += fmt.Sprintf(", %d PRs", stack.PRCount)
+		}
+		if stack.Scope != "" {
+			label += fmt.Sprintf(", scope: %s", stack.Scope)
+		}
+		label += ")"
+		out.Info("%s", label)
+	}
+	out.Newline()
+
+	// If interactive and no stacks specified, confirm proceeding with all stacks
+	if len(selectedStacks) == 0 && ctx.Interactive {
+		confirmed, err := tui.PromptConfirm(fmt.Sprintf("Combine all %d stacks?", len(availableStacks)), true)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			out.Info("Canceled. Use --stacks to select specific stacks.")
+			return nil
+		}
+	}
+
+	// Execute multi-stack merge
+	result, err := merge.ExecuteMultiStack(ctx, merge.MultiStackOptions{
+		SelectedStacks: selectedStacks,
+		SkipLocalCI:    skipLocalCI,
+		Wait:           wait,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Show summary
+	out.Newline()
+	out.Success("Multi-stack merge complete!")
+	out.Info("  PR: #%d %s", result.PRNumber, result.PRURL)
+	out.Info("  Included: %d stacks", len(result.IncludedStacks))
+	if len(result.ExcludedStacks) > 0 {
+		out.Warn("  Excluded: %d stacks", len(result.ExcludedStacks))
 	}
 
 	return nil
