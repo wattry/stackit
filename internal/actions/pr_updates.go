@@ -29,6 +29,7 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 	branch := ctx.Engine.GetBranch(name)
 	prInfo, err := branch.GetPrInfo()
 	if err != nil || prInfo == nil || prInfo.Number() == nil {
+		ctx.Output.Debug("Skipping PR metadata update for %s: no PR info available", name)
 		return
 	}
 
@@ -37,6 +38,7 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 	// 1. Fetch latest PR state from GitHub (Option 1)
 	latestPR, err := ctx.GitHubClient.GetPullRequest(ctx.Context, repoOwner, repoName, prNumber)
 	if err != nil {
+		ctx.Output.Debug("Failed to fetch PR #%d for %s: %v", prNumber, name, err)
 		return
 	}
 
@@ -73,10 +75,14 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 			updateOpts.Body = &updatedBody
 		}
 
+		ctx.Output.Debug("Updating PR #%d for %s: titleChanged=%v, bodyChanged=%v", prNumber, name, updatedTitle != currentTitle, shouldUpdateBody)
 		err = ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, prNumber, updateOpts)
 		if err != nil {
+			ctx.Output.Debug("Failed to update PR #%d for %s: %v", prNumber, name, err)
 			return
 		}
+	} else {
+		ctx.Output.Debug("PR #%d for %s already up to date", prNumber, name)
 	}
 
 	// Successfully updated (or already up to date), update local engine state
