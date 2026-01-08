@@ -29,10 +29,11 @@ const (
 	checkStatePending             = "PENDING"
 	checkStatusInProgress         = "IN_PROGRESS"
 
-	// Stackit lock check name - this check is excluded from CI status evaluation
-	// because locking PRs is part of the consolidation workflow and expected to fail
+	// Stackit check names - these checks are excluded from CI status evaluation
+	// because they are part of stackit's own workflow and expected to fail
 	// during merge operations.
-	stackitLockCheckName = "Check Lock Status"
+	stackitLockCheckName       = "Check Lock Status"
+	stackitStackOrderCheckName = "Check Stack Order"
 )
 
 // CreatePROptions contains options for creating a pull request
@@ -604,8 +605,8 @@ func BatchGetPRChecksStatusGraphQL(ctx context.Context, runner git.Runner, owner
 						}
 					}
 
-					// Skip stackit lock check as in REST implementation
-					if detail.Name == stackitLockCheckName {
+					// Skip stackit's own checks as they are expected to fail during merge operations
+					if detail.Name == stackitLockCheckName || detail.Name == stackitStackOrderCheckName {
 						continue
 					}
 
