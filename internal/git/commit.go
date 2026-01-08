@@ -47,9 +47,9 @@ func (r *runner) CommitWithOptions(opts CommitOptions) error {
 		args = append(args, "-e")
 	}
 	// If we're in non-interactive mode, or if we have a message and aren't explicitly editing,
-	// use the non-interactive runner.
+	// use the streaming runner to show hook output while capturing for error handling.
 	if !utils.IsInteractive() || (opts.Message != "" && !opts.Edit) || (opts.Amend && opts.NoEdit) {
-		_, err := r.RunGitCommandWithContext(context.Background(), args...)
+		_, err := r.runGitStreaming(context.Background(), args...)
 		return err
 	}
 
