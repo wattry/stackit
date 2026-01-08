@@ -3,7 +3,6 @@ package merge
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
@@ -27,6 +26,7 @@ type ConsolidateMergeExecutor struct {
 	ctx               *app.Context
 	consolidationPR   *github.PullRequestInfo // Set after consolidation PR is merged
 	consolidationUser string                  // GitHub username who performed the consolidation
+	prGenerator       *PRContentGenerator
 
 	handler   Handler // Optional progress handler for TUI updates
 	stepIndex int     // Current step index for the handler
@@ -35,9 +35,10 @@ type ConsolidateMergeExecutor struct {
 // NewConsolidateMergeExecutor creates a new consolidation executor
 func NewConsolidateMergeExecutor(plan *Plan, engine mergeExecuteEngine, ctx *app.Context) *ConsolidateMergeExecutor {
 	return &ConsolidateMergeExecutor{
-		plan:   plan,
-		engine: engine,
-		ctx:    ctx,
+		plan:        plan,
+		engine:      engine,
+		ctx:         ctx,
+		prGenerator: NewPRContentGenerator(engine),
 	}
 }
 
@@ -185,14 +186,12 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 
 func (c *ConsolidateMergeExecutor) createConsolidationPR(ctx context.Context, branchName string) (*github.PullRequestInfo, error) {
 	scope := c.getStackScope()
-	title := fmt.Sprintf("[%s] Consolidate stack: %s", scope, c.getConsolidationTitle())
-
-	body := c.buildConsolidationPRBody()
+	content := c.prGenerator.GenerateConsolidationPR(c.plan.BranchesToMerge, scope)
 
 	owner, repo := c.getOwnerRepo()
 	opts := github.CreatePROptions{
-		Title: title,
-		Body:  body,
+		Title: content.Title,
+		Body:  content.Body,
 		Head:  branchName,
 		Base:  c.engine.Trunk().GetName(),
 		Draft: false,
@@ -283,7 +282,9 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 		}
 
 		// Keep the consolidation PR number so the footer knows it was consolidated
-		_ = c.engine.UpsertPrInfo(branch, prInfo) // Just re-upsert to trigger update if needed
+		if err := c.engine.UpsertPrInfo(branch, prInfo); err != nil {
+			splog.Debug("Failed to upsert PR info for %s: %v", branchInfo.BranchName, err)
+		}
 		affectedBranches = append(affectedBranches, branchInfo.BranchName)
 	}
 
@@ -317,7 +318,9 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	for _, b := range branchesToLock {
 		prInfo, _ := b.GetPrInfo()
 		if prInfo != nil {
-			_ = c.engine.UpsertPrInfo(b, prInfo.WithMergeBranch(consolidationBranch))
+			if err := c.engine.UpsertPrInfo(b, prInfo.WithMergeBranch(consolidationBranch)); err != nil {
+				splog.Debug("Failed to upsert PR info for %s: %v", b.GetName(), err)
+			}
 		}
 	}
 
@@ -349,71 +352,6 @@ func (c *ConsolidateMergeExecutor) getBranchTitle(branchInfo BranchMergeInfo) st
 		return prInfo.Title()
 	}
 	return branchInfo.BranchName
-}
-
-func (c *ConsolidateMergeExecutor) getConsolidationTitle() string {
-	if len(c.plan.BranchesToMerge) == 0 {
-		return "Stack consolidation"
-	}
-
-	// Use the title of the top-most PR as the main title
-	topBranch := c.plan.BranchesToMerge[len(c.plan.BranchesToMerge)-1]
-	return c.getBranchTitle(topBranch)
-}
-
-func (c *ConsolidateMergeExecutor) buildConsolidationPRBody() string {
-	var body strings.Builder
-
-	body.WriteString(fmt.Sprintf("## Stack Consolidation: %s\n\n", c.getStackScope()))
-	body.WriteString("This PR consolidates the following stack of changes into a single merge:\n\n")
-
-	for i, branchInfo := range c.plan.BranchesToMerge {
-		branch := c.engine.GetBranch(branchInfo.BranchName)
-		prInfo, _ := branch.GetPrInfo()
-		if prInfo != nil && prInfo.Number() != nil {
-			body.WriteString(fmt.Sprintf("%d. **PR #%d**: %s\n", i+1, *prInfo.Number(), prInfo.Title()))
-		} else {
-			body.WriteString(fmt.Sprintf("%d. **%s**: %s\n", i+1, branchInfo.BranchName, c.getBranchTitle(branchInfo)))
-		}
-	}
-
-	body.WriteString("\n### Benefits\n")
-	body.WriteString("- ✅ Single CI run validates entire stack\n")
-	body.WriteString("- ✅ Atomic merge prevents partial stack states\n")
-	body.WriteString("- ✅ Faster than sequential merging\n")
-	body.WriteString("- ✅ Cleaner merge history\n")
-
-	body.WriteString("\n### After Merge\n")
-	body.WriteString("Individual PRs will be automatically documented and closed.\n")
-
-	body.WriteString("\n### Stack Structure\n")
-	body.WriteString("```\n")
-	body.WriteString(c.buildStackTree())
-	body.WriteString("```\n")
-
-	return body.String()
-}
-
-func (c *ConsolidateMergeExecutor) buildStackTree() string {
-	var tree strings.Builder
-	trunkName := c.engine.Trunk().GetName()
-
-	tree.WriteString(trunkName + "\n")
-
-	for _, branchInfo := range c.plan.BranchesToMerge {
-		branch := c.engine.GetBranch(branchInfo.BranchName)
-		depth := 0
-		parent := branch.GetParent()
-		for parent != nil && !parent.IsTrunk() {
-			depth++
-			parent = parent.GetParent()
-		}
-
-		indent := strings.Repeat("  ", depth+1)
-		tree.WriteString(fmt.Sprintf("%s├─ %s (PR #%d)\n", indent, branchInfo.BranchName, branchInfo.PRNumber))
-	}
-
-	return tree.String()
 }
 
 func (c *ConsolidateMergeExecutor) getOwnerRepo() (owner, repo string) {

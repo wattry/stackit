@@ -59,6 +59,16 @@ const (
 	ChecksNone ChecksStatus = "NONE"
 )
 
+// Timing constants for CI waiting
+const (
+	// DefaultCITimeout is the default timeout for waiting on CI checks
+	DefaultCITimeout = 10 * time.Minute
+	// DefaultCIPollInterval is the default interval between CI status checks
+	DefaultCIPollInterval = 15 * time.Second
+	// CIRegistrationDelay is the delay to allow CI checks to register after push
+	CIRegistrationDelay = 5 * time.Second
+)
+
 // BranchMergeInfo contains info about a branch to be merged
 type BranchMergeInfo struct {
 	BranchName    string
@@ -420,7 +430,6 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 
 func buildBottomUpSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string) []PlanStep {
 	steps := []PlanStep{}
-	defaultTimeout := 10 * time.Minute
 
 	for i, branchInfo := range branchesToMerge {
 		steps = append(steps, PlanStep{
@@ -428,7 +437,7 @@ func buildBottomUpSteps(branchesToMerge []BranchMergeInfo, upstackBranches []str
 			BranchName:   branchInfo.BranchName,
 			PRNumber:     branchInfo.PRNumber,
 			Description:  fmt.Sprintf("Wait for CI checks on PR #%d (%s)", branchInfo.PRNumber, branchInfo.BranchName),
-			WaitTimeout:  defaultTimeout,
+			WaitTimeout:  DefaultCITimeout,
 			ExpectChecks: branchInfo.HasChecks(),
 		})
 
@@ -491,14 +500,7 @@ func buildTopDownSteps(branchesToMerge []BranchMergeInfo, currentBranch string, 
 		StepType:    StepUpdatePRBase,
 		BranchName:  currentBranch,
 		PRNumber:    currentBranchInfo.PRNumber,
-		Description: fmt.Sprintf("Rebase %s onto trunk (squashing %d intermediate branch(es))", currentBranch, len(branchesToMerge)-1),
-	})
-
-	steps = append(steps, PlanStep{
-		StepType:    StepUpdatePRBase,
-		BranchName:  currentBranch,
-		PRNumber:    currentBranchInfo.PRNumber,
-		Description: fmt.Sprintf("Update PR #%d base branch to trunk", currentBranchInfo.PRNumber),
+		Description: fmt.Sprintf("Rebase %s onto trunk and update PR #%d base", currentBranch, currentBranchInfo.PRNumber),
 	})
 
 	steps = append(steps, PlanStep{
@@ -506,7 +508,7 @@ func buildTopDownSteps(branchesToMerge []BranchMergeInfo, currentBranch string, 
 		BranchName:   currentBranch,
 		PRNumber:     currentBranchInfo.PRNumber,
 		Description:  fmt.Sprintf("Wait for CI checks on PR #%d (%s)", currentBranchInfo.PRNumber, currentBranch),
-		WaitTimeout:  10 * time.Minute,
+		WaitTimeout:  DefaultCITimeout,
 		ExpectChecks: currentBranchInfo.HasChecks(),
 	})
 

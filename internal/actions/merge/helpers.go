@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/output"
 )
@@ -63,42 +62,4 @@ func isCIFailure(err error) bool {
 	}
 	errStr := fmt.Sprintf("%v", err)
 	return strings.Contains(errStr, "CI checks failed") || strings.Contains(errStr, "failing CI checks") || strings.Contains(errStr, "pending CI checks")
-}
-
-// CheckSyncStatus checks if the repository is up to date with remote
-func CheckSyncStatus(ctx context.Context, eng engine.Engine, splog output.Output) (bool, []string, error) {
-	needsSync := false
-	staleBranches := []string{}
-
-	// Check if trunk needs pulling
-	pullResult, err := eng.PullTrunk(ctx)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to check trunk status: %w", err)
-	}
-
-	if pullResult == engine.PullDone {
-		needsSync = true
-		staleBranches = append(staleBranches, eng.Trunk().GetName())
-	}
-
-	// Check all tracked branches
-	allBranches := eng.AllBranches()
-	for _, b := range allBranches {
-		if b.IsTrunk() {
-			continue
-		}
-
-		status, err := eng.GetBranchRemoteStatus(b)
-		if err != nil {
-			splog.Debug("Failed to get status for %s: %v", b.GetName(), err)
-			continue
-		}
-
-		if !status.Matches() {
-			needsSync = true
-			staleBranches = append(staleBranches, b.GetName())
-		}
-	}
-
-	return needsSync, staleBranches, nil
 }

@@ -56,6 +56,26 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 		return nil, fmt.Errorf("failed to initialize worktree engine: %w", err)
 	}
 
+	// Ensure worktree trunk is up to date before merging stacks
+	if err := worktreeEng.PopulateRemoteShas(); err != nil {
+		w.output.Debug("Failed to populate remote SHAs in multistack worktree: %v", err)
+	}
+	pullResult, err := worktreeEng.PullTrunk(ctx)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to update trunk in worktree: %w", err)
+	}
+	if pullResult == engine.PullConflict {
+		cleanup()
+		return nil, fmt.Errorf("trunk could not be fast-forwarded (diverged from remote). Please sync trunk before running multi-stack merge")
+	}
+	// Ensure worktree is checked out at the updated trunk tip
+	worktreeTrunk := worktreeEng.GetBranch(trunk.GetName())
+	if err := worktreeEng.CheckoutBranch(ctx, worktreeTrunk); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to checkout trunk in worktree: %w", err)
+	}
+
 	result := &MultiStackWorktreeResult{
 		MergedStacks:   make([]MultiStackInfo, 0),
 		ConflictStacks: make([]MultiStackExcluded, 0),
@@ -66,9 +86,17 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 
 	// Try to merge each stack
 	for _, stack := range stacks {
-		err := w.tryMergeStack(ctx, worktreeEng, stack)
+		baseline, err := worktreeEng.GetCurrentRevision(ctx)
 		if err != nil {
+			cleanup()
+			return nil, fmt.Errorf("failed to capture worktree state: %w", err)
+		}
+
+		if err := w.tryMergeStack(ctx, worktreeEng, stack); err != nil {
 			w.output.Debug("Stack %s conflicts: %v", stack.RootBranch, err)
+			if resetErr := worktreeEng.ResetHard(ctx, baseline); resetErr != nil {
+				w.output.Debug("Failed to reset worktree after conflict: %v", resetErr)
+			}
 			result.ConflictStacks = append(result.ConflictStacks, MultiStackExcluded{
 				Stack:  stack,
 				Reason: "conflict",
