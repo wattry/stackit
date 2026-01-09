@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"stackit.dev/stackit/internal/app"
@@ -78,7 +80,7 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 		return nil, err
 	}
 
-	// Capture deleted branches before they are removed from the plan
+	// Capture planned deletions before executeDeletions removes them from plan.branches
 	deletedBranches := make(map[string]string)
 	for name, info := range plan.branches {
 		deletedBranches[name] = info.reason
@@ -104,7 +106,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 	out := ctx.Output
 
 	allTrackedBranches := eng.AllBranches()
-	branchesToProcessPool := []engine.Branch{}
+	candidateBranches := []engine.Branch{}
 	branchNames := []string{}
 	allRevisionsToFetch := []string{eng.Trunk().GetName()}
 
@@ -112,7 +114,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 		name := branch.GetName()
 		allRevisionsToFetch = append(allRevisionsToFetch, name)
 		if !branch.IsTrunk() {
-			branchesToProcessPool = append(branchesToProcessPool, branch)
+			candidateBranches = append(candidateBranches, branch)
 			branchNames = append(branchNames, name)
 
 			parent := branch.GetParent()
@@ -124,26 +126,28 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 
 	metadataMap, metaErrs := eng.Git().BatchReadMetadata(branchNames)
 	if len(metaErrs) > 0 {
-		out.Debug("Failed to read metadata for some branches: %v", metaErrs)
+		out.Warn("Failed to read metadata for some branches (they may not be cleaned): %v", metaErrs)
 	}
 
 	revisionsMap, revErrs := eng.Git().BatchGetRevisions(allRevisionsToFetch)
 	if len(revErrs) > 0 {
-		out.Debug("Failed to get revisions for some branches: %v", revErrs)
+		out.Warn("Failed to get revisions for some branches (they may not be cleaned): %v", revErrs)
 	}
 
 	mergedBranches, err := eng.Git().GetMergedBranches(c, eng.Trunk().GetName())
 	if err != nil {
-		out.Debug("Failed to get merged branches: %v", err)
+		out.Warn("Failed to get merged branches: %v", err)
 	}
 
 	deleteStatuses := make(map[string]string) // name -> reason
 	var skippedInWorktree []string
 	var mu sync.Mutex
 
-	if len(branchesToProcessPool) > 0 {
-		utils.Run(branchesToProcessPool, func(branch engine.Branch) {
+	if len(candidateBranches) > 0 {
+		utils.Run(candidateBranches, func(branch engine.Branch) {
 			name := branch.GetName()
+			// ShouldDeleteBranchCached is defined in common.go and uses pre-fetched data
+			// to determine if a branch should be deleted (merged, closed PR, etc.)
 			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, metadataMap[name], revisionsMap, mergedBranches)
 			if shouldDelete {
 				// Skip current branch if in a managed worktree (can't checkout trunk to delete it)
@@ -241,6 +245,7 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 	out := ctx.Output
 	c := ctx.Context
 
+	previousCount := len(plan.branches)
 	for {
 		var batchNames []string
 		for name, info := range plan.branches {
@@ -252,6 +257,9 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 		if len(batchNames) == 0 {
 			break
 		}
+
+		// Sort for deterministic deletion order (helps with debugging and reproducibility)
+		sort.Strings(batchNames)
 
 		// Remove any worktrees that have these branches checked out
 		var failedWorktreeRemovals []string
@@ -296,7 +304,7 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 
 		// Batch delete from engine
 		if _, err := eng.DeleteBranches(c, branches); err != nil {
-			return fmt.Errorf("failed to delete some branches: %w", err)
+			return fmt.Errorf("failed to delete branches [%s]: %w", strings.Join(batchNames, ", "), err)
 		}
 
 		// Batch delete remote metadata
@@ -312,6 +320,17 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 			parentName := parents[name]
 			plan.removeBlocker(parentName, name)
 		}
+
+		// Safety check: ensure we're making progress to prevent infinite loops
+		currentCount := len(plan.branches)
+		if currentCount >= previousCount && currentCount > 0 {
+			remaining := make([]string, 0, currentCount)
+			for name := range plan.branches {
+				remaining = append(remaining, name)
+			}
+			return fmt.Errorf("no progress made in deletion, %d branches remaining: %s", currentCount, strings.Join(remaining, ", "))
+		}
+		previousCount = currentCount
 	}
 
 	return nil
@@ -370,10 +389,16 @@ func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *
 
 // removeWorktreeIfCheckedOut removes the worktree if the branch is checked out in one.
 // Returns the worktree path that was removed (or empty string if none), and any error.
+//
+// Error handling strategy:
+//   - Errors when *checking* if a branch is in a worktree are swallowed (return nil error)
+//     because we don't want to block branch deletion if we can't determine worktree status.
+//   - Errors when *removing* a worktree are returned because they indicate a real problem
+//     that would prevent the branch from being deleted cleanly.
 func removeWorktreeIfCheckedOut(ctx context.Context, branchName string, eng engine.Engine, out output.Output) (string, error) {
 	worktreePath, err := eng.Git().GetWorktreePathForBranch(ctx, branchName)
 	if err != nil {
-		// Error checking worktree, log and continue (don't block deletion)
+		// Swallow error: don't block deletion if we can't check worktree status
 		out.Debug("Failed to check worktree for branch %s: %v", branchName, err)
 		return "", nil
 	}
