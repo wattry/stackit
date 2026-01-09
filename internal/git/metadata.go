@@ -32,8 +32,9 @@ type BranchType string
 
 // Branch types
 const (
-	BranchTypeUser    BranchType = "user"    // Normal stacked branch
-	BranchTypeUtility BranchType = "utility" // Created by st merge --consolidate or other internal tasks
+	BranchTypeUser           BranchType = "user"            // Normal stacked branch
+	BranchTypeUtility        BranchType = "utility"         // Created by st merge --consolidate or other internal tasks
+	BranchTypeWorktreeAnchor BranchType = "worktree-anchor" // Anchor branch for worktree, has no commits
 )
 
 // Meta represents branch metadata stored in Git refs

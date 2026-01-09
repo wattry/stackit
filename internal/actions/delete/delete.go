@@ -46,6 +46,10 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("branch %s is not tracked by stackit", branchName)
 	}
 
+	if branch.IsWorktreeAnchor() {
+		return fmt.Errorf("cannot delete branch %s because it is a worktree anchor; use 'stackit worktree remove' to remove the worktree first", branchName)
+	}
+
 	// Build StackGraph for efficient traversals
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
@@ -147,7 +151,7 @@ func cleanupWorktreesForDeletedStacks(ctx *app.Context, deletedStackRoots []stri
 
 		// Check if user is in this worktree - emit CD directive to navigate back to main repo
 		if ctx.InManagedWorktree && ctx.WorktreeInfo != nil &&
-			ctx.WorktreeInfo.StackRoot == stackRoot {
+			ctx.WorktreeInfo.AnchorBranch == stackRoot {
 			ctx.Output.DirectiveCD(wt.MainRepoDir)
 		}
 

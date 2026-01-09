@@ -58,6 +58,11 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("branch %s is not tracked by Stackit", source)
 	}
 
+	// Prevent moving worktree anchor branches
+	if sourceBranch.IsWorktreeAnchor() {
+		return fmt.Errorf("cannot move worktree anchor branch %s", source)
+	}
+
 	// Validate onto is provided
 	onto := opts.Onto
 	if onto == "" {
@@ -79,6 +84,11 @@ func Action(ctx *app.Context, opts Options) error {
 		if !found {
 			return fmt.Errorf("branch %s does not exist", onto)
 		}
+	}
+
+	// Prevent moving onto worktree anchor branches
+	if ontoBranch.IsWorktreeAnchor() {
+		return fmt.Errorf("cannot move branch onto worktree anchor %s; use 'stackit create' in the worktree instead", onto)
 	}
 
 	// Prevent moving onto itself

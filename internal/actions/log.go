@@ -110,7 +110,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	inReviewCount := 0
 	for name, ann := range annotations {
 		branch := ctx.Engine.GetBranch(name)
-		if branch.IsTrunk() {
+		if branch.IsTrunk() || branch.IsWorktreeAnchor() {
 			continue
 		}
 		branchCount++

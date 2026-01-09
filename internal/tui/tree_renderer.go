@@ -18,11 +18,16 @@ func NewStackTreeRendererWithFilter(eng engine.BranchReader, filter func(string)
 
 // NewStackTreeRendererWithStrategy creates a tree renderer with a specific sorting strategy and optional filter
 func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool) *tree.StackTreeRenderer {
-	var branchFilter func(engine.Branch) bool
-	if filter != nil {
-		branchFilter = func(b engine.Branch) bool {
+	branchFilter := func(b engine.Branch) bool {
+		// Always filter out worktree anchor branches from the tree display
+		if b.IsWorktreeAnchor() {
+			return false
+		}
+		// Apply user-provided filter if any
+		if filter != nil {
 			return filter(b.GetName())
 		}
+		return true
 	}
 
 	graph := engine.BuildStackGraph(eng, strategy, branchFilter)

@@ -55,13 +55,13 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 
 	// Check each worktree to see if its stack root still exists
 	for _, wt := range worktrees {
-		stackRootBranch := ctx.Engine.GetBranch(wt.StackRoot)
+		stackRootBranch := ctx.Engine.GetBranch(wt.AnchorBranch)
 
 		// Check if the stack root branch still exists and is tracked
 		// A branch "exists" if it's in the branch list (not just tracked)
 		branchExists := false
 		for _, b := range ctx.Engine.AllBranches() {
-			if b.GetName() == wt.StackRoot {
+			if b.GetName() == wt.AnchorBranch {
 				branchExists = true
 				break
 			}
@@ -74,11 +74,11 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 
 			if newStackRoot != "" {
 				// Update the worktree registry to point to the new stack root
-				ctx.Output.Info("Updating worktree stack root from %s to %s", wt.StackRoot, newStackRoot)
+				ctx.Output.Info("Updating worktree stack root from %s to %s", wt.AnchorBranch, newStackRoot)
 
 				// Unregister old stack root
-				if unregErr := ctx.Engine.UnregisterWorktree(wt.StackRoot); unregErr != nil {
-					ctx.Output.Debug("Failed to unregister old worktree for %s: %v", wt.StackRoot, unregErr)
+				if unregErr := ctx.Engine.UnregisterWorktree(wt.AnchorBranch); unregErr != nil {
+					ctx.Output.Debug("Failed to unregister old worktree for %s: %v", wt.AnchorBranch, unregErr)
 				}
 
 				// Register new stack root
@@ -89,7 +89,7 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 				}
 			} else {
 				// No surviving branches - clean up worktree
-				ctx.Output.Info("Removing worktree for deleted stack %s", wt.StackRoot)
+				ctx.Output.Info("Removing worktree for deleted stack %s", wt.AnchorBranch)
 
 				// Check if worktree path still exists before trying to remove
 				if _, statErr := os.Stat(wt.Path); statErr == nil {
@@ -103,12 +103,12 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 				}
 
 				// Unregister the worktree from the registry
-				if unregErr := ctx.Engine.UnregisterWorktree(wt.StackRoot); unregErr != nil {
+				if unregErr := ctx.Engine.UnregisterWorktree(wt.AnchorBranch); unregErr != nil {
 					result.Errors = append(result.Errors,
-						"failed to unregister worktree for "+wt.StackRoot+": "+unregErr.Error())
-					ctx.Output.Debug("Failed to unregister worktree for %s: %v", wt.StackRoot, unregErr)
+						"failed to unregister worktree for "+wt.AnchorBranch+": "+unregErr.Error())
+					ctx.Output.Debug("Failed to unregister worktree for %s: %v", wt.AnchorBranch, unregErr)
 				} else {
-					result.RemovedWorktrees = append(result.RemovedWorktrees, wt.StackRoot)
+					result.RemovedWorktrees = append(result.RemovedWorktrees, wt.AnchorBranch)
 				}
 			}
 		}

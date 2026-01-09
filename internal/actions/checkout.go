@@ -86,6 +86,17 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions, handler CheckoutHand
 
 	branch := eng.GetBranch(branchName)
 
+	// Block checking out worktree anchor branches directly
+	if branch.IsWorktreeAnchor() {
+		// Find the worktree name for a better error message
+		wtInfo, _ := eng.GetWorktreeForStack(branchName)
+		displayName := branchName // Default to branch name for legacy worktrees
+		if wtInfo != nil && wtInfo.Name != "" {
+			displayName = wtInfo.Name
+		}
+		return fmt.Errorf("cannot check out worktree anchor branch directly; use 'cd $(stackit worktree open %s)' to enter the worktree", displayName)
+	}
+
 	// Handle checkout via worktree directives if the branch belongs to a stack with a worktree
 	if handleWorktreeCheckout(ctx, branch, branchName) {
 		return nil // Checkout handled via shell directives
@@ -175,7 +186,7 @@ func handleWorktreeCheckout(ctx *app.Context, branch engine.Branch, branchName s
 	// Case 1: We're in a worktree and checking out a branch NOT in this worktree's stack
 	// (either trunk, or a branch from a different stack)
 	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil {
-		currentStackRoot := ctx.WorktreeInfo.StackRoot
+		currentStackRoot := ctx.WorktreeInfo.AnchorBranch
 
 		// Check if target is in a different location than current worktree
 		needsSwitch := false

@@ -88,9 +88,9 @@ func TestWorktreeRegistry(t *testing.T) {
 
 		// Write worktree metadata
 		meta := &git.WorktreeMeta{
-			Path:        "/path/to/worktree",
-			StackRoot:   "feature-branch",
-			MainRepoDir: scene.Repo.Dir,
+			Path:         "/path/to/worktree",
+			AnchorBranch: "feature-branch",
+			MainRepoDir:  scene.Repo.Dir,
 		}
 		err := runner.WriteWorktreeMeta("feature-branch", meta)
 		require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestWorktreeRegistry(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, readMeta)
 		require.Equal(t, "/path/to/worktree", readMeta.Path)
-		require.Equal(t, "feature-branch", readMeta.StackRoot)
+		require.Equal(t, "feature-branch", readMeta.AnchorBranch)
 		require.Equal(t, scene.Repo.Dir, readMeta.MainRepoDir)
 	})
 
@@ -124,8 +124,8 @@ func TestWorktreeRegistry(t *testing.T) {
 
 		// Write worktree metadata
 		meta := &git.WorktreeMeta{
-			Path:      "/path/to/worktree",
-			StackRoot: "feature-branch",
+			Path:         "/path/to/worktree",
+			AnchorBranch: "feature-branch",
 		}
 		err := runner.WriteWorktreeMeta("feature-branch", meta)
 		require.NoError(t, err)
@@ -148,15 +148,15 @@ func TestWorktreeRegistry(t *testing.T) {
 
 		// Write multiple worktree metadata
 		meta1 := &git.WorktreeMeta{
-			Path:      "/path/to/worktree1",
-			StackRoot: "feature-1",
+			Path:         "/path/to/worktree1",
+			AnchorBranch: "feature-1",
 		}
 		err := runner.WriteWorktreeMeta("feature-1", meta1)
 		require.NoError(t, err)
 
 		meta2 := &git.WorktreeMeta{
-			Path:      "/path/to/worktree2",
-			StackRoot: "feature-2",
+			Path:         "/path/to/worktree2",
+			AnchorBranch: "feature-2",
 		}
 		err = runner.WriteWorktreeMeta("feature-2", meta2)
 		require.NoError(t, err)

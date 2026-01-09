@@ -582,19 +582,25 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 
 // RegisterWorktree registers a worktree for a stack root in local git refs
 func (e *engineImpl) RegisterWorktree(stackRoot string, path string) error {
+	return e.RegisterWorktreeWithName(stackRoot, path, "")
+}
+
+// RegisterWorktreeWithName registers a worktree with a user-friendly name
+func (e *engineImpl) RegisterWorktreeWithName(anchorBranch string, path string, name string) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
 	meta := &git.WorktreeMeta{
-		Path:        absPath,
-		StackRoot:   stackRoot,
-		CreatedAt:   timeNow(),
-		MainRepoDir: e.repoRoot,
+		Name:         name,
+		Path:         absPath,
+		AnchorBranch: anchorBranch,
+		CreatedAt:    timeNow(),
+		MainRepoDir:  e.repoRoot,
 	}
 
-	return e.git.WriteWorktreeMeta(stackRoot, meta)
+	return e.git.WriteWorktreeMeta(anchorBranch, meta)
 }
 
 // UnregisterWorktree removes worktree registration for a stack root
@@ -613,10 +619,11 @@ func (e *engineImpl) GetWorktreeForStack(stackRoot string) (*WorktreeInfo, error
 	}
 
 	return &WorktreeInfo{
-		Path:        meta.Path,
-		StackRoot:   meta.StackRoot,
-		CreatedAt:   meta.CreatedAt,
-		MainRepoDir: meta.MainRepoDir,
+		Name:         meta.Name,
+		Path:         meta.Path,
+		AnchorBranch: meta.AnchorBranch,
+		CreatedAt:    meta.CreatedAt,
+		MainRepoDir:  meta.MainRepoDir,
 	}, nil
 }
 
@@ -638,10 +645,11 @@ func (e *engineImpl) ListManagedWorktrees() ([]WorktreeInfo, error) {
 	for _, k := range keys {
 		meta := metas[k]
 		result = append(result, WorktreeInfo{
-			Path:        meta.Path,
-			StackRoot:   meta.StackRoot,
-			CreatedAt:   meta.CreatedAt,
-			MainRepoDir: meta.MainRepoDir,
+			Name:         meta.Name,
+			Path:         meta.Path,
+			AnchorBranch: meta.AnchorBranch,
+			CreatedAt:    meta.CreatedAt,
+			MainRepoDir:  meta.MainRepoDir,
 		})
 	}
 
@@ -723,10 +731,11 @@ func (e *engineImpl) IsInManagedWorktree() (bool, *WorktreeInfo, error) {
 		}
 		if wtPath == currentPath {
 			return true, &WorktreeInfo{
-				Path:        wt.Path,
-				StackRoot:   wt.StackRoot,
-				CreatedAt:   wt.CreatedAt,
-				MainRepoDir: wt.MainRepoDir,
+				Name:         wt.Name,
+				Path:         wt.Path,
+				AnchorBranch: wt.AnchorBranch,
+				CreatedAt:    wt.CreatedAt,
+				MainRepoDir:  wt.MainRepoDir,
 			}, nil
 		}
 	}
