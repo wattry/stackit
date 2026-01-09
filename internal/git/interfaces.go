@@ -132,6 +132,7 @@ type RebaseOperations interface {
 // MergeOperations handles merge operations.
 type MergeOperations interface {
 	Merge(ctx context.Context, branchName string, opts MergeOptions) error
+	MergeMultiple(ctx context.Context, branches []string, opts MergeOptions) error
 	IsMergeInProgress(ctx context.Context) bool
 	MergeAbort(ctx context.Context) error
 	GetUnmergedFiles(ctx context.Context) ([]string, error)

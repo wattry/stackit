@@ -41,6 +41,15 @@ func (e *engineImpl) Merge(ctx context.Context, revision string, opts MergeOptio
 	})
 }
 
+// MergeMultiple performs an octopus merge of multiple branches into the current branch
+func (e *engineImpl) MergeMultiple(ctx context.Context, branches []string, opts MergeOptions) error {
+	return e.git.MergeMultiple(ctx, branches, git.MergeOptions{
+		NoEdit:  opts.NoEdit,
+		NoFF:    opts.NoFF,
+		Message: opts.Message,
+	})
+}
+
 // Fetch fetches from a remote
 func (e *engineImpl) Fetch(ctx context.Context, remote string, branch string) error {
 	return e.git.Fetch(ctx, remote, branch)
