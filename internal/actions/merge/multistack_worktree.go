@@ -110,28 +110,27 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 	return result, nil
 }
 
-// tryMergeStack attempts to merge all branches of a stack in order.
-// Returns error if ANY branch conflicts (entire stack is skipped on conflict).
+// tryMergeStack attempts to merge all branches of a stack via octopus merge.
+// Returns error if any branch conflicts (entire stack is skipped on conflict).
 func (w *MultiStackWorktreeExecutor) tryMergeStack(ctx context.Context, eng engine.Engine, stack MultiStackInfo) error {
-	for _, branchName := range stack.AllBranches {
-		// Create a merge commit message
-		msg := fmt.Sprintf("Merge %s for multi-stack", branchName)
+	// Create a merge commit message
+	msg := fmt.Sprintf("Merge stack %s for multi-stack (%d branches)", stack.RootBranch, len(stack.AllBranches))
 
-		err := eng.Merge(ctx, branchName, engine.MergeOptions{
-			NoFF:    true,
-			NoEdit:  true,
-			Message: msg,
-		})
-		if err != nil {
-			// Abort the merge if it's in progress
-			git := eng.Git()
-			if git.IsMergeInProgress(ctx) {
-				if abortErr := git.MergeAbort(ctx); abortErr != nil {
-					w.output.Debug("Failed to abort merge: %v", abortErr)
-				}
+	// Perform octopus merge (single merge commit with multiple parents)
+	err := eng.MergeMultiple(ctx, stack.AllBranches, engine.MergeOptions{
+		NoFF:    true,
+		NoEdit:  true,
+		Message: msg,
+	})
+	if err != nil {
+		// Abort the merge if it's in progress
+		git := eng.Git()
+		if git.IsMergeInProgress(ctx) {
+			if abortErr := git.MergeAbort(ctx); abortErr != nil {
+				w.output.Debug("Failed to abort merge: %v", abortErr)
 			}
-			return fmt.Errorf("conflict in branch %s: %w", branchName, err)
 		}
+		return fmt.Errorf("conflict in stack %s: %w", stack.RootBranch, err)
 	}
 	return nil
 }

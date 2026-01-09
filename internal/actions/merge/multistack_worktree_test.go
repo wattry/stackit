@@ -83,3 +83,92 @@ func TestMultiStackWorktreeExecutor_PullsTrunkBeforeMerge(t *testing.T) {
 	assert.Equal(t, latestRemoteSHA, worktreeHead)
 	assert.Contains(t, remotePath, "origin")
 }
+
+func TestMultiStackWorktreeExecutor_OctopusMergeCreatesSingleCommit(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create a stack with 3 branches: branch1 -> branch2 -> branch3
+	s.CreateBranch("branch1").
+		TrackBranch("branch1", s.Engine.Trunk().GetName())
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch1-change", "file1.txt"))
+	branch1SHA, err := s.Scene.Repo.GetRevision("branch1")
+	require.NoError(t, err)
+	s.Rebuild()
+
+	s.CreateBranch("branch2").
+		TrackBranch("branch2", "branch1")
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch2-change", "file2.txt"))
+	branch2SHA, err := s.Scene.Repo.GetRevision("branch2")
+	require.NoError(t, err)
+	s.Rebuild()
+
+	s.CreateBranch("branch3").
+		TrackBranch("branch3", "branch2")
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch3-change", "file3.txt"))
+	branch3SHA, err := s.Scene.Repo.GetRevision("branch3")
+	require.NoError(t, err)
+	s.Rebuild().
+		Checkout(s.Engine.Trunk().GetName())
+
+	// Execute octopus merge
+	executor := NewMultiStackWorktreeExecutor(s.Engine, s.Context.Output)
+	result, err := executor.ExecuteInWorktree(context.Background(), []MultiStackInfo{
+		{RootBranch: "branch1", AllBranches: []string{"branch1", "branch2", "branch3"}},
+	})
+	require.NoError(t, err)
+	defer result.Cleanup()
+
+	require.Len(t, result.MergedStacks, 1)
+	assert.Equal(t, "branch1", result.MergedStacks[0].RootBranch)
+
+	// Verify we have a single merge commit with multiple parents (octopus merge)
+	worktreeRepo := testhelpers.NewGitRepoFromExisting(t, result.WorktreePath)
+
+	// Get the commit object to count parents
+	parentOutput, err := worktreeRepo.RunGitCommandAndGetOutput("cat-file", "-p", "HEAD")
+	require.NoError(t, err)
+
+	// Count "parent" lines in the commit object
+	parentCount := 0
+	for _, line := range splitLines(parentOutput) {
+		if len(line) > 6 && line[:6] == "parent" {
+			parentCount++
+		}
+	}
+
+	// Octopus merge should have 4 parents: trunk + branch1 + branch2 + branch3
+	assert.Equal(t, 4, parentCount, "octopus merge should have 4 parents (trunk + 3 branches)")
+
+	// Verify all original branch commits are ancestors of HEAD
+	isAncestor := func(sha string) bool {
+		err := worktreeRepo.RunGitCommand("merge-base", "--is-ancestor", sha, "HEAD")
+		return err == nil
+	}
+
+	assert.True(t, isAncestor(branch1SHA), "branch1 commit should be ancestor of HEAD")
+	assert.True(t, isAncestor(branch2SHA), "branch2 commit should be ancestor of HEAD")
+	assert.True(t, isAncestor(branch3SHA), "branch3 commit should be ancestor of HEAD")
+
+	// Verify all files are present in the working tree
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "file1.txt"))
+	assert.NoError(t, err, "file1.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "file2.txt"))
+	assert.NoError(t, err, "file2.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "file3.txt"))
+	assert.NoError(t, err, "file3.txt should exist")
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}

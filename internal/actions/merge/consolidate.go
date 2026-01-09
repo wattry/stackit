@@ -3,6 +3,7 @@ package merge
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
@@ -161,16 +162,27 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 		return "", fmt.Errorf("failed to reset to trunk: %w", err)
 	}
 
-	// Merge all stack branches with --no-ff to preserve branch structure and enable auto-closing
+	// Collect branch names for octopus merge
+	branches := make([]string, len(c.plan.BranchesToMerge))
 	for i, branchInfo := range c.plan.BranchesToMerge {
-		splog.Info("  Merging %s (%d/%d)...", branchInfo.BranchName, i+1, len(c.plan.BranchesToMerge))
-		splog.Debug("Consolidation merge: merging %s", branchInfo.BranchName)
+		branches[i] = branchInfo.BranchName
+	}
 
-		commitMsg := fmt.Sprintf("Consolidate %s: %s", branchInfo.BranchName, c.getBranchTitle(branchInfo))
-		if err := c.engine.Merge(ctx, branchInfo.BranchName, engine.MergeOptions{NoFF: true, Message: commitMsg}); err != nil {
-			splog.Debug("Consolidation merge failed for %s: %v", branchInfo.BranchName, err)
-			return "", fmt.Errorf("failed to merge %s: %w", branchInfo.BranchName, err)
-		}
+	// Build commit message listing all branches
+	commitMsg := fmt.Sprintf("Consolidate stack [%s]", scope)
+	if len(branches) <= 3 {
+		commitMsg += ": " + strings.Join(branches, ", ")
+	} else {
+		commitMsg += fmt.Sprintf(" (%d branches)", len(branches))
+	}
+
+	splog.Info("  Merging %d branches via octopus merge...", len(branches))
+	splog.Debug("Consolidation merge: merging branches %v", branches)
+
+	// Perform octopus merge (single merge commit with multiple parents)
+	if err := c.engine.MergeMultiple(ctx, branches, engine.MergeOptions{NoFF: true, Message: commitMsg}); err != nil {
+		splog.Debug("Consolidation octopus merge failed: %v", err)
+		return "", fmt.Errorf("failed to merge branches: %w", err)
 	}
 
 	if err := c.engine.PushBranch(ctx, c.engine.GetBranch(branchName), c.engine.GetRemote(), git.PushOptions{
@@ -370,15 +382,6 @@ func (c *ConsolidateMergeExecutor) getStackScope() string {
 		}
 	}
 	return "stack"
-}
-
-func (c *ConsolidateMergeExecutor) getBranchTitle(branchInfo BranchMergeInfo) string {
-	branch := c.engine.GetBranch(branchInfo.BranchName)
-	prInfo, _ := branch.GetPrInfo()
-	if prInfo != nil {
-		return prInfo.Title()
-	}
-	return branchInfo.BranchName
 }
 
 func (c *ConsolidateMergeExecutor) getOwnerRepo() (owner, repo string) {
