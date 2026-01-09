@@ -93,6 +93,9 @@ type Client interface {
 
 	// GetOwnerRepo returns the repository owner and name
 	GetOwnerRepo() (owner, repo string)
+
+	// ClosePullRequest closes a pull request
+	ClosePullRequest(ctx context.Context, owner, repo string, prNumber int) error
 }
 
 // ToPullRequestInfo converts a github.PullRequest to PullRequestInfo

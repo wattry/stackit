@@ -156,3 +156,10 @@ func (c *MockGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNam
 
 	return results, nil
 }
+
+// ClosePullRequest closes a pull request
+func (c *MockGitHubClient) ClosePullRequest(ctx context.Context, owner, repo string, prNumber int) error {
+	state := "closed"
+	_, _, err := c.client.PullRequests.Edit(ctx, owner, repo, prNumber, &github.PullRequest{State: &state})
+	return err
+}

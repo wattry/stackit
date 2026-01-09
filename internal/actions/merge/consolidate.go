@@ -248,6 +248,9 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 	}
 
 	affectedBranches := []string{}
+	var closedPRs []int
+	var failedPRs []int
+
 	for _, branchInfo := range c.plan.BranchesToMerge {
 		branch := c.engine.GetBranch(branchInfo.BranchName)
 		prInfo, err := branch.GetPrInfo()
@@ -255,10 +258,18 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 			continue
 		}
 
-		// Get current PR body to append footer
-		existingPR, err := githubClient.GetPullRequest(ctx, repoOwner, repoName, *prInfo.Number())
+		prNumber := *prInfo.Number()
+
+		// Get current PR to check state and get body
+		existingPR, err := githubClient.GetPullRequest(ctx, repoOwner, repoName, prNumber)
 		if err != nil {
-			splog.Debug("Failed to get PR #%d for %s: %v", *prInfo.Number(), branchInfo.BranchName, err)
+			splog.Debug("Failed to get PR #%d for %s: %v", prNumber, branchInfo.BranchName, err)
+			continue
+		}
+
+		// Skip if already closed/merged (e.g., by merge commit strategy)
+		if existingPR.State != "OPEN" {
+			splog.Debug("PR #%d is already %s, skipping", prNumber, existingPR.State)
 			continue
 		}
 
@@ -275,10 +286,18 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 			Body: &newBody,
 		}
 
-		if err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, *prInfo.Number(), updateOpts); err != nil {
-			splog.Debug("Failed to update PR #%d body: %v", *prInfo.Number(), err)
+		if err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, prNumber, updateOpts); err != nil {
+			splog.Debug("Failed to update PR #%d body: %v", prNumber, err)
 		} else {
-			splog.Debug("Updated PR #%d with consolidation footer", *prInfo.Number())
+			splog.Debug("Updated PR #%d with consolidation footer", prNumber)
+		}
+
+		// Close the PR (handles squash/rebase merge strategies where GitHub doesn't auto-close)
+		if err := githubClient.ClosePullRequest(ctx, repoOwner, repoName, prNumber); err != nil {
+			splog.Debug("Failed to close PR #%d: %v", prNumber, err)
+			failedPRs = append(failedPRs, prNumber)
+		} else {
+			closedPRs = append(closedPRs, prNumber)
 		}
 
 		// Keep the consolidation PR number so the footer knows it was consolidated
@@ -292,6 +311,14 @@ func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
 		if err := actions.PushMetadataAndSyncPRs(c.ctx, affectedBranches); err != nil {
 			splog.Warn("Failed to sync individual PRs: %v", err)
 		}
+	}
+
+	// Report summary
+	if len(closedPRs) > 0 {
+		splog.Info("Closed %d individual PR(s)", len(closedPRs))
+	}
+	if len(failedPRs) > 0 {
+		splog.Warn("Failed to close %d PR(s): %v", len(failedPRs), failedPRs)
 	}
 }
 
