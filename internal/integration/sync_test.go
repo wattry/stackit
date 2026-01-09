@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -435,4 +436,174 @@ func createRemoteMetadataRefForSync(t *testing.T, sh *scenario.Scenario, branchN
 
 func scopePtr(s string) *string {
 	return &s
+}
+
+// TestSyncDoesNotLeaveIndexState verifies that after sync cleans up merged branches
+// and restacks remaining branches, the working directory is left in a clean state
+// with no staged changes. This is a regression test for the bug where the Git index
+// would retain stale state after multiple rebase operations during RestackBranches.
+func TestSyncDoesNotLeaveIndexState(t *testing.T) {
+	t.Run("sync from main does not leave staged changes after cleanup and restack", func(t *testing.T) {
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// 1. Create a chain: main -> branch-a -> branch-b
+		sh.CreateBranch("branch-a").
+			CommitChange("file-a", "content-a").
+			TrackBranch("branch-a", "main")
+
+		sh.CreateBranch("branch-b").
+			CommitChange("file-b", "content-b").
+			TrackBranch("branch-b", "branch-a")
+
+		eng := sh.Engine
+		mainBranchName := eng.Trunk().GetName()
+
+		// 2. Simulate squash-merge: advance main with the same content as branch-a
+		// This is what happens when a PR is squash-merged on GitHub
+		sh.Checkout("main").
+			CommitChange("file-a", "content-a")
+
+		// 3. Mark branch-a as merged
+		metaA, err := eng.Git().ReadMetadata("branch-a")
+		require.NoError(t, err)
+		if metaA.PrInfo == nil {
+			metaA.PrInfo = &git.PrInfoPersistence{}
+		}
+		prNum := 1
+		state := prStateMerged
+		base := mainBranchName
+		metaA.PrInfo.Number = &prNum
+		metaA.PrInfo.State = &state
+		metaA.PrInfo.Base = &base
+		err = eng.Git().WriteMetadata("branch-a", metaA)
+		require.NoError(t, err)
+
+		// 4. Stay on main (user's exact scenario)
+		sh.Checkout("main")
+
+		// 5. Run sync with restack (this will delete branch-a and restack branch-b onto new main)
+		err = sync.Action(sh.Context, sync.Options{Restack: true}, nil)
+		require.NoError(t, err)
+
+		// 6. CRITICAL: Verify main has no staged or unstaged changes after sync
+		// This is the core assertion that catches the bug
+		output, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
+		require.NoError(t, err)
+		require.Empty(t, strings.TrimSpace(output), "git status should be clean after sync, but got: %s", output)
+
+		// 7. Verify branch-a was deleted (cleanup occurred)
+		allLocalBranches, err := sh.Scene.Repo.GetLocalBranches()
+		require.NoError(t, err)
+		require.NotContains(t, allLocalBranches, "branch-a", "branch-a should have been deleted")
+
+		// 8. Verify branch-b was reparented to main
+		branchB := eng.GetBranch("branch-b")
+		require.NotNil(t, branchB.GetParent())
+		require.Equal(t, mainBranchName, branchB.GetParent().GetName(), "branch-b should be reparented to main")
+	})
+
+	t.Run("sync from detached HEAD does not leave staged changes", func(t *testing.T) {
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a simple stack
+		sh.CreateBranch("feature").
+			CommitChange("feature.txt", "feature content").
+			TrackBranch("feature", "main")
+
+		eng := sh.Engine
+		mainBranchName := eng.Trunk().GetName()
+
+		// Mark feature as merged
+		meta, err := eng.Git().ReadMetadata("feature")
+		require.NoError(t, err)
+		if meta.PrInfo == nil {
+			meta.PrInfo = &git.PrInfoPersistence{}
+		}
+		prNum := 1
+		state := prStateMerged
+		base := mainBranchName
+		meta.PrInfo.Number = &prNum
+		meta.PrInfo.State = &state
+		meta.PrInfo.Base = &base
+		err = eng.Git().WriteMetadata("feature", meta)
+		require.NoError(t, err)
+
+		// Detach HEAD at main
+		mainRev, err := sh.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", "main")
+		require.NoError(t, err)
+		err = sh.Scene.Repo.RunGitCommand("checkout", "--detach", strings.TrimSpace(mainRev))
+		require.NoError(t, err)
+
+		// Run sync
+		err = sync.Action(sh.Context, sync.Options{Restack: true}, nil)
+		require.NoError(t, err)
+
+		// Verify clean status
+		output, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
+		require.NoError(t, err)
+		require.Empty(t, strings.TrimSpace(output), "git status should be clean after sync from detached HEAD")
+	})
+
+	t.Run("sync with rebase that moves commits does not leave staged changes", func(t *testing.T) {
+		// This test creates a scenario where the rebase actually moves commits,
+		// which is more likely to trigger index state issues.
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// 1. Create initial stack: main -> feature -> child
+		sh.CreateBranch("feature").
+			CommitChange("feature.txt", "feature v1").
+			TrackBranch("feature", "main")
+
+		sh.CreateBranch("child").
+			CommitChange("child.txt", "child content").
+			TrackBranch("child", "feature")
+
+		eng := sh.Engine
+		mainBranchName := eng.Trunk().GetName()
+
+		// 2. Go back to main and add a new commit (simulating trunk advancing)
+		sh.Checkout("main").
+			CommitChange("main-new.txt", "new content on main")
+
+		// 3. Mark feature as merged (simulating squash-merge on GitHub)
+		// Also simulate main having the feature's content
+		sh.CommitChange("feature.txt", "feature v1")
+
+		metaF, err := eng.Git().ReadMetadata("feature")
+		require.NoError(t, err)
+		if metaF.PrInfo == nil {
+			metaF.PrInfo = &git.PrInfoPersistence{}
+		}
+		prNum := 1
+		state := prStateMerged
+		base := mainBranchName
+		metaF.PrInfo.Number = &prNum
+		metaF.PrInfo.State = &state
+		metaF.PrInfo.Base = &base
+		err = eng.Git().WriteMetadata("feature", metaF)
+		require.NoError(t, err)
+
+		// 4. Stay on main and run sync
+		// This should:
+		// - Delete feature (merged)
+		// - Reparent child to main
+		// - Restack child onto the new main (this requires actual commit movement)
+		err = sync.Action(sh.Context, sync.Options{Restack: true}, nil)
+		require.NoError(t, err)
+
+		// 5. Verify main has clean status
+		output, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
+		require.NoError(t, err)
+		require.Empty(t, strings.TrimSpace(output), "git status should be clean after sync with rebase, but got: %s", output)
+
+		// 6. Verify feature was deleted
+		allLocalBranches, err := sh.Scene.Repo.GetLocalBranches()
+		require.NoError(t, err)
+		require.NotContains(t, allLocalBranches, "feature")
+
+		// 7. Verify child was reparented to main
+		childBranch := eng.GetBranch("child")
+		require.NotNil(t, childBranch.GetParent())
+		require.Equal(t, mainBranchName, childBranch.GetParent().GetName())
+	})
 }
