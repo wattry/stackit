@@ -27,7 +27,7 @@ func NewSyncUI(out output.Output, logger output.Logger) (*tui.Runner, syncAction
 		model := syncComponent.NewModel(0) // Start with 0, will be updated in Start()
 		runner := tui.NewRunner(model, out, logger)
 		runner.Start()
-		return runner, NewInteractiveSyncHandler(runner, model)
+		return runner, NewInteractiveSyncHandler(runner, model, out)
 	}
 	return nil, NewSimpleSyncHandler(out)
 }
@@ -93,6 +93,23 @@ func (h *SimpleSyncHandler) Complete(summary syncAction.Summary) {
 
 // Cleanup implements Handler. No-op for non-TTY handler.
 func (h *SimpleSyncHandler) Cleanup() {}
+
+// IsInteractive implements Handler. Returns false for non-TTY handler.
+func (h *SimpleSyncHandler) IsInteractive() bool { return false }
+
+// PromptMetadataConflict implements Handler. Logs warning and returns false (keep local) in non-interactive mode.
+func (h *SimpleSyncHandler) PromptMetadataConflict(diff *engine.MetadataDiff) (bool, error) {
+	h.splog.Warn("Metadata conflict for %s (keeping local, use interactive mode to resolve)",
+		style.ColorBranchName(diff.Branch, false))
+	return false, nil
+}
+
+// PromptOrphanedMetadata implements Handler. Logs warning and returns false (accept deletion) in non-interactive mode.
+func (h *SimpleSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (bool, error) {
+	h.splog.Warn("Orphaned metadata for %s (accepting deletion, use interactive mode to push)",
+		style.ColorBranchName(info.BranchName, false))
+	return false, nil
+}
 
 func (h *SimpleSyncHandler) printPhaseHeader(phase syncAction.Phase) {
 	// Add spacing between phases (but not before first phase)
@@ -290,6 +307,7 @@ func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts 
 type InteractiveSyncHandler struct {
 	runner       *tui.Runner
 	model        *syncComponent.Model
+	output       output.Output
 	mu           stdsync.Mutex
 	totalOps     int
 	completedOps int
@@ -297,10 +315,11 @@ type InteractiveSyncHandler struct {
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
-func NewInteractiveSyncHandler(runner *tui.Runner, model *syncComponent.Model) *InteractiveSyncHandler {
+func NewInteractiveSyncHandler(runner *tui.Runner, model *syncComponent.Model, out output.Output) *InteractiveSyncHandler {
 	return &InteractiveSyncHandler{
 		runner: runner,
 		model:  model,
+		output: out,
 	}
 }
 
@@ -539,6 +558,47 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 
 // Cleanup is a no-op - terminal cleanup is handled by the runner via defer.
 func (h *InteractiveSyncHandler) Cleanup() {}
+
+// IsInteractive implements Handler. Returns true for TTY handler.
+func (h *InteractiveSyncHandler) IsInteractive() bool { return true }
+
+// PromptMetadataConflict implements Handler. Pauses TUI, displays conflict, prompts user.
+func (h *InteractiveSyncHandler) PromptMetadataConflict(diff *engine.MetadataDiff) (bool, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	// Display the conflict details
+	h.output.Info("\nMetadata differs for branch '%s':", style.ColorBranchName(diff.Branch, false))
+	for _, fd := range diff.Differences {
+		h.output.Info("  %s: %v (local) → %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
+	}
+	if diff.RemoteMeta != nil && diff.RemoteMeta.LastModifiedBy != nil {
+		h.output.Info("  Last modified by: %s <%s>",
+			diff.RemoteMeta.LastModifiedBy.GitName,
+			diff.RemoteMeta.LastModifiedBy.GitEmail)
+	}
+
+	return tui.PromptConfirm("Accept remote metadata?", false)
+}
+
+// PromptOrphanedMetadata implements Handler. Pauses TUI, displays info, prompts user.
+func (h *InteractiveSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (bool, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	h.output.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
+		style.ColorBranchName(info.BranchName, false))
+	if info.LocalMeta != nil {
+		if info.LocalMeta.LockReason.IsLocked() {
+			h.output.Info("  lockReason: %s", info.LocalMeta.LockReason)
+		}
+		if info.LocalMeta.Scope != nil {
+			h.output.Info("  scope: %s", *info.LocalMeta.Scope)
+		}
+	}
+
+	return tui.PromptConfirm("Push your local metadata to remote?", false)
+}
 
 // formatRestackSummary formats the restack summary
 func (h *InteractiveSyncHandler) formatRestackSummary(restacked, skipped int, conflicts []string) string {
