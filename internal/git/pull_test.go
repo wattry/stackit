@@ -189,3 +189,64 @@ func TestPullBranch_WithReload(t *testing.T) {
 	_, err = runner.GetCommitAuthor(initialSha)
 	require.NoError(t, err, "go-git should still see old commits")
 }
+
+func TestPullBranch_WorkingDirSyncWhenOnBranch(t *testing.T) {
+	// This test reproduces a bug where PullBranch leaves the working directory
+	// with uncommitted changes after pulling when we're already on the branch.
+	// The changes appear as the inverse of what was just pulled (reverting the merge).
+	//
+	// Root cause: After update-ref, using git checkout <branch> is a no-op when
+	// we're already on that branch - it doesn't sync the index/working tree.
+
+	// 1. Setup a "remote" repository with initial content
+	remoteScene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial content", "init")
+	})
+	remotePath, err := remoteScene.Repo.CreateBareRemote("upstream")
+	require.NoError(t, err)
+	err = remoteScene.Repo.PushBranch("upstream", "main")
+	require.NoError(t, err)
+
+	// 2. Clone to local repository
+	localDir, err := os.MkdirTemp("", "stackit-test-local-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(localDir) })
+
+	cmd := exec.Command("git", "clone", "--branch", "main", remotePath, localDir)
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	// Create runner for local repo
+	runner := git.NewRunnerWithPath(localDir, nil)
+	err = runner.InitDefaultRepo()
+	require.NoError(t, err)
+
+	// 3. Simulate a PR merge on the remote: create feature branch, modify file, merge
+	err = remoteScene.Repo.CreateAndCheckoutBranch("feature")
+	require.NoError(t, err)
+	err = remoteScene.Repo.CreateChangeAndCommit("feature changes", "feature")
+	require.NoError(t, err)
+
+	err = remoteScene.Repo.CheckoutBranch("main")
+	require.NoError(t, err)
+	err = remoteScene.Repo.RunGitCommand("merge", "--no-ff", "feature", "-m", "Merge feature")
+	require.NoError(t, err)
+	err = remoteScene.Repo.PushBranch("upstream", "main")
+	require.NoError(t, err)
+
+	// 4. Local is on main - pull the changes
+	ctx := context.Background()
+	currentBranch, err := runner.RunGitCommandWithContext(ctx, "rev-parse", "--abbrev-ref", "HEAD")
+	require.NoError(t, err)
+	require.Equal(t, "main", currentBranch, "Should be on main before pulling")
+
+	result, err := runner.PullBranch(ctx, "origin", "main")
+	require.NoError(t, err)
+	require.Equal(t, git.PullDone, result, "PullBranch should succeed")
+
+	// 5. Verify working directory is clean - this is the key assertion
+	// BUG: Without the fix, git status shows uncommitted changes that revert the merge
+	status, err := runner.GetStatusPorcelain(ctx)
+	require.NoError(t, err)
+	require.Empty(t, status, "Working directory should be clean after pull, but got: %s", status)
+}

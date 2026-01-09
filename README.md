@@ -27,7 +27,6 @@ graph TD
     style main stroke-dasharray: 5 5
 ```
 
-
 Stackit manages the complexity of this workflow—automatically handling rebases, keeping track of parent-child relationships, and submitting the entire stack to GitHub with a single command.
 
 ---
