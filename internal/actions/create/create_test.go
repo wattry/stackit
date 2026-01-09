@@ -313,7 +313,7 @@ func TestCreateAction_Worktree(t *testing.T) {
 		worktreeInfo, err := eng.GetWorktreeForStack("feature-branch")
 		require.NoError(t, err)
 		require.NotNil(t, worktreeInfo)
-		require.Equal(t, "feature-branch", worktreeInfo.StackRoot)
+		require.Equal(t, "feature-branch", worktreeInfo.AnchorBranch)
 		require.Contains(t, worktreeInfo.Path, "feature-branch")
 
 		// Clean up worktree

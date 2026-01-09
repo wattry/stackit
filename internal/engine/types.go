@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"stackit.dev/stackit/internal/errors"
@@ -288,13 +289,21 @@ func (b Branch) IsFrozen() bool {
 	return b.reader.IsFrozen(b)
 }
 
-// CanModify checks if the branch can be modified (not locked or frozen)
+// IsWorktreeAnchor checks if the branch is a worktree anchor branch
+func (b Branch) IsWorktreeAnchor() bool {
+	return b.reader.IsWorktreeAnchor(b)
+}
+
+// CanModify checks if the branch can be modified (not locked, frozen, or a worktree anchor)
 func (b Branch) CanModify() bool {
-	return !b.IsLocked() && !b.IsFrozen()
+	return !b.IsLocked() && !b.IsFrozen() && !b.IsWorktreeAnchor()
 }
 
 // EnsureCanModify checks if the branch can be modified and returns an error if not
 func (b Branch) EnsureCanModify() error {
+	if b.IsWorktreeAnchor() {
+		return fmt.Errorf("cannot modify worktree anchor branch %s; use 'stackit create' to add commits to this stack", b.name)
+	}
 	if b.CanModify() {
 		return nil
 	}

@@ -13,10 +13,11 @@ const WorktreeRefPrefix = "refs/stackit/worktrees/"
 
 // WorktreeMeta represents worktree tracking metadata stored in local Git refs
 type WorktreeMeta struct {
-	Path        string    `json:"path"`        // Absolute path to worktree
-	StackRoot   string    `json:"stackRoot"`   // First branch created from trunk (stack root)
-	CreatedAt   time.Time `json:"createdAt"`   // When worktree was created
-	MainRepoDir string    `json:"mainRepoDir"` // Path to main repo (for detection)
+	Name         string    `json:"name,omitempty"` // User-provided name for display (new worktrees only)
+	Path         string    `json:"path"`           // Absolute path to worktree
+	AnchorBranch string    `json:"stackRoot"`      // Anchor branch for worktree (JSON: stackRoot for backwards compat)
+	CreatedAt    time.Time `json:"createdAt"`      // When worktree was created
+	MainRepoDir  string    `json:"mainRepoDir"`    // Path to main repo (for detection)
 }
 
 func (r *runner) AddWorktree(ctx context.Context, path string, branch string, detach bool) error {

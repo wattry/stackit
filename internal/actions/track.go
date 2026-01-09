@@ -54,6 +54,11 @@ func TrackAction(ctx *app.Context, opts TrackOptions) error {
 			return fmt.Errorf("parent branch %s must be tracked (or be trunk)", parent)
 		}
 
+		// Prevent tracking with worktree anchor as parent
+		if parentBranch.IsWorktreeAnchor() {
+			return fmt.Errorf("parent branch %s is a worktree anchor; use 'stackit create' in the worktree instead", parent)
+		}
+
 		// Validate parent is an ancestor (unless force is used)
 		if !opts.Force {
 			parentRev, err := eng.GetRevision(eng.GetBranch(parent))

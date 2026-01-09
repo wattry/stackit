@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // IsTrunk checks if a branch is the trunk
@@ -71,6 +73,49 @@ func (e *engineImpl) IsFrozen(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.frozenMap[branch.GetName()]
+}
+
+// GetBranchType returns the branch type for a branch
+func (e *engineImpl) GetBranchType(branch Branch) git.BranchType {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return git.BranchType(e.branchTypeMap[branch.GetName()])
+}
+
+// IsWorktreeAnchor checks if a branch is a worktree anchor branch
+func (e *engineImpl) IsWorktreeAnchor(branch Branch) bool {
+	return e.GetBranchType(branch) == git.BranchTypeWorktreeAnchor
+}
+
+// SetBranchType sets the branch type for a branch
+func (e *engineImpl) SetBranchType(branch Branch, branchType git.BranchType) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	branchName := branch.GetName()
+
+	// Read existing metadata
+	meta, err := e.git.ReadMetadata(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata: %w", err)
+	}
+
+	// Update branch type
+	meta.BranchType = branchType
+
+	// Write metadata
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
+		return fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	// Update in-memory map
+	if branchType != "" {
+		e.branchTypeMap[branchName] = string(branchType)
+	} else {
+		delete(e.branchTypeMap, branchName)
+	}
+
+	return nil
 }
 
 // GetExplicitScope returns the explicit scope set for a branch (no inheritance)

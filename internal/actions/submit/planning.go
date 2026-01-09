@@ -145,12 +145,12 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 		allBranches[i] = b.GetName()
 	}
 
-	// Remove duplicates and trunk
+	// Remove duplicates, trunk, and worktree anchor branches (which are not submittable)
 	branches := []string{}
 	branchSet := make(map[string]bool)
 	for _, b := range allBranches {
 		branchObj := nav.GetBranch(b)
-		if !branchObj.IsTrunk() && !branchSet[b] {
+		if !branchObj.IsTrunk() && !branchObj.IsWorktreeAnchor() && !branchSet[b] {
 			branches = append(branches, b)
 			branchSet[b] = true
 		}

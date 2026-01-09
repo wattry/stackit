@@ -20,6 +20,7 @@ type engineImpl struct {
 	scopeMap          map[string]string    // branch -> scope
 	lockedMap         map[string]string    // branch -> lock reason (empty if not locked)
 	frozenMap         map[string]bool      // branch -> frozen (local-only)
+	branchTypeMap     map[string]string    // branch -> branch type (worktree-anchor, utility, etc.)
 	remoteShas        map[string]string    // branch -> remote SHA (populated by PopulateRemoteShas)
 	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata
 	localModified     map[string]bool      // branches with local changes not yet pushed

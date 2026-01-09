@@ -38,6 +38,7 @@ type BranchStatus interface {
 	IsLocked(branch Branch) bool
 	GetLockReason(branch Branch) LockReason
 	IsFrozen(branch Branch) bool
+	IsWorktreeAnchor(branch Branch) bool
 	GetPrInfo(branch Branch) (*PrInfo, error)
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string
@@ -108,6 +109,7 @@ type BranchTracking interface {
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
+	SetBranchType(branch Branch, branchType git.BranchType) error
 	SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error)
 	SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error)
 }
@@ -147,16 +149,19 @@ type WorktreeOperations interface {
 
 // WorktreeInfo represents information about a stackit-managed worktree
 type WorktreeInfo struct {
-	Path        string    // Absolute path to worktree
-	StackRoot   string    // Stack root branch name
-	CreatedAt   time.Time // When worktree was created
-	MainRepoDir string    // Path to main repo
+	Name         string    // User-provided name for display (empty for legacy worktrees)
+	Path         string    // Absolute path to worktree
+	AnchorBranch string    // Anchor branch name (stack root for legacy worktrees)
+	CreatedAt    time.Time // When worktree was created
+	MainRepoDir  string    // Path to main repo
 }
 
 // WorktreeRegistry handles stackit-managed worktree tracking
 type WorktreeRegistry interface {
 	// RegisterWorktree registers a worktree for a stack root
 	RegisterWorktree(stackRoot string, path string) error
+	// RegisterWorktreeWithName registers a worktree with a user-friendly name
+	RegisterWorktreeWithName(anchorBranch string, path string, name string) error
 	// UnregisterWorktree removes worktree registration for a stack root
 	UnregisterWorktree(stackRoot string) error
 	// GetWorktreeForStack returns worktree info for a stack root, or nil if none
