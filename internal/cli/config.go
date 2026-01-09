@@ -37,9 +37,9 @@ Examples:
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
 			// Get repo root
-			runner := git.NewRunner()
+			runner := git.NewRunner(nil)
 			if cwd != "" {
-				runner = git.NewRunnerWithPath(cwd)
+				runner = git.NewRunnerWithPath(cwd, nil)
 			}
 			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {
@@ -74,9 +74,9 @@ func newConfigGetCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
 			// Get repo root
-			runner := git.NewRunner()
+			runner := git.NewRunner(nil)
 			if cwd != "" {
-				runner = git.NewRunnerWithPath(cwd)
+				runner = git.NewRunnerWithPath(cwd, nil)
 			}
 			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {
@@ -129,9 +129,9 @@ func newConfigSetCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
 			// Get repo root
-			runner := git.NewRunner()
+			runner := git.NewRunner(nil)
 			if cwd != "" {
-				runner = git.NewRunnerWithPath(cwd)
+				runner = git.NewRunnerWithPath(cwd, nil)
 			}
 			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {

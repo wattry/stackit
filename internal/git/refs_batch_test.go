@@ -16,7 +16,7 @@ func TestUpdateRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Create initial blobs for refs (using non-branch refs since they can be any object)
@@ -60,7 +60,7 @@ func TestUpdateRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Create initial blobs and refs
@@ -104,7 +104,7 @@ func TestUpdateRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		err := runner.UpdateRefsBatch(ctx, []git.RefUpdate{})
@@ -116,7 +116,7 @@ func TestUpdateRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		sha, err := runner.CreateBlob("content")
@@ -141,7 +141,7 @@ func TestUpdateRefsBatchWithLog(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		sha, err := runner.CreateBlob(`{"parent":"main"}`)
@@ -165,7 +165,7 @@ func TestUpdateRefsBatchWithLog(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Get current commit SHA
@@ -197,7 +197,7 @@ func TestDeleteRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Create refs to delete
@@ -231,7 +231,7 @@ func TestDeleteRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		err := runner.DeleteRefsBatch(ctx, []string{})
@@ -245,7 +245,7 @@ func TestDeleteRefsBatch(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Create one ref
@@ -274,7 +274,7 @@ func TestRefUpdateIntegration(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Get initial commit for branch ref
@@ -324,7 +324,7 @@ func TestRefUpdateIntegration(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		ctx := context.Background()
 
 		// Get initial commit

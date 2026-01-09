@@ -27,7 +27,7 @@ type Handler interface {
 
 // Action performs the initialization of Stackit in a repository
 func Action(ctx context.Context, repoRoot string, opts Options, handler Handler) error {
-	runner := git.NewRunnerWithPath(repoRoot)
+	runner := git.NewRunnerWithPath(repoRoot, nil)
 
 	cfg, err := config.LoadConfig(repoRoot)
 	if err != nil {

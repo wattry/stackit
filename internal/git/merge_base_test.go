@@ -18,7 +18,7 @@ func TestIsAncestor(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 		err := runner.InitDefaultRepo()
 		require.NoError(t, err)
 
@@ -43,7 +43,7 @@ func TestIsAncestor(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 		err := runner.InitDefaultRepo()
 		require.NoError(t, err)
 
@@ -68,7 +68,7 @@ func TestIsAncestor(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 		err := runner.InitDefaultRepo()
 		require.NoError(t, err)
 
@@ -123,7 +123,7 @@ func TestIsAncestor_GitFallback(t *testing.T) {
 		require.NoError(t, err)
 
 		// 4. Create a runner for the local repo
-		runner := git.NewRunnerWithPath(localDir)
+		runner := git.NewRunnerWithPath(localDir, nil)
 		err = runner.InitDefaultRepo()
 		require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestIsAncestor_GitFallback(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 		err := runner.InitDefaultRepo()
 		require.NoError(t, err)
 

@@ -25,7 +25,7 @@ func TestIsMerged(t *testing.T) {
 		require.NoError(t, err)
 
 		// Initialize git repo
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 
 		// Branch is not merged
 		merged, err := runner.IsMerged(context.Background(), "branch1", "main")
@@ -51,7 +51,7 @@ func TestIsMerged(t *testing.T) {
 		require.NoError(t, err)
 
 		// Initialize git repo
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 
 		// Branch should be merged
 		merged, err := runner.IsMerged(context.Background(), "branch1", "main")

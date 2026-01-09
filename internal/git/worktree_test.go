@@ -17,7 +17,7 @@ func TestWorktree(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 
 		// Create a branch to checkout in the worktree
 		err := scene.Repo.CreateBranch("test-branch")
@@ -58,7 +58,7 @@ func TestWorktree(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 
 		// Create a temporary directory for the worktree
 		tmpDir := t.TempDir()
@@ -84,7 +84,7 @@ func TestWorktreeRegistry(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 
 		// Write worktree metadata
 		meta := &git.WorktreeMeta{
@@ -108,7 +108,7 @@ func TestWorktreeRegistry(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 
 		// Read non-existent metadata
 		meta, err := runner.ReadWorktreeMeta("non-existent")
@@ -120,7 +120,7 @@ func TestWorktreeRegistry(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 
 		// Write worktree metadata
 		meta := &git.WorktreeMeta{
@@ -144,7 +144,7 @@ func TestWorktreeRegistry(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Repo.Dir)
+		runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 
 		// Write multiple worktree metadata
 		meta1 := &git.WorktreeMeta{

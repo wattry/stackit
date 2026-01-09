@@ -608,3 +608,7 @@ func (d *demoGitRunner) DeleteWorktreeMeta(_ string) error {
 func (d *demoGitRunner) ListWorktreeMetas() (map[string]*git.WorktreeMeta, error) {
 	return make(map[string]*git.WorktreeMeta), nil
 }
+
+func (d *demoGitRunner) SetLogger(_ git.DebugLogger) {
+	// No-op for demo runner
+}

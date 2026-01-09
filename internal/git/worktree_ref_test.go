@@ -34,12 +34,12 @@ func TestResolveRefInWorktree(t *testing.T) {
 	worktreePath := filepath.Join(tmpDir, "worktree")
 
 	// Add worktree for feature branch using the main runner
-	mainRunner := git.NewRunnerWithPath(scene.Repo.Dir)
+	mainRunner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 	err = mainRunner.AddWorktree(context.Background(), worktreePath, "feature", false)
 	require.NoError(t, err)
 
 	// Create a NEW runner pointing to the worktree
-	worktreeRunner := git.NewRunnerWithPath(worktreePath)
+	worktreeRunner := git.NewRunnerWithPath(worktreePath, nil)
 	err = worktreeRunner.InitDefaultRepo()
 	require.NoError(t, err)
 

@@ -88,7 +88,7 @@ func (h *cliInitHandler) OnSuccess(trunkName string, wasInitialized bool, isRese
 // Returns the repo root path. This is used by commands that need stackit
 // to be initialized but want to auto-initialize for convenience.
 func EnsureInitialized(ctx context.Context, writer io.Writer) (string, error) {
-	runner := git.NewRunner()
+	runner := git.NewRunner(nil)
 	repoRoot, err := runner.DiscoverRepoRoot()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository: %w", err)
@@ -124,9 +124,9 @@ func newInitCmd() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
-			runner := git.NewRunner()
+			runner := git.NewRunner(nil)
 			if cwd != "" {
-				runner = git.NewRunnerWithPath(cwd)
+				runner = git.NewRunnerWithPath(cwd, nil)
 			}
 			repoRoot, err := runner.DiscoverRepoRoot()
 			if err != nil {

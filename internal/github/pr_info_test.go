@@ -161,7 +161,7 @@ func TestGetGitHubClient(t *testing.T) {
 		// Mock token by setting environment variable
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner())
+		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner(nil))
 		// Note: This may fail if gh CLI is not available, but that's okay for testing the logic
 		if err != nil {
 			// If it fails due to token issues, that's expected in test environment
@@ -197,7 +197,7 @@ func TestGetGitHubClient(t *testing.T) {
 		// Mock token
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner())
+		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner(nil))
 		if err != nil {
 			// If it fails due to token issues, that's expected in test environment
 			require.Contains(t, err.Error(), "token")
@@ -233,7 +233,7 @@ func TestGetGitHubClient(t *testing.T) {
 		// Mock token
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner())
+		client, owner, repo, err := githubpkg.GetGitHubClient(context.Background(), git.NewRunner(nil))
 		if err != nil {
 			// If it fails due to token issues, that's expected in test environment
 			require.Contains(t, err.Error(), "token")
