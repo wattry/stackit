@@ -142,7 +142,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if metadataFetchErr != nil {
 		out.Debug("No remote metadata to fetch: %v", metadataFetchErr)
 	}
-	if err := processRemoteMetadata(ctx, &opts); err != nil {
+	if err := processRemoteMetadata(ctx, &opts, handler); err != nil {
 		return err
 	}
 
@@ -358,6 +358,20 @@ type Handler interface {
 	// Cleanup ensures terminal is restored on error (may be no-op for non-TTY handlers)
 	Cleanup()
 
+	// IsInteractive returns true if this handler supports interactive prompts.
+	// Non-interactive handlers return false and their prompt methods return defaults.
+	IsInteractive() bool
+
+	// PromptMetadataConflict displays a metadata conflict and asks user to accept remote.
+	// Returns true to accept remote metadata, false to keep local.
+	// In non-interactive mode, returns (false, nil) to preserve local changes.
+	PromptMetadataConflict(diff *engine.MetadataDiff) (acceptRemote bool, err error)
+
+	// PromptOrphanedMetadata asks what to do when remote metadata was deleted but local has changes.
+	// Returns true to push local metadata to remote, false to accept deletion.
+	// In non-interactive mode, returns (false, nil) to accept the remote deletion.
+	PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (pushLocal bool, err error)
+
 	// RestackHandler methods are available for restack-specific output
 	// This allows the same handler to be used for standalone restack operations
 	RestackHandler
@@ -387,6 +401,19 @@ func (h *NullHandler) OnRestackComplete(_, _ int, _ []string) {}
 
 // Cleanup implements Handler.
 func (h *NullHandler) Cleanup() {}
+
+// IsInteractive implements Handler.
+func (h *NullHandler) IsInteractive() bool { return false }
+
+// PromptMetadataConflict implements Handler. Returns false (keep local) in non-interactive mode.
+func (h *NullHandler) PromptMetadataConflict(_ *engine.MetadataDiff) (bool, error) {
+	return false, nil
+}
+
+// PromptOrphanedMetadata implements Handler. Returns false (accept deletion) in non-interactive mode.
+func (h *NullHandler) PromptOrphanedMetadata(_ engine.OrphanedMetadataInfo) (bool, error) {
+	return false, nil
+}
 
 // FormatSummaryParts returns the summary parts as a slice of strings
 // This is shared between SimpleSyncHandler and InteractiveSyncHandler

@@ -40,7 +40,7 @@ func TestMetadataCleanup(t *testing.T) {
 		s.Rebuild()
 
 		// 5. Run sync remote metadata
-		err = syncRemoteMetadata(s.Context, &Options{})
+		err = syncRemoteMetadata(s.Context, &Options{}, &NullHandler{})
 		require.NoError(t, err)
 
 		// 6. Verify metadata ref for deleted branch is gone
@@ -82,8 +82,8 @@ func TestMetadataCleanup(t *testing.T) {
 		require.NoError(t, err)
 
 		// 2. Run syncRemoteMetadata
-		// This should NOT prompt (non-interactive mode will fail if it tries to prompt)
-		err = syncRemoteMetadata(s.Context, &Options{})
+		// This should NOT prompt (NullHandler returns defaults without prompting)
+		err = syncRemoteMetadata(s.Context, &Options{}, &NullHandler{})
 		require.NoError(t, err)
 	})
 }

@@ -1,20 +1,19 @@
 package sync
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // syncRemoteMetadata fetches and processes remote metadata.
 // Deprecated: Use FetchRemoteMetadata in parallel + processRemoteMetadata
-func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
+func syncRemoteMetadata(ctx *app.Context, opts *Options, handler Handler) error {
 	eng := ctx.RemoteMetadata()
 	out := ctx.Output
 
@@ -26,12 +25,12 @@ func syncRemoteMetadata(ctx *app.Context, opts *Options) error {
 	}
 	ctx.Logger.Info("fetch remote metadata completed durationMs=%d", time.Since(fetchStart).Milliseconds())
 
-	return processRemoteMetadata(ctx, opts)
+	return processRemoteMetadata(ctx, opts, handler)
 }
 
 // processRemoteMetadata processes remote metadata after fetch completes
 // This is designed to run after the network fetch operation completes in parallel
-func processRemoteMetadata(ctx *app.Context, opts *Options) error {
+func processRemoteMetadata(ctx *app.Context, opts *Options, handler Handler) error {
 	eng := ctx.RemoteMetadata()
 	out := ctx.Output
 
@@ -51,7 +50,7 @@ func processRemoteMetadata(ctx *app.Context, opts *Options) error {
 
 	// Handle orphaned local metadata (dual-checkout scenario or manual branch deletion)
 	orphanedStart := time.Now()
-	if err := handleOrphanedMetadata(ctx, opts); err != nil {
+	if err := handleOrphanedMetadata(ctx, opts, handler); err != nil {
 		return err
 	}
 	ctx.Logger.Info("handle orphaned metadata completed durationMs=%d", time.Since(orphanedStart).Milliseconds())
@@ -74,9 +73,9 @@ func processRemoteMetadata(ctx *app.Context, opts *Options) error {
 		return nil
 	}
 
-	// Prompt user for each conflicting branch
+	// Resolve each conflicting branch via handler
 	for _, diff := range diffs {
-		if err := promptAndResolveConflict(ctx, diff); err != nil {
+		if err := resolveMetadataConflict(ctx, diff, handler); err != nil {
 			return err
 		}
 	}
@@ -85,7 +84,7 @@ func processRemoteMetadata(ctx *app.Context, opts *Options) error {
 }
 
 // handleOrphanedMetadata handles branches where remote metadata was deleted but local exists
-func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
+func handleOrphanedMetadata(ctx *app.Context, opts *Options, handler Handler) error {
 	eng := ctx.Engine
 	out := ctx.Output
 
@@ -126,8 +125,8 @@ func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 				out.Debug("Failed to delete metadata hash for %s: %v", info.BranchName, err)
 			}
 		} else {
-			// Has local changes - prompt user
-			if err := promptOrphanedMetadata(ctx, info); err != nil {
+			// Has local changes - prompt user via handler
+			if err := resolveOrphanedMetadata(ctx, info, handler); err != nil {
 				return err
 			}
 		}
@@ -136,31 +135,21 @@ func handleOrphanedMetadata(ctx *app.Context, opts *Options) error {
 	return nil
 }
 
-// promptOrphanedMetadata prompts the user about orphaned metadata with local changes
-func promptOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo) error {
+// resolveOrphanedMetadata resolves orphaned metadata by prompting via handler
+func resolveOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo, handler Handler) error {
 	eng := ctx.Engine
 	out := ctx.Output
 
-	out.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
-		style.ColorBranchName(info.BranchName, false))
-	if info.LocalMeta.LockReason.IsLocked() {
-		out.Info("  lockReason: %s", info.LocalMeta.LockReason)
-	}
-	if info.LocalMeta.Scope != nil {
-		out.Info("  scope: %s", *info.LocalMeta.Scope)
-	}
-
-	accept, err := promptYesNo("Push your local metadata to remote?")
+	pushLocal, err := handler.PromptOrphanedMetadata(info)
 	if err != nil {
-		// In non-interactive mode, PromptConfirm returns (false, ErrInteractiveDisabled)
-		// We default to false (don't push) to avoid hanging in tests
-		if !errors.Is(err, tui.ErrInteractiveDisabled) {
+		// Handle user cancellation (Ctrl+C)
+		if errors.Is(err, errors.ErrCanceled) {
 			return err
 		}
-		// accept is already false when ErrInteractiveDisabled
+		return fmt.Errorf("prompt failed: %w", err)
 	}
 
-	if accept {
+	if pushLocal {
 		// Push local metadata to remote
 		if err := eng.SetLastModifiedBy(info.BranchName); err != nil {
 			out.Debug("Failed to set last modified by: %v", err)
@@ -192,42 +181,22 @@ func printMetadataDiffs(diffs []*engine.MetadataDiff, splog interface{ Info(stri
 	splog.Info("\nRun without --dry-run to apply changes.")
 }
 
-// promptAndResolveConflict prompts the user to accept or reject remote metadata
-func promptAndResolveConflict(ctx *app.Context, diff *engine.MetadataDiff) error {
+// resolveMetadataConflict resolves a metadata conflict by prompting via handler
+func resolveMetadataConflict(ctx *app.Context, diff *engine.MetadataDiff, handler Handler) error {
 	eng := ctx.RemoteMetadata()
-	out := ctx.Output
 
-	// Display field-level diff
-	out.Info("\nMetadata differs for branch '%s':", style.ColorBranchName(diff.Branch, false))
-	for _, fd := range diff.Differences {
-		out.Info("  %s: %v (local) → %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
-	}
-	if diff.RemoteMeta.LastModifiedBy != nil {
-		out.Info("  Last modified by: %s <%s>",
-			diff.RemoteMeta.LastModifiedBy.GitName,
-			diff.RemoteMeta.LastModifiedBy.GitEmail)
-	}
-
-	// Prompt
-	accept, err := promptYesNo("Accept remote metadata?")
+	acceptRemote, err := handler.PromptMetadataConflict(diff)
 	if err != nil {
-		// In non-interactive mode, PromptConfirm returns (false, ErrInteractiveDisabled)
-		// We default to false (reject remote) to avoid hanging in tests
-		if !errors.Is(err, tui.ErrInteractiveDisabled) {
+		// Handle user cancellation (Ctrl+C)
+		if errors.Is(err, errors.ErrCanceled) {
 			return err
 		}
-		// accept is already false when ErrInteractiveDisabled
+		return fmt.Errorf("prompt failed: %w", err)
 	}
 
-	if accept {
+	if acceptRemote {
 		return eng.AcceptRemoteMetadata(diff.Branch)
 	}
 	eng.RejectRemoteMetadata(diff.Branch)
 	return nil
-}
-
-// promptYesNo prompts the user for a yes/no answer
-// Uses tui.PromptConfirm which respects non-interactive mode
-func promptYesNo(prompt string) (bool, error) {
-	return tui.PromptConfirm(prompt, false)
 }
