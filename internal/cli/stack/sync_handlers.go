@@ -99,15 +99,28 @@ func (h *SimpleSyncHandler) IsInteractive() bool { return false }
 
 // PromptMetadataConflict implements Handler. Logs warning and returns false (keep local) in non-interactive mode.
 func (h *SimpleSyncHandler) PromptMetadataConflict(diff *engine.MetadataDiff) (bool, error) {
-	h.splog.Warn("Metadata conflict for %s (keeping local, use interactive mode to resolve)",
+	h.splog.Warn("Metadata conflict for %s (keeping local):",
 		style.ColorBranchName(diff.Branch, false))
+	for _, fd := range diff.Differences {
+		h.splog.Warn("  %s: %v (local) vs %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
+	}
+	h.splog.Info("  Use interactive mode to accept remote changes")
 	return false, nil
 }
 
 // PromptOrphanedMetadata implements Handler. Logs warning and returns false (accept deletion) in non-interactive mode.
 func (h *SimpleSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (bool, error) {
-	h.splog.Warn("Orphaned metadata for %s (accepting deletion, use interactive mode to push)",
+	h.splog.Warn("Orphaned metadata for %s (accepting deletion):",
 		style.ColorBranchName(info.BranchName, false))
+	if info.LocalMeta != nil {
+		if info.LocalMeta.LockReason.IsLocked() {
+			h.splog.Warn("  lockReason: %s", info.LocalMeta.LockReason)
+		}
+		if info.LocalMeta.Scope != nil {
+			h.splog.Warn("  scope: %s", *info.LocalMeta.Scope)
+		}
+	}
+	h.splog.Info("  Use interactive mode to push local changes")
 	return false, nil
 }
 
