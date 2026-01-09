@@ -88,23 +88,24 @@ func TestMultiStackWorktreeExecutor_OctopusMergeCreatesSingleCommit(t *testing.T
 	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// Create a stack with 3 branches: branch1 -> branch2 -> branch3
+	// Each branch modifies different files to avoid conflicts
 	s.CreateBranch("branch1").
 		TrackBranch("branch1", s.Engine.Trunk().GetName())
-	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch1-change", "file1.txt"))
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch1-content", "file1"))
 	branch1SHA, err := s.Scene.Repo.GetRevision("branch1")
 	require.NoError(t, err)
 	s.Rebuild()
 
 	s.CreateBranch("branch2").
 		TrackBranch("branch2", "branch1")
-	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch2-change", "file2.txt"))
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch2-content", "file2"))
 	branch2SHA, err := s.Scene.Repo.GetRevision("branch2")
 	require.NoError(t, err)
 	s.Rebuild()
 
 	s.CreateBranch("branch3").
 		TrackBranch("branch3", "branch2")
-	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch3-change", "file3.txt"))
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch3-content", "file3"))
 	branch3SHA, err := s.Scene.Repo.GetRevision("branch3")
 	require.NoError(t, err)
 	s.Rebuild().
@@ -121,7 +122,7 @@ func TestMultiStackWorktreeExecutor_OctopusMergeCreatesSingleCommit(t *testing.T
 	require.Len(t, result.MergedStacks, 1)
 	assert.Equal(t, "branch1", result.MergedStacks[0].RootBranch)
 
-	// Verify we have a single merge commit with multiple parents (octopus merge)
+	// Verify we have a merge commit (Git optimizes stacked branches to 2 parents: trunk + top branch)
 	worktreeRepo := testhelpers.NewGitRepoFromExisting(t, result.WorktreePath)
 
 	// Get the commit object to count parents
@@ -136,10 +137,12 @@ func TestMultiStackWorktreeExecutor_OctopusMergeCreatesSingleCommit(t *testing.T
 		}
 	}
 
-	// Octopus merge should have 4 parents: trunk + branch1 + branch2 + branch3
-	assert.Equal(t, 4, parentCount, "octopus merge should have 4 parents (trunk + 3 branches)")
+	// For stacked branches, Git optimizes to 2 parents (trunk + top branch)
+	// since the top branch already contains all commits from lower branches
+	assert.Equal(t, 2, parentCount, "merge should have 2 parents (trunk + top branch)")
 
-	// Verify all original branch commits are ancestors of HEAD
+	// Verify all original branch commits are ancestors of HEAD (this is the critical check)
+	// GitHub will auto-close PRs because their commits are reachable from the merged commit
 	isAncestor := func(sha string) bool {
 		err := worktreeRepo.RunGitCommand("merge-base", "--is-ancestor", sha, "HEAD")
 		return err == nil
@@ -150,12 +153,13 @@ func TestMultiStackWorktreeExecutor_OctopusMergeCreatesSingleCommit(t *testing.T
 	assert.True(t, isAncestor(branch3SHA), "branch3 commit should be ancestor of HEAD")
 
 	// Verify all files are present in the working tree
-	_, err = os.Stat(filepath.Join(result.WorktreePath, "file1.txt"))
-	assert.NoError(t, err, "file1.txt should exist")
-	_, err = os.Stat(filepath.Join(result.WorktreePath, "file2.txt"))
-	assert.NoError(t, err, "file2.txt should exist")
-	_, err = os.Stat(filepath.Join(result.WorktreePath, "file3.txt"))
-	assert.NoError(t, err, "file3.txt should exist")
+	// CreateChangeAndCommit creates files as "{prefix}_test.txt"
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "file1_test.txt"))
+	assert.NoError(t, err, "file1_test.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "file2_test.txt"))
+	assert.NoError(t, err, "file2_test.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "file3_test.txt"))
+	assert.NoError(t, err, "file3_test.txt should exist")
 }
 
 func splitLines(s string) []string {
