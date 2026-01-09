@@ -116,7 +116,12 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			var styleStr string
 			prompt := &survey.Select{
 				Message: fmt.Sprintf("How would you like to split %s?", currentBranch.GetName()),
-				Options: []string{"By commit - slice up the history of this branch", "By hunk - split into new single-commit branches", "Cancel"},
+				Options: []string{
+					"By commit - slice up the history of this branch",
+					"By hunk - split into new single-commit branches",
+					"By file - extract specific files into a new parent branch",
+					"Cancel",
+				},
 			}
 			if err := survey.AskOne(prompt, &styleStr); err != nil {
 				return fmt.Errorf("canceled")
@@ -129,6 +134,8 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 				style = StyleCommit
 			case strings.Contains(styleStr, "hunk"):
 				style = StyleHunk
+			case strings.Contains(styleStr, "file"):
+				style = StyleFile
 			}
 		} else {
 			// Only one commit, default to hunk

@@ -98,6 +98,29 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 			return nil, fmt.Errorf("failed to check staged changes: %w", err)
 		}
 		if !hasStaged {
+			// Nothing was staged - ask user if they want to continue or cancel
+			if utils.IsInteractive() {
+				var continueChoice string
+				prompt := &survey.Select{
+					Message: "No changes staged. What would you like to do?",
+					Options: []string{"Try again", "Cancel split"},
+				}
+				if err := survey.AskOne(prompt, &continueChoice); err != nil {
+					// Ctrl+C during prompt - restore and exit
+					_ = eng.ForceCheckoutBranch(ctx, branchToSplit)
+					return nil, fmt.Errorf("canceled")
+				}
+				if strings.Contains(continueChoice, "Cancel") {
+					_ = eng.ForceCheckoutBranch(ctx, branchToSplit)
+					if len(branchNames) == 0 {
+						return nil, fmt.Errorf("canceled: no new branches created")
+					}
+					return nil, fmt.Errorf("canceled")
+				}
+				// User chose to try again
+				continue
+			}
+			// Non-interactive mode - just skip and continue
 			splog.Info("No changes staged, skipping this branch.")
 			continue
 		}
