@@ -39,7 +39,7 @@ func TestRebase(t *testing.T) {
 		require.NoError(t, err)
 
 		// Rebase branch1 onto new main
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		result, err := runner.Rebase(context.Background(), "branch1", "main", branch1Rev)
 		require.NoError(t, err)
 		require.Equal(t, git.RebaseDone, result)
@@ -80,7 +80,7 @@ func TestRebase(t *testing.T) {
 		require.NoError(t, err)
 
 		// Rebase should result in conflict (using fork point, not branch tip)
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		result, err := runner.Rebase(context.Background(), "branch1", "main", forkPoint)
 		require.NoError(t, err)
 		require.Equal(t, git.RebaseConflict, result)
@@ -96,7 +96,7 @@ func TestIsRebaseInProgress(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		require.False(t, runner.IsRebaseInProgress(context.Background()))
 	})
 
@@ -126,7 +126,7 @@ func TestIsRebaseInProgress(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start rebase (will conflict)
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		_, err = runner.Rebase(context.Background(), "branch1", "main", forkPoint)
 		require.NoError(t, err)
 
@@ -162,7 +162,7 @@ func TestRebaseContinue(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start rebase (will conflict)
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		_, err = runner.Rebase(context.Background(), "branch1", "main", forkPoint)
 		require.NoError(t, err)
 		require.True(t, runner.IsRebaseInProgress(context.Background()))
@@ -210,7 +210,7 @@ func TestGetRebaseHead(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start rebase (will conflict)
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		_, err = runner.Rebase(context.Background(), "branch1", "main", forkPoint)
 		require.NoError(t, err)
 

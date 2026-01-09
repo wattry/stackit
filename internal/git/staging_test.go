@@ -15,7 +15,7 @@ func TestStageAll(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		// Create unstaged change
 		err := scene.Repo.CreateChange("new content", "test", true)
@@ -47,7 +47,7 @@ func TestStageTracked(t *testing.T) {
 			// Create initial tracked file
 			return s.Repo.CreateChangeAndCommit("initial", "test")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		// Modify tracked file (unstaged)
 		err := scene.Repo.CreateChange("modified", "test", true)
@@ -73,7 +73,7 @@ func TestHasStagedChanges(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		hasStaged, err := runner.HasStagedChanges(context.Background())
 		require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestHasStagedChanges(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		// Create and stage change
 		err := scene.Repo.CreateChange("new content", "test", false)
@@ -101,7 +101,7 @@ func TestHasUnstagedChanges(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		hasUnstaged, err := runner.HasUnstagedChanges(context.Background())
 		require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestHasUnstagedChanges(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "test")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		// Create unstaged change
 		err := scene.Repo.CreateChange("modified", "test", true)
@@ -129,7 +129,7 @@ func TestHasUntrackedFiles(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		hasUntracked, err := runner.HasUntrackedFiles(context.Background())
 		require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestHasUntrackedFiles(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		// Create untracked file
 		err := scene.Repo.CreateChange("content", "newfile", true)
@@ -157,7 +157,7 @@ func TestAddAll(t *testing.T) {
 		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 
 		// Create unstaged change
 		err := scene.Repo.CreateChange("new content", "test", true)

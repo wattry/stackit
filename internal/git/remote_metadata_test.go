@@ -22,7 +22,7 @@ func TestBatchDeleteRemoteMetadataRefs(t *testing.T) {
 
 		// Create some metadata refs and push them
 		branches := []string{"branch1", "branch2", "branch3"}
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		for _, b := range branches {
 			refName := fmt.Sprintf("refs/stackit/metadata/%s", b)
 			// Create a blob for the ref
@@ -67,7 +67,7 @@ func TestBatchDeleteRemoteMetadataRefs(t *testing.T) {
 		require.NoError(t, err)
 
 		refName := "refs/stackit/metadata/branch1"
-		runner := git.NewRunnerWithPath(scene.Dir)
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
 		sha, err := runner.CreateBlob(`{"branch":"branch1"}`)
 		require.NoError(t, err)
 
@@ -85,7 +85,7 @@ func TestBatchDeleteRemoteMetadataRefs(t *testing.T) {
 	})
 
 	t.Run("handles empty slice gracefully", func(t *testing.T) {
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		err := runner.BatchDeleteRemoteMetadataRefs([]string{})
 		require.NoError(t, err)
 	})

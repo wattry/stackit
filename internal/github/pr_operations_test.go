@@ -114,7 +114,7 @@ func TestUpdatePullRequest(t *testing.T) {
 			Body:  &newBody,
 		}
 
-		err = githubpkg.UpdatePullRequest(context.Background(), client, git.NewRunner(), owner, repo, *createdPR.Number, updateOpts)
+		err = githubpkg.UpdatePullRequest(context.Background(), client, git.NewRunner(nil), owner, repo, *createdPR.Number, updateOpts)
 		require.NoError(t, err)
 
 		// Verify the update
@@ -143,7 +143,7 @@ func TestUpdatePullRequest(t *testing.T) {
 			Base: &newBase,
 		}
 
-		err = githubpkg.UpdatePullRequest(context.Background(), client, git.NewRunner(), owner, repo, *createdPR.Number, updateOpts)
+		err = githubpkg.UpdatePullRequest(context.Background(), client, git.NewRunner(nil), owner, repo, *createdPR.Number, updateOpts)
 		require.NoError(t, err)
 
 		// Verify the update
@@ -175,7 +175,7 @@ func TestUpdatePullRequest(t *testing.T) {
 			Reviewers: []string{"reviewer1"},
 		}
 
-		err = githubpkg.UpdatePullRequest(context.Background(), client, git.NewRunner(), owner, repo, *createdPR.Number, updateOpts)
+		err = githubpkg.UpdatePullRequest(context.Background(), client, git.NewRunner(nil), owner, repo, *createdPR.Number, updateOpts)
 		require.NoError(t, err)
 	})
 }

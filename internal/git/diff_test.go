@@ -17,7 +17,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		})
 
 		// Initialize git repo
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 
 		// Get main revision
 		mainRev, err := scene.Repo.GetRef("main")
@@ -35,7 +35,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		})
 
 		// Initialize git repo
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 
 		// Get main revision
 		mainRev, err := scene.Repo.GetRef("main")
@@ -59,7 +59,7 @@ func TestIsDiffEmpty(t *testing.T) {
 		})
 
 		// Initialize git repo
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 
 		// Get main revision
 		mainRev, err := scene.Repo.GetRef("main")
@@ -84,7 +84,7 @@ func TestGetUnmergedFiles(t *testing.T) {
 			return s.Repo.CreateChangeAndCommit("initial", "init")
 		})
 
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		files, err := runner.GetUnmergedFiles(context.Background())
 		require.NoError(t, err)
 		require.Empty(t, files)
@@ -117,7 +117,7 @@ func TestGetUnmergedFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start rebase (will conflict)
-		runner := git.NewRunner()
+		runner := git.NewRunner(nil)
 		_, err = runner.Rebase(context.Background(), "branch1", "main", forkPoint)
 		require.NoError(t, err)
 

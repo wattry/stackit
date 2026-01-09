@@ -20,6 +20,11 @@ import (
 	"stackit.dev/stackit/internal/utils"
 )
 
+// DebugLogger is an interface for logging debug messages
+type DebugLogger interface {
+	Debug(msg string, args ...any)
+}
+
 var (
 	// goGitMu synchronizes go-git operations that access packfiles to prevent
 	// "concurrent map iteration and map write" panics
@@ -139,6 +144,8 @@ func (r *runner) runGitInternal(ctx context.Context, input string, env []string,
 		defer cancel()
 	}
 
+	r.debugLog("git %s", strings.Join(args, " "))
+
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if r.repoRoot != "" {
 		cmd.Dir = r.repoRoot
@@ -182,6 +189,8 @@ func (r *runner) runGitStreaming(ctx context.Context, args ...string) (string, e
 		defer cancel()
 	}
 
+	r.debugLog("git %s (streaming)", strings.Join(args, " "))
+
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if r.repoRoot != "" {
 		cmd.Dir = r.repoRoot
@@ -219,6 +228,8 @@ func (r *runner) RunGHCommandWithContext(ctx context.Context, args ...string) (s
 		defer cancel()
 	}
 
+	r.debugLog("gh %s", strings.Join(args, " "))
+
 	cmd := exec.CommandContext(ctx, "gh", args...)
 	// Use repoRoot for gh commands to ensure they are scoped to the correct repo
 	if r.repoRoot != "" {
@@ -246,6 +257,9 @@ func (r *runner) RunGitCommandInteractive(args ...string) error {
 	if !utils.IsInteractive() {
 		return fmt.Errorf("interactive git command '%v' not allowed in non-interactive mode", args)
 	}
+
+	r.debugLog("git %s (interactive)", strings.Join(args, " "))
+
 	cmd := exec.Command("git", args...)
 	if r.repoRoot != "" {
 		cmd.Dir = r.repoRoot
@@ -329,22 +343,25 @@ type Runner interface {
 	RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error)
 	RunGitCommandInteractive(args ...string) error
 	RunGHCommandWithContext(ctx context.Context, args ...string) (string, error)
+
+	// Logging
+	SetLogger(logger DebugLogger)
 }
 
 // NewRunner returns a standard implementation of Runner that uses the current
 // working directory as its repository root.
-func NewRunner() Runner {
-	return &runner{}
+func NewRunner(logger DebugLogger) Runner {
+	return &runner{logger: logger}
 }
 
 // NewRunnerWithPath returns a Runner that operates on a specific repo path.
 // This is safe for parallel tests since it doesn't rely on global state.
-func NewRunnerWithPath(repoRoot string) Runner {
+func NewRunnerWithPath(repoRoot string, logger DebugLogger) Runner {
 	abs, err := filepath.Abs(repoRoot)
 	if err == nil {
 		repoRoot = abs
 	}
-	return &runner{repoRoot: repoRoot}
+	return &runner{repoRoot: repoRoot, logger: logger}
 }
 
 // runner implements Runner by calling the actual git package functions
@@ -352,6 +369,19 @@ type runner struct {
 	repo     *Repository
 	repoRoot string
 	repoMu   sync.Mutex
+	logger   DebugLogger
+}
+
+// SetLogger sets the debug logger for git command logging
+func (r *runner) SetLogger(logger DebugLogger) {
+	r.logger = logger
+}
+
+// debugLog logs a git command if a debug logger is set
+func (r *runner) debugLog(format string, args ...any) {
+	if r.logger != nil {
+		r.logger.Debug(format, args...)
+	}
 }
 
 func (r *runner) ensureRepo() (*Repository, error) {

@@ -35,7 +35,7 @@ func TestPullBranch_Reproduction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a long-lived runner
-	runner := git.NewRunnerWithPath(localDir)
+	runner := git.NewRunnerWithPath(localDir, nil)
 	err = runner.InitDefaultRepo()
 	require.NoError(t, err)
 
@@ -97,7 +97,7 @@ func TestReloadRepository(t *testing.T) {
 	})
 
 	// Create a runner and initialize it
-	runner := git.NewRunnerWithPath(scene.Repo.Dir)
+	runner := git.NewRunnerWithPath(scene.Repo.Dir, nil)
 	err := runner.InitDefaultRepo()
 	require.NoError(t, err)
 
@@ -153,7 +153,7 @@ func TestPullBranch_WithReload(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a long-lived runner
-	runner := git.NewRunnerWithPath(localDir)
+	runner := git.NewRunnerWithPath(localDir, nil)
 	err = runner.InitDefaultRepo()
 	require.NoError(t, err)
 

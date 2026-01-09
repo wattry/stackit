@@ -45,9 +45,9 @@ This will create .github/workflows/stackit.yml which includes:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
-			runner := git.NewRunner()
+			runner := git.NewRunner(nil)
 			if cwd != "" {
-				runner = git.NewRunnerWithPath(cwd)
+				runner = git.NewRunnerWithPath(cwd, nil)
 			}
 			return runGithubInstall(runner, force, cmd.OutOrStdout())
 		},

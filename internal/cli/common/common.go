@@ -68,9 +68,9 @@ func HandleCommandError(err error) error {
 // that returns all branch names in the repository.
 func CompleteBranches(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	cwd, _ := cmd.Flags().GetString("cwd")
-	runner := git.NewRunner()
+	runner := git.NewRunner(nil)
 	if cwd != "" {
-		runner = git.NewRunnerWithPath(cwd)
+		runner = git.NewRunnerWithPath(cwd, nil)
 	}
 	branches, err := runner.GetAllBranchNames()
 	if err != nil {

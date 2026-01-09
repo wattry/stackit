@@ -126,19 +126,6 @@ func NewContextWithRepoRootAndOptions(eng engine.Engine, repoRoot string, opts G
 
 // NewContextWithRepoRootOptionsAndWriter creates a new context with the given engine, repo root, options and writer
 func NewContextWithRepoRootOptionsAndWriter(eng engine.Engine, repoRoot string, opts GlobalOptions, writer io.Writer) *Context {
-	if eng == nil {
-		panic("NewContextWithRepoRootAndOptions called with nil engine")
-	}
-
-	// Update global TUI interactivity
-	utils.SetInteractive(opts.Interactive)
-
-	// Create console output
-	consoleOutput := output.NewConsoleOutput(writer, opts.Debug)
-	if opts.Quiet {
-		consoleOutput.SetQuiet(true)
-	}
-
 	// Create file logger (skip when STACKIT_NO_LOGGING is set, e.g., during tests or CI)
 	var logger output.Logger
 	if os.Getenv("STACKIT_NO_LOGGING") != "" {
@@ -153,6 +140,41 @@ func NewContextWithRepoRootOptionsAndWriter(eng engine.Engine, repoRoot string, 
 			logger = fileLogger
 		}
 	}
+	return NewContextWithRepoRootOptionsAndWriterAndLogger(eng, repoRoot, opts, writer, logger)
+}
+
+// NewContextWithRepoRootOptionsAndWriterAndLogger creates a new context with the given engine, repo root, options, writer and logger
+func NewContextWithRepoRootOptionsAndWriterAndLogger(eng engine.Engine, repoRoot string, opts GlobalOptions, writer io.Writer, logger output.Logger) *Context {
+	if eng == nil {
+		panic("NewContextWithRepoRootAndOptions called with nil engine")
+	}
+
+	// Update global TUI interactivity
+	utils.SetInteractive(opts.Interactive)
+
+	// Create console output
+	consoleOutput := output.NewConsoleOutput(writer, opts.Debug)
+	if opts.Quiet {
+		consoleOutput.SetQuiet(true)
+	}
+
+	// If no logger provided, create one
+	if logger == nil {
+		if os.Getenv("STACKIT_NO_LOGGING") != "" {
+			logger = output.NewNullLogger()
+		} else {
+			logPath := output.GetLogFilePath()
+			fileLogger, err := output.NewFileLogger(logPath)
+			if err != nil {
+				logger = output.NewNullLogger()
+			} else {
+				logger = fileLogger
+			}
+		}
+	}
+
+	// Enable git command debug logging on the engine's git runner
+	eng.Git().SetLogger(logger)
 
 	return &Context{
 		Context:     context.Background(),
@@ -202,18 +224,36 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 	trunk := cfg.Trunk()
 	maxUndoDepth := cfg.UndoStackDepth()
 
-	// Create real engine
+	// Create file logger first so git commands during engine init are logged
+	var logger output.Logger
+	if os.Getenv("STACKIT_NO_LOGGING") != "" {
+		logger = output.NewNullLogger()
+	} else {
+		logPath := output.GetLogFilePath()
+		fileLogger, err := output.NewFileLogger(logPath)
+		if err != nil {
+			logger = output.NewNullLogger()
+		} else {
+			logger = fileLogger
+		}
+	}
+
+	// Create git runner with logger for command logging
+	gitRunner := git.NewRunnerWithPath(repoRoot, logger)
+
+	// Create real engine with configured runner
 	eng, err := engine.NewEngine(engine.Options{
 		RepoRoot:          repoRoot,
 		Trunk:             trunk,
 		MaxUndoStackDepth: maxUndoDepth,
 		Writer:            writer,
+		Git:               gitRunner,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	runtimeCtx := NewContextWithRepoRootOptionsAndWriter(eng, repoRoot, opts, writer)
+	runtimeCtx := NewContextWithRepoRootOptionsAndWriterAndLogger(eng, repoRoot, opts, writer, logger)
 	runtimeCtx.Context = ctx
 
 	// Try to create real GitHub client (may fail if no token)
@@ -239,9 +279,9 @@ func GetContextWithWriter(ctx context.Context, opts GlobalOptions, writer io.Wri
 	}
 
 	// Get repo root using a runner
-	runner := git.NewRunner()
+	runner := git.NewRunner(nil)
 	if opts.Cwd != "" {
-		runner = git.NewRunnerWithPath(opts.Cwd)
+		runner = git.NewRunnerWithPath(opts.Cwd, nil)
 	}
 	repoRoot, err := runner.DiscoverRepoRoot()
 	if err != nil {

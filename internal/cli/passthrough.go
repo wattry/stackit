@@ -116,9 +116,9 @@ func HandlePassthroughWithResult(args []string, exit bool, out, errWriter io.Wri
 
 			// Check if the command is modifying and the branch is locked or frozen
 			if slices.Contains(modifyingGitCommands, command) {
-				runner := git.NewRunner()
+				runner := git.NewRunner(nil)
 				if cwd != "" {
-					runner = git.NewRunnerWithPath(cwd)
+					runner = git.NewRunnerWithPath(cwd, nil)
 				}
 				if locked, frozen, branch := isCurrentBranchLockedOrFrozen(runner); locked || frozen {
 					var state, cmd string
