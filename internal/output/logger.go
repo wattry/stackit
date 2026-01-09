@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -40,7 +41,7 @@ func NewFileLogger(logFilePath string) (*FileLogger, error) {
 
 	// Create file handler with timestamps
 	fileHandler := slog.NewTextHandler(lumberjackLogger, &slog.HandlerOptions{
-		Level: slog.LevelDebug, // Always log everything to file
+		Level: getLogLevel(),
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				return slog.Attr{Key: a.Key, Value: slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05.000"))}
@@ -53,6 +54,25 @@ func NewFileLogger(logFilePath string) (*FileLogger, error) {
 		logger:    slog.New(fileHandler),
 		logWriter: lumberjackLogger,
 	}, nil
+}
+
+// getLogLevel returns the log level from STACKIT_LOG_LEVEL environment variable.
+// Valid values are: debug, info, warn, error (case-insensitive).
+// Defaults to Info if not set or invalid.
+func getLogLevel() slog.Level {
+	levelStr := strings.ToLower(os.Getenv("STACKIT_LOG_LEVEL"))
+	switch levelStr {
+	case "debug":
+		return slog.LevelDebug
+	case "info", "":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // Debug logs a debug message.
