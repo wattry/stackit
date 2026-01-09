@@ -126,6 +126,7 @@ type BranchMutations interface {
 	ResetHard(ctx context.Context, revision string) error
 	ResetMerge(ctx context.Context, revision string) error
 	Merge(ctx context.Context, revision string, opts MergeOptions) error
+	MergeMultiple(ctx context.Context, branches []string, opts MergeOptions) error
 	Fetch(ctx context.Context, remote string, branch string) error
 	InteractiveRebase(ctx context.Context, onto string) error
 }

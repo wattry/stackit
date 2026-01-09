@@ -257,6 +257,10 @@ func (d *demoGitRunner) Merge(_ context.Context, _ string, _ git.MergeOptions) e
 	return nil
 }
 
+func (d *demoGitRunner) MergeMultiple(_ context.Context, _ []string, _ git.MergeOptions) error {
+	return nil
+}
+
 func (d *demoGitRunner) CheckoutPaths(_ context.Context, _ string, _ []string) error {
 	return nil
 }

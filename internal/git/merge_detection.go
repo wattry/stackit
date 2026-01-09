@@ -31,6 +31,32 @@ func (r *runner) Merge(ctx context.Context, branchName string, opts MergeOptions
 	return nil
 }
 
+// MergeMultiple performs an octopus merge of multiple branches into the current branch.
+// This creates a single merge commit with multiple parents.
+func (r *runner) MergeMultiple(ctx context.Context, branches []string, opts MergeOptions) error {
+	if len(branches) == 0 {
+		return nil
+	}
+
+	args := []string{"merge"}
+	if opts.NoEdit {
+		args = append(args, "--no-edit")
+	}
+	if opts.NoFF {
+		args = append(args, "--no-ff")
+	}
+	if opts.Message != "" {
+		args = append(args, "-m", opts.Message)
+	}
+	args = append(args, branches...)
+
+	_, err := r.RunGitCommandWithContext(ctx, args...)
+	if err != nil {
+		return fmt.Errorf("failed to merge branches: %w", err)
+	}
+	return nil
+}
+
 func (r *runner) IsMergeInProgress(ctx context.Context) bool {
 	gitDir := r.getGitDir(ctx)
 	mergeHead := filepath.Join(gitDir, "MERGE_HEAD")
