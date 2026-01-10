@@ -66,6 +66,8 @@ This repo uses stackit for managing stacked changes. **NEVER use raw git command
 | `gh pr create` | `command stackit submit` |
 | `git rebase` | `command stackit restack` |
 
+**Exception:** `git commit` is allowed when adding additional commits to an existing stacked branch.
+
 ### Correct Workflow for Creating Stacked Changes
 
 **IMPORTANT:** `command stackit create` requires staged changes. You MUST stage changes BEFORE running the command.
@@ -109,6 +111,7 @@ Run `/stackit` for the full guide, or use specific skills:
 - `/stack-status` - View stack health
 - `/stack-fix` - Diagnose and fix issues
 - `/stack-sync` - Sync with trunk and cleanup
+- `/stack-restack` - Rebase all branches in the stack
 
 ## Implementation Details
 
