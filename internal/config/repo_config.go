@@ -229,7 +229,47 @@ func (c *Config) SetMergeMethod(method string) error {
 	}
 }
 
+// CICommand returns the CI command to run for validation.
+// This is the unified config that should be used by all CI validation.
+// It checks ci.command first, then falls back to combine.ciCommand for backwards compatibility.
+func (c *Config) CICommand() string {
+	// Check new unified config first
+	if c.data.CICommand != nil {
+		return *c.data.CICommand
+	}
+	// Fall back to legacy combine.ciCommand
+	if c.data.CombineCICommand != nil {
+		return *c.data.CombineCICommand
+	}
+	return ""
+}
+
+// SetCICommand sets the unified CI command for validation
+func (c *Config) SetCICommand(cmd string) {
+	c.data.CICommand = &cmd
+}
+
+// CITimeout returns the timeout in seconds for CI validation (default: 600)
+// Checks ci.timeout first, then falls back to combine.ciTimeout for backwards compatibility.
+func (c *Config) CITimeout() int {
+	// Check new unified config first
+	if c.data.CITimeout != nil {
+		return *c.data.CITimeout
+	}
+	// Fall back to legacy combine.ciTimeout
+	if c.data.CombineCITimeout != nil {
+		return *c.data.CombineCITimeout
+	}
+	return 600 // 10 minutes default
+}
+
+// SetCITimeout sets the timeout in seconds for CI validation
+func (c *Config) SetCITimeout(seconds int) {
+	c.data.CITimeout = &seconds
+}
+
 // CombineCICommand returns the CI command to run for combine validation
+// Deprecated: Use CICommand() instead. This is kept for backwards compatibility.
 func (c *Config) CombineCICommand() string {
 	if c.data.CombineCICommand != nil {
 		return *c.data.CombineCICommand
@@ -238,11 +278,13 @@ func (c *Config) CombineCICommand() string {
 }
 
 // SetCombineCICommand sets the CI command for combine validation
+// Deprecated: Use SetCICommand() instead. This is kept for backwards compatibility.
 func (c *Config) SetCombineCICommand(cmd string) {
 	c.data.CombineCICommand = &cmd
 }
 
 // CombineCITimeout returns the timeout in seconds for combine CI validation (default: 600)
+// Deprecated: Use CITimeout() instead. This is kept for backwards compatibility.
 func (c *Config) CombineCITimeout() int {
 	if c.data.CombineCITimeout != nil {
 		return *c.data.CombineCITimeout
@@ -251,6 +293,7 @@ func (c *Config) CombineCITimeout() int {
 }
 
 // SetCombineCITimeout sets the timeout in seconds for combine CI validation
+// Deprecated: Use SetCITimeout() instead. This is kept for backwards compatibility.
 func (c *Config) SetCombineCITimeout(seconds int) {
 	c.data.CombineCITimeout = &seconds
 }
@@ -266,8 +309,10 @@ type RepoConfig struct {
 	WorktreeBasePath           *string  `json:"worktree.basePath,omitempty"`
 	WorktreeAutoClean          *bool    `json:"worktree.autoClean,omitempty"`
 	MergeMethod                *string  `json:"merge.method,omitempty"`
-	CombineCICommand           *string  `json:"combine.ciCommand,omitempty"`
-	CombineCITimeout           *int     `json:"combine.ciTimeout,omitempty"`
+	CombineCICommand           *string  `json:"combine.ciCommand,omitempty"` // Deprecated: use CICommand
+	CombineCITimeout           *int     `json:"combine.ciTimeout,omitempty"` // Deprecated: use CITimeout
+	CICommand                  *string  `json:"ci.command,omitempty"`        // Unified CI command for all validation
+	CITimeout                  *int     `json:"ci.timeout,omitempty"`        // Unified CI timeout in seconds
 }
 
 // GetBranchPattern returns the branch name pattern as a BranchPattern type
