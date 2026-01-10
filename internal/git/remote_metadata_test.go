@@ -1,6 +1,7 @@
 package git_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestBatchDeleteRemoteMetadataRefs(t *testing.T) {
 		}
 
 		// Delete multiple refs
-		err = runner.BatchDeleteRemoteMetadataRefs(branches[0:2]) // branch1, branch2
+		err = runner.BatchDeleteRemoteMetadataRefs(context.Background(), branches[0:2]) // branch1, branch2
 		require.NoError(t, err)
 
 		// Verify branch1 and branch2 are gone from remote, but branch3 remains
@@ -77,7 +78,7 @@ func TestBatchDeleteRemoteMetadataRefs(t *testing.T) {
 		err = scene.Repo.RunGitCommand("push", "origin", refName)
 		require.NoError(t, err)
 
-		err = runner.BatchDeleteRemoteMetadataRefs([]string{"branch1"})
+		err = runner.BatchDeleteRemoteMetadataRefs(context.Background(), []string{"branch1"})
 		require.NoError(t, err)
 
 		out, _ := scene.Repo.RunGitCommandAndGetOutput("ls-remote", "origin", refName)
@@ -86,7 +87,7 @@ func TestBatchDeleteRemoteMetadataRefs(t *testing.T) {
 
 	t.Run("handles empty slice gracefully", func(t *testing.T) {
 		runner := git.NewRunner(nil)
-		err := runner.BatchDeleteRemoteMetadataRefs([]string{})
+		err := runner.BatchDeleteRemoteMetadataRefs(context.Background(), []string{})
 		require.NoError(t, err)
 	})
 }

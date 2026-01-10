@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -113,7 +114,7 @@ func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
 	// Not configured yet - this might be a fresh clone
 	// Try to fetch metadata refs (this is a network operation, so it's slow)
 	// Only do this if refspec isn't configured to avoid slowing down every command
-	if err := e.git.FetchMetadataRefs(); err != nil {
+	if err := e.git.FetchMetadataRefs(context.Background()); err != nil {
 		// No remote metadata available, or error fetching - that's okay
 		return
 	}
@@ -161,7 +162,7 @@ func (e *engineImpl) Rebuild(newTrunkName string) error {
 // PopulateRemoteShas populates remote branch information by fetching SHAs from remote
 func (e *engineImpl) PopulateRemoteShas() error {
 	remote := e.git.GetRemote()
-	remoteShas, err := e.git.FetchRemoteShas(remote)
+	remoteShas, err := e.git.FetchRemoteShas(context.Background(), remote)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

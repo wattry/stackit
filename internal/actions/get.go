@@ -309,7 +309,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	}
 
 	// Fetch and apply remote metadata for all branches in the stack
-	if err := eng.Git().FetchMetadataRefs(); err != nil {
+	if err := eng.Git().FetchMetadataRefs(ctx.Context); err != nil {
 		out.Debug("No remote metadata to fetch: %v", err)
 	} else {
 		// Configure refspec so future git fetch commands also fetch metadata

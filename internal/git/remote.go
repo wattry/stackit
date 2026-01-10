@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -34,7 +35,17 @@ func (r *runner) getRemote(repo *Repository) string {
 	return DefaultRemote
 }
 
-func (r *runner) fetchRemoteShas(repo *Repository, remote string) (map[string]string, error) {
+func (r *runner) fetchRemoteShas(ctx context.Context, repo *Repository, remote string) (map[string]string, error) {
+	// Ensure context has a deadline for the network operation
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultCommandTimeout)
+		defer cancel()
+	}
+
 	// Synchronize go-git operations to prevent concurrent packfile access
 	goGitMu.Lock()
 	rem, err := repo.Remote(remote)
@@ -43,10 +54,9 @@ func (r *runner) fetchRemoteShas(repo *Repository, remote string) (map[string]st
 		return nil, fmt.Errorf("failed to get remote %s: %w", remote, err)
 	}
 
-	// List remote references
-	// Synchronize go-git operations to prevent concurrent packfile access
+	// List remote references with context for timeout support
 	goGitMu.Lock()
-	refs, err := rem.List(&gogit.ListOptions{})
+	refs, err := rem.ListContext(ctx, &gogit.ListOptions{})
 	goGitMu.Unlock()
 	if err != nil {
 		if errors.Is(err, transport.ErrEmptyRemoteRepository) || errors.Is(err, gogit.NoErrAlreadyUpToDate) {

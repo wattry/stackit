@@ -440,12 +440,12 @@ func (r *runner) GetRemote() string {
 	return r.getRemote(repo)
 }
 
-func (r *runner) FetchRemoteShas(remote string) (map[string]string, error) {
+func (r *runner) FetchRemoteShas(ctx context.Context, remote string) (map[string]string, error) {
 	repo, err := r.ensureRepo()
 	if err != nil {
 		return nil, err
 	}
-	return r.fetchRemoteShas(repo, remote)
+	return r.fetchRemoteShas(ctx, repo, remote)
 }
 
 func (r *runner) GetRemoteSha(remote, branchName string) (string, error) {
@@ -883,7 +883,7 @@ func (r *runner) ListRefs(prefix string) (map[string]string, error) {
 	return result, nil
 }
 
-func (r *runner) PushMetadataRefs(branches []string) error {
+func (r *runner) PushMetadataRefs(ctx context.Context, branches []string) error {
 	if len(branches) == 0 {
 		return nil
 	}
@@ -894,23 +894,23 @@ func (r *runner) PushMetadataRefs(branches []string) error {
 	for _, branch := range branches {
 		args = append(args, fmt.Sprintf("+refs/stackit/metadata/%s", branch))
 	}
-	_, err := r.runGitCommandInternal(args...)
+	_, err := r.RunGitCommandWithContext(ctx, args...)
 	return err
 }
 
-func (r *runner) FetchMetadataRefs() error {
+func (r *runner) FetchMetadataRefs(ctx context.Context) error {
 	// git fetch origin 'refs/stackit/metadata/*:refs/stackit/remote-metadata/*'
-	_, err := r.runGitCommandInternal("fetch", "origin", "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*")
+	_, err := r.RunGitCommandWithContext(ctx, "fetch", "origin", "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*")
 	return err
 }
 
-func (r *runner) DeleteRemoteMetadataRef(branch string) error {
+func (r *runner) DeleteRemoteMetadataRef(ctx context.Context, branch string) error {
 	// git push origin --delete refs/stackit/metadata/<branch>
-	_, err := r.runGitCommandInternal("push", "origin", "--delete", fmt.Sprintf("refs/stackit/metadata/%s", branch))
+	_, err := r.RunGitCommandWithContext(ctx, "push", "origin", "--delete", fmt.Sprintf("refs/stackit/metadata/%s", branch))
 	return err
 }
 
-func (r *runner) BatchDeleteRemoteMetadataRefs(branches []string) error {
+func (r *runner) BatchDeleteRemoteMetadataRefs(ctx context.Context, branches []string) error {
 	if len(branches) == 0 {
 		return nil
 	}
@@ -919,7 +919,7 @@ func (r *runner) BatchDeleteRemoteMetadataRefs(branches []string) error {
 	for _, branch := range branches {
 		args = append(args, fmt.Sprintf("refs/stackit/metadata/%s", branch))
 	}
-	_, err := r.runGitCommandInternal(args...)
+	_, err := r.RunGitCommandWithContext(ctx, args...)
 	return err
 }
 
