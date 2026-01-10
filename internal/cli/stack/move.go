@@ -105,11 +105,13 @@ func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, er
 		excludedBranches[d.GetName()] = true
 	}
 
-	// Show interactive selector
+	// Show interactive selector with context about what we're doing
+	header := fmt.Sprintf("Select new parent for '%s'", sourceBranch)
 	selected, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
 		Style:   "FULL",
 		Exclude: excludedBranches,
 		Logger:  ctx.Logger,
+		Header:  header,
 	})
 	if err != nil {
 		return "", err
