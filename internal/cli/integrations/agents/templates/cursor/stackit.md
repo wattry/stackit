@@ -4,7 +4,7 @@ This repository uses [stackit](https://github.com/getstackit/stackit) for managi
 
 ## Overview
 
-Stackit is a CLI tool for managing stacked changes in Git repositories. When working with this codebase, you should use stackit commands to create, manage, and submit branches.
+Stackit is a CLI tool for managing stacked changes in Git repositories. Stacks can be linear chains or branch into tree structures when you need parallel work paths. When working with this codebase, you should use stackit commands to create, manage, and submit branches.
 
 **CRITICAL:** Always use the `--no-interactive` flag when running any `stackit` command. For commands that require confirmation, also include the `--force` flag (for absorb) or `--yes` flag (for undo/merge).
 
@@ -50,8 +50,8 @@ Stackit is a CLI tool for managing stacked changes in Git repositories. When wor
 ## Important Notes
 
 - Always use stackit commands with `--no-interactive` instead of raw git commands for branch management
-- Stackit maintains parent-child relationships between branches
+- Stackit maintains parent-child relationships between branches (a branch can have multiple children)
 - PRs are automatically created/updated with proper base branches
-- The stack structure is preserved when submitting multiple PRs
+- The stack structure (linear or tree-shaped) is preserved when submitting multiple PRs
 
 For more information, see: https://github.com/getstackit/stackit

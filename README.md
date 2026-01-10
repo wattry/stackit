@@ -6,7 +6,7 @@
 
 ## What is Stacking?
 
-Stacked changes (or "stacked diffs") is a development workflow where you break a large feature into a sequence of small, focused branches that build on top of each other. Instead of one massive Pull Request, you have a "stack" of smaller PRs.
+Stacked changes (or "stacked diffs") is a development workflow where you break a large feature into small, focused branches that build on top of each other. Instead of one massive Pull Request, you have a "stack" of smaller PRs. Stacks can be linear (a simple chain of branches) or they can branch out into a tree structure when you need to work on multiple parallel features that share a common base.
 
 ### How it helps engineers:
 
@@ -18,16 +18,17 @@ Stacked changes (or "stacked diffs") is a development workflow where you break a
 ### The Stacked Workflow
 
 ```mermaid
-graph TD
-    main[main branch] --> B1[PR 1: API Changes]
-    B1 --> B2[PR 2: Implementation]
-    B2 --> B3[PR 3: UI Components]
-    B3 --> B4[PR 4: Integration Tests]
-    
+graph BT
+    main[main branch] --- B1[PR 1: API Changes]
+    B1 --- B2[PR 2: Implementation]
+    B2 --- B3[PR 3: UI Components]
+    B2 --- B4[PR 4: CLI Support]
+    B3 --- B5[PR 5: Integration Tests]
+
     style main stroke-dasharray: 5 5
 ```
 
-Stackit manages the complexity of this workflow—automatically handling rebases, keeping track of parent-child relationships, and submitting the entire stack to GitHub with a single command.
+Stacks naturally form a tree structure—a single branch can have multiple children when you need to work on parallel features. Stackit manages the complexity of this workflow—automatically handling rebases, keeping track of parent-child relationships, and submitting the entire stack to GitHub with a single command.
 
 ---
 
@@ -115,11 +116,24 @@ See your current position in the stack:
 stackit log
 ```
 ```
-main
+● add-logic ← you are here
 │
-├─◯ add-api
-│ │
-│ └─● add-logic ← you are here
+◯ add-api
+│
+main
+```
+
+Stacks can also branch when you have parallel work:
+```
+◯ add-tests
+│
+│ ● add-ui ← you are here
+├─┘
+◯ add-logic
+│
+◯ add-api
+│
+main
 ```
 
 ### 5. Submit your PRs
