@@ -69,6 +69,7 @@ type LogModel struct {
 	reverse       bool
 	showUntracked bool
 	exclude       map[string]bool
+	header        string // Custom header text for selection mode
 }
 
 // NewLogModel creates a new LogModel
@@ -136,6 +137,7 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		reverse:        opts.Reverse,
 		showUntracked:  opts.ShowUntracked,
 		exclude:        opts.Exclude,
+		header:         opts.Header,
 		collapsed:      make(map[string]bool),
 		searchMatches:  searchMatches,
 		mode:           LogModeView,
@@ -537,7 +539,11 @@ func (m *LogModel) View() string {
 	title := "Stackit Log"
 	help := "'q' quit, 'enter' expand/collapse, '↑/k' '↓/j' navigate"
 	if m.mode == LogModeSelect {
-		title = "Select Branch"
+		if m.header != "" {
+			title = m.header
+		} else {
+			title = "Select Branch"
+		}
 		if m.inSearchMode {
 			help = fmt.Sprintf("Search: /%s (esc to exit, enter to confirm)", m.searchQuery)
 		} else {
@@ -606,4 +612,5 @@ type LogOptions struct {
 	ShowUntracked bool
 	Exclude       map[string]bool // Branches to exclude from selection
 	Logger        output.Logger   // Optional logger for IO timing diagnostics
+	Header        string          // Custom header text for selection mode (e.g., "Select new parent for branch X")
 }
