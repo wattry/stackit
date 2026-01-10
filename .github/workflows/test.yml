@@ -42,7 +42,12 @@ jobs:
       - name: Run tests
         env:
           STACKIT_NO_LOGGING: "1"
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            go test -v -race -coverprofile=coverage.out ./...
+          else
+            go test -v -coverprofile=coverage.out ./...
+          fi
 
 
   lint:
