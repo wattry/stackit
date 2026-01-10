@@ -164,6 +164,15 @@ func (r *runner) ResetWorktreeWorkingDir(ctx context.Context, worktreePath strin
 	return nil
 }
 
+// WorktreeHasUncommittedChanges checks if a worktree has uncommitted changes.
+func (r *runner) WorktreeHasUncommittedChanges(ctx context.Context, worktreePath string) (bool, error) {
+	output, err := r.RunGitCommandWithContext(ctx, "-C", worktreePath, "status", "--porcelain")
+	if err != nil {
+		return false, fmt.Errorf("failed to check status in worktree %s: %w", worktreePath, err)
+	}
+	return strings.TrimSpace(output) != "", nil
+}
+
 // GetWorktreeCurrentBranch returns the name of the branch currently checked out in a worktree.
 // Returns empty string if the worktree is in detached HEAD state.
 func (r *runner) GetWorktreeCurrentBranch(ctx context.Context, worktreePath string) (string, error) {
