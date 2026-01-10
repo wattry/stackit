@@ -104,61 +104,98 @@ func GetDefaultGlobalOptions() GlobalOptions {
 	}
 }
 
-// NewContext creates a new context with the given engine
-func NewContext(eng engine.Engine) *Context {
-	return NewContextWithOptions(eng, GetDefaultGlobalOptions())
+// ContextOption is a function that configures a Context
+type ContextOption func(*contextOptions)
+
+type contextOptions struct {
+	repoRoot string
+	global   GlobalOptions
+	writer   io.Writer
+	logger   output.Logger
 }
 
-// NewContextWithOptions creates a new context with the given engine and options
-func NewContextWithOptions(eng engine.Engine, opts GlobalOptions) *Context {
-	return NewContextWithRepoRootOptionsAndWriter(eng, "", opts, output.DefaultConsoleWriter)
-}
-
-// NewContextWithRepoRoot creates a new context with the given engine and repo root
-func NewContextWithRepoRoot(eng engine.Engine, repoRoot string) *Context {
-	return NewContextWithRepoRootAndOptions(eng, repoRoot, GetDefaultGlobalOptions())
-}
-
-// NewContextWithRepoRootAndOptions creates a new context with the given engine, repo root and options
-func NewContextWithRepoRootAndOptions(eng engine.Engine, repoRoot string, opts GlobalOptions) *Context {
-	return NewContextWithRepoRootOptionsAndWriter(eng, repoRoot, opts, os.Stdout)
-}
-
-// NewContextWithRepoRootOptionsAndWriter creates a new context with the given engine, repo root, options and writer
-func NewContextWithRepoRootOptionsAndWriter(eng engine.Engine, repoRoot string, opts GlobalOptions, writer io.Writer) *Context {
-	// Create file logger (skip when STACKIT_NO_LOGGING is set, e.g., during tests or CI)
-	var logger output.Logger
-	if os.Getenv("STACKIT_NO_LOGGING") != "" {
-		logger = output.NewNullLogger()
-	} else {
-		logPath := output.GetLogFilePath()
-		fileLogger, err := output.NewFileLogger(logPath)
-		if err != nil {
-			// If file logging fails, use null logger
-			logger = output.NewNullLogger()
-		} else {
-			logger = fileLogger
-		}
+// WithRepoRoot sets the repository root path
+func WithRepoRoot(repoRoot string) ContextOption {
+	return func(o *contextOptions) {
+		o.repoRoot = repoRoot
 	}
-	return NewContextWithRepoRootOptionsAndWriterAndLogger(eng, repoRoot, opts, writer, logger)
 }
 
-// NewContextWithRepoRootOptionsAndWriterAndLogger creates a new context with the given engine, repo root, options, writer and logger
-func NewContextWithRepoRootOptionsAndWriterAndLogger(eng engine.Engine, repoRoot string, opts GlobalOptions, writer io.Writer, logger output.Logger) *Context {
+// WithGlobalOptions sets the global options
+func WithGlobalOptions(opts GlobalOptions) ContextOption {
+	return func(o *contextOptions) {
+		o.global = opts
+	}
+}
+
+// WithWriter sets the output writer
+func WithWriter(writer io.Writer) ContextOption {
+	return func(o *contextOptions) {
+		o.writer = writer
+	}
+}
+
+// WithLogger sets the logger
+func WithLogger(logger output.Logger) ContextOption {
+	return func(o *contextOptions) {
+		o.logger = logger
+	}
+}
+
+// WithInteractive sets the interactive mode
+func WithInteractive(interactive bool) ContextOption {
+	return func(o *contextOptions) {
+		o.global.Interactive = interactive
+	}
+}
+
+// WithVerify sets the verify mode
+func WithVerify(verify bool) ContextOption {
+	return func(o *contextOptions) {
+		o.global.Verify = verify
+	}
+}
+
+// WithDebug sets the debug mode
+func WithDebug(debug bool) ContextOption {
+	return func(o *contextOptions) {
+		o.global.Debug = debug
+	}
+}
+
+// WithQuiet sets the quiet mode
+func WithQuiet(quiet bool) ContextOption {
+	return func(o *contextOptions) {
+		o.global.Quiet = quiet
+	}
+}
+
+// NewContext creates a new context with the given engine and options
+func NewContext(eng engine.Engine, opts ...ContextOption) *Context {
 	if eng == nil {
-		panic("NewContextWithRepoRootAndOptions called with nil engine")
+		panic("NewContext called with nil engine")
+	}
+
+	options := contextOptions{
+		global: GetDefaultGlobalOptions(),
+		writer: os.Stdout,
+	}
+
+	for _, opt := range opts {
+		opt(&options)
 	}
 
 	// Update global TUI interactivity
-	utils.SetInteractive(opts.Interactive)
+	utils.SetInteractive(options.global.Interactive)
 
 	// Create console output
-	consoleOutput := output.NewConsoleOutput(writer, opts.Debug)
-	if opts.Quiet {
+	consoleOutput := output.NewConsoleOutput(options.writer, options.global.Debug)
+	if options.global.Quiet {
 		consoleOutput.SetQuiet(true)
 	}
 
 	// If no logger provided, create one
+	logger := options.logger
 	if logger == nil {
 		if os.Getenv("STACKIT_NO_LOGGING") != "" {
 			logger = output.NewNullLogger()
@@ -166,6 +203,7 @@ func NewContextWithRepoRootOptionsAndWriterAndLogger(eng engine.Engine, repoRoot
 			logPath := output.GetLogFilePath()
 			fileLogger, err := output.NewFileLogger(logPath)
 			if err != nil {
+				// If file logging fails, use null logger
 				logger = output.NewNullLogger()
 			} else {
 				logger = fileLogger
@@ -181,11 +219,11 @@ func NewContextWithRepoRootOptionsAndWriterAndLogger(eng engine.Engine, repoRoot
 		Engine:      eng,
 		Output:      consoleOutput,
 		Logger:      logger,
-		RepoRoot:    repoRoot,
-		Interactive: opts.Interactive,
-		Verify:      opts.Verify,
-		Debug:       opts.Debug,
-		Quiet:       opts.Quiet,
+		RepoRoot:    options.repoRoot,
+		Interactive: options.global.Interactive,
+		Verify:      options.global.Verify,
+		Debug:       options.global.Debug,
+		Quiet:       options.global.Quiet,
 	}
 }
 
@@ -208,7 +246,7 @@ func NewContextAuto(ctx context.Context, repoRoot string, opts GlobalOptions) (*
 func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalOptions, writer io.Writer) (*Context, error) {
 	if utils.IsDemoMode() && DemoEngineFactory != nil {
 		eng := DemoEngineFactory()
-		runtimeCtx := NewContextWithRepoRootOptionsAndWriter(eng, repoRoot, opts, writer)
+		runtimeCtx := NewContext(eng, WithRepoRoot(repoRoot), WithGlobalOptions(opts), WithWriter(writer))
 		runtimeCtx.Context = ctx
 		if DemoGitHubClientFactory != nil {
 			runtimeCtx.GitHubClient = DemoGitHubClientFactory()
@@ -253,7 +291,7 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 		return nil, err
 	}
 
-	runtimeCtx := NewContextWithRepoRootOptionsAndWriterAndLogger(eng, repoRoot, opts, writer, logger)
+	runtimeCtx := NewContext(eng, WithRepoRoot(repoRoot), WithGlobalOptions(opts), WithWriter(writer), WithLogger(logger))
 	runtimeCtx.Context = ctx
 
 	// Try to create real GitHub client (may fail if no token)

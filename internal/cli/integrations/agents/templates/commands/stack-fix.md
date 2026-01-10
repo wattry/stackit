@@ -5,71 +5,39 @@ allowed-tools: Bash(stackit:*), Bash(git:*)
 
 # Stack Fix
 
-Diagnose and automatically fix common stack problems.
+Diagnose and fix common stack problems.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Git status: !`git status --short 2>/dev/null`
+- Git status: !`git status --short`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Instructions
 
-1. **Analyze stack health first**:
-   ```bash
-   bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
-   ```
-   This identifies issues and suggests fixes
+1. Analyze the context to identify issues:
 
-2. Review `stackit log --no-interactive` for structural issues and branch relationships
+   **Rebase in progress**:
+   - Guide user through conflict resolution
+   - Then `stackit continue` or `stackit abort`
 
-3. Check for and fix these common issues in priority order:
+   **Build errors after absorb**:
+   - Run build on each branch: `stackit foreach "<build-command>"`
+   - Find and fix dependency issues
+   - After 2 failed attempts, suggest `stackit undo --yes`
 
-   **Compilation errors after absorb (PRIORITY FIX):**
-   - Common after `stackit absorb` when absorbed changes depend on files/changes that didn't get cleanly absorbed
-   - **Use detailed workflow:** See [../skills/stackit/workflows/fix-absorb.md](../skills/stackit/workflows/fix-absorb.md)
-   - **Workflow checklist pattern:**
-     ```
-     Absorb Fix Progress:
-     - [ ] Step 1: Identify build/test commands
-     - [ ] Step 2: Build and test each branch
-     - [ ] Step 3: Identify failed branches
-     - [ ] Step 4: Find missing dependencies
-     - [ ] Step 5: Apply fixes
-     - [ ] Step 6: Verify entire stack
-     ```
-   - **Validation loop:** For each branch:
-     - Run build/test
-     - If fails → find dependency → apply fix → re-run build/test
-     - If passes → mark complete → next branch
-   - **Only complete when entire stack builds successfully**
+   **Branches need restack**:
+   - Run `stackit restack --no-interactive`
 
-   **Rebase in progress:**
-   - Check `git status` for "rebase in progress"
-   - If conflicts: See [../skills/stackit/workflows/conflict-resolution.md](../skills/stackit/workflows/conflict-resolution.md)
-   - Guide through resolution, then `stackit continue --no-interactive`
-   - If user wants to abort: `stackit abort --no-interactive`
+   **Orphaned branches (parent was merged)**:
+   - Run `stackit sync --no-interactive`
 
-   **Branches need restack:**
-   - Run `stackit restack --no-interactive` to rebase branches
-   - Handle conflicts if they occur
+   **Uncommitted changes blocking operation**:
+   - Suggest commit or stash
 
-   **Orphaned branches (parent was merged):**
-   - Run `stackit sync --no-interactive` to reparent
+2. After fixes, verify stack is healthy:
+   - `stackit log` shows clean tree
+   - All branches build successfully
 
-   **PR base mismatch:**
-   - Run `stackit submit --no-interactive` to update PR bases
-
-   **Uncommitted changes blocking operation:**
-   - Suggest stashing or committing
-
-4. **Final verification with validation loop**:
-   - Run build on entire stack: `stackit foreach --no-interactive "<build-command>"`
-   - If ANY branch fails:
-     - Return to step 3
-     - Fix the failing branch
-     - Re-run verification
-   - Only consider fix complete when ALL branches build successfully
-   - Show updated stack state with `stackit log --no-interactive`
-
-## Error Handling
-- For unrecoverable issues: suggest `stackit undo --no-interactive --yes`
-- If unsure: ask user before destructive operations
+## Do NOT
+- Make destructive changes without user confirmation
+- Loop indefinitely on fixes (max 2 attempts per issue)
