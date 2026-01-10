@@ -30,14 +30,6 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	ctx.Logger.Info("sync started", "restack", opts.Restack, "force", opts.Force)
 
-	// Debug: capture initial state
-	currentBranch := eng.CurrentBranch()
-	currentBranchName := ""
-	if currentBranch != nil {
-		currentBranchName = currentBranch.GetName()
-	}
-	ctx.Logger.Info("[sync-debug] initial state: currentBranch=%s", currentBranchName)
-
 	// Use null handler if none provided
 	if handler == nil {
 		handler = &NullHandler{}
@@ -53,12 +45,22 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Info("Syncing branches across all configured trunks...")
 	}
 
-	// Check for uncommitted changes
+	// Check for uncommitted changes in main repo
 	uncommittedStart := time.Now()
 	hasUncommitted := ctx.Reader().HasUncommittedChanges(gctx)
 	ctx.Logger.Info("check uncommitted changes completed", "durationMs", time.Since(uncommittedStart).Milliseconds())
 	if hasUncommitted {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
+	}
+
+	// Check for uncommitted changes in managed worktrees
+	managedWorktrees, err := eng.ListManagedWorktrees()
+	if err == nil {
+		for _, wt := range managedWorktrees {
+			if hasChanges, _ := eng.Git().WorktreeHasUncommittedChanges(gctx, wt.Path); hasChanges {
+				return fmt.Errorf("worktree at %s has uncommitted changes. Please commit or stash them before syncing", wt.Path)
+			}
+		}
 	}
 
 	// Calculate total operations for progress (rough estimate)
@@ -147,31 +149,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Phase 3: Clean branches (delete merged/closed)
-	// Debug: capture git status before cleanBranches
-	if statusBefore, err := eng.Git().RunGitCommandWithContext(gctx, "status", "--porcelain"); err == nil && statusBefore != "" {
-		ctx.Logger.Info("[sync-debug] git status BEFORE cleanBranches:\n%s", statusBefore)
-	}
-
 	cleanResult, err := cleanBranches(ctx, &opts, handler, summary)
 	if err != nil {
 		return fmt.Errorf("failed to clean branches: %w", err)
-	}
-
-	// Debug: capture git status after cleanBranches
-	if statusAfter, err := eng.Git().RunGitCommandWithContext(gctx, "status", "--porcelain"); err == nil && statusAfter != "" {
-		ctx.Logger.Info("[sync-debug] git status AFTER cleanBranches:\n%s", statusAfter)
-	}
-
-	// Debug: log branches deleted and reparented
-	if len(cleanResult.DeletedBranches) > 0 {
-		deletedNames := make([]string, 0, len(cleanResult.DeletedBranches))
-		for name := range cleanResult.DeletedBranches {
-			deletedNames = append(deletedNames, name)
-		}
-		ctx.Logger.Info("[sync-debug] deleted branches: %v", deletedNames)
-	}
-	if len(cleanResult.BranchesWithNewParents) > 0 {
-		ctx.Logger.Info("[sync-debug] branches reparented: %v", cleanResult.BranchesWithNewParents)
 	}
 
 	// Clean orphaned worktrees (after branch cleanup so we know what's been deleted)
@@ -212,43 +192,15 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Phase 4: Restack branches
 	handler.EmitEvent(Event{Phase: PhaseRestack, Type: EventStarted})
 
-	// Debug: log branches to be restacked
-	if len(branchesToRestack) > 0 {
-		ctx.Logger.Info("[sync-debug] branches to restack: %v", branchesToRestack)
-	}
-
-	// Debug: capture git status before restackBranches
-	if statusBefore, err := eng.Git().RunGitCommandWithContext(gctx, "status", "--porcelain"); err == nil && statusBefore != "" {
-		ctx.Logger.Info("[sync-debug] git status BEFORE restackBranches:\n%s", statusBefore)
-	}
-
 	if err := restackBranches(ctx, branchesToRestack, handler, summary); err != nil {
 		// Even on error, complete with summary
 		handler.Complete(*summary)
 		return err
 	}
 
-	// Debug: capture git status after restackBranches
-	if statusAfter, err := eng.Git().RunGitCommandWithContext(gctx, "status", "--porcelain"); err == nil && statusAfter != "" {
-		ctx.Logger.Info("[sync-debug] git status AFTER restackBranches:\n%s", statusAfter)
-	}
-
 	// Check if everything was up to date
 	if !summary.HasChanges() {
 		summary.UpToDate = true
-	}
-
-	// Debug: capture final state
-	finalBranch := eng.CurrentBranch()
-	finalBranchName := ""
-	if finalBranch != nil {
-		finalBranchName = finalBranch.GetName()
-	}
-	ctx.Logger.Info("[sync-debug] final state: currentBranch=%s", finalBranchName)
-
-	// Debug: final git status check
-	if statusFinal, err := eng.Git().RunGitCommandWithContext(gctx, "status", "--porcelain"); err == nil && statusFinal != "" {
-		ctx.Logger.Info("[sync-debug] FINAL git status (this indicates a BUG if non-empty):\n%s", statusFinal)
 	}
 
 	ctx.Logger.Info("sync completed",

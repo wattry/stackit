@@ -369,18 +369,24 @@ type runner struct {
 	repo     *Repository
 	repoRoot string
 	repoMu   sync.Mutex
+	loggerMu sync.RWMutex
 	logger   DebugLogger
 }
 
 // SetLogger sets the debug logger for git command logging
 func (r *runner) SetLogger(logger DebugLogger) {
+	r.loggerMu.Lock()
 	r.logger = logger
+	r.loggerMu.Unlock()
 }
 
 // debugLog logs a git command if a debug logger is set
 func (r *runner) debugLog(format string, args ...any) {
-	if r.logger != nil {
-		r.logger.Debug(format, args...)
+	r.loggerMu.RLock()
+	logger := r.logger
+	r.loggerMu.RUnlock()
+	if logger != nil {
+		logger.Debug(format, args...)
 	}
 }
 

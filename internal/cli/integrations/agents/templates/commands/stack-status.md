@@ -9,17 +9,14 @@ Show the current stack state and identify any issues.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`stackit log --no-interactive 2>/dev/null || echo 'Stackit not initialized'`
+- Git status: !`git status --short`
+- Stack state: !`stackit log --no-interactive 2>&1`
+- Branch info: !`stackit info --json --no-interactive 2>&1`
 
 ## Instructions
 
-1. Run `stackit log --no-interactive` to display the branch tree
-2. Run `stackit info --no-interactive` to show current branch details
-3. Based on the output, suggest next actions:
-   - If branches need restack: suggest `stackit restack --no-interactive`
-   - If branches have no PR: suggest `stackit submit --no-interactive`
-   - If stack is healthy: confirm status is good
-
-## Error Handling
-- If not in a git repo: inform user
-- If stackit not initialized: suggest `stackit init --no-interactive`
+Based on the context above:
+- If branches need restack: suggest `stackit restack`
+- If branches have no PR: suggest `stackit submit`
+- If uncommitted changes: note them
+- If stack is healthy: confirm status is good

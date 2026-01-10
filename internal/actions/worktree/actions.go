@@ -12,6 +12,7 @@ import (
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -236,18 +237,18 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	anchorBranch := eng.GetBranch(anchorBranchName)
 	if err := eng.SetParent(ctx.Context, anchorBranch, trunk); err != nil {
 		// Clean up branch on failure
-		_ = cleanupAnchorBranch(ctx.Context, eng, anchorBranchName)
+		cleanupAnchorBranch(ctx.Context, eng, anchorBranchName, out)
 		return nil, fmt.Errorf("failed to set parent: %w", err)
 	}
 
 	if err := eng.SetBranchType(anchorBranch, git.BranchTypeWorktreeAnchor); err != nil {
-		_ = cleanupAnchorBranch(ctx.Context, eng, anchorBranchName)
+		cleanupAnchorBranch(ctx.Context, eng, anchorBranchName, out)
 		return nil, fmt.Errorf("failed to set branch type: %w", err)
 	}
 
 	if opts.Scope != "" {
 		if err := eng.SetScope(anchorBranch, engine.NewScope(opts.Scope)); err != nil {
-			_ = cleanupAnchorBranch(ctx.Context, eng, anchorBranchName)
+			cleanupAnchorBranch(ctx.Context, eng, anchorBranchName, out)
 			return nil, fmt.Errorf("failed to set scope: %w", err)
 		}
 	}
@@ -255,7 +256,7 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	// Create the worktree
 	worktreePath, err := createWorktreeForAnchor(ctx, opts.Name, anchorBranchName)
 	if err != nil {
-		_ = cleanupAnchorBranch(ctx.Context, eng, anchorBranchName)
+		cleanupAnchorBranch(ctx.Context, eng, anchorBranchName, out)
 		return nil, err
 	}
 
@@ -292,6 +293,11 @@ func createWorktreeForAnchor(ctx *app.Context, name string, anchorBranch string)
 	// Worktree path: basePath/name
 	worktreePath := filepath.Join(basePath, name)
 
+	// Check if path already exists
+	if _, err := os.Stat(worktreePath); err == nil {
+		return "", fmt.Errorf("worktree path %s already exists; remove it first or choose a different name", worktreePath)
+	}
+
 	// Create the worktree (non-detached, pointing to the anchor branch)
 	if err := eng.AddWorktree(ctx.Context, worktreePath, anchorBranch, false); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
@@ -307,7 +313,9 @@ func createWorktreeForAnchor(ctx *app.Context, name string, anchorBranch string)
 	return worktreePath, nil
 }
 
-// cleanupAnchorBranch cleans up an anchor branch on failure
-func cleanupAnchorBranch(ctx context.Context, eng engine.Engine, branchName string) error {
-	return eng.DeleteBranch(ctx, eng.GetBranch(branchName))
+// cleanupAnchorBranch cleans up an anchor branch on failure and logs any cleanup errors
+func cleanupAnchorBranch(ctx context.Context, eng engine.Engine, branchName string, out output.Output) {
+	if err := eng.DeleteBranch(ctx, eng.GetBranch(branchName)); err != nil {
+		out.Warn("Failed to clean up anchor branch %s: %v", branchName, err)
+	}
 }

@@ -195,9 +195,12 @@ func (e *engineImpl) restackBranch(
 					return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to reset working tree for frozen branch %s: %w", branchName, err)
 				}
 			} else {
-				// If the branch is checked out in a different worktree, reset that worktree
-				if worktreePath, err := e.git.GetWorktreePathForBranch(ctx, branchName); err == nil && worktreePath != "" {
-					_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath)
+				// If the branch is checked out in a different worktree, reset that worktree.
+				// This is best-effort: sync checks for uncommitted changes before proceeding,
+				// so failure here just means the worktree may be briefly out of sync with HEAD.
+				// The ResetWorktreeWorkingDir command itself is logged via debugLog.
+				if worktreePath, wtErr := e.git.GetWorktreePathForBranch(ctx, branchName); wtErr == nil && worktreePath != "" {
+					_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath) //nolint:errcheck // best-effort
 				}
 			}
 
@@ -263,9 +266,11 @@ func (e *engineImpl) restackBranch(
 				return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to reset working tree for anchor %s: %w", branchName, err)
 			}
 		} else {
-			// If the branch is checked out in a different worktree, reset that worktree
-			if worktreePath, err := e.git.GetWorktreePathForBranch(ctx, branchName); err == nil && worktreePath != "" {
-				_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath)
+			// If the branch is checked out in a different worktree, reset that worktree.
+			// This is best-effort: sync checks for uncommitted changes before proceeding,
+			// so failure here just means the worktree may be briefly out of sync with HEAD.
+			if worktreePath, wtErr := e.git.GetWorktreePathForBranch(ctx, branchName); wtErr == nil && worktreePath != "" {
+				_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath) //nolint:errcheck // best-effort
 			}
 		}
 
@@ -445,9 +450,10 @@ func (e *engineImpl) restackBranch(
 	// If this branch is checked out in a worktree, reset that worktree's working directory
 	// to match the new branch content. Without this, the worktree would have stale content
 	// that appears as staged changes reverting the rebased commits.
-	if worktreePath, err := e.git.GetWorktreePathForBranch(ctx, branchName); err == nil && worktreePath != "" {
-		// Best-effort: don't fail restack if worktree reset fails
-		_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath)
+	// This is best-effort: sync checks for uncommitted changes before proceeding,
+	// so failure here just means the worktree may be briefly out of sync with HEAD.
+	if worktreePath, wtErr := e.git.GetWorktreePathForBranch(ctx, branchName); wtErr == nil && worktreePath != "" {
+		_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath) //nolint:errcheck // best-effort
 	}
 
 	metadataSHA, err := e.git.CreateBlob(string(metadataJSON))
