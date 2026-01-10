@@ -61,14 +61,8 @@ func (h *SimpleMoveHandler) OnRename(oldName, newName string) {
 }
 
 // Complete is called when move finishes
-func (h *SimpleMoveHandler) Complete(result move.Result) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.splog.Info("Moved %s from %s to %s",
-		style.ColorBranchName(result.SourceBranch, true),
-		style.ColorBranchName(result.OldParent, false),
-		style.ColorBranchName(result.NewParent, false))
+func (h *SimpleMoveHandler) Complete(_ move.Result) {
+	// Output already handled by the action
 }
 
 // Cleanup is a no-op for the simple handler
