@@ -29,6 +29,18 @@ type CleanBranchesResult struct {
 	SkippedInWorktree      []string // branches that couldn't be deleted from worktree
 }
 
+// BranchDeletionPlan contains the planned branch deletions before execution
+type BranchDeletionPlan struct {
+	// BranchesToDelete maps branch name to deletion reason
+	BranchesToDelete map[string]string
+	// BranchesWithNewParents lists branches that will be reparented
+	BranchesWithNewParents []string
+	// SkippedInWorktree lists branches skipped due to being in a worktree
+	SkippedInWorktree []string
+	// internal plan for execution
+	plan *deletionPlan
+}
+
 // branchDeletionInfo stores information about a branch marked for deletion
 type branchDeletionInfo struct {
 	reason   string
@@ -95,6 +107,63 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 		DeletedBranches:        deletedBranches,
 		BranchesWithNewParents: branchesWithNewParents,
 		SkippedInWorktree:      skippedInWorktree,
+	}, nil
+}
+
+// PlanBranchDeletions identifies branches that should be deleted and builds a deletion plan.
+// This does NOT execute any deletions - use ExecuteBranchDeletions to apply the plan.
+func PlanBranchDeletions(ctx *app.Context, opts CleanBranchesOptions) (*BranchDeletionPlan, error) {
+	// Phase 1: Identify candidates for deletion
+	deleteStatuses, skippedInWorktree := identifyBranchesToDelete(ctx, opts)
+
+	// Phase 2: Build deletion plan
+	plan, branchesWithNewParents, err := buildDeletionPlanAndReparent(ctx, deleteStatuses)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the public plan
+	branchesToDelete := make(map[string]string)
+	for name, info := range plan.branches {
+		branchesToDelete[name] = info.reason
+	}
+
+	return &BranchDeletionPlan{
+		BranchesToDelete:       branchesToDelete,
+		BranchesWithNewParents: branchesWithNewParents,
+		SkippedInWorktree:      skippedInWorktree,
+		plan:                   plan,
+	}, nil
+}
+
+// ExecuteBranchDeletions executes a previously planned deletion.
+// The branchesToDelete parameter allows filtering which branches from the plan to actually delete.
+// If nil, all planned branches are deleted.
+func ExecuteBranchDeletions(ctx *app.Context, plannedDeletion *BranchDeletionPlan, branchesToDelete map[string]bool) (*CleanBranchesResult, error) {
+	// If branchesToDelete filter is provided, remove branches not in the filter
+	if branchesToDelete != nil {
+		for name := range plannedDeletion.plan.branches {
+			if !branchesToDelete[name] {
+				delete(plannedDeletion.plan.branches, name)
+			}
+		}
+	}
+
+	// Capture planned deletions before executeDeletions removes them from plan.branches
+	deletedBranches := make(map[string]string)
+	for name, info := range plannedDeletion.plan.branches {
+		deletedBranches[name] = info.reason
+	}
+
+	// Execute deletions
+	if err := executeDeletions(ctx, plannedDeletion.plan); err != nil {
+		return nil, err
+	}
+
+	return &CleanBranchesResult{
+		DeletedBranches:        deletedBranches,
+		BranchesWithNewParents: plannedDeletion.BranchesWithNewParents,
+		SkippedInWorktree:      plannedDeletion.SkippedInWorktree,
 	}, nil
 }
 

@@ -324,6 +324,11 @@ type Handler interface {
 	// In non-interactive mode, returns (false, nil) to accept the remote deletion.
 	PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (pushLocal bool, err error)
 
+	// PromptBranchDeletions displays planned branch deletions and asks user to confirm each one.
+	// Returns a map of branch names that the user confirmed for deletion.
+	// In non-interactive mode, returns all branches (auto-confirm).
+	PromptBranchDeletions(branches map[string]string) (confirmed map[string]bool, err error)
+
 	// RestackHandler methods are available for restack-specific output
 	// This allows the same handler to be used for standalone restack operations
 	RestackHandler
@@ -365,6 +370,15 @@ func (h *NullHandler) PromptMetadataConflict(_ *engine.MetadataDiff) (bool, erro
 // PromptOrphanedMetadata implements Handler. Returns false (accept deletion) in non-interactive mode.
 func (h *NullHandler) PromptOrphanedMetadata(_ engine.OrphanedMetadataInfo) (bool, error) {
 	return false, nil
+}
+
+// PromptBranchDeletions implements Handler. Returns all branches (auto-confirm) in non-interactive mode.
+func (h *NullHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
+	confirmed := make(map[string]bool)
+	for name := range branches {
+		confirmed[name] = true
+	}
+	return confirmed, nil
 }
 
 // FormatSummaryParts returns the summary parts as a slice of strings

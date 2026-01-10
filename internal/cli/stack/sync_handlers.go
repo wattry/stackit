@@ -124,6 +124,15 @@ func (h *SimpleSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataI
 	return false, nil
 }
 
+// PromptBranchDeletions implements Handler. In non-interactive mode, auto-confirms all deletions.
+func (h *SimpleSyncHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
+	confirmed := make(map[string]bool)
+	for name := range branches {
+		confirmed[name] = true
+	}
+	return confirmed, nil
+}
+
 func (h *SimpleSyncHandler) printPhaseHeader(phase syncAction.Phase) {
 	// Add spacing between phases (but not before first phase)
 	if h.currentPhase != "" {
@@ -611,6 +620,56 @@ func (h *InteractiveSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMeta
 	}
 
 	return tui.PromptConfirm("Push your local metadata to remote?", false)
+}
+
+// PromptBranchDeletions implements Handler. Pauses TUI, displays planned deletions, prompts for each.
+func (h *InteractiveSyncHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	confirmed := make(map[string]bool)
+
+	if len(branches) == 0 {
+		return confirmed, nil
+	}
+
+	h.output.Newline()
+	h.output.Info("The following branches are candidates for deletion:")
+	h.output.Newline()
+
+	// Sort branch names for consistent ordering
+	names := make([]string, 0, len(branches))
+	for name := range branches {
+		names = append(names, name)
+	}
+	// Sort alphabetically
+	for i := 0; i < len(names)-1; i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[i] > names[j] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+
+	// Display all branches with their reasons first
+	for _, name := range names {
+		reason := branches[name]
+		h.output.Info("  %s: %s", style.ColorBranchName(name, false), style.ColorDim(reason))
+	}
+	h.output.Newline()
+
+	// Prompt for each branch
+	for _, name := range names {
+		reason := branches[name]
+		prompt := fmt.Sprintf("Delete %s (%s)?", style.ColorBranchName(name, false), reason)
+		shouldDelete, err := tui.PromptConfirm(prompt, true)
+		if err != nil {
+			return confirmed, err
+		}
+		confirmed[name] = shouldDelete
+	}
+
+	return confirmed, nil
 }
 
 // formatRestackSummary formats the restack summary
