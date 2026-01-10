@@ -156,3 +156,71 @@ func (r *AnalysisResult) HasShippable() bool {
 func (r *AnalysisResult) TotalStacks() int {
 	return len(r.Stacks)
 }
+
+// CombinationResult contains the result of checking if stacks can be merged together.
+type CombinationResult struct {
+	// Combinable indicates whether the selected stacks can be merged without conflicts.
+	Combinable bool
+
+	// WorkingStacks are stacks that can be merged together.
+	WorkingStacks []Stack
+
+	// ConflictingStacks are stacks that conflict and cannot be included.
+	ConflictingStacks []ExcludedStack
+
+	// LocalCIPassed indicates whether local CI passed on the combined code.
+	// nil means local CI was not run.
+	LocalCIPassed *bool
+
+	// LocalCIError contains the error if local CI failed.
+	LocalCIError error
+}
+
+// ExcludedStack represents a stack that was excluded from a combination.
+type ExcludedStack struct {
+	Stack  Stack           // The excluded stack
+	Reason ExclusionReason // Why it was excluded
+}
+
+// ExclusionReason describes why a stack was excluded from a combination.
+type ExclusionReason string
+
+const (
+	// ReasonMergeConflict indicates the stack has merge conflicts with others.
+	ReasonMergeConflict ExclusionReason = "merge_conflict"
+	// ReasonLocalCIFailed indicates local CI failed when this stack was included.
+	ReasonLocalCIFailed ExclusionReason = "local_ci_failed"
+)
+
+// IncludedCount returns the number of stacks that can be combined.
+func (r *CombinationResult) IncludedCount() int {
+	return len(r.WorkingStacks)
+}
+
+// ExcludedCount returns the number of stacks that were excluded.
+func (r *CombinationResult) ExcludedCount() int {
+	return len(r.ConflictingStacks)
+}
+
+// AllCombined returns true if all stacks could be combined.
+func (r *CombinationResult) AllCombined() bool {
+	return len(r.ConflictingStacks) == 0
+}
+
+// GetWorkingRoots returns the root branch names of working stacks.
+func (r *CombinationResult) GetWorkingRoots() []string {
+	roots := make([]string, len(r.WorkingStacks))
+	for i, s := range r.WorkingStacks {
+		roots[i] = s.RootBranch()
+	}
+	return roots
+}
+
+// GetConflictingRoots returns the root branch names of conflicting stacks.
+func (r *CombinationResult) GetConflictingRoots() []string {
+	roots := make([]string, len(r.ConflictingStacks))
+	for i, s := range r.ConflictingStacks {
+		roots[i] = s.Stack.RootBranch()
+	}
+	return roots
+}
