@@ -57,11 +57,11 @@ func registerPromptStories() {
 		Description: "Interactive interface for reordering branches in a stack",
 		CreateModel: func() tea.Model {
 			return NewReorderModel([]string{
-				"feature-1 (base)",
-				"feature-2 (api)",
-				"feature-3 (ui)",
 				"feature-4 (docs)",
-			})
+				"feature-3 (ui)",
+				"feature-2 (api)",
+				"feature-1 (base)",
+			}, "main")
 		},
 	})
 }

@@ -155,8 +155,12 @@ func (r *runner) runGitInternal(ctx context.Context, input string, env []string,
 		cmd.Stdin = strings.NewReader(input)
 	}
 
+	// Prevent git from prompting via TTY (important when TUI has terminal in raw mode)
+	// GIT_TERMINAL_PROMPT=0 prevents git from trying to read credentials or confirmations
+	// from the terminal, which could cause hangs when a TUI is active.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Env = append(cmd.Env, env...)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -238,6 +242,11 @@ func (r *runner) RunGHCommandWithContext(ctx context.Context, args ...string) (s
 		wd, _ := os.Getwd()
 		cmd.Dir = wd
 	}
+
+	// Prevent gh from prompting via TTY (important when TUI has terminal in raw mode)
+	// GH_PROMPT_DISABLED=1 prevents gh from trying to prompt for authentication
+	// or confirmations, which could cause hangs when a TUI is active.
+	cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1")
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

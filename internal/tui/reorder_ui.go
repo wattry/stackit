@@ -15,6 +15,7 @@ import (
 // reorderModel is the bubbletea model for reordering branches
 type reorderModel struct {
 	branches  []string
+	trunk     string // trunk branch name (displayed but not selectable)
 	cursor    int
 	confirmed bool
 	canceled  bool
@@ -22,9 +23,10 @@ type reorderModel struct {
 }
 
 // newReorderModel creates a new reorder TUI model
-func newReorderModel(branches []string) reorderModel {
+func newReorderModel(branches []string, trunk string) reorderModel {
 	return reorderModel{
 		branches: branches,
+		trunk:    trunk,
 		cursor:   0,
 		keys:     keys.DefaultReorder,
 	}
@@ -93,6 +95,7 @@ func (m reorderModel) View() string {
 	b.WriteString("\n\n")
 
 	// Branch list with cursor + background selection
+	// Top of stack (tip) is first, bottom of stack (closest to trunk) is last
 	selectionStyle := style.Selection()
 	cursorStyle := style.SelectionCursorStyle()
 	branchStyle := style.BranchStyle(false, false, false)
@@ -109,20 +112,27 @@ func (m reorderModel) View() string {
 		}
 	}
 
+	// Show trunk at the bottom (not selectable) - use trunk style (pink)
+	if m.trunk != "" {
+		trunkStyle := style.BranchStyle(false, true, false) // isTrunk=true for pink color
+		b.WriteString(fmt.Sprintf("%s%s\n", style.SelectionPadding, trunkStyle.Render(m.trunk)))
+	}
+
 	return b.String()
 }
 
 // NewReorderModel creates a tea.Model for a reorder prompt (used by stories/demo)
-func NewReorderModel(branches []string) tea.Model {
-	return newReorderModel(branches)
+func NewReorderModel(branches []string, trunk string) tea.Model {
+	return newReorderModel(branches, trunk)
 }
 
 // RunReorderTUI runs the reorder TUI and returns the new order
-func RunReorderTUI(branches []string) ([]string, error) {
+// trunk is displayed at the bottom but is not selectable or reorderable
+func RunReorderTUI(branches []string, trunk string) ([]string, error) {
 	if !IsTTY() {
 		return nil, fmt.Errorf("RunReorderTUI called in non-interactive mode")
 	}
-	m := newReorderModel(branches)
+	m := newReorderModel(branches, trunk)
 	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 
 	finalModel, err := p.Run()

@@ -93,10 +93,20 @@ func ReorderAction(ctx *app.Context) error {
 		return fmt.Errorf("need at least 2 branches to reorder. Found %d branch(es)", len(branches))
 	}
 
-	// Store original order for comparison
+	// Store original order for comparison (in trunk-to-tip order)
 	originalOrder := make([]string, len(branches))
 	copy(originalOrder, branches)
-	out.Debug("reorder: original order: %v", originalOrder)
+	out.Debug("reorder: original order (trunk-to-tip): %v", originalOrder)
+
+	// Get trunk name for TUI display
+	trunkName := eng.Trunk().GetName()
+
+	// Reverse branches for TUI display (tip first, then down to trunk)
+	// This makes the UI more intuitive: top of stack at the top of the list
+	displayBranches := make([]string, len(branches))
+	copy(displayBranches, branches)
+	slices.Reverse(displayBranches)
+	out.Debug("reorder: display order (tip-first): %v", displayBranches)
 
 	// Open TUI or Editor to get new order
 	var newOrder []string
@@ -105,7 +115,7 @@ func ReorderAction(ctx *app.Context) error {
 	if isTTY {
 		out.Debug("reorder: opening TUI for reordering")
 		var err error
-		newOrder, err = tui.RunReorderTUI(branches)
+		newOrder, err = tui.RunReorderTUI(displayBranches, trunkName)
 		if err != nil {
 			if err.Error() == "reorder canceled" {
 				out.Debug("reorder: user canceled reorder via TUI")
@@ -115,7 +125,10 @@ func ReorderAction(ctx *app.Context) error {
 			out.Debug("reorder: TUI failed: %v", err)
 			return fmt.Errorf("TUI failed: %w", err)
 		}
-		out.Debug("reorder: TUI returned new order: %v", newOrder)
+		out.Debug("reorder: TUI returned new order (tip-first): %v", newOrder)
+		// Reverse back to trunk-to-tip order for parent relationship updates
+		slices.Reverse(newOrder)
+		out.Debug("reorder: converted to trunk-to-tip order: %v", newOrder)
 	} else {
 		out.Debug("reorder: opening editor for reordering (non-TTY mode)")
 		// Create editor content with instructions
