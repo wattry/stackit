@@ -117,7 +117,7 @@ func PushMetadataAndSyncPRs(ctx *app.Context, branchNames []string) error {
 	}
 
 	// Push metadata refs
-	if err := eng.Git().PushMetadataRefs(branchNames); err != nil {
+	if err := eng.Git().PushMetadataRefs(ctx.Context, branchNames); err != nil {
 		out.Debug("Failed to push metadata refs: %v", err)
 		return err
 	}

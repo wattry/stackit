@@ -31,17 +31,17 @@ type RepositoryWriter interface {
 
 // RemoteOperations handles interaction with remote repositories.
 type RemoteOperations interface {
-	FetchRemoteShas(remote string) (map[string]string, error)
+	FetchRemoteShas(ctx context.Context, remote string) (map[string]string, error)
 	GetRemoteSha(remote, branchName string) (string, error)
 	GetRemoteRevision(branchName string) (string, error)
 	FindRemoteBranch(ctx context.Context, remote string) (string, error)
 	PushBranch(ctx context.Context, branchName, remote string, opts PushOptions) error
 	PullBranch(ctx context.Context, remote, branchName string) (PullResult, error)
 	Fetch(ctx context.Context, remote, branch string) error
-	PushMetadataRefs(branches []string) error
-	FetchMetadataRefs() error
-	DeleteRemoteMetadataRef(branch string) error
-	BatchDeleteRemoteMetadataRefs(branches []string) error
+	PushMetadataRefs(ctx context.Context, branches []string) error
+	FetchMetadataRefs(ctx context.Context) error
+	DeleteRemoteMetadataRef(ctx context.Context, branch string) error
+	BatchDeleteRemoteMetadataRefs(ctx context.Context, branches []string) error
 	TestRemoteRefCompatibility() error
 }
 

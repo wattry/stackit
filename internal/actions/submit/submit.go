@@ -507,7 +507,7 @@ func pushMetadataRefs(ctx *app.Context, branches []engine.Branch) error {
 	}
 
 	// Push metadata refs
-	if err := ctx.Git().PushMetadataRefs(branchNames); err != nil {
+	if err := ctx.Git().PushMetadataRefs(ctx.Context, branchNames); err != nil {
 		// Check if this looks like a race condition (concurrent push)
 		if isRaceConditionError(err) {
 			return fmt.Errorf("metadata push rejected due to concurrent changes by another user. Run 'st sync' to pull the latest metadata, then retry: %w", err)

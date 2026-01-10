@@ -31,7 +31,7 @@ func (d *demoGitRunner) GetRemote() string {
 	return "origin"
 }
 
-func (d *demoGitRunner) FetchRemoteShas(_ string) (map[string]string, error) {
+func (d *demoGitRunner) FetchRemoteShas(_ context.Context, _ string) (map[string]string, error) {
 	return make(map[string]string), nil
 }
 
@@ -581,19 +581,19 @@ func (d *demoGitRunner) CheckCommutation(_ git.Hunk, _, _ string) (bool, error) 
 	return true, nil
 }
 
-func (d *demoGitRunner) PushMetadataRefs(_ []string) error {
+func (d *demoGitRunner) PushMetadataRefs(_ context.Context, _ []string) error {
 	return nil
 }
 
-func (d *demoGitRunner) FetchMetadataRefs() error {
+func (d *demoGitRunner) FetchMetadataRefs(_ context.Context) error {
 	return nil
 }
 
-func (d *demoGitRunner) DeleteRemoteMetadataRef(_ string) error {
+func (d *demoGitRunner) DeleteRemoteMetadataRef(_ context.Context, _ string) error {
 	return nil
 }
 
-func (d *demoGitRunner) BatchDeleteRemoteMetadataRefs(_ []string) error {
+func (d *demoGitRunner) BatchDeleteRemoteMetadataRefs(_ context.Context, _ []string) error {
 	return nil
 }
 

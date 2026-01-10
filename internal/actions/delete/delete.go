@@ -112,7 +112,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 	for i, b := range toDelete {
 		branchNames[i] = b.GetName()
 	}
-	if err := eng.Git().BatchDeleteRemoteMetadataRefs(branchNames); err != nil {
+	if err := eng.Git().BatchDeleteRemoteMetadataRefs(ctx.Context, branchNames); err != nil {
 		out.Debug("Failed to batch delete remote metadata: %v", err)
 	}
 
