@@ -130,18 +130,28 @@ func TestOpenAction(t *testing.T) {
 }
 
 func TestCreateAction(t *testing.T) {
-	t.Run("fails when not on trunk", func(t *testing.T) {
+	t.Run("succeeds when not on trunk and creates worktree from trunk", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit()
 
 		// Create and checkout a non-trunk branch
 		s.RunGit("checkout", "-b", "feature")
 
-		_, err := worktree.CreateAction(s.Context, worktree.CreateOptions{
+		result, err := worktree.CreateAction(s.Context, worktree.CreateOptions{
 			Name: "my-worktree",
 		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must be run from trunk")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Verify parent is trunk (worktree should be created from trunk regardless of current branch)
+		anchorBranch := s.Engine.GetBranch(result.AnchorBranch)
+		parent := anchorBranch.GetParent()
+		require.NotNil(t, parent)
+		assert.True(t, parent.IsTrunk())
+
+		// Clean up worktree
+		_ = s.Engine.RemoveWorktree(s.Context.Context, result.Path)
+		_ = s.Engine.UnregisterWorktree(result.AnchorBranch)
 	})
 
 	t.Run("fails when name is empty", func(t *testing.T) {

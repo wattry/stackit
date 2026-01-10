@@ -164,15 +164,19 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	eng := ctx.Engine
 	out := ctx.Output
 
-	// Validate we're on trunk
-	currentBranch := eng.CurrentBranch()
-	if currentBranch == nil {
-		return nil, fmt.Errorf("not on a branch")
+	trunk := eng.Trunk()
+
+	// Check if trunk is behind remote and warn
+	if status, err := eng.GetBranchRemoteStatus(trunk); err == nil && status.Behind() {
+		out.Warn("Local %s is behind remote. Consider running 'st sync' first.", trunk.GetName())
 	}
 
-	trunk := eng.Trunk()
-	if currentBranch.GetName() != trunk.GetName() {
-		return nil, fmt.Errorf("worktree create must be run from trunk (%s)", trunk.GetName())
+	// Inform user if not on trunk (worktree is always created from trunk)
+	currentBranch := eng.CurrentBranch()
+	if currentBranch == nil {
+		out.Info("Creating worktree from %s (currently in detached HEAD state)", trunk.GetName())
+	} else if currentBranch.GetName() != trunk.GetName() {
+		out.Info("Creating worktree from %s (current branch: %s)", trunk.GetName(), currentBranch.GetName())
 	}
 
 	// Validate we're not already in a managed worktree
