@@ -37,8 +37,11 @@ If no branch is provided, sync the current stack.`,
 					branchOrPR = args[0]
 				}
 
-				// Create handler based on TTY availability
-				handler := NewGetHandler(ctx.Output)
+				// Create runner (manages terminal state) and handler (processes events)
+				runner, handler := NewGetUI(ctx.Output, ctx.Logger)
+				if runner != nil {
+					defer runner.Cleanup()
+				}
 
 				return actions.GetAction(ctx, branchOrPR, actions.GetOptions{
 					Downstack: downstack,

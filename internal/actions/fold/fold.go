@@ -17,7 +17,7 @@ type Options struct {
 	DryRun     bool // If true, only shows what would happen
 }
 
-func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
+func showDryRun(ctx *app.Context, current, parent engine.Branch) {
 	eng := ctx.Engine
 	out := ctx.Output
 
@@ -76,14 +76,19 @@ func showDryRun(ctx *app.Context, current, parent engine.Branch) error {
 
 	out.Newline()
 	out.Info("%s", style.ColorDim("No changes were applied."))
-	return nil
 }
 
 // Action performs the fold operation
-func Action(ctx *app.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 	out := ctx.Output
 	gctx := ctx.Context
+
+	// Use null handler if none provided
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
 
 	// Validate we're on a branch
 	currentBranch, err := eng.ValidateOnBranch()
@@ -153,8 +158,12 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 	}
 
+	// Start handler with branch info
+	handler.Start(currentBranch, parentName, opts.DryRun)
+
 	if opts.DryRun {
-		return showDryRun(ctx, currentBranchObj, parentBranch)
+		showDryRun(ctx, currentBranchObj, parentBranch)
+		return nil
 	}
 
 	if opts.Keep {
@@ -162,7 +171,15 @@ func Action(ctx *app.Context, opts Options) error {
 		if parentBranch.IsTrunk() {
 			return fmt.Errorf("cannot fold into trunk with --keep because it would delete the trunk branch")
 		}
-		return foldWithKeep(gctx, ctx, currentBranchObj, parentBranch, eng, out, opts)
+		if err := foldWithKeep(gctx, ctx, currentBranchObj, parentBranch, eng, out, opts); err != nil {
+			return err
+		}
+		// With --keep, the parent is folded into current, so parent is deleted
+		handler.Complete(Result{
+			FoldedBranch: parentName,
+			IntoBranch:   currentBranch,
+		})
+		return nil
 	}
 
 	// Check if folding into trunk
@@ -170,5 +187,13 @@ func Action(ctx *app.Context, opts Options) error {
 		return fmt.Errorf("cannot fold into trunk branch %s without --allow-trunk. Folding into trunk will modify your local main branch directly", parentName)
 	}
 
-	return foldNormal(gctx, ctx, currentBranchObj, parentBranch, eng, out, opts)
+	if err := foldNormal(gctx, ctx, currentBranchObj, parentBranch, eng, out, opts); err != nil {
+		return err
+	}
+	// Normal fold: current is folded into parent, so current is deleted
+	handler.Complete(Result{
+		FoldedBranch: currentBranch,
+		IntoBranch:   parentName,
+	})
+	return nil
 }

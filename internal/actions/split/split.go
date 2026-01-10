@@ -40,10 +40,16 @@ type Result struct {
 }
 
 // Action performs the split operation
-func Action(ctx *app.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 	out := ctx.Output
 	context := ctx.Context
+
+	// Use null handler if none provided
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
 
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
@@ -118,6 +124,9 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 	}
 
+	// Start handler with branch info and style
+	handler.Start(currentBranch.GetName(), style)
+
 	// Take snapshot before any modifications
 	snapshotArgs := []string{string(style)}
 	if style == StyleFile && len(opts.Pathspecs) > 0 {
@@ -169,6 +178,11 @@ func Action(ctx *app.Context, opts Options) error {
 				return fmt.Errorf("failed to restack upstack branches: %w", err)
 			}
 		}
+		handler.Complete(ActionResult{
+			OriginalBranch: currentBranch.GetName(),
+			NewBranches:    pathspecs, // File split uses pathspecs as new branches
+			Style:          style,
+		})
 		return nil
 	default:
 		return fmt.Errorf("unknown split style: %s", style)
@@ -203,5 +217,10 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 	}
 
+	handler.Complete(ActionResult{
+		OriginalBranch: currentBranch.GetName(),
+		NewBranches:    result.BranchNames,
+		Style:          style,
+	})
 	return nil
 }

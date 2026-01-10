@@ -29,11 +29,17 @@ state without prompting.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
+				// Create runner (manages terminal state) and handler (processes events)
+				runner, handler := NewUndoUI(ctx.Output, ctx.Logger)
+				if runner != nil {
+					defer runner.Cleanup()
+				}
+
 				// Run undo action
 				return undo.Action(ctx, undo.Options{
 					SnapshotID: snapshotID,
 					Force:      force,
-				})
+				}, handler)
 			})
 		},
 	}

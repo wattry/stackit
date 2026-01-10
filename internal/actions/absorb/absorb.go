@@ -9,7 +9,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -27,9 +26,17 @@ type Options struct {
 }
 
 // Action performs the absorb operation
-func Action(ctx *app.Context, opts Options) error {
+func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 	out := ctx.Output
+
+	// Use null handler if none provided
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
+	handler.Start(opts.DryRun)
 
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
@@ -88,6 +95,7 @@ func Action(ctx *app.Context, opts Options) error {
 	}
 	if !hasStaged {
 		out.Info("Nothing to absorb.")
+		handler.Complete(Result{})
 		return nil
 	}
 
@@ -99,6 +107,7 @@ func Action(ctx *app.Context, opts Options) error {
 
 	if len(hunks) == 0 {
 		out.Info("Nothing to absorb.")
+		handler.Complete(Result{})
 		return nil
 	}
 
@@ -187,6 +196,7 @@ func Action(ctx *app.Context, opts Options) error {
 		} else {
 			out.Info("Nothing to absorb.")
 		}
+		handler.Complete(Result{Unabsorbed: len(unabsorbedHunks)})
 		return nil
 	}
 
@@ -200,6 +210,7 @@ func Action(ctx *app.Context, opts Options) error {
 			}
 		}
 		printDryRunOutput(flatHunksByCommit, unabsorbedHunks, eng, out)
+		// Don't call Complete() for dry-run - no actual changes made
 		return nil
 	}
 
@@ -213,18 +224,20 @@ func Action(ctx *app.Context, opts Options) error {
 	printAbsorbPlan(flatHunksByCommit, unabsorbedHunks, eng, out)
 
 	// Prompt for confirmation if not --force
-	if !opts.Force && ctx.Interactive {
-		confirmed, err := tui.PromptConfirm("Apply these changes to the commits?", false)
+	if !opts.Force && handler.IsInteractive() {
+		confirmed, err := handler.PromptConfirm("Apply these changes to the commits?")
 		if err != nil {
 			return fmt.Errorf("confirmation canceled: %w", err)
 		}
 		if !confirmed {
 			out.Info("Absorb canceled")
+			handler.Complete(Result{})
 			return nil
 		}
-	} else if !opts.Force && !ctx.Interactive {
+	} else if !opts.Force && !handler.IsInteractive() {
 		// Non-interactive without force: default to no
 		out.Info("Non-interactive mode: skipping absorb (use --force to override)")
+		handler.Complete(Result{})
 		return nil
 	}
 
@@ -261,6 +274,7 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 
 		for commitSHA := range branchHunks {
+			handler.OnApply(branch.GetName(), commitSHA[:8])
 			out.Info("Absorbed changes into commit %s in %s", commitSHA[:8], style.ColorBranchName(branch.GetName(), false))
 		}
 	}
@@ -291,5 +305,10 @@ func Action(ctx *app.Context, opts Options) error {
 		}
 	}
 
+	handler.Complete(Result{
+		Absorbed:    len(hunkTargets),
+		Unabsorbed:  len(unabsorbedHunks),
+		BranchCount: len(hunksByBranch),
+	})
 	return nil
 }
