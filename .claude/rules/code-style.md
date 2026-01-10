@@ -2,14 +2,13 @@
 
 ## General
 
-- Clarity and simplicity is very important
-- Unless specified we do not care about backwards compatability
+- Clarity and simplicity over cleverness
+- No backwards compatibility concerns unless specified
 
 ## Go Code Style
 
-- Follow standard Go conventions and idioms
 - Prefer early returns over deep nesting
-- Use meaningful variable names; avoid single-letter names except for loop indices
+- Use meaningful variable names; single-letter names only for loop indices
 
 ## Error Handling
 
@@ -20,9 +19,8 @@
 ## Comments
 
 - Write comments for exported functions and types
-- Explain "why" not "what" in implementation comments
-- Keep comments up to date when code changes
-- Do not use low value comments, comments should only be required where the code is not self documenting
+- Explain "why" not "what"
+- Only add comments where code is not self-documenting
 
 ## Testing
 
