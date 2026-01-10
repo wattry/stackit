@@ -13,7 +13,7 @@ Create a new stacked branch on top of the current branch.
 - Staged changes: !`git diff --cached --stat`
 - Staged diff: !`git diff --cached | head -200`
 - Recent commits: !`git log --oneline -3 2>&1`
-- Stack state: !`stackit log --no-interactive 2>&1`
+- Stack state: !`command stackit log --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
@@ -26,7 +26,7 @@ $ARGUMENTS
    - Analyze the staged diff to understand what changed
    - Check README.md or CONTRIBUTING.md for commit conventions
    - Consider matching the style of recent commits if present
-4. Run: `echo "commit message" | stackit create [branch-name] --no-interactive`
+4. Run: `echo "commit message" | command stackit create [branch-name] --no-interactive`
    - Branch name is optional; stackit auto-generates from commit message
 5. Show new stack state
 

@@ -51,25 +51,64 @@ Use **Conventional Commits**:
 
 ## Using Stackit for Commits and PRs
 
-This repo uses stackit for managing stacked changes. **Always use stackit commands instead of raw git for branch operations:**
+This repo uses stackit for managing stacked changes. **NEVER use raw git commands for branch/commit operations. Always use `command stackit`.**
 
-| Instead of | Use |
-|------------|-----|
-| `git checkout -b` + `git commit` | `stackit create` |
-| `gh pr create` | `stackit submit` |
-| `git rebase` | `stackit restack` |
+### Critical Rules
 
-**Workflow:**
-1. Run `stackit log` to understand current stack state before making changes
-2. Use `stackit create` to create new branches with commits (auto-generates branch names)
-3. Use `stackit submit` to push and create/update PRs
-4. Use `stackit sync` to pull latest from trunk and cleanup merged branches
+1. **NEVER use `git commit` directly** - Always use `command stackit create` for new commits
+2. **NEVER use `git checkout -b`** - Use `command stackit create` to create branches
+3. **NEVER use `gh pr create`** - Use `command stackit submit` for PRs
 
-**Available skills:** Run `/stackit` for the full guide, or use specific commands:
-- `/stack-create` - Create a stacked branch
+| Forbidden | Required |
+|-----------|----------|
+| `git commit -m "..."` | `command stackit create -m "..."` |
+| `git checkout -b branch` | `command stackit create -m "..."` |
+| `gh pr create` | `command stackit submit` |
+| `git rebase` | `command stackit restack` |
+
+### Correct Workflow for Creating Stacked Changes
+
+**IMPORTANT:** `command stackit create` requires staged changes. You MUST stage changes BEFORE running the command.
+
+```bash
+# 1. Check current stack state
+command stackit log
+
+# 2. Make your code changes
+# ... edit files ...
+
+# 3. Stage your changes FIRST
+git add -A
+
+# 4. Create the stacked branch WITH the commit (staged changes required!)
+command stackit create -m "feat: my feature description"
+
+# 5. Submit PRs when ready
+command stackit submit
+```
+
+### Common Mistakes to Avoid
+
+```bash
+# WRONG - Creates empty branch, then commits outside stackit
+command stackit create -m "feat: something"  # No staged changes = empty branch!
+# ... make changes ...
+git commit -m "feat: something"      # WRONG! Bypasses stackit
+
+# CORRECT - Stage first, then create
+# ... make changes ...
+git add -A
+command stackit create -m "feat: something"  # Creates branch + commits staged changes
+```
+
+### Available Skills
+
+Run `/stackit` for the full guide, or use specific skills:
+- `/stack-create` - Create a stacked branch (use this instead of manual commands)
 - `/stack-submit` - Submit PRs
 - `/stack-status` - View stack health
 - `/stack-fix` - Diagnose and fix issues
+- `/stack-sync` - Sync with trunk and cleanup
 
 ## Implementation Details
 
