@@ -37,7 +37,7 @@ func TestMoveCommand(t *testing.T) {
 		})
 
 		// 1. Move branch2 to main (downstack)
-		output := runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--source", "branch2", "--onto", "main")
+		output := runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--source", "branch2", "--onto", "main", "-y")
 		normalized := testhelpers.NormalizeOutput(output)
 		require.Equal(t, testhelpers.NormalizeOutput(`
 Moved branch2 (current) from branch1 to main.
@@ -48,7 +48,7 @@ Restacked branch3 (current) on branch2.
 		// 2. Move current branch (branch3) to branch1
 		err := scene.Repo.CheckoutBranch("branch3")
 		require.NoError(t, err)
-		output = runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--onto", "branch1")
+		output = runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--onto", "branch1", "-y")
 		require.Equal(t, testhelpers.NormalizeOutput(`
 Moved branch3 (current) from branch2 to branch1.
 Restacked branch3 (current) on branch1.
@@ -63,7 +63,7 @@ Restacked branch3 (current) on branch1.
 		err = scene.Repo.CreateChangeAndCommit("main change", "main")
 		require.NoError(t, err)
 
-		output = runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--source", "branch1", "--onto", "main")
+		output = runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--source", "branch1", "--onto", "main", "-y")
 		require.Equal(t, testhelpers.NormalizeOutput(`
 Moved branch1 (current) from main to main.
 Restacked branch1 on main.

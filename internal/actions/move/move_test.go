@@ -427,4 +427,53 @@ func TestMoveAction(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "commit A2", branchA2Messages[0])
 	})
+
+	t.Run("moving middle branch to trunk does not affect downstack branches", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a linear stack: main -> A -> B -> C
+		s.Checkout("main").CreateBranch("branchA").Commit("commit A")
+		s.TrackBranch("branchA", "main")
+
+		s.Checkout("branchA").CreateBranch("branchB").Commit("commit B")
+		s.TrackBranch("branchB", "branchA")
+
+		s.Checkout("branchB").CreateBranch("branchC").Commit("commit C")
+		s.TrackBranch("branchC", "branchB")
+
+		// Move branchB from branchA to main (middle branch to trunk)
+		err := Action(s.Context, Options{
+			Source: "branchB",
+			Onto:   "main",
+		}, nil)
+		require.NoError(t, err)
+
+		// Verify branchB only has its own commit (not A's commit)
+		branchBCommits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branchB"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(branchBCommits), "branchB should only have 1 commit after move")
+		require.Equal(t, "commit B", branchBCommits[0])
+
+		// CRITICAL: Verify branchA is NOT merged into main
+		// This is the bug we're testing - moving B to main should NOT cause A to appear merged
+		mergedIntoMain, err := s.Engine.Git().IsMerged(s.Context.Context, "branchA", "main")
+		require.NoError(t, err)
+		require.False(t, mergedIntoMain, "branchA should NOT be merged into main after moving branchB")
+
+		// Verify branchA still has its own commit
+		branchACommits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branchA"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(branchACommits), "branchA should still have 1 commit")
+		require.Equal(t, "commit A", branchACommits[0])
+
+		// Verify branchC still has branchB as parent and its own commit
+		branchCParent := s.Engine.GetBranch("branchC").GetParent()
+		require.NotNil(t, branchCParent)
+		require.Equal(t, "branchB", branchCParent.GetName())
+
+		branchCCommits, err := s.Engine.GetAllCommits(s.Engine.GetBranch("branchC"), engine.CommitFormatSubject)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(branchCCommits), "branchC should have 1 commit")
+		require.Equal(t, "commit C", branchCCommits[0])
+	})
 }

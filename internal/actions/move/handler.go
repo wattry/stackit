@@ -30,6 +30,15 @@ type Result struct {
 	NewName      string
 }
 
+// Preview contains information about the planned move for confirmation
+type Preview struct {
+	SourceBranch string   // Branch being moved
+	OldParent    string   // Current parent branch
+	NewParent    string   // Target parent branch
+	Commits      []string // Commit subjects that will be moved
+	Descendants  []string // Descendant branches that will be restacked
+}
+
 // Handler receives events from move action
 type Handler interface {
 	// Start is called at the beginning of move
@@ -52,6 +61,11 @@ type Handler interface {
 
 	// PromptRename prompts user to confirm branch rename due to scope change
 	PromptRename(oldName, oldScope, newScope string) (bool, error)
+
+	// PromptConfirmMove displays a preview of the move and asks for confirmation.
+	// Returns true to proceed with the move, false to cancel.
+	// In non-interactive mode, returns true (auto-confirm).
+	PromptConfirmMove(preview Preview) (bool, error)
 }
 
 // NullHandler is a no-op handler for when nil is passed
@@ -77,3 +91,6 @@ func (h *NullHandler) IsInteractive() bool { return false }
 
 // PromptRename implements Handler.
 func (h *NullHandler) PromptRename(_ string, _ string, _ string) (bool, error) { return false, nil }
+
+// PromptConfirmMove implements Handler. Returns true (auto-confirm) for null handler.
+func (h *NullHandler) PromptConfirmMove(_ Preview) (bool, error) { return true, nil }

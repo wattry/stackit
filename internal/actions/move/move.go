@@ -13,8 +13,9 @@ import (
 
 // Options contains options for the move command
 type Options struct {
-	Source string // Branch to move (defaults to current branch)
-	Onto   string // Branch to move onto
+	Source      string // Branch to move (defaults to current branch)
+	Onto        string // Branch to move onto
+	SkipConfirm bool   // Skip confirmation prompt (--yes flag)
 }
 
 // Action performs the move operation
@@ -113,6 +114,46 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 	}
 
+	// Get current parent for preview
+	oldParent := sourceBranch.GetParent()
+	oldParentName := ""
+	if oldParent == nil {
+		oldParentName = eng.Trunk().GetName()
+	} else {
+		oldParentName = oldParent.GetName()
+	}
+
+	// Prompt for confirmation in interactive mode (unless --yes flag is set)
+	if handler.IsInteractive() && !opts.SkipConfirm {
+		// Get commits that will be moved
+		commits, _ := eng.GetAllCommits(sourceBranch, engine.CommitFormatSubject)
+
+		// Get descendant names (excluding source itself)
+		var descendantNames []string
+		for _, d := range descendants {
+			if d.GetName() != source {
+				descendantNames = append(descendantNames, d.GetName())
+			}
+		}
+
+		preview := Preview{
+			SourceBranch: source,
+			OldParent:    oldParentName,
+			NewParent:    onto,
+			Commits:      commits,
+			Descendants:  descendantNames,
+		}
+
+		confirmed, err := handler.PromptConfirmMove(preview)
+		if err != nil {
+			return fmt.Errorf("failed to prompt for confirmation: %w", err)
+		}
+		if !confirmed {
+			out.Info("Move canceled.")
+			return nil
+		}
+	}
+
 	// Check for scope change and potential rename
 	var renamed bool
 	sourceScope := sourceBranch.GetScope()
@@ -135,17 +176,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 	}
 
-	// Get current parent for logging
-	// sourceBranch already declared above
-	oldParent := sourceBranch.GetParent()
-	oldParentName := ""
-	if oldParent == nil {
-		oldParentName = eng.Trunk().GetName()
-	} else {
-		oldParentName = oldParent.GetName()
-	}
-
-	// Start handler with branch info
+	// Start handler with branch info (oldParentName computed earlier for preview)
 	handler.Start(source, oldParentName, onto)
 
 	// Capture old divergence point to preserve it after reparenting
