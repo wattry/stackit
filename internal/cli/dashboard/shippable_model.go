@@ -203,6 +203,11 @@ func (m *shippableModel) selectAllShippable() {
 	}
 }
 
+// clearSelection clears all selections.
+func (m *shippableModel) clearSelection() {
+	m.selected = make(map[string]bool)
+}
+
 // Init initializes the model.
 func (m *shippableModel) Init() tea.Cmd {
 	return m.refresh()

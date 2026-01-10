@@ -57,6 +57,17 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "Some stacks conflict"
 		}
 		return m, nil
+
+	case shipCompleteMsg:
+		m.analyzing = false
+		if msg.err != nil {
+			m.errorMessage = msg.err.Error()
+			return m, nil
+		}
+		// Ship successful
+		m.statusMessage = "Shipped! PR: " + msg.result.PRURL
+		m.clearSelection()
+		return m, m.refresh()
 	}
 
 	return m, nil
@@ -186,11 +197,31 @@ func (m *shippableModel) startShip() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// shipCompleteMsg signals that the ship operation completed.
+type shipCompleteMsg struct {
+	result *shippable.ShipResult
+	err    error
+}
+
 // executeShip executes the ship action after confirmation.
 func (m *shippableModel) executeShip() (tea.Model, tea.Cmd) {
-	// TODO: Implement actual ship action in Phase 4
-	m.statusMessage = "Ship action not yet implemented"
-	return m, nil
+	selected := m.selectedStacks()
+	if len(selected) == 0 {
+		m.errorMessage = "No stacks selected"
+		return m, nil
+	}
+
+	m.analyzing = true
+	m.statusMessage = "Shipping..."
+
+	return m, func() tea.Msg {
+		shipper := shippable.NewShipper(m.ctx)
+		result, err := shipper.Ship(selected, shippable.ShipOptions{
+			SkipLocalCI: !m.options.RunLocalCI,
+			Wait:        false, // Don't wait in UI, user can monitor PR
+		})
+		return shipCompleteMsg{result: result, err: err}
+	}
 }
 
 // startCombinationAnalysis checks if selected stacks can be combined.

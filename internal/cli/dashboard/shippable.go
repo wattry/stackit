@@ -1,3 +1,4 @@
+// Package dashboard provides the interactive shippable work TUI.
 package dashboard
 
 import (
