@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"sort"
+	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
@@ -31,16 +33,53 @@ func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Su
 	}
 
 	cleanStart := time.Now()
-	result, err := actions.CleanBranches(ctx, actions.CleanBranchesOptions{
+
+	// Phase 1: Plan which branches to delete
+	plan, err := actions.PlanBranchDeletions(ctx, actions.CleanBranchesOptions{
 		Force:             opts.Force,
 		InManagedWorktree: ctx.InManagedWorktree,
 		CurrentBranch:     currentBranchName,
 	})
-	ctx.Logger.Info("clean branches completed durationMs=%d deletedCount=%d", time.Since(cleanStart).Milliseconds(), len(result.DeletedBranches))
-
 	if err != nil {
-		return result, err
+		return nil, err
 	}
+
+	// Log each branch and its deletion reason
+	if len(plan.BranchesToDelete) > 0 {
+		// Sort branch names for consistent logging
+		names := make([]string, 0, len(plan.BranchesToDelete))
+		for name := range plan.BranchesToDelete {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		// Build detailed log message
+		var logDetails []string
+		for _, name := range names {
+			reason := plan.BranchesToDelete[name]
+			logDetails = append(logDetails, name+": "+reason)
+		}
+		ctx.Logger.Info("branches planned for deletion count=%d branches=[%s]",
+			len(plan.BranchesToDelete), strings.Join(logDetails, ", "))
+	}
+
+	// Phase 2: Get user confirmation for deletions (interactive mode only)
+	var branchesToDelete map[string]bool
+	if handler.IsInteractive() && len(plan.BranchesToDelete) > 0 {
+		confirmed, err := handler.PromptBranchDeletions(plan.BranchesToDelete)
+		if err != nil {
+			return nil, err
+		}
+		branchesToDelete = confirmed
+	}
+
+	// Phase 3: Execute deletions
+	result, err := actions.ExecuteBranchDeletions(ctx, plan, branchesToDelete)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx.Logger.Info("clean branches completed durationMs=%d deletedCount=%d", time.Since(cleanStart).Milliseconds(), len(result.DeletedBranches))
 
 	// Emit events for each deleted branch
 	for name, reason := range result.DeletedBranches {
