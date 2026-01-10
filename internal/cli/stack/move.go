@@ -19,14 +19,25 @@ func NewMoveCmd() *cobra.Command {
 		all    bool
 		onto   string
 		source string
+		yes    bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "move",
-		Short: "Rebase the current branch onto the target branch",
-		Long: `Rebase the current branch onto the target branch and restack all of its descendants.
+		Short: "Move this branch to a different parent in the stack",
+		Long: `Move a branch to a new parent, rebasing only its own commits onto the target.
 
-If no branch is passed in, opens an interactive selector to choose the target branch.`,
+This command changes the branch's parent pointer and rebases the branch's commits
+onto the new parent. Only the branch's own commits are moved - commits from
+ancestor branches are NOT included.
+
+After moving, all descendant branches are automatically restacked.
+
+Examples:
+  stackit move --onto main           # Move current branch to be a child of main
+  stackit move --source feature-b --onto feature-a  # Move feature-b onto feature-a
+
+If no --onto is specified, opens an interactive selector to choose the target.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
@@ -58,8 +69,9 @@ If no branch is passed in, opens an interactive selector to choose the target br
 
 				// Run move action
 				return move.Action(ctx, move.Options{
-					Source: sourceBranch,
-					Onto:   ontoBranch,
+					Source:      sourceBranch,
+					Onto:        ontoBranch,
+					SkipConfirm: yes,
 				}, handler)
 			})
 		},
@@ -69,6 +81,7 @@ If no branch is passed in, opens an interactive selector to choose the target br
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Show branches across all configured trunks in interactive selection.")
 	cmd.Flags().StringVarP(&onto, "onto", "o", "", "Branch to move the current branch onto.")
 	cmd.Flags().StringVar(&source, "source", "", "Branch to move (defaults to current branch).")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
 
 	_ = cmd.RegisterFlagCompletionFunc("onto", common.CompleteBranches)
 	_ = cmd.RegisterFlagCompletionFunc("source", common.CompleteBranches)

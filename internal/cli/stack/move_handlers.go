@@ -81,6 +81,11 @@ func (h *SimpleMoveHandler) PromptRename(_, oldScope, newScope string) (bool, er
 	return false, nil
 }
 
+// PromptConfirmMove returns true (auto-confirm) for simple handler (non-interactive)
+func (h *SimpleMoveHandler) PromptConfirmMove(_ move.Preview) (bool, error) {
+	return true, nil
+}
+
 // InteractiveMoveHandler provides interactive prompts for move operations
 type InteractiveMoveHandler struct {
 	SimpleMoveHandler
@@ -101,4 +106,40 @@ func (h *InteractiveMoveHandler) IsInteractive() bool {
 // PromptRename prompts user to confirm branch rename due to scope change
 func (h *InteractiveMoveHandler) PromptRename(_, oldScope, newScope string) (bool, error) {
 	return tui.PromptConfirm(fmt.Sprintf("Branch name contains '%s', but its scope will now be '%s'. Would you like to rename the branch?", oldScope, newScope), true)
+}
+
+// PromptConfirmMove displays a preview of the move and asks for confirmation
+func (h *InteractiveMoveHandler) PromptConfirmMove(preview move.Preview) (bool, error) {
+	h.splog.Newline()
+	h.splog.Info("Move Preview:")
+	h.splog.Info("  Branch: %s", style.ColorBranchName(preview.SourceBranch, true))
+	h.splog.Info("  From:   %s", style.ColorBranchName(preview.OldParent, false))
+	h.splog.Info("  To:     %s", style.ColorBranchName(preview.NewParent, false))
+
+	if len(preview.Commits) > 0 {
+		h.splog.Newline()
+		h.splog.Info("Commits to be moved (%d):", len(preview.Commits))
+		for _, commit := range preview.Commits {
+			h.splog.Info("  • %s", commit)
+		}
+	}
+
+	if len(preview.Descendants) > 0 {
+		h.splog.Newline()
+		h.splog.Info("Descendants to be restacked (%d):", len(preview.Descendants))
+		for _, desc := range preview.Descendants {
+			h.splog.Info("  • %s", style.ColorBranchName(desc, false))
+		}
+	}
+
+	h.splog.Newline()
+	h.splog.Info("This will rebase %s's commits onto %s.",
+		style.ColorBranchName(preview.SourceBranch, true),
+		style.ColorBranchName(preview.NewParent, false))
+	if len(preview.Descendants) > 0 {
+		h.splog.Info("All descendant branches will be automatically restacked.")
+	}
+	h.splog.Newline()
+
+	return tui.PromptConfirm("Proceed with move?", true)
 }
