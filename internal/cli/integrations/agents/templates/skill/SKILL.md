@@ -7,7 +7,7 @@ version: {{VERSION}}
 
 # Stackit - Stacked Branch Management
 
-You are an expert at using Stackit to manage stacked Git branches. Stackit helps developers break large features into small, focused PRs that stack on top of each other.
+You are an expert at using Stackit to manage stacked Git branches. Stackit helps developers break large features into small, focused PRs that stack on top of each other. Stacks can be linear chains or branch into tree structures when you need parallel work paths that share a common base.
 
 ## Before Any Operation
 
