@@ -8,11 +8,19 @@ import (
 	"runtime/debug"
 	"sync"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/output"
 )
+
+// ReadySignaler allows a model to signal when it's ready to receive messages.
+// Models implementing this interface will have their SetReadyChan called before
+// the program starts, and should close the channel in their Init() method.
+type ReadySignaler interface {
+	SetReadyChan(chan struct{})
+}
 
 // Runner manages async bubbletea program lifecycle with panic recovery.
 // It handles signal handling, terminal cleanup, and crash logging.
@@ -38,6 +46,8 @@ func NewRunner(model tea.Model, out output.Output, logger output.Logger) *Runner
 
 // Start begins running the tea.Program in a background goroutine.
 // It sets up signal handling and panic recovery.
+// If the model implements ReadySignaler, Start waits for the model to signal
+// readiness before returning, preventing race conditions with Send().
 func (r *Runner) Start() {
 	r.mu.Lock()
 	if r.started {
@@ -48,6 +58,13 @@ func (r *Runner) Start() {
 
 	// Quiet console output while TUI is active
 	r.output.SetQuiet(true)
+
+	// Set up ready channel if model supports it
+	var readyChan chan struct{}
+	if signaler, ok := r.model.(ReadySignaler); ok {
+		readyChan = make(chan struct{})
+		signaler.SetReadyChan(readyChan)
+	}
 
 	r.program = tea.NewProgram(r.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 
@@ -79,6 +96,17 @@ func (r *Runner) Start() {
 		}
 		r.Cleanup()
 	}()
+
+	// Wait for ready signal if model supports it
+	// This prevents Send() calls from blocking on an uninitialized event loop
+	if readyChan != nil {
+		select {
+		case <-readyChan:
+			// Program is ready to receive messages
+		case <-time.After(2 * time.Second):
+			r.logger.Warn("TUI startup timed out, proceeding anyway")
+		}
+	}
 }
 
 // Cleanup ensures the terminal is restored to normal mode.

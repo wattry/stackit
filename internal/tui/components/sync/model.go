@@ -50,6 +50,7 @@ type Model struct {
 	Done         bool
 	Summary      string
 	Width        int
+	readyChan    chan struct{} // signals when Init() is called
 }
 
 // PhaseStartMsg indicates a phase has started
@@ -100,8 +101,19 @@ func NewModel(totalOps int) *Model {
 	}
 }
 
+// SetReadyChan sets the channel that will be closed when Init() is called.
+// This implements the tui.ReadySignaler interface.
+func (m *Model) SetReadyChan(ch chan struct{}) {
+	m.readyChan = ch
+}
+
 // Init initializes the model
 func (m *Model) Init() tea.Cmd {
+	// Signal that the program is ready to receive messages
+	if m.readyChan != nil {
+		close(m.readyChan)
+		m.readyChan = nil
+	}
 	return m.Spinner.Tick
 }
 
