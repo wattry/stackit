@@ -216,6 +216,52 @@ func (r *Runner) IsRunning() bool {
 	return r.started && !r.stopped
 }
 
+// IsHealthy returns true if the TUI is running and responsive.
+// This is a more comprehensive check than IsRunning, verifying the program is not nil.
+func (r *Runner) IsHealthy() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.started && !r.stopped && r.program != nil
+}
+
+// SendWithTimeout sends a message with a timeout.
+// Returns error if the send doesn't complete within the timeout.
+// This is useful for detecting hangs in the TUI event loop.
+func (r *Runner) SendWithTimeout(msg tea.Msg, timeout time.Duration) error {
+	if r == nil {
+		return nil
+	}
+
+	msgType := reflect.TypeOf(msg).String()
+	r.logger.Debug("tui.Runner.SendWithTimeout", "msgType", msgType, "timeout", timeout)
+
+	done := make(chan struct{})
+	go func() {
+		r.Send(msg)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-time.After(timeout):
+		r.logger.Error("TUI send timed out", "msgType", msgType, "timeout", timeout)
+		return fmt.Errorf("send timed out after %v for %s", timeout, msgType)
+	}
+}
+
+// MustSend sends a message and logs error if timeout occurs.
+// Uses a default 5-second timeout. This is the recommended way to send messages
+// when you want hang detection without blocking indefinitely.
+func (r *Runner) MustSend(msg tea.Msg) {
+	if err := r.SendWithTimeout(msg, 5*time.Second); err != nil {
+		r.logger.Error("MustSend failed", "error", err)
+	}
+}
+
 // PanicError is sent when a tea.Cmd panics during execution.
 // Models can handle this to show an error message or recover gracefully.
 type PanicError struct {
