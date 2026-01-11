@@ -19,7 +19,8 @@ type WorktreeCleanupResult struct {
 // If a stack root is deleted but has surviving children (reparented to trunk), the worktree
 // registry is updated to point to the new stack root instead of deleting the worktree.
 // This function is best-effort and will not fail sync on errors.
-func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
+// Worktrees with dirty anchors (uncommitted changes) are skipped to preserve work in progress.
+func cleanOrphanedWorktrees(ctx *app.Context, dirtyAnchors map[string]bool) *WorktreeCleanupResult {
 	result := &WorktreeCleanupResult{
 		RemovedWorktrees: []string{},
 		Errors:           []string{},
@@ -55,6 +56,11 @@ func cleanOrphanedWorktrees(ctx *app.Context) *WorktreeCleanupResult {
 
 	// Check each worktree to see if its stack root still exists
 	for _, wt := range worktrees {
+		// Skip dirty worktrees - don't clean up while there are uncommitted changes
+		if dirtyAnchors[wt.AnchorBranch] {
+			continue
+		}
+
 		stackRootBranch := ctx.Engine.GetBranch(wt.AnchorBranch)
 
 		// Check if the stack root branch still exists and is tracked

@@ -45,20 +45,28 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Info("Syncing branches across all configured trunks...")
 	}
 
-	// Check for uncommitted changes in main repo
+	// Check for uncommitted changes in main repo (not worktrees - those are handled below)
+	// If we're in a worktree with uncommitted changes, the worktree dirty check will skip that stack
 	uncommittedStart := time.Now()
 	hasUncommitted := ctx.Reader().HasUncommittedChanges(gctx)
 	ctx.Logger.Info("check uncommitted changes completed", "durationMs", time.Since(uncommittedStart).Milliseconds())
-	if hasUncommitted {
+	if hasUncommitted && !ctx.InManagedWorktree {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
 	}
 
-	// Check for uncommitted changes in managed worktrees
+	// Collect dirty worktree anchors (stacks to skip entirely)
+	// Rather than failing on dirty worktrees, we skip their entire stack to allow
+	// parallel work in other worktrees while preserving consistency.
+	var dirtyAnchors map[string]bool
 	managedWorktrees, err := eng.ListManagedWorktrees()
 	if err == nil {
 		for _, wt := range managedWorktrees {
 			if hasChanges, _ := eng.Git().WorktreeHasUncommittedChanges(gctx, wt.Path); hasChanges {
-				return fmt.Errorf("worktree at %s has uncommitted changes. Please commit or stash them before syncing", wt.Path)
+				if dirtyAnchors == nil {
+					dirtyAnchors = make(map[string]bool)
+				}
+				dirtyAnchors[wt.AnchorBranch] = true
+				out.Warn("Skipping stack rooted at %s (worktree has uncommitted changes)", wt.AnchorBranch)
 			}
 		}
 	}
@@ -132,10 +140,15 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return githubErr
 	}
 
+	// Populate skipped stacks in summary
+	for anchor := range dirtyAnchors {
+		summary.SkippedStacks = append(summary.SkippedStacks, anchor)
+	}
+
 	// Process GitHub PR info results (sequential - depends on PR info)
 	branchesToRestack := []string{}
 	if githubSyncResult != nil {
-		if err := processGitHubSyncResult(ctx, githubSyncResult, &branchesToRestack, handler); err != nil {
+		if err := processGitHubSyncResult(ctx, githubSyncResult, &branchesToRestack, dirtyAnchors, handler); err != nil {
 			return err
 		}
 	}
@@ -149,13 +162,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Phase 3: Clean branches (delete merged/closed)
-	cleanResult, err := cleanBranches(ctx, &opts, handler, summary)
+	cleanResult, err := cleanBranches(ctx, &opts, dirtyAnchors, handler, summary)
 	if err != nil {
 		return fmt.Errorf("failed to clean branches: %w", err)
 	}
 
 	// Clean orphaned worktrees (after branch cleanup so we know what's been deleted)
-	worktreeResult := cleanOrphanedWorktrees(ctx)
+	worktreeResult := cleanOrphanedWorktrees(ctx, dirtyAnchors)
 	if len(worktreeResult.RemovedWorktrees) > 0 {
 		summary.WorktreesCleaned = len(worktreeResult.RemovedWorktrees)
 	}
@@ -166,8 +179,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
-	// Add branches with new parents to restack list
+	// Add branches with new parents to restack list (skip dirty stacks)
 	for _, branchName := range cleanResult.BranchesWithNewParents {
+		if isInDirtyStack(ctx, branchName, dirtyAnchors) {
+			continue
+		}
 		branch := eng.GetBranch(branchName)
 		upstack := graph.Range(branch, engine.StackRange{
 			RecursiveChildren: true,
@@ -192,7 +208,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Phase 4: Restack branches
 	handler.EmitEvent(Event{Phase: PhaseRestack, Type: EventStarted})
 
-	if err := restackBranches(ctx, branchesToRestack, handler, summary); err != nil {
+	if err := restackBranches(ctx, branchesToRestack, dirtyAnchors, handler, summary); err != nil {
 		// Even on error, complete with summary
 		handler.Complete(*summary)
 		return err
@@ -282,6 +298,7 @@ type Summary struct {
 	ConflictBranches  []string // Names of branches that conflicted
 	UpToDate          bool     // Everything was already current
 	WorktreesCleaned  int      // Number of orphaned worktrees cleaned up
+	SkippedStacks     []string // Stacks skipped due to dirty worktrees
 }
 
 // ParentsResult contains the result of synchronizing parents from GitHub
@@ -292,7 +309,8 @@ type ParentsResult struct {
 // HasChanges returns true if any operations were performed
 func (s *Summary) HasChanges() bool {
 	return s.TrunkUpdated || s.BranchesSynced > 0 || s.BranchesRestacked > 0 ||
-		s.BranchesDeleted > 0 || s.BranchesSkipped > 0 || s.WorktreesCleaned > 0
+		s.BranchesDeleted > 0 || s.BranchesSkipped > 0 || s.WorktreesCleaned > 0 ||
+		len(s.SkippedStacks) > 0
 }
 
 // Handler abstracts TTY vs non-TTY output for sync operations
@@ -404,6 +422,9 @@ func FormatSummaryParts(summary Summary) []string {
 	if summary.BranchesSkipped > 0 {
 		parts = append(parts, fmt.Sprintf("skipped %d (conflict)", summary.BranchesSkipped))
 	}
+	if len(summary.SkippedStacks) > 0 {
+		parts = append(parts, fmt.Sprintf("skipped %d stack%s (dirty worktree)", len(summary.SkippedStacks), plural(len(summary.SkippedStacks))))
+	}
 
 	return parts
 }
@@ -443,4 +464,16 @@ func pluralES(count int) string {
 		return ""
 	}
 	return "es"
+}
+
+// isInDirtyStack returns true if the branch belongs to a dirty worktree's stack.
+// A branch is in a dirty stack if its stack root (first ancestor whose parent is trunk)
+// matches the anchor branch of a dirty worktree.
+func isInDirtyStack(ctx *app.Context, branchName string, dirtyAnchors map[string]bool) bool {
+	if len(dirtyAnchors) == 0 {
+		return false
+	}
+	branch := ctx.Engine.GetBranch(branchName)
+	stackRoot := ctx.Engine.GetStackRootForBranch(branch)
+	return dirtyAnchors[stackRoot]
 }

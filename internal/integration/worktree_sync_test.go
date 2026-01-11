@@ -321,6 +321,143 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		sh.ExpectBranchParent("branchD", "branchC")
 	})
 
+	t.Run("sync from dirty worktree skips own stack", func(t *testing.T) {
+		// Test scenario:
+		// 1. Create a worktree with a stack
+		// 2. Add uncommitted changes to the worktree
+		// 3. Run sync FROM that dirty worktree
+		// Expected:
+		// - Sync should complete without error
+		// - The worktree's stack should be skipped
+
+		sh := NewTestShellWithRemoteInProcess(t)
+
+		// Create a stack with worktree
+		sh.Log("Creating stack with worktree...")
+		sh.WriteFile("feature.txt", "feature content").
+			Run("create feature -w -m 'feature branch'").
+			OnBranch("main")
+
+		worktree := sh.GetWorktreePath("feature")
+		shW := sh.InWorktree(worktree)
+		shW.OnBranch("feature")
+
+		// Record SHA before sync
+		sh.Git("rev-parse feature")
+		featureBefore := sh.Output()
+
+		// Add uncommitted changes to the worktree
+		sh.Log("Adding uncommitted changes to worktree...")
+		shW.WriteFile("dirty.txt", "uncommitted content")
+		// Don't commit - this makes it dirty
+
+		// Advance main
+		sh.Log("Advancing main...")
+		sh.WriteFile("main-update.txt", "main change").
+			Git("add main-update.txt").
+			Git("commit -m 'Main advanced'").
+			Git("push origin main")
+
+		// Run sync from the dirty worktree
+		sh.Log("Running sync from dirty worktree...")
+		shW.Run("sync")
+
+		// Sync should complete without error
+		shW.OutputContains("Skipping stack")
+
+		// Feature branch should NOT be restacked (we're in it with uncommitted changes)
+		sh.Git("rev-parse feature")
+		featureAfter := sh.Output()
+		if featureBefore != featureAfter {
+			t.Errorf("Feature branch should NOT have been restacked (dirty), but SHA changed from %s to %s", featureBefore, featureAfter)
+		}
+
+		// Uncommitted changes should still be present
+		shW.Git("status --porcelain")
+		if shW.Output() == "" {
+			t.Error("Worktree should still have uncommitted changes")
+		}
+	})
+
+	t.Run("sync skips dirty worktree stack and syncs clean stack", func(t *testing.T) {
+		// Test scenario:
+		// 1. Create two worktrees with separate stacks
+		// 2. Add uncommitted changes to one worktree (making it "dirty")
+		// 3. Run sync from main repo
+		// Expected:
+		// - Clean worktree stack should be synced normally
+		// - Dirty worktree stack should be skipped
+		// - Sync should complete without error
+
+		sh := NewTestShellWithRemoteInProcess(t)
+
+		// Create Stack A (will be clean)
+		sh.Log("Creating Stack A with worktree (clean)...")
+		sh.WriteFile("stackA.txt", "stack A content").
+			Run("create stackA -w -m 'Stack A root'").
+			OnBranch("main")
+
+		worktreeA := sh.GetWorktreePath("stackA")
+		shA := sh.InWorktree(worktreeA)
+		shA.OnBranch("stackA")
+
+		// Create Stack B (will be dirty)
+		sh.Log("Creating Stack B with worktree (will be dirty)...")
+		sh.WriteFile("stackB.txt", "stack B content").
+			Run("create stackB -w -m 'Stack B root'").
+			OnBranch("main")
+
+		worktreeB := sh.GetWorktreePath("stackB")
+		shB := sh.InWorktree(worktreeB)
+		shB.OnBranch("stackB")
+
+		// Record the branch SHA before sync
+		sh.Git("rev-parse stackA")
+		stackABefore := sh.Output()
+		sh.Git("rev-parse stackB")
+		stackBBefore := sh.Output()
+
+		// Add uncommitted changes to worktree B (making it dirty)
+		sh.Log("Adding uncommitted changes to worktree B...")
+		shB.WriteFile("dirty.txt", "uncommitted content")
+		// Don't commit - this makes it dirty
+
+		// Advance main
+		sh.Log("Advancing main...")
+		sh.WriteFile("main-update.txt", "main change").
+			Git("add main-update.txt").
+			Git("commit -m 'Main advanced'").
+			Git("push origin main")
+
+		// Run sync from main repo
+		sh.Log("Running sync from main repo...")
+		sh.OnBranch("main").
+			Run("sync")
+
+		// Sync should complete without error (output check)
+		sh.OutputContains("Skipping stack")
+
+		// Stack A should be restacked (SHA changed)
+		sh.Git("rev-parse stackA")
+		stackAAfter := sh.Output()
+		if stackABefore == stackAAfter {
+			t.Errorf("Stack A should have been restacked, but SHA unchanged: %s", stackABefore)
+		}
+
+		// Stack B should NOT be restacked (SHA unchanged)
+		sh.Git("rev-parse stackB")
+		stackBAfter := sh.Output()
+		if stackBBefore != stackBAfter {
+			t.Errorf("Stack B should NOT have been restacked (dirty), but SHA changed from %s to %s", stackBBefore, stackBAfter)
+		}
+
+		// Worktree B should still have the uncommitted changes
+		shB.Git("status --porcelain")
+		if shB.Output() == "" {
+			t.Error("Worktree B should still have uncommitted changes")
+		}
+	})
+
 	t.Run("forked stack in worktree - bottom branch merged", func(t *testing.T) {
 		// Test scenario: forked stack where A has two children B and C
 		// Structure: main -> A -> B
