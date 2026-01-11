@@ -8,20 +8,21 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
 )
 
-// Model is the bubbletea model for foreach progress
+// Model is the bubbletea model for foreach progress.
+// It embeds tui.BaseModel for standard lifecycle handling.
 type Model struct {
+	tui.BaseModel // Embedded for ReadySignaler interface
 	Items         []Item
 	Renderer      *tree.StackTreeRenderer
 	RootBranch    string
-	Spinner       spinner.Model
-	Done          bool
+	spinner       spinner.Model // Use local spinner for custom style
 	Styles        Styles
 	GlobalMessage string
 	Command       string
-	readyChan     chan struct{} // signals when Init() is called
 }
 
 // ProgressUpdateMsg is sent to update the status of a specific branch execution
@@ -51,40 +52,33 @@ func NewModel(items []Item) *Model {
 
 	return &Model{
 		Items:   items,
-		Spinner: s,
+		spinner: s,
 		Styles:  DefaultStyles(),
 	}
 }
 
-// SetReadyChan sets the channel that will be closed when Init() is called.
-// This implements the tui.ReadySignaler interface.
-func (m *Model) SetReadyChan(ch chan struct{}) {
-	m.readyChan = ch
-}
-
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
-	// Signal that the program is ready to receive messages
-	if m.readyChan != nil {
-		close(m.readyChan)
-		m.readyChan = nil
-	}
-	return m.Spinner.Tick
+	// Signal that the program is ready to receive messages via BaseModel
+	m.SignalReady()
+	return m.spinner.Tick
 }
 
 // Update handles messages and updates the model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
-			return m, tea.Quit
-		}
-
-	case spinner.TickMsg:
+	// Handle spinner ticks with our custom spinner BEFORE HandleCommonMsg
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
 		var cmd tea.Cmd
-		m.Spinner, cmd = m.Spinner.Update(msg)
+		m.spinner, cmd = m.spinner.Update(tickMsg)
 		return m, cmd
+	}
 
+	// Handle common messages via BaseModel (key events, window resize)
+	if handled, cmd := m.HandleCommonMsg(msg); handled {
+		return m, cmd
+	}
+
+	switch msg := msg.(type) {
 	case StartExecutionMsg:
 		// Update status for items that are in msg.Items
 		for _, newItem := range msg.Items {
@@ -115,10 +109,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		return m, m.Spinner.Tick
+		return m, m.spinner.Tick
 
 	case ProgressCompleteMsg:
-		m.Done = true
+		m.MarkDone()
 		return m, tea.Quit
 	}
 
@@ -147,7 +141,7 @@ func (m *Model) View() string {
 			// Update custom label for status
 			switch item.Status {
 			case StatusRunning:
-				ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.Spinner.View() + " running...")
+				ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.spinner.View() + " running...")
 			case StatusDone:
 				ann.CustomLabel = m.Styles.DoneStyle.Render("✓")
 				if item.Output != "" {
@@ -186,7 +180,7 @@ func (m *Model) View() string {
 				icon = m.Styles.DimStyle.Render("○")
 				status = m.Styles.DimStyle.Render("pending")
 			case StatusRunning:
-				icon = m.Spinner.View()
+				icon = m.spinner.View()
 				status = m.Styles.SpinnerStyle.Render("running...")
 			case StatusDone:
 				icon = m.Styles.DoneStyle.Render("✓")

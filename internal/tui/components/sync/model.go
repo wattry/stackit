@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -24,33 +25,25 @@ const (
 	PhaseRestack Phase = "restack"
 )
 
-// Status constants
-const (
-	StatusPending = "pending"
-	StatusActive  = "active"
-	StatusDone    = "done"
-)
-
 // PhaseItem represents progress for a single phase
 type PhaseItem struct {
 	Phase   Phase
-	Status  string // StatusPending, StatusActive, StatusDone
+	Status  tui.Status
 	Message string
 	Details []string // Lines of detail output for this phase
 }
 
-// Model is the bubbletea model for sync progress
+// Model is the bubbletea model for sync progress.
+// It embeds tui.BaseModel for standard lifecycle handling.
 type Model struct {
-	Phases       []PhaseItem
-	CurrentPhase Phase
-	TotalOps     int
-	CompletedOps int
-	Progress     progress.Model
-	Spinner      spinner.Model
-	Done         bool
-	Summary      string
-	Width        int
-	readyChan    chan struct{} // signals when Init() is called
+	tui.BaseModel // Embedded for ReadySignaler interface
+	Phases        []PhaseItem
+	CurrentPhase  Phase
+	TotalOps      int
+	CompletedOps  int
+	Progress      progress.Model
+	spinner       spinner.Model // Use local spinner for custom style
+	Summary       string
 }
 
 // PhaseStartMsg indicates a phase has started
@@ -87,57 +80,52 @@ func NewModel(totalOps int) *Model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
-	return &Model{
+	m := &Model{
 		Phases: []PhaseItem{
-			{Phase: PhaseTrunk, Status: StatusPending, Message: "📥 Pulling from remote..."},
-			{Phase: PhaseGitHub, Status: StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
-			{Phase: PhaseClean, Status: StatusPending, Message: "🧹 Cleaning branches..."},
-			{Phase: PhaseRestack, Status: StatusPending, Message: "📚 Restacking branches..."},
+			{Phase: PhaseTrunk, Status: tui.StatusPending, Message: "📥 Pulling from remote..."},
+			{Phase: PhaseGitHub, Status: tui.StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
+			{Phase: PhaseClean, Status: tui.StatusPending, Message: "🧹 Cleaning branches..."},
+			{Phase: PhaseRestack, Status: tui.StatusPending, Message: "📚 Restacking branches..."},
 		},
 		TotalOps: totalOps,
 		Progress: p,
-		Spinner:  s,
-		Width:    80,
+		spinner:  s,
 	}
-}
-
-// SetReadyChan sets the channel that will be closed when Init() is called.
-// This implements the tui.ReadySignaler interface.
-func (m *Model) SetReadyChan(ch chan struct{}) {
-	m.readyChan = ch
+	m.Width = 80 // Set BaseModel's Width
+	return m
 }
 
 // Init initializes the model
 func (m *Model) Init() tea.Cmd {
-	// Signal that the program is ready to receive messages
-	if m.readyChan != nil {
-		close(m.readyChan)
-		m.readyChan = nil
-	}
-	return m.Spinner.Tick
+	// Signal that the program is ready to receive messages via BaseModel
+	m.SignalReady()
+	return m.spinner.Tick
 }
 
 // Update handles messages
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
-			return m, tea.Quit
-		}
+	// Handle spinner ticks with our custom spinner BEFORE HandleCommonMsg
+	// (HandleCommonMsg would update BaseModel.Spinner instead)
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(tickMsg)
+		return m, cmd
+	}
 
+	// Handle common messages via BaseModel (key events, window resize)
+	if handled, cmd := m.HandleCommonMsg(msg); handled {
+		return m, cmd
+	}
+
+	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.Width = msg.Width
+		// BaseModel already set Width/Height, but we also need to update Progress.Width
 		newWidth := msg.Width - 10
 		if newWidth > 60 {
 			newWidth = 60
 		}
 		m.Progress.Width = newWidth
 		return m, nil
-
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.Spinner, cmd = m.Spinner.Update(msg)
-		return m, cmd
 
 	case progress.FrameMsg:
 		progressModel, cmd := m.Progress.Update(msg)
@@ -148,9 +136,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.CurrentPhase = msg.Phase
 		for i := range m.Phases {
 			if m.Phases[i].Phase == msg.Phase {
-				m.Phases[i].Status = StatusActive
-			} else if m.Phases[i].Status == StatusActive {
-				m.Phases[i].Status = StatusDone
+				m.Phases[i].Status = tui.StatusActive
+			} else if m.Phases[i].Status == tui.StatusActive {
+				m.Phases[i].Status = tui.StatusDone
 			}
 		}
 		return m, nil
@@ -178,8 +166,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Summary = msg.Summary
 		// Mark all phases as done
 		for i := range m.Phases {
-			if m.Phases[i].Status == StatusActive {
-				m.Phases[i].Status = StatusDone
+			if m.Phases[i].Status == tui.StatusActive {
+				m.Phases[i].Status = tui.StatusDone
 			}
 		}
 		return m, tea.Quit
@@ -201,7 +189,7 @@ func (m *Model) View() string {
 	// Phase headers with their details
 	firstPhase := true
 	for _, phase := range m.Phases {
-		if phase.Status == StatusPending {
+		if phase.Status == tui.StatusPending {
 			continue // Don't show pending phases
 		}
 
@@ -214,8 +202,8 @@ func (m *Model) View() string {
 		// Phase header
 		icon := "✓"
 		phaseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-		if phase.Status == StatusActive {
-			icon = m.Spinner.View()
+		if phase.Status == tui.StatusActive {
+			icon = m.spinner.View()
 			phaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 		}
 
