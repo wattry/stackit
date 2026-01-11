@@ -69,7 +69,7 @@ func syncGitHubPRInfo(ctx *app.Context) (*GitHubSyncResult, error) {
 // This must run after syncGitHubPRInfo completes
 //
 //nolint:unparam // error return is for future error handling
-func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branchesToRestack *[]string, handler Handler) error {
+func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branchesToRestack *[]string, dirtyAnchors map[string]bool, handler Handler) error {
 	eng := ctx.PR()
 	nav := ctx.Navigator()
 	out := ctx.Output
@@ -122,14 +122,17 @@ func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branche
 
 	// Synchronize local parents with GitHub PR base branches
 	parentsStart := time.Now()
-	syncResult, err := ParentsFromGitHubBase(ctx)
+	syncResult, err := ParentsFromGitHubBase(ctx, dirtyAnchors)
 	ctx.Logger.Info("sync parents from github base completed durationMs=%d", time.Since(parentsStart).Milliseconds())
 	if err != nil {
 		out.Debug("Failed to sync parents from GitHub: %v", err)
 	} else if len(syncResult.BranchesReparented) > 0 {
 		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
-		// Add reparented branches to restack list
+		// Add reparented branches to restack list (skip dirty stacks)
 		for _, branchName := range syncResult.BranchesReparented {
+			if isInDirtyStack(ctx, branchName, dirtyAnchors) {
+				continue
+			}
 			*branchesToRestack = append(*branchesToRestack, branchName)
 			// Also add descendants
 			branch := nav.GetBranch(branchName)
@@ -146,7 +149,7 @@ func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branche
 }
 
 // ParentsFromGitHubBase synchronizes local parents with GitHub PR base branches
-func ParentsFromGitHubBase(ctx *app.Context) (*ParentsResult, error) {
+func ParentsFromGitHubBase(ctx *app.Context, dirtyAnchors map[string]bool) (*ParentsResult, error) {
 	eng := ctx.Engine // Using Engine here because it needs multiple interfaces (Status, Navigator, Differ, Tracking)
 	out := ctx.Output
 	gctx := ctx.Context
@@ -163,6 +166,11 @@ func ParentsFromGitHubBase(ctx *app.Context) (*ParentsResult, error) {
 
 	for _, branch := range allBranches {
 		if branch.IsTrunk() {
+			continue
+		}
+
+		// Skip branches in dirty stacks - we don't want to reparent them
+		if isInDirtyStack(ctx, branch.GetName(), dirtyAnchors) {
 			continue
 		}
 

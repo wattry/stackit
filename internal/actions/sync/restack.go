@@ -10,7 +10,7 @@ import (
 )
 
 // restackBranches handles restacking branches after sync operations
-func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handler, summary *Summary) error {
+func restackBranches(ctx *app.Context, branchesToRestack []string, dirtyAnchors map[string]bool, handler Handler, summary *Summary) error {
 	nav := ctx.Navigator()
 	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 
@@ -39,11 +39,11 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, handler Handl
 		}
 	}
 
-	// Remove duplicates and filter out non-existent/untracked branches
+	// Remove duplicates and filter out non-existent/untracked branches and dirty stacks
 	seen := make(map[string]bool)
 	uniqueBranches := []engine.Branch{}
 	for _, branchName := range branchesToRestack {
-		if !seen[branchName] {
+		if !seen[branchName] && !isInDirtyStack(ctx, branchName, dirtyAnchors) {
 			seen[branchName] = true
 			branch := nav.GetBranch(branchName)
 			// Only include branches that exist, are tracked, and are not trunks

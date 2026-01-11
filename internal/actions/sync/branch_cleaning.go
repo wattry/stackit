@@ -11,7 +11,7 @@ import (
 )
 
 // cleanBranches handles cleaning merged/closed branches
-func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Summary) (*actions.CleanBranchesResult, error) {
+func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool, handler Handler, summary *Summary) (*actions.CleanBranchesResult, error) {
 	// Only emit phase start if we have branches that might need cleaning
 	allBranches := ctx.Engine.AllBranches()
 	hasBranchesToCheck := false
@@ -42,6 +42,13 @@ func cleanBranches(ctx *app.Context, opts *Options, handler Handler, summary *Su
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Filter out branches in dirty stacks - don't delete them while worktree has uncommitted changes
+	for name := range plan.BranchesToDelete {
+		if isInDirtyStack(ctx, name, dirtyAnchors) {
+			delete(plan.BranchesToDelete, name)
+		}
 	}
 
 	// Log each branch and its deletion reason

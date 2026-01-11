@@ -132,7 +132,7 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 
 		// Now call SyncParentsFromGitHubBase directly to test if it incorrectly reparents
 		// based on the stale PR info we stored
-		syncResult, err := ParentsFromGitHubBase(s.Context)
+		syncResult, err := ParentsFromGitHubBase(s.Context, nil)
 		require.NoError(t, err)
 
 		// Rebuild engine to pick up any changes
