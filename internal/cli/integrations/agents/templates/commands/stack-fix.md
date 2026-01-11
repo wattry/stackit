@@ -10,7 +10,7 @@ Diagnose and fix common stack problems.
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
-- Stack state: !`stackit log --no-interactive 2>&1`
+- Stack state: !`command stackit log --no-interactive 2>&1`
 
 ## Instructions
 
@@ -18,24 +18,24 @@ Diagnose and fix common stack problems.
 
    **Rebase in progress**:
    - Guide user through conflict resolution
-   - Then `stackit continue` or `stackit abort`
+   - Then `command stackit continue` or `command stackit abort`
 
    **Build errors after absorb**:
-   - Run build on each branch: `stackit foreach "<build-command>"`
+   - Run build on each branch: `command stackit foreach "<build-command>"`
    - Find and fix dependency issues
-   - After 2 failed attempts, suggest `stackit undo --yes`
+   - After 2 failed attempts, suggest `command stackit undo --yes`
 
    **Branches need restack**:
-   - Run `stackit restack --no-interactive`
+   - Run `command stackit restack --no-interactive`
 
    **Orphaned branches (parent was merged)**:
-   - Run `stackit sync --no-interactive`
+   - Run `command stackit sync --no-interactive`
 
    **Uncommitted changes blocking operation**:
    - Suggest commit or stash
 
 2. After fixes, verify stack is healthy:
-   - `stackit log` shows clean tree
+   - `command stackit log` shows clean tree
    - All branches build successfully
 
 ## Do NOT

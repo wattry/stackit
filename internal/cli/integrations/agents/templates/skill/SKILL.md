@@ -11,13 +11,13 @@ You are an expert at using Stackit to manage stacked Git branches. Stackit helps
 
 ## Before Any Operation
 
-**Always run `stackit log --no-interactive` first** to understand:
+**Always run `command stackit log --no-interactive` first** to understand:
 - Current branch position in the stack
 - Parent/child relationships
 - Which branches need attention
 
 **CRITICAL: Non-Interactive Mode**
-When calling `stackit` commands, **ALWAYS** include the `--no-interactive` flag. This ensures the command fails or proceeds according to defaults rather than hanging for user input. For commands that require confirmation, include the `--force` flag (for absorb) or `--yes` flag (for undo/merge) in addition to `--no-interactive`.
+When calling `command stackit` commands, **ALWAYS** include the `--no-interactive` flag. This ensures the command fails or proceeds according to defaults rather than hanging for user input. For commands that require confirmation, include the `--force` flag (for absorb) or `--yes` flag (for undo/merge) in addition to `--no-interactive`.
 
 **Check for project conventions:**
 - Read `README.md` and `CONTRIBUTING.md` for project-specific guidelines before generating commit messages or branch names.
@@ -31,7 +31,7 @@ Run the stack analyzer to check health and get actionable suggestions:
 bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 ```
 
-> **Note:** All stackit commands below should be called with `--no-interactive`.
+> **Note:** All stackit commands below should be called with `command stackit ... --no-interactive`.
 
 ## Core Workflows
 
@@ -44,48 +44,48 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 3. **Create branch with commit** (branch name auto-generated from message, respects `branch.pattern` config):
    ```bash
    # Preferred: pipe format (handles multi-line messages and special characters)
-   echo "feat: add user authentication" | stackit create --no-interactive
+   echo "feat: add user authentication" | command stackit create --no-interactive
 
    # With explicit branch name
-   echo "feat: add user authentication" | stackit create my-branch --no-interactive
+   echo "feat: add user authentication" | command stackit create my-branch --no-interactive
 
    # Stage all changes and create in one command
-   echo "feat: add user authentication" | stackit create --all --no-interactive
+   echo "feat: add user authentication" | command stackit create --all --no-interactive
    ```
 4. If currently on trunk (e.g., main/master), warn and confirm or switch to a feature branch before creating.
-5. Show stack: `stackit log --no-interactive`
+5. Show stack: `command stackit log --no-interactive`
 
 ### Adding More Commits to a Branch
 
 **A stacked branch can have multiple commits.** You don't need to create a new branch for every commit:
 
 - **Add another commit:** Make changes, stage them, then use `git commit` as normal
-- **Amend the current commit:** `stackit modify` (like `git commit --amend`)
-- **Absorb changes into the right commits:** Stage fixes across multiple commits, then `stackit absorb` automatically amends each change to the correct commit
+- **Amend the current commit:** `command stackit modify` (like `git commit --amend`)
+- **Absorb changes into the right commits:** Stage fixes across multiple commits, then `command stackit absorb` automatically amends each change to the correct commit
 
 When to use multiple commits vs new branches:
 - **Same logical change:** Multiple commits in one branch (e.g., implementation + tests)
-- **Separate reviewable units:** Create a new stacked branch with `stackit create`
+- **Separate reviewable units:** Create a new stacked branch with `command stackit create`
 
 ### Submitting PRs
 
-1. Check stack state: `stackit log --no-interactive`
+1. Check stack state: `command stackit log --no-interactive`
 2. Submit options:
-   - Current + ancestors: `stackit submit --no-interactive`
-   - Entire stack: `stackit submit --stack --no-interactive`
-   - As drafts: `stackit submit --draft --no-interactive`
+   - Current + ancestors: `command stackit submit --no-interactive`
+   - Entire stack: `command stackit submit --stack --no-interactive`
+   - As drafts: `command stackit submit --draft --no-interactive`
 
 ### Syncing with Main
 
-1. Sync with trunk and cleanup: `stackit sync --no-interactive`
-2. If branches were deleted: `stackit restack --no-interactive`
+1. Sync with trunk and cleanup: `command stackit sync --no-interactive`
+2. If branches were deleted: `command stackit restack --no-interactive`
 
 ### Fixing Issues
 
-- **Rebase conflicts:** Resolve files, then `stackit continue --no-interactive`
-- **Absorb conflicts:** See [workflows/absorb-conflict.md](workflows/absorb-conflict.md) or use `stackit absorb --show-conflict --no-interactive`
-- **Abort operation:** `stackit abort --no-interactive`
-- **Undo last command:** `stackit undo --no-interactive --yes`
+- **Rebase conflicts:** Resolve files, then `command stackit continue --no-interactive`
+- **Absorb conflicts:** See [workflows/absorb-conflict.md](workflows/absorb-conflict.md) or use `command stackit absorb --show-conflict --no-interactive`
+- **Abort operation:** `command stackit abort --no-interactive`
+- **Undo last command:** `command stackit undo --no-interactive --yes`
 - **Stack health issues:** See [workflows/fix-absorb.md](workflows/fix-absorb.md) or run `/stack-fix`
 - **Intelligent folding:** See [workflows/stack-fold.md](workflows/stack-fold.md) or run `/stack-fold`
 
@@ -153,7 +153,7 @@ When generating commit messages:
 1. Check README.md and CONTRIBUTING.md for project guidelines
 2. Follow documented conventions if available
 3. If no conventions documented, write a clear, descriptive message
-4. **Use pipe format:** `echo "message" | stackit create --no-interactive`
+4. **Use pipe format:** `echo "message" | command stackit create --no-interactive`
 
 **Validation loop:**
 - Generate message
@@ -182,14 +182,28 @@ When generating PR descriptions:
 - Body has meaningful content (not placeholders)?
 - Test plan is specific?
 
+## FORBIDDEN Commands
+
+When working with stacks, NEVER use these git commands:
+
+| FORBIDDEN | USE INSTEAD |
+|-----------|-------------|
+| `git commit` (for new branches) | `command stackit create` |
+| `git checkout -b` | `command stackit create` |
+| `gh pr create` | `command stackit submit` |
+| `git rebase` | `command stackit restack` |
+
+**Exception:** `git commit` is allowed ONLY when adding additional commits to an existing stacked branch.
+
 ## Important Rules
 
-1. **Never use raw git for branch operations** - always use stackit commands
-2. **Check state before destructive operations** - run `stackit log` first
-3. **Always validate after absorb** - absorb can cause compilation errors, see fix-absorb workflow
-4. **Handle conflicts gracefully** - guide user through resolution, see conflict-resolution workflow
-5. **Keep PRs small and focused** - suggest splitting if too large
-6. **Use validation loops** - for commit messages, PR descriptions, and post-absorb builds
+1. **NEVER use `git commit` to create new stacked branches** - always use `command stackit create`
+2. **Stage changes BEFORE running `command stackit create`** - it requires staged changes to work correctly
+3. **Check state before destructive operations** - run `command stackit log` first
+4. **Always validate after absorb** - absorb can cause compilation errors, see fix-absorb workflow
+5. **Handle conflicts gracefully** - guide user through resolution, see conflict-resolution workflow
+6. **Keep PRs small and focused** - suggest splitting if too large
+7. **Use validation loops** - for commit messages, PR descriptions, and post-absorb builds
 
 ## Version {{VERSION}} Changes
 

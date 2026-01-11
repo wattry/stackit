@@ -10,22 +10,22 @@ Submit branches to GitHub and create/update PRs.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`stackit log --no-interactive 2>&1`
-- Branch info: !`stackit info --json --no-interactive 2>&1`
+- Stack state: !`command stackit log --no-interactive 2>&1`
+- Branch info: !`command stackit info --json --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
 
 ## Instructions
 
-1. Check the branch info JSON - if parent branch doesn't exist, run `stackit sync` first
+1. Check the branch info JSON - if parent branch doesn't exist, run `command stackit sync` first
 2. For branches without PRs, prepare PR metadata:
    - Check for .github/pull_request_template.md for format requirements
    - Title: first commit message line
    - Body: summary of commits + test plan
 3. Run submit command:
-   - Current branch: `stackit submit --no-interactive`
-   - Entire stack: `stackit submit --stack --no-interactive`
+   - Current branch: `command stackit submit --no-interactive`
+   - Entire stack: `command stackit submit --stack --no-interactive`
    - As drafts: add `--draft`
 4. Report created/updated PR URLs
 

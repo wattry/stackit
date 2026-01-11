@@ -2,7 +2,7 @@
 
 After `stackit absorb`, compilation errors may occur when absorbed changes depend on files/changes that didn't get cleanly absorbed into the same commit.
 
-> **CRITICAL:** Always run stackit commands with `--no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
+> **CRITICAL:** Always run stackit commands with `command stackit ... --no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
 
 ## Why This Happens
 
@@ -57,7 +57,7 @@ Starting from the **bottom** of the stack (earliest branch), build and test each
 
 ```bash
 # Get list of branches in stack order
-stackit log --no-interactive
+command stackit log --no-interactive
 
 # For each branch (bottom to top):
 git checkout <branch-name>
@@ -95,7 +95,7 @@ For each missing item, search upstack branches for where it's defined:
 
 ```bash
 # Get child branch name
-stackit children --no-interactive
+command stackit children --no-interactive
 
 # Check what changes exist in child that aren't in current
 git diff <current-branch>..<child-branch>
@@ -139,7 +139,7 @@ git show <child-branch>:path/to/file.go > path/to/file.go
 
 # 3. Commit the fix
 git add path/to/file.go
-stackit modify --no-interactive  # Amends current branch's commit
+command stackit modify --no-interactive  # Amends current branch's commit
 ```
 
 ### Option C: Interactive rebase (advanced)
@@ -162,10 +162,10 @@ After fixing all branches, verify the entire stack builds:
 
 ```bash
 # Build all branches in order
-stackit foreach --no-interactive "<build-command>"
+command stackit foreach --no-interactive "<build-command>"
 
 # Test all branches
-stackit foreach --no-interactive "<test-command>"
+command stackit foreach --no-interactive "<test-command>"
 ```
 
 **Expected output:**
@@ -206,7 +206,7 @@ To avoid this in the future:
 1. **Keep changes focused**: Absorb works best when changes are closely related
 2. **Absorb frequently**: Smaller sets of changes = fewer dependency issues
 3. **Check as you go**: Run build after absorb to catch issues early
-4. **Use modify for small fixes**: `stackit modify --no-interactive` is safer for targeted changes
+4. **Use modify for small fixes**: `command stackit modify --no-interactive` is safer for targeted changes
 
 ## Example Walkthrough
 
@@ -233,10 +233,10 @@ just build
 # ✓ Build succeeded
 
 # 5. Restack children (they're now based on old version)
-stackit restack --no-interactive
+command stackit restack --no-interactive
 
 # 6. Verify entire stack
-stackit foreach --no-interactive "just build"
+command stackit foreach --no-interactive "just build"
 # ✓ All branches succeed
 ```
 
@@ -244,5 +244,5 @@ stackit foreach --no-interactive "just build"
 
 - ✓ All branches build without errors
 - ✓ All branches pass tests
-- ✓ Stack structure is clean (`stackit log --no-interactive` shows proper tree)
+- ✓ Stack structure is clean (`command stackit log --no-interactive` shows proper tree)
 - ✓ No git conflicts or issues

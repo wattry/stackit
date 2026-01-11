@@ -12,11 +12,11 @@ This workflow guides the LLM through analyzing a branch stack and recommending b
 ### 1. Gather Context
 Fetch the complete metadata for the current stack:
 ```bash
-stackit info --stack --json --no-interactive
+command stackit info --stack --json --no-interactive
 ```
 
 ### 2. Identify Candidates
-Analyze the JSON output to find folding candidates. 
+Analyze the JSON output to find folding candidates.
 
 **Criteria for a "Good" Fold Candidate:**
 - **Granularity:** The branch has few commits (often just 1) and small diff stats (few files changed, few lines added/deleted).
@@ -30,7 +30,7 @@ Analyze the JSON output to find folding candidates.
 ### 3. Detailed Analysis (Optional but Recommended)
 For high-confidence candidates, verify the actual changes to ensure they are safe to merge into the parent:
 ```bash
-stackit info <branch-name> --diff --no-interactive
+command stackit info <branch-name> --diff --no-interactive
 ```
 
 ### 4. Propose a Fold Plan
@@ -44,14 +44,14 @@ Present your findings to the user. For each recommendation, include:
 Wait for user confirmation. If confirmed, perform the fold:
 ```bash
 # Fold branch into parent (keeps parent name)
-stackit checkout <branch-to-fold> --no-interactive
-stackit fold --no-interactive
+command stackit checkout <branch-to-fold> --no-interactive
+command stackit fold --no-interactive
 ```
 
 ### 6. Post-Fold Cleanup
 After folding, ensure the stack is healthy:
 ```bash
-stackit restack --no-interactive
+command stackit restack --no-interactive
 ```
 
 ## Safety Constraints
