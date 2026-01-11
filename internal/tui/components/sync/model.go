@@ -180,8 +180,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	var b strings.Builder
 
-	// Get shared styles
+	// Get shared styles and icons
 	statusStyles := style.DefaultStatusStyles()
+	statusIcons := style.DefaultStatusIcons()
 	commonStyles := style.DefaultCommonStyles()
 
 	// Progress bar at top (only when active and not done)
@@ -204,7 +205,7 @@ func (m *Model) View() string {
 		firstPhase = false
 
 		// Phase header
-		icon := "✓"
+		icon := statusIcons.Done
 		phaseStyle := statusStyles.Done
 		if phase.Status == core.StatusActive {
 			icon = m.spinner.View()
