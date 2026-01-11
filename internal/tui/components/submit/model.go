@@ -11,12 +11,19 @@ import (
 	"stackit.dev/stackit/internal/tui/components/tree"
 )
 
-// Model is the bubbletea model for submit progress
+// Key constants for TUI interactions (local to avoid import cycle with tui package)
+const (
+	keyCtrlC = "ctrl+c"
+	keyQuit  = "q"
+)
+
+// Model is the bubbletea model for submit progress.
+// It implements the ReadySignaler pattern for integration with tui.Runner.
 type Model struct {
 	Items         []Item
 	Renderer      *tree.StackTreeRenderer
 	RootBranch    string
-	Spinner       spinner.Model
+	spinner       spinner.Model
 	Done          bool
 	Styles        Styles
 	GlobalMessage string
@@ -59,7 +66,7 @@ func NewModel(items []Item) *Model {
 
 	return &Model{
 		Items:   items,
-		Spinner: s,
+		spinner: s,
 		Styles:  DefaultStyles(),
 	}
 }
@@ -77,20 +84,20 @@ func (m *Model) Init() tea.Cmd {
 		close(m.readyChan)
 		m.readyChan = nil
 	}
-	return m.Spinner.Tick
+	return m.spinner.Tick
 }
 
 // Update handles messages and updates the model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
+		if msg.String() == keyCtrlC || msg.String() == keyQuit {
 			return m, tea.Quit
 		}
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
-		m.Spinner, cmd = m.Spinner.Update(msg)
+		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
 	case StartSubmitMsg:
@@ -153,7 +160,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		return m, m.Spinner.Tick
+		return m, m.spinner.Tick
 
 	case ProgressCompleteMsg:
 		m.Done = true
@@ -188,9 +195,9 @@ func (m *Model) View() string {
 			} else {
 				switch item.Status {
 				case StatusSubmitting:
-					ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.Spinner.View() + " submitting...")
+					ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.spinner.View() + " submitting...")
 				case StatusSyncing:
-					ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.Spinner.View() + " syncing...")
+					ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.spinner.View() + " syncing...")
 				case StatusDone:
 					ann.CustomLabel = m.Styles.DoneStyle.Render("✓")
 					if item.URL != "" {
@@ -229,14 +236,14 @@ func (m *Model) View() string {
 					status = m.Styles.DimStyle.Render("will " + item.Action)
 				}
 			case StatusSubmitting:
-				icon = m.Spinner.View()
+				icon = m.spinner.View()
 				action := "Creating"
 				if item.Action == "update" {
 					action = "Updating"
 				}
 				status = m.Styles.SpinnerStyle.Render(action + "...")
 			case StatusSyncing:
-				icon = m.Spinner.View()
+				icon = m.spinner.View()
 				status = m.Styles.SpinnerStyle.Render("syncing...")
 			case StatusDone:
 				icon = m.Styles.DoneStyle.Render("✓")
