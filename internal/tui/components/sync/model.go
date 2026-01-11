@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -39,18 +40,17 @@ type PhaseItem struct {
 	Details []string // Lines of detail output for this phase
 }
 
-// Model is the bubbletea model for sync progress
+// Model is the bubbletea model for sync progress.
+// It embeds tui.BaseModel for standard lifecycle handling.
 type Model struct {
-	Phases       []PhaseItem
-	CurrentPhase Phase
-	TotalOps     int
-	CompletedOps int
-	Progress     progress.Model
-	Spinner      spinner.Model
-	Done         bool
-	Summary      string
-	Width        int
-	readyChan    chan struct{} // signals when Init() is called
+	tui.BaseModel // Embedded for ReadySignaler interface
+	Phases        []PhaseItem
+	CurrentPhase  Phase
+	TotalOps      int
+	CompletedOps  int
+	Progress      progress.Model
+	spinner       spinner.Model // Use local spinner for custom style
+	Summary       string
 }
 
 // PhaseStartMsg indicates a phase has started
@@ -87,7 +87,7 @@ func NewModel(totalOps int) *Model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
-	return &Model{
+	m := &Model{
 		Phases: []PhaseItem{
 			{Phase: PhaseTrunk, Status: StatusPending, Message: "📥 Pulling from remote..."},
 			{Phase: PhaseGitHub, Status: StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
@@ -96,37 +96,31 @@ func NewModel(totalOps int) *Model {
 		},
 		TotalOps: totalOps,
 		Progress: p,
-		Spinner:  s,
-		Width:    80,
+		spinner:  s,
 	}
-}
-
-// SetReadyChan sets the channel that will be closed when Init() is called.
-// This implements the tui.ReadySignaler interface.
-func (m *Model) SetReadyChan(ch chan struct{}) {
-	m.readyChan = ch
+	m.Width = 80 // Set BaseModel's Width
+	return m
 }
 
 // Init initializes the model
 func (m *Model) Init() tea.Cmd {
-	// Signal that the program is ready to receive messages
-	if m.readyChan != nil {
-		close(m.readyChan)
-		m.readyChan = nil
-	}
-	return m.Spinner.Tick
+	// Signal that the program is ready to receive messages via BaseModel
+	m.SignalReady()
+	return m.spinner.Tick
 }
 
 // Update handles messages
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
-			return m, tea.Quit
-		}
+	// Handle common messages via BaseModel
+	if handled, cmd := m.HandleCommonMsg(msg); handled {
+		// Copy spinner from BaseModel if it was updated
+		// But we use our own spinner, so just return the cmd
+		return m, cmd
+	}
 
+	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.Width = msg.Width
+		// BaseModel already set Width/Height, but we also need to update Progress.Width
 		newWidth := msg.Width - 10
 		if newWidth > 60 {
 			newWidth = 60
@@ -135,8 +129,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
+		// Use our custom spinner
 		var cmd tea.Cmd
-		m.Spinner, cmd = m.Spinner.Update(msg)
+		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
 	case progress.FrameMsg:
@@ -215,7 +210,7 @@ func (m *Model) View() string {
 		icon := "✓"
 		phaseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 		if phase.Status == StatusActive {
-			icon = m.Spinner.View()
+			icon = m.spinner.View()
 			phaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 		}
 
