@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
@@ -76,9 +75,10 @@ func NewModel(totalOps int) *Model {
 		progress.WithoutPercentage(),
 	)
 
+	commonStyles := style.DefaultCommonStyles()
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = commonStyles.Spinner
 
 	m := &Model{
 		Phases: []PhaseItem{
@@ -180,6 +180,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	var b strings.Builder
 
+	// Get shared styles
+	statusStyles := style.DefaultStatusStyles()
+	commonStyles := style.DefaultCommonStyles()
+
 	// Progress bar at top (only when active and not done)
 	if !m.Done && m.TotalOps > 0 {
 		b.WriteString(m.Progress.View())
@@ -201,18 +205,17 @@ func (m *Model) View() string {
 
 		// Phase header
 		icon := "✓"
-		phaseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+		phaseStyle := statusStyles.Done
 		if phase.Status == core.StatusActive {
 			icon = m.spinner.View()
-			phaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+			phaseStyle = statusStyles.Active
 		}
 
 		b.WriteString(fmt.Sprintf("%s %s\n", icon, phaseStyle.Render(phase.Message)))
 
 		// Phase details
-		dimStyle := style.SubtleStyle()
 		for _, detail := range phase.Details {
-			b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render(detail)))
+			b.WriteString(fmt.Sprintf("  %s\n", commonStyles.Subtle.Render(detail)))
 		}
 	}
 

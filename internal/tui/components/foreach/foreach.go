@@ -15,7 +15,8 @@ type Item struct {
 	Error      error
 }
 
-// Styles defines the visual styling for the foreach component
+// Styles defines the visual styling for the foreach component.
+// It uses the shared style definitions from internal/tui/style for consistency.
 type Styles struct {
 	SpinnerStyle lipgloss.Style
 	DoneStyle    lipgloss.Style
@@ -25,15 +26,18 @@ type Styles struct {
 	DimStyle     lipgloss.Style
 }
 
-// DefaultStyles returns the default styles for the foreach component
+// DefaultStyles returns the default styles for the foreach component,
+// using shared styles from the style package for consistency.
 func DefaultStyles() Styles {
+	statusStyles := style.DefaultStatusStyles()
+	commonStyles := style.DefaultCommonStyles()
 	return Styles{
-		SpinnerStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
-		DoneStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
-		ErrorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		BranchStyle:  style.BranchStyle(false, false, false).Bold(true),
-		OutputStyle:  style.DimStyle(),
-		DimStyle:     style.SubtleStyle(),
+		SpinnerStyle: commonStyles.Spinner,
+		DoneStyle:    statusStyles.Done,
+		ErrorStyle:   statusStyles.Error,
+		BranchStyle:  commonStyles.Branch.Bold(true),
+		OutputStyle:  commonStyles.Dim,
+		DimStyle:     commonStyles.Subtle,
 	}
 }
 
