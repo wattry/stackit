@@ -214,9 +214,6 @@ func (r *Runner) Send(msg tea.Msg) {
 		return
 	}
 
-	msgType := reflect.TypeOf(msg).String()
-	r.logger.Debug("tui.Runner.Send", "msgType", msgType)
-
 	r.mu.Lock()
 	p := r.program
 	r.mu.Unlock()
@@ -242,7 +239,11 @@ func (r *Runner) Wait() {
 }
 
 // IsRunning returns true if the program is currently running.
+// Safe to call on nil receivers.
 func (r *Runner) IsRunning() bool {
+	if r == nil {
+		return false
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.started && !r.stopped
@@ -260,15 +261,21 @@ func (r *Runner) IsHealthy() bool {
 }
 
 // SendWithTimeout sends a message with a timeout.
-// Returns error if the send doesn't complete within the timeout.
+// Returns error if the send doesn't complete within the timeout or if the
+// runner's context is canceled (e.g., during Cleanup).
 // This is useful for detecting hangs in the TUI event loop.
 func (r *Runner) SendWithTimeout(msg tea.Msg, timeout time.Duration) error {
 	if r == nil {
 		return nil
 	}
 
-	msgType := reflect.TypeOf(msg).String()
-	r.logger.Debug("tui.Runner.SendWithTimeout", "msgType", msgType, "timeout", timeout)
+	// Check if already stopped
+	ctx := r.Context()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -279,9 +286,12 @@ func (r *Runner) SendWithTimeout(msg tea.Msg, timeout time.Duration) error {
 	select {
 	case <-done:
 		return nil
+	case <-ctx.Done():
+		// Runner was cleaned up, don't log as error
+		return ctx.Err()
 	case <-time.After(timeout):
-		r.logger.Error("TUI send timed out", "msgType", msgType, "timeout", timeout)
-		return fmt.Errorf("send timed out after %v for %s", timeout, msgType)
+		r.logger.Error("TUI send timed out", "msgType", reflect.TypeOf(msg).String(), "timeout", timeout)
+		return fmt.Errorf("send timed out after %v", timeout)
 	}
 }
 

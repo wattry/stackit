@@ -25,17 +25,10 @@ const (
 	PhaseRestack Phase = "restack"
 )
 
-// Status constants
-const (
-	StatusPending = "pending"
-	StatusActive  = "active"
-	StatusDone    = "done"
-)
-
 // PhaseItem represents progress for a single phase
 type PhaseItem struct {
 	Phase   Phase
-	Status  string // StatusPending, StatusActive, StatusDone
+	Status  tui.Status
 	Message string
 	Details []string // Lines of detail output for this phase
 }
@@ -89,10 +82,10 @@ func NewModel(totalOps int) *Model {
 
 	m := &Model{
 		Phases: []PhaseItem{
-			{Phase: PhaseTrunk, Status: StatusPending, Message: "📥 Pulling from remote..."},
-			{Phase: PhaseGitHub, Status: StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
-			{Phase: PhaseClean, Status: StatusPending, Message: "🧹 Cleaning branches..."},
-			{Phase: PhaseRestack, Status: StatusPending, Message: "📚 Restacking branches..."},
+			{Phase: PhaseTrunk, Status: tui.StatusPending, Message: "📥 Pulling from remote..."},
+			{Phase: PhaseGitHub, Status: tui.StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
+			{Phase: PhaseClean, Status: tui.StatusPending, Message: "🧹 Cleaning branches..."},
+			{Phase: PhaseRestack, Status: tui.StatusPending, Message: "📚 Restacking branches..."},
 		},
 		TotalOps: totalOps,
 		Progress: p,
@@ -111,10 +104,16 @@ func (m *Model) Init() tea.Cmd {
 
 // Update handles messages
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle common messages via BaseModel
+	// Handle spinner ticks with our custom spinner BEFORE HandleCommonMsg
+	// (HandleCommonMsg would update BaseModel.Spinner instead)
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(tickMsg)
+		return m, cmd
+	}
+
+	// Handle common messages via BaseModel (key events, window resize)
 	if handled, cmd := m.HandleCommonMsg(msg); handled {
-		// Copy spinner from BaseModel if it was updated
-		// But we use our own spinner, so just return the cmd
 		return m, cmd
 	}
 
@@ -128,12 +127,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Progress.Width = newWidth
 		return m, nil
 
-	case spinner.TickMsg:
-		// Use our custom spinner
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-
 	case progress.FrameMsg:
 		progressModel, cmd := m.Progress.Update(msg)
 		m.Progress = progressModel.(progress.Model)
@@ -143,9 +136,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.CurrentPhase = msg.Phase
 		for i := range m.Phases {
 			if m.Phases[i].Phase == msg.Phase {
-				m.Phases[i].Status = StatusActive
-			} else if m.Phases[i].Status == StatusActive {
-				m.Phases[i].Status = StatusDone
+				m.Phases[i].Status = tui.StatusActive
+			} else if m.Phases[i].Status == tui.StatusActive {
+				m.Phases[i].Status = tui.StatusDone
 			}
 		}
 		return m, nil
@@ -173,8 +166,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Summary = msg.Summary
 		// Mark all phases as done
 		for i := range m.Phases {
-			if m.Phases[i].Status == StatusActive {
-				m.Phases[i].Status = StatusDone
+			if m.Phases[i].Status == tui.StatusActive {
+				m.Phases[i].Status = tui.StatusDone
 			}
 		}
 		return m, tea.Quit
@@ -196,7 +189,7 @@ func (m *Model) View() string {
 	// Phase headers with their details
 	firstPhase := true
 	for _, phase := range m.Phases {
-		if phase.Status == StatusPending {
+		if phase.Status == tui.StatusPending {
 			continue // Don't show pending phases
 		}
 
@@ -209,7 +202,7 @@ func (m *Model) View() string {
 		// Phase header
 		icon := "✓"
 		phaseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-		if phase.Status == StatusActive {
+		if phase.Status == tui.StatusActive {
 			icon = m.spinner.View()
 			phaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 		}
