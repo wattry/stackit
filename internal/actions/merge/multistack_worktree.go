@@ -57,7 +57,7 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 	}
 
 	// Try global octopus merge first (all branches from all stacks in one commit)
-	if err := w.tryGlobalOctopusMerge(ctx, worktreeEng, stacks); err == nil {
+	if err := w.tryGlobalOctopusMerge(ctx, session.Engine, stacks); err == nil {
 		w.output.Debug("Global octopus merge succeeded for %d stacks", len(stacks))
 		result.MergedStacks = stacks
 		return result, nil
@@ -67,8 +67,9 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 	w.output.Debug("Global octopus merge failed, falling back to per-stack merging")
 
 	// Reset to trunk before trying per-stack
-	if err := worktreeEng.ResetHard(ctx, trunk.GetName()); err != nil {
-		cleanup()
+	trunk := w.eng.Trunk()
+	if err := session.Engine.ResetHard(ctx, trunk.GetName()); err != nil {
+		session.Close()
 		return nil, fmt.Errorf("failed to reset after global merge failure: %w", err)
 	}
 
