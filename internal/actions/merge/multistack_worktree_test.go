@@ -162,6 +162,97 @@ func TestMultiStackWorktreeExecutor_OctopusMergeCreatesSingleCommit(t *testing.T
 	assert.NoError(t, err, "file3_test.txt should exist")
 }
 
+func TestMultiStackWorktreeExecutor_GlobalOctopusMergeAcrossStacks(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create stack1 with 2 branches modifying different files
+	s.CreateBranch("stack1-branch1").
+		TrackBranch("stack1-branch1", s.Engine.Trunk().GetName())
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("stack1-b1", "s1file1"))
+	stack1Branch1SHA, err := s.Scene.Repo.GetRevision("stack1-branch1")
+	require.NoError(t, err)
+	s.Rebuild()
+
+	s.CreateBranch("stack1-branch2").
+		TrackBranch("stack1-branch2", "stack1-branch1")
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("stack1-b2", "s1file2"))
+	stack1Branch2SHA, err := s.Scene.Repo.GetRevision("stack1-branch2")
+	require.NoError(t, err)
+	s.Rebuild().
+		Checkout(s.Engine.Trunk().GetName())
+
+	// Create stack2 with 2 branches modifying different files (no conflicts with stack1)
+	s.CreateBranch("stack2-branch1").
+		TrackBranch("stack2-branch1", s.Engine.Trunk().GetName())
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("stack2-b1", "s2file1"))
+	stack2Branch1SHA, err := s.Scene.Repo.GetRevision("stack2-branch1")
+	require.NoError(t, err)
+	s.Rebuild()
+
+	s.CreateBranch("stack2-branch2").
+		TrackBranch("stack2-branch2", "stack2-branch1")
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("stack2-b2", "s2file2"))
+	stack2Branch2SHA, err := s.Scene.Repo.GetRevision("stack2-branch2")
+	require.NoError(t, err)
+	s.Rebuild().
+		Checkout(s.Engine.Trunk().GetName())
+
+	// Execute multi-stack merge
+	executor := NewMultiStackWorktreeExecutor(s.Engine, s.Context.Output)
+	result, err := executor.ExecuteInWorktree(context.Background(), []MultiStackInfo{
+		{RootBranch: "stack1-branch1", AllBranches: []string{"stack1-branch1", "stack1-branch2"}},
+		{RootBranch: "stack2-branch1", AllBranches: []string{"stack2-branch1", "stack2-branch2"}},
+	})
+	require.NoError(t, err)
+	defer result.Cleanup()
+
+	// Both stacks should be merged
+	require.Len(t, result.MergedStacks, 2)
+	assert.Empty(t, result.ConflictStacks)
+
+	worktreeRepo := testhelpers.NewGitRepoFromExisting(t, result.WorktreePath)
+
+	// Verify we have exactly ONE merge commit (global octopus) by counting first-parent commits
+	// First-parent traversal shows just the merge commits on the mainline
+	logOutput, err := worktreeRepo.RunGitCommandAndGetOutput("rev-list", "--count", "--first-parent", s.Engine.Trunk().GetName()+"..HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, "1", logOutput, "should have exactly 1 merge commit on first-parent path (global octopus)")
+
+	// Verify HEAD has multiple parents (octopus merge)
+	parentOutput, err := worktreeRepo.RunGitCommandAndGetOutput("cat-file", "-p", "HEAD")
+	require.NoError(t, err)
+	parentCount := 0
+	for _, line := range splitLines(parentOutput) {
+		if len(line) > 6 && line[:6] == "parent" {
+			parentCount++
+		}
+	}
+	// Git optimizes stacked branches, so we expect at least 3 parents:
+	// trunk + top of stack1 + top of stack2
+	assert.GreaterOrEqual(t, parentCount, 3, "octopus merge should have at least 3 parents")
+
+	// Verify all branch commits are ancestors
+	isAncestor := func(sha string) bool {
+		err := worktreeRepo.RunGitCommand("merge-base", "--is-ancestor", sha, "HEAD")
+		return err == nil
+	}
+
+	assert.True(t, isAncestor(stack1Branch1SHA), "stack1-branch1 should be ancestor of HEAD")
+	assert.True(t, isAncestor(stack1Branch2SHA), "stack1-branch2 should be ancestor of HEAD")
+	assert.True(t, isAncestor(stack2Branch1SHA), "stack2-branch1 should be ancestor of HEAD")
+	assert.True(t, isAncestor(stack2Branch2SHA), "stack2-branch2 should be ancestor of HEAD")
+
+	// Verify all files are present
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "s1file1_test.txt"))
+	assert.NoError(t, err, "s1file1_test.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "s1file2_test.txt"))
+	assert.NoError(t, err, "s1file2_test.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "s2file1_test.txt"))
+	assert.NoError(t, err, "s2file1_test.txt should exist")
+	_, err = os.Stat(filepath.Join(result.WorktreePath, "s2file2_test.txt"))
+	assert.NoError(t, err, "s2file2_test.txt should exist")
+}
+
 func splitLines(s string) []string {
 	var lines []string
 	start := 0

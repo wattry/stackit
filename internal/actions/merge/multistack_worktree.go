@@ -32,8 +32,9 @@ func NewMultiStackWorktreeExecutor(eng engine.Engine, out output.Output) *MultiS
 }
 
 // ExecuteInWorktree creates a worktree at trunk and attempts to merge all stacks.
-// For each stack, it merges all branches in order. If any branch in a stack
-// conflicts, the entire stack is skipped.
+// It first tries a global octopus merge (all branches from all stacks in one commit).
+// If that fails due to conflicts, it falls back to per-stack merging to identify
+// which stacks conflict.
 func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []MultiStackInfo) (*MultiStackWorktreeResult, error) {
 	trunk := w.eng.Trunk()
 
@@ -84,7 +85,23 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 		Cleanup:        cleanup,
 	}
 
-	// Try to merge each stack
+	// Try global octopus merge first (all branches from all stacks in one commit)
+	if err := w.tryGlobalOctopusMerge(ctx, worktreeEng, stacks); err == nil {
+		w.output.Debug("Global octopus merge succeeded for %d stacks", len(stacks))
+		result.MergedStacks = stacks
+		return result, nil
+	}
+
+	// Global octopus failed, fall back to per-stack merging to identify conflicts
+	w.output.Debug("Global octopus merge failed, falling back to per-stack merging")
+
+	// Reset to trunk before trying per-stack
+	if err := worktreeEng.ResetHard(ctx, trunk.GetName()); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to reset after global merge failure: %w", err)
+	}
+
+	// Try to merge each stack individually
 	for _, stack := range stacks {
 		baseline, err := worktreeEng.GetCurrentRevision(ctx)
 		if err != nil {
@@ -108,6 +125,42 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 	}
 
 	return result, nil
+}
+
+// tryGlobalOctopusMerge attempts to merge all branches from all stacks in a single octopus merge.
+// This creates one merge commit with all branches as parents.
+func (w *MultiStackWorktreeExecutor) tryGlobalOctopusMerge(ctx context.Context, eng engine.Engine, stacks []MultiStackInfo) error {
+	// Collect all branches from all stacks
+	var allBranches []string
+	for _, stack := range stacks {
+		allBranches = append(allBranches, stack.AllBranches...)
+	}
+
+	if len(allBranches) == 0 {
+		return nil
+	}
+
+	// Build commit message
+	msg := fmt.Sprintf("Merge %d stacks (%d branches)", len(stacks), len(allBranches))
+
+	// Perform octopus merge (single merge commit with multiple parents)
+	err := eng.MergeMultiple(ctx, allBranches, engine.MergeOptions{
+		NoFF:    true,
+		NoEdit:  true,
+		Message: msg,
+	})
+	if err != nil {
+		// Abort the merge if it's in progress
+		git := eng.Git()
+		if git.IsMergeInProgress(ctx) {
+			if abortErr := git.MergeAbort(ctx); abortErr != nil {
+				w.output.Debug("Failed to abort merge: %v", abortErr)
+			}
+		}
+		return fmt.Errorf("global octopus merge failed: %w", err)
+	}
+
+	return nil
 }
 
 // tryMergeStack attempts to merge all branches of a stack via octopus merge.
