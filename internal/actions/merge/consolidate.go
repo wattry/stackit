@@ -243,95 +243,27 @@ func (c *ConsolidateMergeExecutor) postMergeCleanup(_ context.Context) {
 }
 
 func (c *ConsolidateMergeExecutor) updateIndividualPRs() {
-	splog := c.ctx.Output
-	ctx := c.ctx.Context
-	githubClient := c.ctx.GitHubClient
-
 	// Skip if we don't have consolidation PR info
 	if c.consolidationPR == nil || c.consolidationPR.Number == 0 {
-		splog.Debug("No consolidation PR info available for footer updates")
+		c.ctx.Output.Debug("No consolidation PR info available for footer updates")
 		return
 	}
 
-	repoOwner, repoName := githubClient.GetOwnerRepo()
-	if repoOwner == "" || repoName == "" {
-		splog.Debug("Could not get repo owner/name for PR updates")
-		return
+	// Collect branch names
+	branchNames := make([]string, len(c.plan.BranchesToMerge))
+	for i, b := range c.plan.BranchesToMerge {
+		branchNames[i] = b.BranchName
 	}
 
-	affectedBranches := []string{}
-	var closedPRs []int
-	var failedPRs []int
+	// Use shared PR cleaner
+	cleaner := NewPRCleaner(c.ctx, c.engine, PRCleanupConfig{
+		Source:                CleanupSourceConsolidate,
+		ConsolidationPRNumber: c.consolidationPR.Number,
+		UserName:              c.consolidationUser,
+	})
 
-	for _, branchInfo := range c.plan.BranchesToMerge {
-		branch := c.engine.GetBranch(branchInfo.BranchName)
-		prInfo, err := branch.GetPrInfo()
-		if err != nil || prInfo == nil || prInfo.Number() == nil {
-			continue
-		}
-
-		prNumber := *prInfo.Number()
-
-		// Get current PR to check state and get body
-		existingPR, err := githubClient.GetPullRequest(ctx, repoOwner, repoName, prNumber)
-		if err != nil {
-			splog.Debug("Failed to get PR #%d for %s: %v", prNumber, branchInfo.BranchName, err)
-			continue
-		}
-
-		// Skip if already closed/merged (e.g., by merge commit strategy)
-		if existingPR.State != "OPEN" {
-			splog.Debug("PR #%d is already %s, skipping", prNumber, existingPR.State)
-			continue
-		}
-
-		// Build footer
-		footer := fmt.Sprintf("\n\n---\n*Merged via consolidation into #%d", c.consolidationPR.Number)
-		if c.consolidationUser != "" {
-			footer += fmt.Sprintf(" by %s", c.consolidationUser)
-		}
-		footer += "*"
-
-		// Append footer to existing body
-		newBody := existingPR.Body + footer
-		updateOpts := github.UpdatePROptions{
-			Body: &newBody,
-		}
-
-		if err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, prNumber, updateOpts); err != nil {
-			splog.Debug("Failed to update PR #%d body: %v", prNumber, err)
-		} else {
-			splog.Debug("Updated PR #%d with consolidation footer", prNumber)
-		}
-
-		// Close the PR (handles squash/rebase merge strategies where GitHub doesn't auto-close)
-		if err := githubClient.ClosePullRequest(ctx, repoOwner, repoName, prNumber); err != nil {
-			splog.Debug("Failed to close PR #%d: %v", prNumber, err)
-			failedPRs = append(failedPRs, prNumber)
-		} else {
-			closedPRs = append(closedPRs, prNumber)
-		}
-
-		// Keep the consolidation PR number so the footer knows it was consolidated
-		if err := c.engine.UpsertPrInfo(branch, prInfo); err != nil {
-			splog.Debug("Failed to upsert PR info for %s: %v", branchInfo.BranchName, err)
-		}
-		affectedBranches = append(affectedBranches, branchInfo.BranchName)
-	}
-
-	if len(affectedBranches) > 0 {
-		if err := actions.PushMetadataAndSyncPRs(c.ctx, affectedBranches); err != nil {
-			splog.Warn("Failed to sync individual PRs: %v", err)
-		}
-	}
-
-	// Report summary
-	if len(closedPRs) > 0 {
-		splog.Info("Closed %d individual PR(s)", len(closedPRs))
-	}
-	if len(failedPRs) > 0 {
-		splog.Warn("Failed to close %d PR(s): %v", len(failedPRs), failedPRs)
-	}
+	result := cleaner.CleanupBranches(c.ctx.Context, branchNames)
+	cleaner.LogResult(result)
 }
 
 func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context, consolidationBranch string) error {
