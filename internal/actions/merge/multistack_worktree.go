@@ -6,6 +6,7 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/worktree"
 )
 
 // MultiStackWorktreeResult contains the result of merging stacks in a worktree
@@ -19,15 +20,17 @@ type MultiStackWorktreeResult struct {
 
 // MultiStackWorktreeExecutor handles merging stacks in a worktree
 type MultiStackWorktreeExecutor struct {
-	eng    engine.Engine
-	output output.Output
+	eng      engine.Engine
+	output   output.Output
+	executor *worktree.Executor
 }
 
 // NewMultiStackWorktreeExecutor creates a new worktree executor for multi-stack merge
 func NewMultiStackWorktreeExecutor(eng engine.Engine, out output.Output) *MultiStackWorktreeExecutor {
 	return &MultiStackWorktreeExecutor{
-		eng:    eng,
-		output: out,
+		eng:      eng,
+		output:   out,
+		executor: worktree.NewExecutor(eng, out),
 	}
 }
 
@@ -36,57 +39,25 @@ func NewMultiStackWorktreeExecutor(eng engine.Engine, out output.Output) *MultiS
 // If that fails due to conflicts, it falls back to per-stack merging to identify
 // which stacks conflict.
 func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stacks []MultiStackInfo) (*MultiStackWorktreeResult, error) {
-	trunk := w.eng.Trunk()
-
-	// Create temporary worktree at trunk
-	worktreePath, cleanup, err := w.eng.CreateTemporaryWorktree(ctx, trunk.GetName(), "stackit-multistack-*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create worktree: %w", err)
-	}
-
-	w.output.Debug("Created worktree at %s", worktreePath)
-
-	// Create engine for worktree
-	worktreeEng, err := engine.NewEngine(engine.Options{
-		RepoRoot:          worktreePath,
-		Trunk:             trunk.GetName(),
-		MaxUndoStackDepth: 0, // No undo needed for multi-stack
+	// Create worktree session at trunk with pull
+	session, err := w.executor.CreateSession(ctx, worktree.CreateSessionOptions{
+		NamePattern: "stackit-multistack-*",
+		PullTrunk:   true,
 	})
 	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to initialize worktree engine: %w", err)
-	}
-
-	// Ensure worktree trunk is up to date before merging stacks
-	if err := worktreeEng.PopulateRemoteShas(); err != nil {
-		w.output.Debug("Failed to populate remote SHAs in multistack worktree: %v", err)
-	}
-	pullResult, err := worktreeEng.PullTrunk(ctx)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to update trunk in worktree: %w", err)
-	}
-	if pullResult == engine.PullConflict {
-		cleanup()
-		return nil, fmt.Errorf("trunk could not be fast-forwarded (diverged from remote). Please sync trunk before running multi-stack merge")
-	}
-	// Ensure worktree is checked out at the updated trunk tip
-	worktreeTrunk := worktreeEng.GetBranch(trunk.GetName())
-	if err := worktreeEng.CheckoutBranch(ctx, worktreeTrunk); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to checkout trunk in worktree: %w", err)
+		return nil, fmt.Errorf("failed to create worktree session: %w", err)
 	}
 
 	result := &MultiStackWorktreeResult{
 		MergedStacks:   make([]MultiStackInfo, 0),
 		ConflictStacks: make([]MultiStackExcluded, 0),
-		WorktreePath:   worktreePath,
-		WorktreeEngine: worktreeEng,
-		Cleanup:        cleanup,
+		WorktreePath:   session.Path,
+		WorktreeEngine: session.Engine,
+		Cleanup:        session.Close,
 	}
 
 	// Try global octopus merge first (all branches from all stacks in one commit)
-	if err := w.tryGlobalOctopusMerge(ctx, worktreeEng, stacks); err == nil {
+	if err := w.tryGlobalOctopusMerge(ctx, session.Engine, stacks); err == nil {
 		w.output.Debug("Global octopus merge succeeded for %d stacks", len(stacks))
 		result.MergedStacks = stacks
 		return result, nil
@@ -96,22 +67,23 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 	w.output.Debug("Global octopus merge failed, falling back to per-stack merging")
 
 	// Reset to trunk before trying per-stack
-	if err := worktreeEng.ResetHard(ctx, trunk.GetName()); err != nil {
-		cleanup()
+	trunk := w.eng.Trunk()
+	if err := session.Engine.ResetHard(ctx, trunk.GetName()); err != nil {
+		session.Close()
 		return nil, fmt.Errorf("failed to reset after global merge failure: %w", err)
 	}
 
 	// Try to merge each stack individually
 	for _, stack := range stacks {
-		baseline, err := worktreeEng.GetCurrentRevision(ctx)
+		baseline, err := session.GetCurrentRevision(ctx)
 		if err != nil {
-			cleanup()
+			session.Close()
 			return nil, fmt.Errorf("failed to capture worktree state: %w", err)
 		}
 
-		if err := w.tryMergeStack(ctx, worktreeEng, stack); err != nil {
+		if err := w.tryMergeStack(ctx, session.Engine, stack); err != nil {
 			w.output.Debug("Stack %s conflicts: %v", stack.RootBranch, err)
-			if resetErr := worktreeEng.ResetHard(ctx, baseline); resetErr != nil {
+			if resetErr := session.ResetToRef(ctx, baseline); resetErr != nil {
 				w.output.Debug("Failed to reset worktree after conflict: %v", resetErr)
 			}
 			result.ConflictStacks = append(result.ConflictStacks, MultiStackExcluded{

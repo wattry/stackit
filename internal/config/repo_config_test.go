@@ -235,6 +235,190 @@ func TestConfigWorktreeSupport(t *testing.T) {
 	})
 }
 
+func TestConfigCICommand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty string when nothing configured", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, "", cfg.CICommand())
+	})
+
+	t.Run("returns ci.command when set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		config := &RepoConfig{
+			Trunk:     stringPtr("main"),
+			CICommand: stringPtr("just check"),
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, "just check", cfg.CICommand())
+	})
+
+	t.Run("falls back to combine.ciCommand for backwards compatibility", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		config := &RepoConfig{
+			Trunk:            stringPtr("main"),
+			CombineCICommand: stringPtr("npm test"),
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, "npm test", cfg.CICommand())
+	})
+
+	t.Run("ci.command takes precedence over combine.ciCommand", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		config := &RepoConfig{
+			Trunk:            stringPtr("main"),
+			CICommand:        stringPtr("just check"),
+			CombineCICommand: stringPtr("npm test"),
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, "just check", cfg.CICommand())
+	})
+}
+
+func TestConfigSetCICommand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets ci.command", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		cfg.SetCICommand("make test")
+		err = cfg.Save()
+		require.NoError(t, err)
+
+		cfg2, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, "make test", cfg2.CICommand())
+	})
+}
+
+func TestConfigCITimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns default 600 when nothing configured", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, 600, cfg.CITimeout())
+	})
+
+	t.Run("returns ci.timeout when set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		timeout := 300
+		config := &RepoConfig{
+			Trunk:     stringPtr("main"),
+			CITimeout: &timeout,
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, 300, cfg.CITimeout())
+	})
+
+	t.Run("falls back to combine.ciTimeout for backwards compatibility", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		timeout := 120
+		config := &RepoConfig{
+			Trunk:            stringPtr("main"),
+			CombineCITimeout: &timeout,
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, 120, cfg.CITimeout())
+	})
+
+	t.Run("ci.timeout takes precedence over combine.ciTimeout", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		newTimeout := 180
+		legacyTimeout := 300
+		config := &RepoConfig{
+			Trunk:            stringPtr("main"),
+			CITimeout:        &newTimeout,
+			CombineCITimeout: &legacyTimeout,
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, 180, cfg.CITimeout())
+	})
+}
+
+func TestConfigSetCITimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets ci.timeout", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		cfg.SetCITimeout(900)
+		err = cfg.Save()
+		require.NoError(t, err)
+
+		cfg2, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, 900, cfg2.CITimeout())
+	})
+}
+
 // Helper function to create string pointer
 func stringPtr(s string) *string {
 	return &s
