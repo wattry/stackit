@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -44,18 +45,17 @@ type StepItem struct {
 }
 
 // Model is the bubbletea model for merge progress
+// It embeds tui.BaseModel for standard lifecycle handling.
 type Model struct {
+	tui.BaseModel     // Embedded for ReadySignaler interface
 	Groups            []Group
 	Steps             []StepItem
 	CurrentIdx        int
-	Spinner           spinner.Model
-	Done              bool
-	Quitting          bool
+	spinner           spinner.Model // lowercase for custom style
+	Quitting          bool          // unique to merge, used in View()
 	styles            styles
 	EstimatedDuration time.Duration
 	Summary           string
-	Width             int
-	readyChan         chan struct{} // signals when Init() is called
 }
 
 type styles struct {
@@ -125,8 +125,7 @@ func NewModel() *Model {
 		Groups:     []Group{},
 		Steps:      []StepItem{},
 		CurrentIdx: 0,
-		Spinner:    s,
-		Width:      80,
+		spinner:    s,
 		styles: styles{
 			spinnerStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
 			doneStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
@@ -138,40 +137,38 @@ func NewModel() *Model {
 	}
 }
 
-// SetReadyChan sets the channel that will be closed when Init() is called.
-// This implements the tui.ReadySignaler interface.
-func (m *Model) SetReadyChan(ch chan struct{}) {
-	m.readyChan = ch
-}
-
-// Init initializes the bubbletea model
+// Init initializes the bubbletea model.
 func (m *Model) Init() tea.Cmd {
-	// Signal that the program is ready to receive messages
-	if m.readyChan != nil {
-		close(m.readyChan)
-		m.readyChan = nil
-	}
-	return m.Spinner.Tick
+	// Signal that the program is ready to receive messages via BaseModel
+	m.SignalReady()
+	return m.spinner.Tick
 }
 
 // Update handles message updates for the bubbletea model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
+	// Handle quit keys first to set Quitting flag (unique to merge component)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if keyMsg.String() == tui.KeyCtrlC || keyMsg.String() == tui.KeyQuit {
 			m.Quitting = true
 			return m, tea.Quit
 		}
+	}
 
-	case tea.WindowSizeMsg:
-		m.Width = msg.Width
-		return m, nil
-
-	case spinner.TickMsg:
+	// Handle spinner ticks with our custom spinner BEFORE HandleCommonMsg
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
 		var cmd tea.Cmd
-		m.Spinner, cmd = m.Spinner.Update(msg)
+		m.spinner, cmd = m.spinner.Update(tickMsg)
 		return m, cmd
+	}
 
+	// Handle window resize via BaseModel (key events already handled above)
+	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.Width = sizeMsg.Width
+		m.Height = sizeMsg.Height
+		return m, nil
+	}
+
+	switch msg := msg.(type) {
 	case PlanLoadedMsg:
 		m.Groups = msg.Groups
 		m.Steps = make([]StepItem, len(msg.StepDescriptions))
@@ -261,7 +258,7 @@ func (m *Model) View() string {
 		if m.Done {
 			b.WriteString(header + m.styles.doneStyle.Render("  Complete"))
 		} else {
-			b.WriteString(header + "  " + m.Spinner.View() + " " + m.styles.dimStyle.Render("Initializing..."))
+			b.WriteString(header + "  " + m.spinner.View() + " " + m.styles.dimStyle.Render("Initializing..."))
 		}
 		b.WriteString("\n")
 		if m.Summary != "" {
@@ -392,7 +389,7 @@ func (m *Model) View() string {
 				line.WriteString(m.styles.errorStyle.Render("→ " + runningGroupInfo.failedStep.Error.Error()))
 			}
 		} else {
-			line.WriteString(fmt.Sprintf("  %s %s ", m.Spinner.View(), lipgloss.NewStyle().Bold(true).Render(group.Label)))
+			line.WriteString(fmt.Sprintf("  %s %s ", m.spinner.View(), lipgloss.NewStyle().Bold(true).Render(group.Label)))
 
 			if runningGroupInfo.activeStep != nil {
 				if runningGroupInfo.activeStep.Status == StatusWaiting {

@@ -2,9 +2,11 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime/debug"
 	"sync"
 	"syscall"
@@ -33,9 +35,12 @@ type Runner struct {
 	started bool
 	stopped bool
 	sigChan chan os.Signal
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 // NewRunner creates a new TUI runner for async program execution.
+// Use NewRunnerWithContext if you need cancellation support.
 func NewRunner(model tea.Model, out output.Output, logger output.Logger) *Runner {
 	return &Runner{
 		model:  model,
@@ -44,14 +49,42 @@ func NewRunner(model tea.Model, out output.Output, logger output.Logger) *Runner
 	}
 }
 
+// NewRunnerWithContext creates a new TUI runner with context support.
+// The context will be canceled when Cleanup is called, allowing
+// background operations to be properly terminated.
+func NewRunnerWithContext(ctx context.Context, model tea.Model, out output.Output, logger output.Logger) *Runner {
+	ctx, cancel := context.WithCancel(ctx)
+	return &Runner{
+		model:  model,
+		output: out,
+		logger: logger,
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+// Context returns the runner's context for use in background operations.
+// If the runner was created without a context (using NewRunner), this returns
+// context.Background().
+func (r *Runner) Context() context.Context {
+	if r == nil || r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
+}
+
 // Start begins running the tea.Program in a background goroutine.
 // It sets up signal handling and panic recovery.
 // If the model implements ReadySignaler, Start waits for the model to signal
 // readiness before returning, preventing race conditions with Send().
 func (r *Runner) Start() {
+	startTime := time.Now()
+	r.logger.Debug("tui.Runner.Start entering")
+
 	r.mu.Lock()
 	if r.started {
 		r.mu.Unlock()
+		r.logger.Debug("tui.Runner.Start already started, returning")
 		return
 	}
 	r.started = true
@@ -64,6 +97,7 @@ func (r *Runner) Start() {
 	if signaler, ok := r.model.(ReadySignaler); ok {
 		readyChan = make(chan struct{})
 		signaler.SetReadyChan(readyChan)
+		r.logger.Debug("tui.Runner.Start ready channel configured")
 	}
 
 	r.program = tea.NewProgram(r.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
@@ -102,11 +136,13 @@ func (r *Runner) Start() {
 	if readyChan != nil {
 		select {
 		case <-readyChan:
-			// Program is ready to receive messages
+			r.logger.Debug("tui.Runner.Start ready signal received", "durationMs", time.Since(startTime).Milliseconds())
 		case <-time.After(2 * time.Second):
-			r.logger.Warn("TUI startup timed out, proceeding anyway")
+			r.logger.Warn("tui.Runner.Start ready timeout, proceeding anyway", "durationMs", time.Since(startTime).Milliseconds())
 		}
 	}
+
+	r.logger.Debug("tui.Runner.Start completed", "durationMs", time.Since(startTime).Milliseconds())
 }
 
 // Cleanup ensures the terminal is restored to normal mode.
@@ -134,6 +170,10 @@ func (r *Runner) Cleanup() {
 	r.program = nil
 	r.output.SetQuiet(false)
 	r.stopped = true
+	// Cancel context to signal background operations to stop
+	if r.cancel != nil {
+		r.cancel()
+	}
 	r.mu.Unlock()
 }
 
@@ -173,6 +213,7 @@ func (r *Runner) Send(msg tea.Msg) {
 	if r == nil {
 		return
 	}
+
 	r.mu.Lock()
 	p := r.program
 	r.mu.Unlock()
@@ -198,10 +239,69 @@ func (r *Runner) Wait() {
 }
 
 // IsRunning returns true if the program is currently running.
+// Safe to call on nil receivers.
 func (r *Runner) IsRunning() bool {
+	if r == nil {
+		return false
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.started && !r.stopped
+}
+
+// IsHealthy returns true if the TUI is running and responsive.
+// This is a more comprehensive check than IsRunning, verifying the program is not nil.
+func (r *Runner) IsHealthy() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.started && !r.stopped && r.program != nil
+}
+
+// SendWithTimeout sends a message with a timeout.
+// Returns error if the send doesn't complete within the timeout or if the
+// runner's context is canceled (e.g., during Cleanup).
+// This is useful for detecting hangs in the TUI event loop.
+func (r *Runner) SendWithTimeout(msg tea.Msg, timeout time.Duration) error {
+	if r == nil {
+		return nil
+	}
+
+	// Check if already stopped
+	ctx := r.Context()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	done := make(chan struct{})
+	go func() {
+		r.Send(msg)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		// Runner was cleaned up, don't log as error
+		return ctx.Err()
+	case <-time.After(timeout):
+		r.logger.Error("TUI send timed out", "msgType", reflect.TypeOf(msg).String(), "timeout", timeout)
+		return fmt.Errorf("send timed out after %v", timeout)
+	}
+}
+
+// MustSend sends a message and logs error if timeout occurs.
+// Uses a default 5-second timeout. This is the recommended way to send messages
+// when you want hang detection without blocking indefinitely.
+func (r *Runner) MustSend(msg tea.Msg) {
+	if err := r.SendWithTimeout(msg, 5*time.Second); err != nil {
+		r.logger.Error("MustSend failed", "error", err)
+	}
 }
 
 // PanicError is sent when a tea.Cmd panics during execution.

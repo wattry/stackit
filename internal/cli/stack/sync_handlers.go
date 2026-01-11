@@ -27,7 +27,7 @@ func NewSyncUI(out output.Output, logger output.Logger) (*tui.Runner, syncAction
 		model := syncComponent.NewModel(0) // Start with 0, will be updated in Start()
 		runner := tui.NewRunner(model, out, logger)
 		runner.Start()
-		return runner, NewInteractiveSyncHandler(runner, model, out)
+		return runner, NewInteractiveSyncHandler(runner, model, out, logger)
 	}
 	return nil, NewSimpleSyncHandler(out)
 }
@@ -330,6 +330,7 @@ type InteractiveSyncHandler struct {
 	runner       *tui.Runner
 	model        *syncComponent.Model
 	output       output.Output
+	logger       output.Logger
 	mu           stdsync.Mutex
 	totalOps     int
 	completedOps int
@@ -337,16 +338,19 @@ type InteractiveSyncHandler struct {
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
-func NewInteractiveSyncHandler(runner *tui.Runner, model *syncComponent.Model, out output.Output) *InteractiveSyncHandler {
+func NewInteractiveSyncHandler(runner *tui.Runner, model *syncComponent.Model, out output.Output, logger output.Logger) *InteractiveSyncHandler {
 	return &InteractiveSyncHandler{
 		runner: runner,
 		model:  model,
 		output: out,
+		logger: logger,
 	}
 }
 
 // Start is called at the beginning of sync
 func (h *InteractiveSyncHandler) Start(totalOps int) {
+	h.logger.Debug("InteractiveSyncHandler.Start entering", "totalOps", totalOps)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -355,16 +359,21 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 
 	// Update model with total ops
 	h.runner.Send(syncComponent.ProgressTickMsg{Completed: 0, Total: totalOps})
+
+	h.logger.Debug("InteractiveSyncHandler.Start completed")
 }
 
 // EmitEvent handles progress updates
 func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
+	h.logger.Debug("InteractiveSyncHandler.EmitEvent", "phase", event.Phase, "type", event.Type, "branch", event.Branch)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	// Handle phase transitions
 	if event.Type == syncAction.EventStarted && event.Phase != h.currentPhase {
 		h.currentPhase = event.Phase
+		h.logger.Debug("InteractiveSyncHandler.EmitEvent phase transition", "phase", event.Phase)
 		h.runner.Send(syncComponent.PhaseStartMsg{
 			Phase: syncComponent.Phase(event.Phase),
 		})
