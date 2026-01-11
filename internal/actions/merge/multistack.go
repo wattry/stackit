@@ -174,6 +174,23 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 		}
 		out.Success("PR merged successfully!")
 		out.Debug("multistack: merge complete")
+
+		// 8. Clean up individual PRs from all included stacks
+		out.Debug("multistack: cleaning up individual PRs")
+		var branchNames []string
+		for _, stack := range result.IncludedStacks {
+			branchNames = append(branchNames, stack.AllBranches...)
+		}
+
+		userName, _ := eng.Git().GetUserName(ctx.Context)
+		cleaner := NewPRCleaner(ctx, eng, PRCleanupConfig{
+			Source:                CleanupSourceMultiStack,
+			ConsolidationPRNumber: pr.Number,
+			UserName:              userName,
+		})
+
+		cleanupResult := cleaner.CleanupBranches(ctx.Context, branchNames)
+		cleaner.LogResult(cleanupResult)
 	}
 
 	out.Debug("multistack: completed successfully")
