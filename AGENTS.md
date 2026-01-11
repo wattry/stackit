@@ -12,6 +12,28 @@ Go-based CLI tool for managing stacked changes in Git repositories.
 - `internal/git`: Low-level Git operations (executing git commands, reading config, managing refs).
 - `internal/utils`: Shared utilities for branch naming, sanitization, and UI helpers.
 
+## CLI Tools
+
+Use these tools instead of standard alternatives for better performance:
+
+| Tool | Use Instead Of | Purpose |
+|------|----------------|---------|
+| `rg` (ripgrep) | `grep` | Fast text search, respects .gitignore |
+| `fd` | `find` | Fast file search, intuitive syntax |
+| `ast-grep` | `sed` for code | AST-based code search and refactoring |
+| `jq` | - | JSON processing |
+| `yq` | - | YAML processing |
+| `tokei` | `wc -l` | Code statistics and language breakdown |
+
+**Examples:**
+```bash
+rg "func.*Create" --type go          # Search for Create functions in Go files
+fd "\.go$" internal/                  # Find all Go files in internal/
+ast-grep -p 'fmt.Errorf($$$)' .       # Find all fmt.Errorf calls
+tokei                                 # Get codebase statistics
+jq '.dependencies' package.json       # Parse JSON
+```
+
 ## Requirements
 
 **All changes must pass tests and lint before committing:**
