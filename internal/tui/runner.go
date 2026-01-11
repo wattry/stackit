@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime/debug"
 	"sync"
 	"syscall"
@@ -49,9 +50,13 @@ func NewRunner(model tea.Model, out output.Output, logger output.Logger) *Runner
 // If the model implements ReadySignaler, Start waits for the model to signal
 // readiness before returning, preventing race conditions with Send().
 func (r *Runner) Start() {
+	startTime := time.Now()
+	r.logger.Debug("tui.Runner.Start entering")
+
 	r.mu.Lock()
 	if r.started {
 		r.mu.Unlock()
+		r.logger.Debug("tui.Runner.Start already started, returning")
 		return
 	}
 	r.started = true
@@ -64,6 +69,7 @@ func (r *Runner) Start() {
 	if signaler, ok := r.model.(ReadySignaler); ok {
 		readyChan = make(chan struct{})
 		signaler.SetReadyChan(readyChan)
+		r.logger.Debug("tui.Runner.Start ready channel configured")
 	}
 
 	r.program = tea.NewProgram(r.model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
@@ -102,11 +108,13 @@ func (r *Runner) Start() {
 	if readyChan != nil {
 		select {
 		case <-readyChan:
-			// Program is ready to receive messages
+			r.logger.Debug("tui.Runner.Start ready signal received", "durationMs", time.Since(startTime).Milliseconds())
 		case <-time.After(2 * time.Second):
-			r.logger.Warn("TUI startup timed out, proceeding anyway")
+			r.logger.Warn("tui.Runner.Start ready timeout, proceeding anyway", "durationMs", time.Since(startTime).Milliseconds())
 		}
 	}
+
+	r.logger.Debug("tui.Runner.Start completed", "durationMs", time.Since(startTime).Milliseconds())
 }
 
 // Cleanup ensures the terminal is restored to normal mode.
@@ -173,6 +181,10 @@ func (r *Runner) Send(msg tea.Msg) {
 	if r == nil {
 		return
 	}
+
+	msgType := reflect.TypeOf(msg).String()
+	r.logger.Debug("tui.Runner.Send", "msgType", msgType)
+
 	r.mu.Lock()
 	p := r.program
 	r.mu.Unlock()
