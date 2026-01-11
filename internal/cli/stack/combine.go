@@ -36,8 +36,8 @@ them together into a single PR. It handles:
   - Binary search: If CI fails, finds the largest subset that passes
 
 Configuration:
-  Set the CI command with: stackit config set combine.ciCommand "your-command"
-  Set the CI timeout with: stackit config set combine.ciTimeout 600
+  Set the CI command with: stackit config set ci.command "your-command"
+  Set the CI timeout with: stackit config set ci.timeout 600
 
 Examples:
   stackit merge --multi-stack                          # Interactive (recommended)

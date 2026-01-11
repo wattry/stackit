@@ -95,7 +95,7 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 		validator := NewLocalCIValidator(cfg, out)
 		if !validator.IsConfigured() {
 			out.Debug("multistack: CI not configured, skipping")
-			out.Warn("CI validation skipped (no combine.ciCommand configured)")
+			out.Warn("CI validation skipped (no ci.command configured)")
 		} else {
 			// Run CI on merged stacks
 			out.Debug("multistack: running CI validation")
