@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -45,9 +45,9 @@ type StepItem struct {
 }
 
 // Model is the bubbletea model for merge progress
-// It embeds tui.BaseModel for standard lifecycle handling.
+// It embeds core.BaseModel for standard lifecycle handling.
 type Model struct {
-	tui.BaseModel     // Embedded for ReadySignaler interface
+	core.BaseModel    // Embedded for ReadySignaler interface
 	Groups            []Group
 	Steps             []StepItem
 	CurrentIdx        int
@@ -148,7 +148,7 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle quit keys first to set Quitting flag (unique to merge component)
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if keyMsg.String() == tui.KeyCtrlC || keyMsg.String() == tui.KeyQuit {
+		if keyMsg.String() == core.KeyCtrlC || keyMsg.String() == core.KeyQuit {
 			m.Quitting = true
 			return m, tea.Quit
 		}

@@ -9,25 +9,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/tui/components/tree"
-)
-
-// Key constants for TUI interactions (local to avoid import cycle with tui package)
-const (
-	keyCtrlC = "ctrl+c"
-	keyQuit  = "q"
+	"stackit.dev/stackit/internal/tui/core"
 )
 
 // Model is the bubbletea model for submit progress.
-// It implements the ReadySignaler pattern for integration with tui.Runner.
+// It embeds core.BaseModel for standard lifecycle handling.
 type Model struct {
-	Items         []Item
-	Renderer      *tree.StackTreeRenderer
-	RootBranch    string
-	spinner       spinner.Model
-	Done          bool
-	Styles        Styles
-	GlobalMessage string
-	readyChan     chan struct{} // signals when Init() is called
+	core.BaseModel // Embedded for ReadySignaler interface
+	Items          []Item
+	Renderer       *tree.StackTreeRenderer
+	RootBranch     string
+	spinner        spinner.Model // lowercase for custom style
+	Styles         Styles
+	GlobalMessage  string
 }
 
 // ProgressUpdateMsg is sent to update the status of a specific branch submission
@@ -71,35 +65,28 @@ func NewModel(items []Item) *Model {
 	}
 }
 
-// SetReadyChan sets the channel that will be closed when Init() is called.
-// This implements the tui.ReadySignaler interface.
-func (m *Model) SetReadyChan(ch chan struct{}) {
-	m.readyChan = ch
-}
-
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
-	// Signal that the program is ready to receive messages
-	if m.readyChan != nil {
-		close(m.readyChan)
-		m.readyChan = nil
-	}
+	// Signal that the program is ready to receive messages via BaseModel
+	m.SignalReady()
 	return m.spinner.Tick
 }
 
 // Update handles messages and updates the model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == keyCtrlC || msg.String() == keyQuit {
-			return m, tea.Quit
-		}
-
-	case spinner.TickMsg:
+	// Handle spinner ticks with our custom spinner BEFORE HandleCommonMsg
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
 		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
+		m.spinner, cmd = m.spinner.Update(tickMsg)
 		return m, cmd
+	}
 
+	// Handle common messages via BaseModel (key events, window resize)
+	if handled, cmd := m.HandleCommonMsg(msg); handled {
+		return m, cmd
+	}
+
+	switch msg := msg.(type) {
 	case StartSubmitMsg:
 		// Update status for items that are in msg.Items
 		for _, newItem := range msg.Items {

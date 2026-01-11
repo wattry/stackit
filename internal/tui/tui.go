@@ -19,6 +19,7 @@ import (
 
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/components/submit"
+	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -28,15 +29,15 @@ var (
 	colorProfileMu sync.Mutex
 )
 
-// Key constants for TUI interactions
+// Key constants re-exported from core for backwards compatibility.
 const (
-	KeyCtrlC = "ctrl+c"
-	KeyQuit  = "q"
-	KeyEsc   = "esc"
-	KeyEnter = "enter"
-	KeyUp    = "up"
-	KeyDown  = "down"
-	KeyTab   = "tab"
+	KeyCtrlC = core.KeyCtrlC
+	KeyQuit  = core.KeyQuit
+	KeyEsc   = core.KeyEsc
+	KeyEnter = core.KeyEnter
+	KeyUp    = core.KeyUp
+	KeyDown  = core.KeyDown
+	KeyTab   = core.KeyTab
 )
 
 // SubmitTUIModel is the bubbletea model for submit progress
