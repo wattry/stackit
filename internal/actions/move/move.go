@@ -176,15 +176,94 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 	}
 
-	// Start handler with branch info (oldParentName computed earlier for preview)
-	handler.Start(source, oldParentName, onto)
-
 	// Capture old divergence point to preserve it after reparenting
 	// This ensures we only move the commits that belong to this branch.
 	var oldParentRev string
 	if meta, err := eng.Git().ReadMetadata(source); err == nil && meta.ParentBranchRevision != nil {
 		oldParentRev = *meta.ParentBranchRevision
 	}
+
+	// Build rebase specs for validation
+	// We need to validate that all rebases will succeed before modifying any state
+	rebaseSpecs := make([]engine.RebaseSpec, 0, len(descendants))
+
+	// Get the target parent's revision for the source branch rebase
+	ontoRev, err := eng.GetRevision(ontoBranch)
+	if err != nil {
+		return fmt.Errorf("failed to get revision for %s: %w", onto, err)
+	}
+
+	// Source branch: rebase onto new parent
+	sourceOldUpstream := oldParentRev
+	if sourceOldUpstream == "" {
+		// Fallback to current parent's revision when metadata doesn't have it
+		if oldParent != nil {
+			var revErr error
+			sourceOldUpstream, revErr = eng.GetRevision(*oldParent)
+			if revErr != nil {
+				out.Debug("Failed to get revision for old parent %s: %v", oldParent.GetName(), revErr)
+			}
+		} else {
+			var revErr error
+			sourceOldUpstream, revErr = eng.GetRevision(eng.Trunk())
+			if revErr != nil {
+				out.Debug("Failed to get revision for trunk: %v", revErr)
+			}
+		}
+	}
+	rebaseSpecs = append(rebaseSpecs, engine.RebaseSpec{
+		Branch:      source,
+		NewParent:   ontoRev,
+		OldUpstream: sourceOldUpstream,
+	})
+
+	// For descendants, each will be rebased onto its parent (which is part of the moving stack)
+	// Since these are topologically ordered, each parent will be rebased before its children
+	sortedDescendants := eng.SortBranchesTopologically(descendants)
+	for _, d := range sortedDescendants {
+		if d.GetName() == source {
+			continue // Already handled above
+		}
+		parent := d.GetParent()
+		if parent == nil {
+			continue
+		}
+		parentRev, revErr := eng.GetRevision(*parent)
+		if revErr != nil {
+			out.Debug("Failed to get revision for parent %s of %s: %v", parent.GetName(), d.GetName(), revErr)
+		}
+
+		// Get the old upstream from metadata, falling back to parent revision if unavailable
+		dOldUpstream := ""
+		if meta, metaErr := eng.Git().ReadMetadata(d.GetName()); metaErr == nil && meta.ParentBranchRevision != nil {
+			dOldUpstream = *meta.ParentBranchRevision
+		}
+		if dOldUpstream == "" {
+			dOldUpstream = parentRev
+		}
+
+		rebaseSpecs = append(rebaseSpecs, engine.RebaseSpec{
+			Branch:      d.GetName(),
+			NewParent:   parentRev,
+			OldUpstream: dOldUpstream,
+		})
+	}
+
+	// Validate rebases in a temporary worktree before modifying any state
+	handler.OnStep(StepValidating, StatusStarted, "Validating rebases...")
+	validation, err := eng.ValidateRebases(gctx, rebaseSpecs)
+	if err != nil {
+		handler.OnStep(StepValidating, StatusFailed, err.Error())
+		return fmt.Errorf("failed to validate rebases: %w", err)
+	}
+	if !validation.Success {
+		handler.OnStep(StepValidating, StatusFailed, validation.ErrorMessage)
+		return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
+	}
+	handler.OnStep(StepValidating, StatusCompleted, "Validation passed")
+
+	// Start handler with branch info (oldParentName computed earlier for preview)
+	handler.Start(source, oldParentName, onto)
 
 	// Update parent in engine
 	if err := eng.SetParent(gctx, sourceBranch, ontoBranch); err != nil {
@@ -196,8 +275,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Restore old divergence point if it's still a valid ancestor
 	if oldParentRev != "" {
-		if isAncestor, _ := eng.Git().IsAncestor(oldParentRev, source); isAncestor {
-			_ = eng.UpdateParentRevision(source, oldParentRev)
+		isAncestor, ancestorErr := eng.Git().IsAncestor(oldParentRev, source)
+		if ancestorErr != nil {
+			out.Debug("Failed to check if %s is ancestor of %s: %v", oldParentRev, source, ancestorErr)
+		} else if isAncestor {
+			if updateErr := eng.UpdateParentRevision(source, oldParentRev); updateErr != nil {
+				out.Debug("Failed to update parent revision for %s: %v", source, updateErr)
+			}
 		}
 	}
 
