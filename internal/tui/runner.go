@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -34,15 +35,42 @@ type Runner struct {
 	started bool
 	stopped bool
 	sigChan chan os.Signal
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 // NewRunner creates a new TUI runner for async program execution.
+// Use NewRunnerWithContext if you need cancellation support.
 func NewRunner(model tea.Model, out output.Output, logger output.Logger) *Runner {
 	return &Runner{
 		model:  model,
 		output: out,
 		logger: logger,
 	}
+}
+
+// NewRunnerWithContext creates a new TUI runner with context support.
+// The context will be canceled when Cleanup is called, allowing
+// background operations to be properly terminated.
+func NewRunnerWithContext(ctx context.Context, model tea.Model, out output.Output, logger output.Logger) *Runner {
+	ctx, cancel := context.WithCancel(ctx)
+	return &Runner{
+		model:  model,
+		output: out,
+		logger: logger,
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+// Context returns the runner's context for use in background operations.
+// If the runner was created without a context (using NewRunner), this returns
+// context.Background().
+func (r *Runner) Context() context.Context {
+	if r == nil || r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
 }
 
 // Start begins running the tea.Program in a background goroutine.
@@ -142,6 +170,10 @@ func (r *Runner) Cleanup() {
 	r.program = nil
 	r.output.SetQuiet(false)
 	r.stopped = true
+	// Cancel context to signal background operations to stop
+	if r.cancel != nil {
+		r.cancel()
+	}
 	r.mu.Unlock()
 }
 
