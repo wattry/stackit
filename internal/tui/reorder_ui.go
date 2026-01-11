@@ -7,28 +7,42 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/tui/keys"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
+// Tree symbols for rendering
+const (
+	branchSymbol = "◯"
+	verticalLine = "│"
+	branchArrow  = "▸"
+)
+
 // reorderModel is the bubbletea model for reordering branches
 type reorderModel struct {
-	branches  []string
-	trunk     string // trunk branch name (displayed but not selectable)
-	cursor    int
-	confirmed bool
-	canceled  bool
-	keys      keys.ReorderKeyMap
+	branches      []string
+	originalOrder []string // tracks original positions to detect moves
+	trunk         string   // trunk branch name (displayed but not selectable)
+	cursor        int
+	confirmed     bool
+	canceled      bool
+	keys          keys.ReorderKeyMap
 }
 
 // newReorderModel creates a new reorder TUI model
 func newReorderModel(branches []string, trunk string) reorderModel {
+	// Store original order to track movements
+	original := make([]string, len(branches))
+	copy(original, branches)
+
 	return reorderModel{
-		branches: branches,
-		trunk:    trunk,
-		cursor:   0,
-		keys:     keys.DefaultReorder,
+		branches:      branches,
+		originalOrder: original,
+		trunk:         trunk,
+		cursor:        0,
+		keys:          keys.DefaultReorder,
 	}
 }
 
@@ -84,38 +98,108 @@ func (m reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// isBranchMoved checks if a branch has moved from its original position
+func (m reorderModel) isBranchMoved(branch string) bool {
+	currentPos := -1
+	originalPos := -1
+
+	for i, b := range m.branches {
+		if b == branch {
+			currentPos = i
+			break
+		}
+	}
+
+	for i, b := range m.originalOrder {
+		if b == branch {
+			originalPos = i
+			break
+		}
+	}
+
+	return currentPos != originalPos
+}
+
+// branchNeedsRestack checks if a branch will need restacking
+// A branch needs restack if it has moved OR any branch below it (toward trunk) has moved
+// Since branches are displayed tip-first, "below" means higher index
+func (m reorderModel) branchNeedsRestack(branchIndex int) bool {
+	// Check if this branch or any branch below it (higher index, closer to trunk) has moved
+	for i := branchIndex; i < len(m.branches); i++ {
+		if m.isBranchMoved(m.branches[i]) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m reorderModel) View() string {
 	var b strings.Builder
 
-	// Header with title and help (consistent with log view)
+	// Header with title and help
 	title := "Reorder Branches"
 	help := "'↑/k' '↓/j' navigate, 'K' 'J' move, 'enter' confirm, 'esc' cancel"
 	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.branches), help))
 	b.WriteString(header)
 	b.WriteString("\n\n")
 
-	// Branch list with cursor + background selection
-	// Top of stack (tip) is first, bottom of stack (closest to trunk) is last
-	selectionStyle := style.Selection()
-	cursorStyle := style.SelectionCursorStyle()
-	branchStyle := style.BranchStyle(false, false, false)
+	// Styles
+	movedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12"))  // Blue for moved
+	restackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // Green for needs restack
+	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))  // Default/white
+	trunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205")) // Pink for trunk
+	dimStyle := lipgloss.NewStyle().Foreground(style.DimColor())        // Dim for tree lines
+	selectionBg := lipgloss.NewStyle().Background(lipgloss.Color("6")).Foreground(lipgloss.Color("0")).Bold(true)
 
+	// Render branch tree (tip-first, trunk at bottom)
 	for i, branch := range m.branches {
-		if i == m.cursor {
-			// Selected: cursor symbol + background highlight
-			cursor := cursorStyle.Render(style.SelectionCursor)
-			branchText := selectionStyle.Render(branch)
-			b.WriteString(fmt.Sprintf("%s%s\n", cursor, branchText))
+		isSelected := i == m.cursor
+		isMoved := m.isBranchMoved(branch)
+		needsRestack := m.branchNeedsRestack(i)
+
+		// Determine branch style based on state
+		var branchStyle lipgloss.Style
+		switch {
+		case isMoved:
+			branchStyle = movedStyle
+		case needsRestack:
+			branchStyle = restackStyle
+		default:
+			branchStyle = normalStyle
+		}
+
+		// Build the line: symbol + arrow + branch name
+		symbol := branchSymbol
+		arrow := branchArrow
+
+		if isSelected {
+			// Selected row: use selection background
+			symbolStyled := selectionBg.Render(symbol)
+			arrowStyled := selectionBg.Render(arrow)
+			branchStyled := selectionBg.Render(branch)
+			b.WriteString(fmt.Sprintf("%s%s%s\n", symbolStyled, arrowStyled, branchStyled))
 		} else {
-			// Unselected: padding + normal style
-			b.WriteString(fmt.Sprintf("%s%s\n", style.SelectionPadding, branchStyle.Render(branch)))
+			// Non-selected row: apply branch-specific color
+			symbolStyled := branchStyle.Render(symbol)
+			arrowStyled := branchStyle.Render(arrow)
+			branchStyled := branchStyle.Render(branch)
+			b.WriteString(fmt.Sprintf("%s%s%s\n", symbolStyled, arrowStyled, branchStyled))
+		}
+
+		// Add vertical connector line (except after the last branch before trunk)
+		if i < len(m.branches)-1 || m.trunk != "" {
+			b.WriteString(dimStyle.Render(verticalLine) + "\n")
 		}
 	}
 
-	// Show trunk at the bottom (not selectable) - use trunk style (pink)
+	// Show trunk at the bottom (not selectable)
 	if m.trunk != "" {
-		trunkStyle := style.BranchStyle(false, true, false) // isTrunk=true for pink color
-		b.WriteString(fmt.Sprintf("%s%s\n", style.SelectionPadding, trunkStyle.Render(m.trunk)))
+		symbol := branchSymbol
+		arrow := branchArrow
+		b.WriteString(fmt.Sprintf("%s%s%s\n",
+			trunkStyle.Render(symbol),
+			trunkStyle.Render(arrow),
+			trunkStyle.Render(m.trunk)))
 	}
 
 	return b.String()
