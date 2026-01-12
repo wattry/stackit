@@ -25,7 +25,7 @@ Regular absorb may break branches when absorbed changes depend on code that coul
 ### Phase 1: Absorb with Plan Output
 
 ```bash
-command stackit absorb --plan-json --force --no-interactive 2>&1
+command stackit absorb --json --force --no-interactive 2>&1
 ```
 
 Parse the JSON output to understand:
@@ -111,7 +111,7 @@ When branch X fails with "undefined: foo":
 ## Example
 
 ```
-$ command stackit absorb --plan-json --force --no-interactive
+$ command stackit absorb --json --force --no-interactive
 
 Plan shows:
 - absorbed: validateUser() call -> add-login branch
