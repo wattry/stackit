@@ -19,10 +19,11 @@ const (
 
 // Options contains options for the absorb command
 type Options struct {
-	All    bool
-	DryRun bool
-	Force  bool
-	Patch  bool
+	All      bool
+	DryRun   bool
+	Force    bool
+	Patch    bool
+	PlanJSON bool // Output machine-readable JSON plan after absorb completes
 }
 
 // Action performs the absorb operation
@@ -310,5 +311,25 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		Unabsorbed:  len(unabsorbedHunks),
 		BranchCount: len(hunksByBranch),
 	})
+
+	// Output JSON plan if requested
+	if opts.PlanJSON {
+		// Get list of new (untracked) files
+		newFiles, _ := ctx.Git().GetUntrackedFiles(ctx.Context)
+
+		planJSON, err := GeneratePlanJSON(
+			currentBranch.GetName(),
+			hunkTargets,
+			unabsorbedHunks,
+			newFiles,
+			eng,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to generate plan JSON: %w", err)
+		}
+		out.Print(string(planJSON))
+		out.Newline()
+	}
+
 	return nil
 }

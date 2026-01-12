@@ -73,6 +73,18 @@ func (r *runner) HasUntrackedFiles(ctx context.Context) (bool, error) {
 	return strings.TrimSpace(output) != "", nil
 }
 
+func (r *runner) GetUntrackedFiles(ctx context.Context) ([]string, error) {
+	output, err := r.RunGitCommandWithContext(ctx, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get untracked files: %w", err)
+	}
+	if strings.TrimSpace(output) == "" {
+		return nil, nil
+	}
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	return lines, nil
+}
+
 func (r *runner) ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
 	diffOutput, err := r.RunGitCommandRawWithContext(ctx, "diff", "--cached")
 	if err != nil {

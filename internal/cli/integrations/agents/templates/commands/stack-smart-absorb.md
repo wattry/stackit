@@ -1,0 +1,142 @@
+---
+description: Smart absorb with intelligent fix sourcing
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep
+---
+
+# Stack Smart Absorb
+
+Absorb staged changes into the correct commits, then intelligently fix any broken branches by drawing from the right sources.
+
+## Context
+- Current branch: !`git branch --show-current`
+- Git status: !`git status --short`
+- Stack state: !`command stackit log --no-interactive 2>&1`
+
+## How This Differs from Regular Absorb
+
+Regular absorb may break branches when absorbed changes depend on code that couldn't be absorbed (e.g., new functions defined in unabsorbable hunks). Smart absorb knows WHERE to find fixes:
+
+- **Unabsorbable hunks**: Staged changes that commuted with everything
+- **New files**: Files that weren't in any commit (can't be absorbed)
+- **Absorbed upstack**: Code that got absorbed to a child branch but is needed by a parent
+
+## Instructions
+
+### Phase 1: Absorb with Plan Output
+
+```bash
+command stackit absorb --plan-json --force --no-interactive 2>&1
+```
+
+Parse the JSON output to understand:
+- What got absorbed and to which branches (`absorbed` array)
+- What couldn't be absorbed and why (`unabsorbable` array)
+- New files that exist (`new_files` array)
+- The stack structure (`stack` array)
+
+Save this information - you'll need it to find fixes.
+
+### Phase 2: Find Broken Branches (Stack-Fix Pattern)
+
+Determine the project's build command from README.md, justfile, or package.json.
+
+```bash
+command stackit bottom --no-interactive
+command stackit foreach --upstack "<build-command>" 2>&1
+```
+
+Parse output to find the FIRST failing branch. The failing branch is where to fix.
+
+**If all branches pass**: Done! Smart absorb succeeded.
+
+### Phase 3: Fix from the Right Sources
+
+For each broken branch, identify what's missing by reading the error.
+
+**Source 1: Unabsorbable hunks**
+- Check the plan's `unabsorbable` array for the missing code
+- If found, apply it to the failing branch:
+  ```bash
+  command stackit checkout <failing-branch> --no-interactive
+  # Edit the file to add the missing code from the unabsorbable hunk content
+  git add <files>
+  git commit -m "fix: add <missing-item> dependency"
+  command stackit restack --no-interactive
+  ```
+
+**Source 2: New files**
+- Check the plan's `new_files` array
+- If the missing code is in a new file, copy relevant parts:
+  ```bash
+  command stackit checkout <failing-branch> --no-interactive
+  # Copy the relevant code from the new file
+  git add <files>
+  git commit -m "fix: add <missing-item> from new file"
+  command stackit restack --no-interactive
+  ```
+
+**Source 3: Absorbed upstack (bring down)**
+- Check the plan's `absorbed` array for hunks that went to child branches
+- If the missing code was absorbed to a child, it needs to come DOWN:
+  ```bash
+  command stackit checkout <failing-branch> --no-interactive
+  # Apply the code from the absorbed hunk content
+  git add <files>
+  git commit -m "fix: bring down <missing-item> from upstack"
+  command stackit restack --no-interactive
+  ```
+
+### Phase 4: Verify Fix
+
+```bash
+command stackit foreach --stack "<build-command>" 2>&1
+```
+
+If another branch fails, repeat Phase 3 for that branch.
+
+### Phase 5: Cleanup
+
+- Remaining staged changes that are now redundant can be unstaged
+- New files that were distributed should be committed on the appropriate branch
+- Run final verification
+
+## Fix Sourcing Logic
+
+When branch X fails with "undefined: foo":
+1. Search `unabsorbable` hunks for "foo" definition
+2. Search `new_files` for "foo" definition
+3. Search `absorbed` hunks (especially those targeting X's children) for "foo" definition
+4. Apply the relevant code to branch X
+
+## Example
+
+```
+$ command stackit absorb --plan-json --force --no-interactive
+
+Plan shows:
+- absorbed: validateUser() call -> add-login branch
+- unabsorbable: hashPassword() definition (commutes_with_all)
+
+$ command stackit foreach --upstack "go build ./..."
+
+add-auth: PASS
+add-login: FAIL - undefined: hashPassword
+
+Looking for hashPassword in unabsorbable hunks... Found!
+
+$ command stackit checkout add-login --no-interactive
+# Edit utils/crypto.go to add hashPassword from unabsorbable content
+$ git add utils/crypto.go
+$ git commit -m "fix: add hashPassword dependency"
+$ command stackit restack --no-interactive
+
+$ command stackit foreach --stack "go build ./..."
+All branches pass!
+```
+
+## Do NOT
+- Skip the plan analysis (that's the whole point of smart absorb)
+- Apply fixes to multiple branches manually (fix at source, restack propagates)
+- Leave broken builds
+- Loop indefinitely on fixes (max 2 attempts per branch, then suggest undo)
+- Use regular /stack-fix if you have the absorb plan - use THIS workflow instead
