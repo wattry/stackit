@@ -327,7 +327,7 @@ func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts 
 
 // InteractiveSyncHandler provides bubbletea TUI for TTY environments
 type InteractiveSyncHandler struct {
-	runner       *tui.Runner
+	runner       tui.Sender
 	model        *syncComponent.Model
 	output       output.Output
 	logger       output.Logger
@@ -338,7 +338,7 @@ type InteractiveSyncHandler struct {
 }
 
 // NewInteractiveSyncHandler creates a new InteractiveSyncHandler
-func NewInteractiveSyncHandler(runner *tui.Runner, model *syncComponent.Model, out output.Output, logger output.Logger) *InteractiveSyncHandler {
+func NewInteractiveSyncHandler(runner tui.Sender, model *syncComponent.Model, out output.Output, logger output.Logger) *InteractiveSyncHandler {
 	return &InteractiveSyncHandler{
 		runner: runner,
 		model:  model,
