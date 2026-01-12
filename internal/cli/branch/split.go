@@ -2,6 +2,8 @@
 package branch
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/split"
@@ -66,6 +68,14 @@ Examples:
 					style = split.StyleFile
 				}
 				// If style is empty, SplitAction will prompt
+
+				// Validate flag combinations
+				if name != "" && style != split.StyleFile && style != "" {
+					return fmt.Errorf("--name can only be used with --by-file")
+				}
+				if message != "" && style != split.StyleFile && style != "" {
+					return fmt.Errorf("--message can only be used with --by-file")
+				}
 
 				// Load config for branch pattern
 				cfg, _ := config.LoadConfig(ctx.RepoRoot)

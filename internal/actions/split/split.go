@@ -37,10 +37,8 @@ type Options struct {
 	// - StyleCommit: All split branches are siblings on the same parent
 	// - StyleHunk: All split branches are siblings on the same parent
 	AsSibling bool
-	// Name specifies a custom name for the split branch.
-	// For single-branch splits: the exact branch name
-	// For multi-branch splits: used as a prefix
-	// If empty, auto-generates based on commit message or "{original}_split"
+	// Name specifies a custom name for the split branch (file split only).
+	// If empty, auto-generates as "{original}_split".
 	Name string
 	// Message specifies the commit message for the split operation.
 	// Only applies to StyleFile (other styles use existing commit messages).
@@ -175,7 +173,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 		// splitByFile handles everything internally (creating branches, tracking, etc.)
 		// and updates the parent relationship (unless AsSibling is true)
-		_, err = splitByFile(context, *currentBranch, pathspecs, eng, splitByFileOptions{
+		fileResult, err := splitByFile(context, *currentBranch, pathspecs, eng, splitByFileOptions{
 			AsSibling: opts.AsSibling,
 			Name:      opts.Name,
 			Message:   opts.Message,
@@ -198,7 +196,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 		handler.Complete(ActionResult{
 			OriginalBranch: currentBranch.GetName(),
-			NewBranches:    pathspecs, // File split uses pathspecs as new branches
+			NewBranches:    fileResult.BranchNames,
 			Style:          style,
 		})
 		return nil

@@ -42,29 +42,16 @@ command stackit split --by-file <file-path>
 This creates the split branch as a NEW PARENT of the current branch.
 The files ARE removed from the current branch.
 
-### Use Case 3: Extract specific commits (Manual workflow)
+### Use Case 3: Split commits into sibling branches
 
-If you need to extract specific commits (not files):
+If you need to split a branch with multiple commits into sibling branches:
 
-1. Identify the commit SHA(s) to extract:
-   ```bash
-   git log --oneline -10
-   ```
+```bash
+command stackit split --by-commit --as-sibling
+```
 
-2. Create new branch from the target parent:
-   ```bash
-   git checkout main
-   git checkout -b <new-branch-name>
-   git cherry-pick <commit-sha>
-   command stackit track
-   ```
-
-3. Return to original branch and remove the commit:
-   ```bash
-   git checkout <original-branch>
-   git reset --hard HEAD~N  # N = number of commits extracted
-   command stackit restack --no-interactive
-   ```
+This interactively lets you select split points. All resulting branches will be
+siblings on the same parent instead of a linear chain.
 
 ### Verification
 

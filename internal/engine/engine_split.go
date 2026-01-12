@@ -106,7 +106,11 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		lastBranchRevision = branchRevision
 	}
 
-	// Update children to point to last branch
+	// Update children to point to last branch.
+	// Note: This applies in both chain and sibling modes. In sibling mode, the split
+	// branches are siblings (share the same parent), but children of the original branch
+	// still need to be reparented to the branch that continues the stack (the last/newest
+	// branch, which is typically the original branch name if it was preserved).
 	if lastBranchName != opts.BranchToSplit {
 		lastBranch := e.GetBranch(lastBranchName)
 		for _, childBranchName := range children {
