@@ -159,17 +159,14 @@ Before continuing, verify your resolution is correct:
 
 ### For Code Files
 
+Run the project's build and test commands (check README.md or CONTRIBUTING.md):
+
 ```bash
 # Build the project
-just build
+<build-command>
 
 # Run tests
-just test
-
-# Or language-specific
-go build ./...
-npm test
-pytest
+<test-command>
 ```
 
 ### For Config Files
@@ -352,8 +349,8 @@ command stackit restack --no-interactive
 ### 4. Use `command stackit foreach --no-interactive` to Check
 
 ```bash
-# Verify entire stack builds before operations
-command stackit foreach --no-interactive "just build"
+# Verify entire stack builds before operations (use project's build command from README.md)
+command stackit foreach --no-interactive "<build-command>"
 ```
 
 ## Advanced: Complex Multi-Branch Conflicts
@@ -376,7 +373,7 @@ git add .
 command stackit continue --no-interactive
 
 # Before moving to next conflict, verify
-just build
+<build-command>
 command stackit log --no-interactive  # Confirm structure still correct
 
 # Continue to next conflict
@@ -412,7 +409,7 @@ command stackit abort --no-interactive
 command stackit undo --no-interactive --yes
 
 # Or fix the build issue
-just build  # See error
+<build-command>  # See error (check README.md for project's build command)
 # Fix the issue
 git add .
 command stackit continue --no-interactive
@@ -444,7 +441,7 @@ vim auth.go
 # → Combine both changes, remove markers
 
 # 6. Verify
-go build ./...
+<build-command>
 # → Build succeeds
 
 # 7. Continue

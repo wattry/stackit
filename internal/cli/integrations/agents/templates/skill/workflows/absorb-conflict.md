@@ -170,9 +170,9 @@ After resolution:
 # 1. Verify the stack structure
 command stackit log --no-interactive
 
-# 2. Build/test each affected branch
-command stackit foreach --no-interactive "just build"
-command stackit foreach --no-interactive "just test"
+# 2. Build/test each affected branch (use project's commands from README.md)
+command stackit foreach --no-interactive "<build-command>"
+command stackit foreach --no-interactive "<test-command>"
 
 # 3. Check for any remaining issues
 git status

@@ -29,27 +29,18 @@ Absorb Fix Progress:
 
 ## Step 1: Identify Build/Test Commands
 
-Check project documentation for build and test commands:
+**Find the project's build and test commands:**
 
-```bash
-# Look for build commands
-grep -i "build\|compile" README.md CONTRIBUTING.md
+1. Check README.md or CONTRIBUTING.md for build/test instructions:
+   ```bash
+   grep -i "build\|compile\|test" README.md CONTRIBUTING.md
+   ```
 
-# Look for test commands
-grep -i "test\|jest\|pytest" README.md CONTRIBUTING.md
+2. Look for common build configuration files (Makefile, package.json, etc.)
 
-# Check for just commands
-cat justfile 2>/dev/null | grep -E "^[a-z-]+:"
-```
-
-**Common patterns by language:**
-
-| Language | Build Command | Test Command |
-|----------|--------------|--------------|
-| Go | `go build ./...` or `just build` | `go test ./...` or `just test` |
-| Node.js | `npm run build` or `pnpm build` | `npm test` or `pnpm test` |
-| Python | `python -m build` or `make build` | `pytest` or `python -m pytest` |
-| Rust | `cargo build` | `cargo test` |
+3. If not found, ask the user:
+   - "What command should I use to build the project?"
+   - "What command should I use to run tests?"
 
 ## Step 2: Build and Test Each Branch
 
@@ -76,7 +67,7 @@ For each failed branch, analyze the error:
 git checkout add-validation
 
 # Run build and capture error
-just build 2>&1 | tee build-error.log
+<build-command> 2>&1 | tee build-error.log
 
 # Common error patterns:
 # - "undefined: functionName" → function defined in later commit
@@ -229,14 +220,14 @@ git checkout add-validation
 git cherry-pick abc123
 
 # 4. Verify fix
-just build
+<build-command>
 # ✓ Build succeeded
 
 # 5. Restack children (they're now based on old version)
 command stackit restack --no-interactive
 
 # 6. Verify entire stack
-command stackit foreach --no-interactive "just build"
+command stackit foreach --no-interactive "<build-command>"
 # ✓ All branches succeed
 ```
 

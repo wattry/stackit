@@ -58,7 +58,7 @@ siblings on the same parent instead of a linear chain.
 After extraction, verify:
 ```bash
 command stackit log  # Both branches should be siblings on the same parent
-just check           # All checks should pass
+<build-command>      # All checks should pass (check README.md for project's build command)
 ```
 
 ## Choosing Between Sibling and Parent

@@ -20,11 +20,10 @@ $ARGUMENTS
 
 ### 1. Determine the check command
 
-If provided in arguments, use that. Otherwise ask the user:
-- Go projects: `go build ./...` or `just check`
-- Node projects: `npm test` or `npm run build`
-- Rust projects: `cargo build`
-- Python projects: `pytest`
+If provided in arguments, use that. Otherwise:
+1. Check README.md or CONTRIBUTING.md for build/test instructions
+2. Look for common build files (Makefile, package.json scripts, etc.)
+3. If not found, ask the user: "What command should I use to verify the code?"
 
 ### 2. Run verification
 

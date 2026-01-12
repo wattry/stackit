@@ -38,7 +38,10 @@ Save this information - you'll need it to find fixes.
 
 ### Phase 2: Find Broken Branches
 
-Determine the project's build command from README.md, justfile, or package.json.
+**Determine the project's build command:**
+1. Check README.md or CONTRIBUTING.md for build/test instructions
+2. Look for common build files (Makefile, package.json scripts, etc.)
+3. If not found, ask the user what command to use
 
 ```bash
 command stackit bottom --no-interactive
@@ -117,7 +120,7 @@ JSON shows:
 - absorbed: validateUser() call -> add-login branch
 - unabsorbable: hashPassword() definition (commutes_with_all)
 
-$ command stackit foreach --upstack "go build ./..."
+$ command stackit foreach --upstack "<build-command>"
 
 add-auth: PASS
 add-login: FAIL - undefined: hashPassword
@@ -130,7 +133,7 @@ $ git add utils/crypto.go
 $ git commit -m "fix: add hashPassword dependency"
 $ command stackit restack --no-interactive
 
-$ command stackit foreach --stack "go build ./..."
+$ command stackit foreach --stack "<build-command>"
 All branches pass!
 ```
 
