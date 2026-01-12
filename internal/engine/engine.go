@@ -88,6 +88,11 @@ type ApplySplitOptions struct {
 	BranchToSplit string   // The branch being split
 	BranchNames   []string // Branch names from oldest to newest
 	BranchPoints  []int    // Commit indices (0 = HEAD, 1 = HEAD~1, etc.)
+	// AsSibling creates all split branches as siblings on the same parent,
+	// instead of creating a linear chain. When true:
+	// - All new branches share the same parent (the original branch's parent)
+	// - Branches are independent rather than stacked on each other
+	AsSibling bool
 }
 
 // Options contains configuration options for creating an Engine
