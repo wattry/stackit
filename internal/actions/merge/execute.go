@@ -1,7 +1,9 @@
 package merge
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"stackit.dev/stackit/internal/app"
@@ -9,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 )
 
@@ -354,6 +357,13 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		// Only delete if branch is tracked
 		branch := eng.GetBranch(step.BranchName)
 		if branch.IsTracked() {
+			// Check if branch is checked out in a worktree and remove it first
+			// Git refuses to delete a branch that is checked out in any worktree
+			if err := removeWorktreeForBranch(ctx.Context, step.BranchName, eng, out); err != nil {
+				out.Debug("Failed to remove worktree for branch %s: %v", step.BranchName, err)
+				// Continue anyway - deletion might still work if worktree is gone
+			}
+
 			if err := eng.DeleteBranch(ctx.Context, branch); err != nil {
 				// Non-fatal - branch might already be deleted
 				out.Debug("Failed to delete branch %s (may already be deleted): %v", step.BranchName, err)
@@ -390,5 +400,39 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		return fmt.Errorf("unknown step type: %s", step.StepType)
 	}
 
+	return nil
+}
+
+// removeWorktreeForBranch removes any worktree that has the given branch checked out.
+// This is necessary because git refuses to delete a branch that is checked out in any worktree.
+// Returns nil if no worktree exists or if removal succeeds.
+func removeWorktreeForBranch(ctx context.Context, branchName string, eng mergeExecuteEngine, out output.Output) error {
+	worktreePath, err := eng.Git().GetWorktreePathForBranch(ctx, branchName)
+	if err != nil {
+		// Don't block deletion if we can't check worktree status
+		out.Debug("Failed to check worktree for branch %s: %v", branchName, err)
+		return nil
+	}
+
+	if worktreePath == "" {
+		return nil // Branch not in any worktree
+	}
+
+	// Don't remove main worktree (resolve symlinks for comparison, e.g., /var vs /private/var on macOS)
+	repoRoot := eng.Git().GetRepoRoot()
+	resolvedWorktree, _ := filepath.EvalSymlinks(worktreePath)
+	resolvedRoot, _ := filepath.EvalSymlinks(repoRoot)
+	if resolvedWorktree == resolvedRoot {
+		out.Debug("Branch %s is in main worktree, cannot remove", branchName)
+		return fmt.Errorf("branch %s is checked out in main worktree", branchName)
+	}
+
+	out.Debug("Removing worktree at %s for branch %s", worktreePath, branchName)
+
+	if err := eng.Git().RemoveWorktree(ctx, worktreePath); err != nil {
+		return fmt.Errorf("failed to remove worktree at %s for branch %s: %w", worktreePath, branchName, err)
+	}
+
+	out.Info("Removed worktree at %s for branch %s", worktreePath, branchName)
 	return nil
 }
