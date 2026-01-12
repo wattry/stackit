@@ -54,7 +54,7 @@ Check `git status` to see which files have conflicts (marked as "both modified" 
 #### Step 3: Run checks BEFORE continuing
 This is critical - run the project's check command to catch any issues early:
 ```bash
-just check  # or the project's equivalent (go build, npm test, etc.)
+<build-command>  # Check README.md or CONTRIBUTING.md for the project's build/test command
 ```
 
 Fix any lint errors, unused variables, or build failures NOW. This prevents having to abort and redo the rebase.
@@ -78,7 +78,7 @@ Child branches need restacking after an amend because the commit SHA changed.
 #### Step 6: Verify
 ```bash
 command stackit log  # Should show clean tree, no "needs restack"
-just check           # All checks should pass
+<build-command>      # All checks should pass
 ```
 
 ### 3. Build Failure Workflow
@@ -92,11 +92,10 @@ Before running foreach, verify:
 If uncommitted changes exist, ask user to commit or stash first.
 
 #### Step 1: Determine the check command
-If not obvious from context, ask what command verifies their code:
-- Go: `go build ./...` or `just check`
-- Node: `npm test` or `npm run build`
-- Rust: `cargo build`
-- Python: `pytest` or `make test`
+**Find the project's build/test command:**
+1. Check README.md or CONTRIBUTING.md for build/test instructions
+2. Look for common build files (Makefile, package.json scripts, etc.)
+3. If not found, ask the user: "What command should I use to verify the code?"
 
 Optionally, verify the command works on current branch first:
 ```bash

@@ -56,11 +56,11 @@ command stackit submit --no-interactive --draft --stack
 
 **Examples:**
 ```bash
-# Build all branches
-command stackit foreach --no-interactive "just build"
+# Build all branches (use project's build command from README.md)
+command stackit foreach --no-interactive "<build-command>"
 
-# Test all branches
-command stackit foreach --no-interactive "npm test"
+# Test all branches (use project's test command from README.md)
+command stackit foreach --no-interactive "<test-command>"
 
 # Show status on each
 command stackit foreach --no-interactive "git status --short"
