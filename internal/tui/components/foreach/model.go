@@ -8,21 +8,21 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/core"
 )
 
 // Model is the bubbletea model for foreach progress.
-// It embeds tui.BaseModel for standard lifecycle handling.
+// It embeds core.BaseModel for standard lifecycle handling.
 type Model struct {
-	tui.BaseModel // Embedded for ReadySignaler interface
-	Items         []Item
-	Renderer      *tree.StackTreeRenderer
-	RootBranch    string
-	spinner       spinner.Model // Use local spinner for custom style
-	Styles        Styles
-	GlobalMessage string
-	Command       string
+	core.BaseModel // Embedded for ReadySignaler interface
+	Items          []Item
+	Renderer       *tree.StackTreeRenderer
+	RootBranch     string
+	spinner        spinner.Model // Use local spinner for custom style
+	Styles         Styles
+	GlobalMessage  string
+	Command        string
 }
 
 // ProgressUpdateMsg is sent to update the status of a specific branch execution

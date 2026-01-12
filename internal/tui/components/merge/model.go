@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/github"
-	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -45,9 +45,9 @@ type StepItem struct {
 }
 
 // Model is the bubbletea model for merge progress
-// It embeds tui.BaseModel for standard lifecycle handling.
+// It embeds core.BaseModel for standard lifecycle handling.
 type Model struct {
-	tui.BaseModel     // Embedded for ReadySignaler interface
+	core.BaseModel    // Embedded for ReadySignaler interface
 	Groups            []Group
 	Steps             []StepItem
 	CurrentIdx        int
@@ -58,6 +58,8 @@ type Model struct {
 	Summary           string
 }
 
+// styles holds the visual styling for the merge component.
+// Uses shared styles from internal/tui/style for consistency.
 type styles struct {
 	spinnerStyle lipgloss.Style
 	doneStyle    lipgloss.Style
@@ -65,6 +67,20 @@ type styles struct {
 	waitStyle    lipgloss.Style
 	dimStyle     lipgloss.Style
 	timeStyle    lipgloss.Style
+}
+
+// newStyles creates styles using the shared style definitions.
+func newStyles() styles {
+	statusStyles := style.DefaultStatusStyles()
+	commonStyles := style.DefaultCommonStyles()
+	return styles{
+		spinnerStyle: commonStyles.Spinner,
+		doneStyle:    statusStyles.Done,
+		errorStyle:   statusStyles.Error,
+		waitStyle:    statusStyles.Warning,
+		dimStyle:     commonStyles.Subtle,
+		timeStyle:    commonStyles.Dim,
+	}
 }
 
 const (
@@ -126,14 +142,7 @@ func NewModel() *Model {
 		Steps:      []StepItem{},
 		CurrentIdx: 0,
 		spinner:    s,
-		styles: styles{
-			spinnerStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
-			doneStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
-			errorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-			waitStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-			dimStyle:     style.SubtleStyle(),
-			timeStyle:    style.DimStyle(),
-		},
+		styles:     newStyles(),
 	}
 }
 
@@ -148,7 +157,7 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle quit keys first to set Quitting flag (unique to merge component)
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if keyMsg.String() == tui.KeyCtrlC || keyMsg.String() == tui.KeyQuit {
+		if keyMsg.String() == core.KeyCtrlC || keyMsg.String() == core.KeyQuit {
 			m.Quitting = true
 			return m, tea.Quit
 		}

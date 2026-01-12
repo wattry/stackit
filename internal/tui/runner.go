@@ -15,14 +15,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui/core"
 )
-
-// ReadySignaler allows a model to signal when it's ready to receive messages.
-// Models implementing this interface will have their SetReadyChan called before
-// the program starts, and should close the channel in their Init() method.
-type ReadySignaler interface {
-	SetReadyChan(chan struct{})
-}
 
 // Runner manages async bubbletea program lifecycle with panic recovery.
 // It handles signal handling, terminal cleanup, and crash logging.
@@ -94,7 +88,7 @@ func (r *Runner) Start() {
 
 	// Set up ready channel if model supports it
 	var readyChan chan struct{}
-	if signaler, ok := r.model.(ReadySignaler); ok {
+	if signaler, ok := r.model.(core.ReadySignaler); ok {
 		readyChan = make(chan struct{})
 		signaler.SetReadyChan(readyChan)
 		r.logger.Debug("tui.Runner.Start ready channel configured")
