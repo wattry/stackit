@@ -15,6 +15,12 @@ import (
 	"stackit.dev/stackit/internal/utils"
 )
 
+// PR submission action constants
+const (
+	actionCreate = "create"
+	actionUpdate = "update"
+)
+
 // StackRangeDownstack returns a StackRange for submitting downstack (ancestors + current)
 func StackRangeDownstack() engine.StackRange {
 	return engine.StackRange{
@@ -213,15 +219,39 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	var errMu sync.Mutex
 
 	if len(submissionInfos) > 0 {
-		utils.Run(submissionInfos, func(info Info) {
-			if err := submitBranch(ctx, info, opts, handler, repoOwner, repoName, remote); err != nil {
-				errMu.Lock()
-				if submitErr == nil {
-					submitErr = err
-				}
-				errMu.Unlock()
+		// Check if this is a new stack (all creates) - use sequential submission
+		// to ensure PRs get sequential numbers in GitHub
+		allCreates := true
+		for _, info := range submissionInfos {
+			if info.Action != actionCreate {
+				allCreates = false
+				break
 			}
-		})
+		}
+
+		if allCreates {
+			// Sequential submission for new stacks - ensures sequential PR numbers
+			for _, info := range submissionInfos {
+				if err := submitBranch(ctx, info, opts, handler, repoOwner, repoName, remote); err != nil {
+					errMu.Lock()
+					if submitErr == nil {
+						submitErr = err
+					}
+					errMu.Unlock()
+				}
+			}
+		} else {
+			// Parallel submission for updates (faster when PRs already exist)
+			utils.Run(submissionInfos, func(info Info) {
+				if err := submitBranch(ctx, info, opts, handler, repoOwner, repoName, remote); err != nil {
+					errMu.Lock()
+					if submitErr == nil {
+						submitErr = err
+					}
+					errMu.Unlock()
+				}
+			})
+		}
 	}
 
 	if submitErr != nil {
@@ -273,10 +303,6 @@ func submitBranch(ctx *app.Context, info Info, opts Options, handler Handler, re
 	}
 
 	var prURL string
-	const (
-		actionCreate = "create"
-		actionUpdate = "update"
-	)
 	var err error
 	if info.Action == actionCreate {
 		prURL, err = createPullRequestQuiet(ctx, info, repoOwner, repoName)

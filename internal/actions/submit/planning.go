@@ -26,14 +26,14 @@ func prepareBranchesForSubmit(ctx *app.Context, branches []engine.Branch, opts O
 		// If PR is closed or merged, treat as a new PR creation
 		// This allows recovery when a PR was closed (e.g., due to deleted base branch)
 		if prInfo != nil && (prInfo.State() == "CLOSED" || prInfo.State() == "MERGED") {
-			action = "create"
+			action = actionCreate
 			prNumber = nil
 		}
 
 		isCurrent := branchName == currentBranch
 
 		// Check if we should skip
-		if opts.UpdateOnly && action == "create" {
+		if opts.UpdateOnly && action == actionCreate {
 			handler.OnEvent(BranchPlanEvent{
 				BranchName: branchName,
 				Action:     action,
@@ -45,7 +45,7 @@ func prepareBranchesForSubmit(ctx *app.Context, branches []engine.Branch, opts O
 		}
 
 		needsUpdate := status.NeedsUpdate
-		if action == "update" {
+		if action == actionUpdate {
 			// Check if draft status needs to change
 			draftStatusNeedsChange := false
 			if prInfo != nil {
