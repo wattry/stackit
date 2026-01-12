@@ -345,6 +345,50 @@ func TestSplitAsSibling(t *testing.T) {
 		sh.Checkout("child").Run("info")
 		sh.OutputContains("feature")
 	})
+
+	t.Run("split rejects --name without explicit --by-file", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Run("create feature -m 'Add feature'")
+
+		// Should error because --name requires explicit --by-file
+		// (without --by-file, style would be auto-detected)
+		sh.RunExpectError("split --name bad-name").
+			OutputContains("--name can only be used with --by-file")
+	})
+
+	t.Run("split rejects --message without explicit --by-file", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Run("create feature -m 'Add feature'")
+
+		// Should error because --message requires explicit --by-file
+		sh.RunExpectError("split --message 'bad message'").
+			OutputContains("--message can only be used with --by-file")
+	})
+
+	t.Run("split --by-file --as-sibling rejects duplicate custom branch name", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Write("file2", "content2").
+			Run("create feature -m 'Add feature'")
+
+		// Create a branch that would conflict
+		sh.Git("branch existing-branch")
+
+		// Should error because branch name already exists
+		sh.RunExpectError("split --by-file file1_test.txt --as-sibling --name existing-branch").
+			OutputContains("already exists")
+	})
 }
 
 func TestSplitUndo(t *testing.T) {

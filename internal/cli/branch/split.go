@@ -70,10 +70,11 @@ Examples:
 				// If style is empty, SplitAction will prompt
 
 				// Validate flag combinations
-				if name != "" && style != split.StyleFile && style != "" {
+				// --name and --message require explicit --by-file (not auto-detected style)
+				if name != "" && style != split.StyleFile {
 					return fmt.Errorf("--name can only be used with --by-file")
 				}
-				if message != "" && style != split.StyleFile && style != "" {
+				if message != "" && style != split.StyleFile {
 					return fmt.Errorf("--message can only be used with --by-file")
 				}
 

@@ -160,7 +160,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 }
 
 // promptForFiles shows an interactive file selector for split --by-file
-func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog output.Output) ([]string, error) {
+func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog output.Output, asSibling bool) ([]string, error) {
 	if !utils.IsInteractive() {
 		return nil, fmt.Errorf("file selection must be specified via pathspecs in non-interactive mode")
 	}
@@ -189,8 +189,13 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 
 	// Show instructions
 	splog.Info("Splitting %s by file.", style.ColorBranchName(branchToSplit.GetName(), true))
-	splog.Info("Select the files to extract to a new parent branch.")
-	splog.Info("The remaining files will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
+	if asSibling {
+		splog.Info("Select the files to extract to a new sibling branch.")
+		splog.Info("The original branch will remain unchanged.")
+	} else {
+		splog.Info("Select the files to extract to a new parent branch.")
+		splog.Info("The remaining files will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
+	}
 	splog.Info("")
 
 	// Prompt for file selection
@@ -203,8 +208,8 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 		return nil, fmt.Errorf("canceled")
 	}
 
-	// Validate that not all files were selected
-	if len(selectedFiles) == len(changedFiles) {
+	// Validate that not all files were selected (only in default mode where files are removed)
+	if !asSibling && len(selectedFiles) == len(changedFiles) {
 		return nil, fmt.Errorf("cannot extract all files - at least one must remain on the original branch")
 	}
 
