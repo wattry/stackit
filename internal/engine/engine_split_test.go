@@ -187,6 +187,147 @@ func TestApplySplitToCommits(t *testing.T) {
 	t.Run("successfully applies split with valid inputs", func(t *testing.T) {
 		t.Skip("Requires full git repository and engine setup")
 	})
+
+	t.Run("creates sibling branches when AsSibling is true", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, testhelpers.BasicSceneSetup)
+		repo := scene.Repo
+
+		// Create a stack: main -> feature
+		err := repo.CreateChangeAndCommit("file1 content", "file1")
+		require.NoError(t, err)
+
+		eng, err := engine.NewEngine(engine.Options{
+			RepoRoot: scene.Dir,
+			Trunk:    "main",
+		})
+		require.NoError(t, err)
+
+		// Create feature branch with 3 commits on top of main
+		err = repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = repo.CreateBranch("feature")
+		require.NoError(t, err)
+		err = repo.CheckoutBranch("feature")
+		require.NoError(t, err)
+
+		err = repo.CreateChangeAndCommit("c1", "file1")
+		require.NoError(t, err)
+		err = repo.CreateChangeAndCommit("c2", "file2")
+		require.NoError(t, err)
+		err = repo.CreateChangeAndCommit("c3", "file3")
+		require.NoError(t, err)
+
+		// Track feature branch
+		err = eng.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		// Detach before split to avoid "used by worktree" error
+		featureSHA, err := repo.GetBranchSHA("feature")
+		require.NoError(t, err)
+		err = repo.CheckoutDetached(featureSHA)
+		require.NoError(t, err)
+
+		// Split feature into branch1 (c1), branch2 (c2), feature (c3) as siblings
+		opts := engine.ApplySplitOptions{
+			BranchToSplit: "feature",
+			BranchNames:   []string{"branch1", "branch2", "feature"},
+			BranchPoints:  []int{0, 1, 2},
+			AsSibling:     true, // All branches should be siblings (same parent)
+		}
+
+		err = eng.ApplySplitToCommits(context.Background(), opts)
+		require.NoError(t, err)
+
+		// Verify branches exist
+		testhelpers.ExpectBranches(t, repo, []string{"main", "branch1", "branch2", "feature"})
+
+		// Verify ALL branches have main as parent (siblings)
+		branch1 := eng.GetBranch("branch1")
+		parent1 := branch1.GetParent()
+		require.NotNil(t, parent1)
+		require.Equal(t, "main", parent1.GetName(), "branch1 should have main as parent")
+
+		branch2 := eng.GetBranch("branch2")
+		parent2 := branch2.GetParent()
+		require.NotNil(t, parent2)
+		require.Equal(t, "main", parent2.GetName(), "branch2 should have main as parent (sibling)")
+
+		feature := eng.GetBranch("feature")
+		parentFeature := feature.GetParent()
+		require.NotNil(t, parentFeature)
+		require.Equal(t, "main", parentFeature.GetName(), "feature should have main as parent (sibling)")
+	})
+
+	t.Run("sibling mode reparents children to last branch", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, testhelpers.BasicSceneSetup)
+		repo := scene.Repo
+
+		// Setup main
+		err := repo.CreateChangeAndCommit("main content", "mainfile")
+		require.NoError(t, err)
+
+		eng, err := engine.NewEngine(engine.Options{
+			RepoRoot: scene.Dir,
+			Trunk:    "main",
+		})
+		require.NoError(t, err)
+
+		// Create feature branch with 2 commits
+		err = repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = repo.CreateBranch("feature")
+		require.NoError(t, err)
+		err = repo.CheckoutBranch("feature")
+		require.NoError(t, err)
+
+		err = repo.CreateChangeAndCommit("c1", "file1")
+		require.NoError(t, err)
+		err = repo.CreateChangeAndCommit("c2", "file2")
+		require.NoError(t, err)
+
+		// Track feature
+		err = eng.TrackBranch(context.Background(), "feature", "main")
+		require.NoError(t, err)
+
+		// Create a child branch of feature
+		err = repo.CreateBranch("child")
+		require.NoError(t, err)
+		err = repo.CheckoutBranch("child")
+		require.NoError(t, err)
+		err = repo.CreateChangeAndCommit("child content", "childfile")
+		require.NoError(t, err)
+
+		err = eng.TrackBranch(context.Background(), "child", "feature")
+		require.NoError(t, err)
+
+		// Detach before split
+		childSHA, err := repo.GetBranchSHA("child")
+		require.NoError(t, err)
+		err = repo.CheckoutDetached(childSHA)
+		require.NoError(t, err)
+
+		// Split feature into branch1 (c1) and feature (c2) as siblings
+		opts := engine.ApplySplitOptions{
+			BranchToSplit: "feature",
+			BranchNames:   []string{"branch1", "feature"},
+			BranchPoints:  []int{0, 1},
+			AsSibling:     true,
+		}
+
+		err = eng.ApplySplitToCommits(context.Background(), opts)
+		require.NoError(t, err)
+
+		// Verify branches are siblings (both have main as parent)
+		branch1 := eng.GetBranch("branch1")
+		require.Equal(t, "main", branch1.GetParent().GetName())
+
+		feature := eng.GetBranch("feature")
+		require.Equal(t, "main", feature.GetParent().GetName())
+
+		// Verify child is still on feature (the last branch in the list)
+		child := eng.GetBranch("child")
+		require.Equal(t, "feature", child.GetParent().GetName())
+	})
 }
 
 // Test helper functions

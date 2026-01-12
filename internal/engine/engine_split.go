@@ -38,6 +38,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 	}
 
 	// Keep track of the last branch's name + SHA for metadata
+	// In sibling mode, all branches share the same parent, so we don't update these
 	lastBranchName := parentBranchName
 	lastBranchRevision := parentRevision
 
@@ -62,10 +63,20 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 			prInfo, _ = e.GetPrInfo(branchToSplit)
 		}
 
+		// Determine parent for this branch
+		// In sibling mode: all branches share the original parent
+		// In chain mode: each branch's parent is the previous branch
+		branchParentName := lastBranchName
+		branchParentRevision := lastBranchRevision
+		if opts.AsSibling {
+			branchParentName = parentBranchName
+			branchParentRevision = parentRevision
+		}
+
 		// Track branch with parent
 		newMeta := &git.Meta{
-			ParentBranchName:     &lastBranchName,
-			ParentBranchRevision: &lastBranchRevision,
+			ParentBranchName:     &branchParentName,
+			ParentBranchRevision: &branchParentRevision,
 		}
 
 		// Preserve PR info if applicable
@@ -86,16 +97,20 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		}
 
 		// Update in-memory cache
-		e.parentMap[branchName] = lastBranchName
-		e.childrenMap[lastBranchName] = append(e.childrenMap[lastBranchName], branchName)
-		slices.Sort(e.childrenMap[lastBranchName])
+		e.parentMap[branchName] = branchParentName
+		e.childrenMap[branchParentName] = append(e.childrenMap[branchParentName], branchName)
+		slices.Sort(e.childrenMap[branchParentName])
 
-		// Update last branch info
+		// Update last branch info (only matters for chain mode)
 		lastBranchName = branchName
 		lastBranchRevision = branchRevision
 	}
 
-	// Update children to point to last branch
+	// Update children to point to last branch.
+	// Note: This applies in both chain and sibling modes. In sibling mode, the split
+	// branches are siblings (share the same parent), but children of the original branch
+	// still need to be reparented to the branch that continues the stack (the last/newest
+	// branch, which is typically the original branch name if it was preserved).
 	if lastBranchName != opts.BranchToSplit {
 		lastBranch := e.GetBranch(lastBranchName)
 		for _, childBranchName := range children {

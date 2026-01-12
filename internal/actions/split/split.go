@@ -31,6 +31,18 @@ type Options struct {
 	Style         Style
 	Pathspecs     []string
 	BranchPattern config.BranchPattern
+	// AsSibling creates split branches as siblings on the same parent instead
+	// of creating a linear chain. When true:
+	// - StyleFile: Creates sibling branch, original branch unchanged
+	// - StyleCommit: All split branches are siblings on the same parent
+	// - StyleHunk: All split branches are siblings on the same parent
+	AsSibling bool
+	// Name specifies a custom name for the split branch (file split only).
+	// If empty, auto-generates as "{original}_split".
+	Name string
+	// Message specifies the commit message for the split operation.
+	// Only applies to StyleFile (other styles use existing commit messages).
+	Message string
 }
 
 // Result contains the result of a split operation
@@ -151,7 +163,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		pathspecs := opts.Pathspecs
 		// If no pathspecs provided, prompt interactively
 		if len(pathspecs) == 0 {
-			pathspecs, err = promptForFiles(context, *currentBranch, eng, out)
+			pathspecs, err = promptForFiles(context, *currentBranch, eng, out, opts.AsSibling)
 			if err != nil {
 				return err
 			}
@@ -160,8 +172,12 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			}
 		}
 		// splitByFile handles everything internally (creating branches, tracking, etc.)
-		// and updates the parent relationship, so we just need to restack upstack branches
-		_, err = splitByFile(context, *currentBranch, pathspecs, eng)
+		// and updates the parent relationship (unless AsSibling is true)
+		fileResult, err := splitByFile(context, *currentBranch, pathspecs, eng, splitByFileOptions{
+			AsSibling: opts.AsSibling,
+			Name:      opts.Name,
+			Message:   opts.Message,
+		})
 		if err != nil {
 			return err
 		}
@@ -180,7 +196,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 		handler.Complete(ActionResult{
 			OriginalBranch: currentBranch.GetName(),
-			NewBranches:    pathspecs, // File split uses pathspecs as new branches
+			NewBranches:    fileResult.BranchNames,
 			Style:          style,
 		})
 		return nil
@@ -206,6 +222,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		BranchToSplit: currentBranch.GetName(),
 		BranchNames:   result.BranchNames,
 		BranchPoints:  result.BranchPoints,
+		AsSibling:     opts.AsSibling,
 	}); err != nil {
 		return fmt.Errorf("failed to apply split: %w", err)
 	}

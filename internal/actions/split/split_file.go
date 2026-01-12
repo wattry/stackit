@@ -20,8 +20,25 @@ type splitByFileEngine interface {
 	engine.BranchWriter
 }
 
-// splitByFile splits a branch by extracting specified files to a new parent branch.
+// splitByFileOptions contains options for the splitByFile operation
+type splitByFileOptions struct {
+	// AsSibling creates the split branch as a sibling instead of a parent.
+	// When true, the extracted files go to a new branch on the same parent,
+	// and the original branch is unchanged (files are NOT removed).
+	AsSibling bool
+	// Name specifies a custom name for the split branch.
+	// If empty, defaults to "{original}_split".
+	Name string
+	// Message specifies a custom commit message for the extraction.
+	// If empty, auto-generates: "Extract {files} from {branch}"
+	Message string
+}
+
+// splitByFile splits a branch by extracting specified files to a new branch.
 //
+// Default behavior (AsSibling=false):
+// Creates a new PARENT branch containing the extracted files.
+// The original branch becomes a child of the split branch.
 // Algorithm:
 //  1. Determine the parent of the branch to split.
 //  2. Create a new "split" branch from the parent.
@@ -30,19 +47,37 @@ type splitByFileEngine interface {
 //  5. Checkout the original branch and remove the extracted files.
 //  6. Commit the removals on the original branch.
 //  7. Update the original branch's parent to be the new split branch.
-func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []string, eng splitByFileEngine) (*Result, error) {
+//
+// Sibling mode (AsSibling=true):
+// Creates a new SIBLING branch containing the extracted files.
+// The original branch is unchanged (files are NOT removed).
+// Algorithm:
+//  1. Determine the parent of the branch to split.
+//  2. Create a new "split" branch from the parent.
+//  3. Checkout the specified files from the original branch into the new split branch.
+//  4. Commit the extracted files on the new split branch.
+//  5. Return to the original branch (no file removal, no reparenting).
+func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []string, eng splitByFileEngine, opts splitByFileOptions) (*Result, error) {
 	// Get parent branch
 	parentBranchName := branchToSplit.GetParentPrecondition()
 
 	// Generate new branch name
-	newBranchName := branchToSplit.GetName() + "_split"
+	newBranchName := opts.Name
+	if newBranchName == "" {
+		newBranchName = branchToSplit.GetName() + "_split"
+	}
 	allBranches := eng.AllBranches()
 	branchNames := make([]string, len(allBranches))
 	for i, b := range allBranches {
 		branchNames[i] = b.GetName()
 	}
-	for slices.Contains(branchNames, newBranchName) {
-		newBranchName += "_split"
+	// Ensure unique name (only if we're auto-generating)
+	if opts.Name == "" {
+		for slices.Contains(branchNames, newBranchName) {
+			newBranchName += "_split"
+		}
+	} else if slices.Contains(branchNames, newBranchName) {
+		return nil, fmt.Errorf("branch %s already exists", newBranchName)
 	}
 
 	// First checkout the parent branch so the new branch starts from there
@@ -71,7 +106,10 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 	}
 
 	// Commit
-	commitMessage := fmt.Sprintf("Extract %s from %s", strings.Join(pathspecs, ", "), branchToSplit.GetName())
+	commitMessage := opts.Message
+	if commitMessage == "" {
+		commitMessage = fmt.Sprintf("Extract %s from %s", strings.Join(pathspecs, ", "), branchToSplit.GetName())
+	}
 	if err := eng.Commit(ctx, commitMessage, 0, true); err != nil {
 		_ = eng.DeleteBranch(ctx, newBranch)
 		return nil, fmt.Errorf("failed to commit: %w", err)
@@ -83,10 +121,20 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 		return nil, fmt.Errorf("failed to track branch: %w", err)
 	}
 
-	// Checkout original branch and remove the files
+	// Return to original branch
 	if err := eng.CheckoutBranch(ctx, branchToSplit); err != nil {
 		return nil, fmt.Errorf("failed to checkout original branch: %w", err)
 	}
+
+	// In sibling mode, we're done - the original branch is unchanged
+	if opts.AsSibling {
+		return &Result{
+			BranchNames:  []string{newBranchName},
+			BranchPoints: []int{0}, // Single commit
+		}, nil
+	}
+
+	// Default mode: remove files from original and reparent
 
 	// Remove the files from the original branch (both index and working directory)
 	if err := eng.RemovePaths(ctx, pathspecs); err != nil {
@@ -112,7 +160,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 }
 
 // promptForFiles shows an interactive file selector for split --by-file
-func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog output.Output) ([]string, error) {
+func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog output.Output, asSibling bool) ([]string, error) {
 	if !utils.IsInteractive() {
 		return nil, fmt.Errorf("file selection must be specified via pathspecs in non-interactive mode")
 	}
@@ -141,8 +189,13 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 
 	// Show instructions
 	splog.Info("Splitting %s by file.", style.ColorBranchName(branchToSplit.GetName(), true))
-	splog.Info("Select the files to extract to a new parent branch.")
-	splog.Info("The remaining files will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
+	if asSibling {
+		splog.Info("Select the files to extract to a new sibling branch.")
+		splog.Info("The original branch will remain unchanged.")
+	} else {
+		splog.Info("Select the files to extract to a new parent branch.")
+		splog.Info("The remaining files will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
+	}
 	splog.Info("")
 
 	// Prompt for file selection
@@ -155,8 +208,8 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 		return nil, fmt.Errorf("canceled")
 	}
 
-	// Validate that not all files were selected
-	if len(selectedFiles) == len(changedFiles) {
+	// Validate that not all files were selected (only in default mode where files are removed)
+	if !asSibling && len(selectedFiles) == len(changedFiles) {
 		return nil, fmt.Errorf("cannot extract all files - at least one must remain on the original branch")
 	}
 

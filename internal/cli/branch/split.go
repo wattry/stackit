@@ -2,6 +2,8 @@
 package branch
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/split"
@@ -17,6 +19,9 @@ func NewSplitCmd() *cobra.Command {
 		byHunk            bool
 		byFile            []string
 		byFileInteractive bool
+		asSibling         bool
+		name              string
+		message           string
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +35,17 @@ split --by-commit slices up the commit history, allowing you to select split poi
 split --by-hunk interactively stages changes to create new single-commit branches.
 split --by-file <files> extracts specified files into a new parent branch.
 split -F (--by-file-interactive) shows an interactive file selector.
-split without options will prompt for a splitting strategy.`,
+split without options will prompt for a splitting strategy.
+
+By default, --by-file creates a new PARENT branch, making the current branch
+a child of the split branch. Use --as-sibling to create an independent branch
+on the same parent instead (leaving the current branch unchanged).
+
+Examples:
+  stackit split --by-file path/to/file.go              # Extract to parent branch
+  stackit split --by-file path/to/file.go --as-sibling # Extract to sibling branch
+  stackit split --by-file path/to/file.go --as-sibling --name "feature-x"
+  stackit split --by-commit --as-sibling               # Split commits as siblings`,
 		SilenceUsage: true,
 		// Disable default help flag to allow -h for --by-hunk
 		DisableFlagParsing: false,
@@ -54,6 +69,15 @@ split without options will prompt for a splitting strategy.`,
 				}
 				// If style is empty, SplitAction will prompt
 
+				// Validate flag combinations
+				// --name and --message require explicit --by-file (not auto-detected style)
+				if name != "" && style != split.StyleFile {
+					return fmt.Errorf("--name can only be used with --by-file")
+				}
+				if message != "" && style != split.StyleFile {
+					return fmt.Errorf("--message can only be used with --by-file")
+				}
+
 				// Load config for branch pattern
 				cfg, _ := config.LoadConfig(ctx.RepoRoot)
 				branchPattern := cfg.GetBranchPattern()
@@ -69,6 +93,9 @@ split without options will prompt for a splitting strategy.`,
 					Style:         style,
 					Pathspecs:     byFile,
 					BranchPattern: branchPattern,
+					AsSibling:     asSibling,
+					Name:          name,
+					Message:       message,
 				}, handler)
 			})
 		},
@@ -82,6 +109,11 @@ split without options will prompt for a splitting strategy.`,
 	cmd.Flags().BoolVarP(&byHunk, "by-hunk", "h", false, "Split by hunk - split into new single-commit branches")
 	cmd.Flags().StringSliceVarP(&byFile, "by-file", "f", nil, "Split by file - extracts specified files to a new parent branch")
 	cmd.Flags().BoolVarP(&byFileInteractive, "by-file-interactive", "F", false, "Split by file (interactive) - select files to extract")
+
+	// Additional options
+	cmd.Flags().BoolVar(&asSibling, "as-sibling", false, "Create split branches as siblings instead of a chain")
+	cmd.Flags().StringVarP(&name, "name", "n", "", "Name for the new split branch (default: auto-generated)")
+	cmd.Flags().StringVarP(&message, "message", "m", "", "Commit message for extraction (only with --by-file)")
 
 	// Add alternative long form names (these will be checked in RunE via cmd.Flags().Changed)
 	// Note: We can't bind the same variable twice, so we check for these flags manually

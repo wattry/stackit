@@ -208,6 +208,189 @@ func TestSplitWorkflow(t *testing.T) {
 	})
 }
 
+func TestSplitAsSibling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("split --by-file --as-sibling creates sibling branch without modifying original", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario:
+		// Before: main -> feature (has file1, file2)
+		// After:  main -> feature (has file1, file2 - unchanged)
+		//         main -> feature_split (has file1 only)
+		//
+		// Unlike default split, --as-sibling:
+		// - Does NOT remove files from original branch
+		// - Creates sibling on same parent, not a new parent
+
+		sh := NewTestShellInProcess(t)
+
+		// Create feature with two files
+		sh.Write("file1", "file1 content").
+			Write("file2", "file2 content").
+			Run("create feature -m 'Add feature with file1 and file2'")
+
+		// Split file1 to sibling branch
+		sh.Run("split --by-file file1_test.txt --as-sibling")
+
+		// Verify both branches exist
+		sh.HasBranches("main", "feature", "feature_split")
+
+		// Verify feature_split has the extracted file
+		sh.Checkout("feature_split")
+		verifyFilesExist(t, sh, []string{"file1_test.txt"})
+		verifyFilesNotExist(t, sh, []string{"file2_test.txt"})
+
+		// Verify feature STILL has both files (unchanged)
+		sh.Checkout("feature")
+		verifyFilesExist(t, sh, []string{"file1_test.txt", "file2_test.txt"})
+
+		// Verify both branches have main as parent (siblings)
+		sh.Run("info")
+		sh.OutputContains("main") // feature's parent is main
+
+		sh.Checkout("feature_split").Run("info")
+		sh.OutputContains("main") // feature_split's parent is also main
+	})
+
+	t.Run("split --by-file --as-sibling with custom name", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("extract", "content").
+			Write("keep", "keep content").
+			Run("create feature -m 'Add feature'")
+
+		sh.Run("split --by-file extract_test.txt --as-sibling --name my-custom-branch")
+
+		// Verify custom branch name was used
+		sh.HasBranches("main", "feature", "my-custom-branch")
+
+		sh.Checkout("my-custom-branch")
+		verifyFilesExist(t, sh, []string{"extract_test.txt"})
+	})
+
+	t.Run("split --by-file --as-sibling with custom message", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file", "content").
+			Run("create feature -m 'Add feature'")
+
+		sh.Run("split --by-file file_test.txt --as-sibling --message 'Custom extraction message'")
+
+		// Verify the commit message on the split branch
+		sh.Checkout("feature_split").
+			Git("log --oneline -1").
+			OutputContains("Custom extraction message")
+	})
+
+	t.Run("split rejects --name with --by-commit", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Run("create feature -m 'Commit 1'")
+		sh.Commit("file2", "Commit 2")
+
+		// Should error because --name only works with --by-file
+		sh.RunExpectError("split --by-commit --name bad-name").
+			OutputContains("--name can only be used with --by-file")
+	})
+
+	t.Run("split rejects --message with --by-commit", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Run("create feature -m 'Commit 1'")
+		sh.Commit("file2", "Commit 2")
+
+		// Should error because --message only works with --by-file
+		sh.RunExpectError("split --by-commit --message 'bad message'").
+			OutputContains("--message can only be used with --by-file")
+	})
+
+	t.Run("split --as-sibling preserves children on original branch", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario:
+		// Before: main -> feature (file1, file2) -> child
+		// After:  main -> feature (file1, file2 - unchanged) -> child
+		//         main -> feature_split (file1)
+
+		sh := NewTestShellInProcess(t)
+
+		// Create feature with two files
+		sh.Write("file1", "file1 content").
+			Write("file2", "file2 content").
+			Run("create feature -m 'Add feature'")
+
+		// Create child branch
+		sh.Write("child_file", "child content").
+			Run("create child -m 'Add child'")
+
+		// Go back to feature and split with --as-sibling
+		sh.Checkout("feature").
+			Run("split --by-file file1_test.txt --as-sibling")
+
+		// Verify structure
+		sh.HasBranches("main", "feature", "feature_split", "child")
+
+		// Verify child still has feature as parent
+		sh.Checkout("child").Run("info")
+		sh.OutputContains("feature")
+	})
+
+	t.Run("split rejects --name without explicit --by-file", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Run("create feature -m 'Add feature'")
+
+		// Should error because --name requires explicit --by-file
+		// (without --by-file, style would be auto-detected)
+		sh.RunExpectError("split --name bad-name").
+			OutputContains("--name can only be used with --by-file")
+	})
+
+	t.Run("split rejects --message without explicit --by-file", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Run("create feature -m 'Add feature'")
+
+		// Should error because --message requires explicit --by-file
+		sh.RunExpectError("split --message 'bad message'").
+			OutputContains("--message can only be used with --by-file")
+	})
+
+	t.Run("split --by-file --as-sibling rejects duplicate custom branch name", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content").
+			Write("file2", "content2").
+			Run("create feature -m 'Add feature'")
+
+		// Create a branch that would conflict
+		sh.Git("branch existing-branch")
+
+		// Should error because branch name already exists
+		sh.RunExpectError("split --by-file file1_test.txt --as-sibling --name existing-branch").
+			OutputContains("already exists")
+	})
+}
+
 func TestSplitUndo(t *testing.T) {
 	t.Parallel()
 
