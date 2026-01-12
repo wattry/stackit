@@ -3,10 +3,14 @@ package actions
 import (
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/sahilm/fuzzy"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -60,7 +64,10 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions, handler CheckoutHand
 	case opts.CheckoutTrunk:
 		branchName = eng.Trunk().GetName()
 	case opts.BranchName != "":
-		branchName = opts.BranchName
+		branchName, err = resolveBranchName(eng, out, opts.BranchName)
+		if err != nil {
+			return CheckoutResult{}, err
+		}
 	default:
 		// Only populate remote SHAs when entering interactive mode
 		// (the selector may need remote information for display)
@@ -251,4 +258,50 @@ func getWorktreeSwitchInfo(ctx *app.Context, branch engine.Branch, branchName st
 		"For automatic worktree switching, enable shell integration: eval \"$(stackit shell zsh)\"",
 	}
 	return targetWorktree.Path, []string{"co", branchName}, fallbackTips
+}
+
+// resolveBranchName resolves a user input to a branch name.
+// It tries: exact match → scope match (topmost branch) → fuzzy match.
+func resolveBranchName(eng engine.Engine, out output.Output, input string) (string, error) {
+	allBranches := eng.AllBranches()
+
+	// Build name list and check for exact match
+	names := make([]string, len(allBranches))
+	for i, b := range allBranches {
+		names[i] = b.GetName()
+		if b.GetName() == input {
+			return input, nil // Exact match found
+		}
+	}
+
+	// Try as scope - find topmost branch with this scope
+	var scopeBranches []engine.Branch
+	for _, b := range allBranches {
+		if !b.IsTrunk() && eng.GetScope(b).String() == input {
+			scopeBranches = append(scopeBranches, b)
+		}
+	}
+	if len(scopeBranches) > 0 {
+		sorted := eng.SortBranchesTopologically(scopeBranches)
+		topmost := sorted[len(sorted)-1].GetName()
+		out.Info("Matched scope %s.", style.ColorDim(input))
+		return topmost, nil
+	}
+
+	// Try fuzzy match
+	matches := fuzzy.Find(input, names)
+	if len(matches) == 1 {
+		out.Info("Fuzzy matched to %s.", style.ColorBranchName(matches[0].Str, false))
+		return matches[0].Str, nil
+	} else if len(matches) > 1 {
+		// Multiple matches - return error with suggestions
+		limit := min(5, len(matches))
+		suggestions := make([]string, limit)
+		for i := 0; i < limit; i++ {
+			suggestions[i] = matches[i].Str
+		}
+		return "", fmt.Errorf("ambiguous match %q - did you mean: %s", input, strings.Join(suggestions, ", "))
+	}
+
+	return "", fmt.Errorf("no branch found matching %q", input)
 }

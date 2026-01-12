@@ -65,7 +65,7 @@ func TestCheckoutCommand(t *testing.T) {
 		// 1. Invalid branch
 		output, err := s.RunCliAndGetOutput("checkout", "nonexistent")
 		require.Error(t, err)
-		require.Contains(t, testhelpers.NormalizeOutput(output), "failed to checkout")
+		require.Contains(t, testhelpers.NormalizeOutput(output), "no branch found matching")
 
 		// 2. Interactive flag in non-interactive mode
 		s.RunCli("create", "a")
