@@ -1,185 +1,151 @@
 package merge
 
 import (
-	"fmt"
-	"strings"
-
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/pr"
 )
 
-// PRContentGenerator handles PR title and body generation for both multi-stack and consolidation merges
+// PRContentGenerator handles PR title and body generation for merge PRs.
 type PRContentGenerator struct {
 	engine interface {
 		GetBranch(name string) engine.Branch
+		GetScope(branch engine.Branch) engine.Scope
 		Trunk() engine.Branch
 	}
 }
 
-// NewPRContentGenerator creates a new PR content generator
+// NewPRContentGenerator creates a new PR content generator.
 func NewPRContentGenerator(engine interface {
 	GetBranch(name string) engine.Branch
+	GetScope(branch engine.Branch) engine.Scope
 	Trunk() engine.Branch
 }) *PRContentGenerator {
 	return &PRContentGenerator{engine: engine}
 }
 
-// PRContent represents the title and body for a PR
-type PRContent struct {
-	Title string
-	Body  string
+// GenerateMultiStackPR generates PR content for multi-stack merges.
+func (g *PRContentGenerator) GenerateMultiStackPR(included []MultiStackInfo, excluded []MultiStackExcluded) pr.Content {
+	branches := g.collectMultiStackBranches(included)
+	scopes := g.collectScopes(branches)
+
+	title := pr.FormatMergeTitle(scopes, len(branches))
+	body := g.generateBody(branches, g.convertExcluded(excluded))
+
+	return pr.Content{Title: title, Body: body}
 }
 
-// GenerateMultiStackPR generates PR content for multi-stack merges
-func (g *PRContentGenerator) GenerateMultiStackPR(included []MultiStackInfo, excluded []MultiStackExcluded, scope string) PRContent {
-	title := g.generateMultiStackTitle(included)
-	body := g.generateMultiStackBody(included, excluded, scope)
-	return PRContent{Title: title, Body: body}
+// GenerateConsolidationPR generates PR content for stack consolidation.
+func (g *PRContentGenerator) GenerateConsolidationPR(branches []BranchMergeInfo) pr.Content {
+	mergeBranches := g.convertBranchMergeInfo(branches)
+	scopes := g.collectScopes(mergeBranches)
+
+	title := pr.FormatMergeTitle(scopes, len(mergeBranches))
+	body := g.generateBody(mergeBranches, nil)
+
+	return pr.Content{Title: title, Body: body}
 }
 
-// GenerateConsolidationPR generates PR content for stack consolidation
-func (g *PRContentGenerator) GenerateConsolidationPR(branches []BranchMergeInfo, scope string) PRContent {
-	title := g.generateConsolidationTitle(branches, scope)
-	body := g.generateConsolidationBody(branches, scope)
-	return PRContent{Title: title, Body: body}
-}
-
-const (
-	multiStackTitlePrefix = "[Multi-Stack] "
-	emptyMergeTitle       = "[Multi-Stack] Empty merge"
-)
-
-// generateMultiStackTitle creates title for multi-stack PRs
-func (g *PRContentGenerator) generateMultiStackTitle(included []MultiStackInfo) string {
-	if len(included) == 0 {
-		return emptyMergeTitle
-	}
-
-	if len(included) == 1 {
-		return fmt.Sprintf("%s%s", multiStackTitlePrefix, included[0].RootBranch)
-	}
-
-	if len(included) == 2 {
-		return fmt.Sprintf("%s%s + %s", multiStackTitlePrefix, included[0].RootBranch, included[1].RootBranch)
-	}
-
-	return fmt.Sprintf("%s%s + %s + %d more",
-		multiStackTitlePrefix, included[0].RootBranch, included[1].RootBranch, len(included)-2)
-}
-
-// generateConsolidationTitle creates title for consolidation PRs
-func (g *PRContentGenerator) generateConsolidationTitle(branches []BranchMergeInfo, scope string) string {
-	if len(branches) == 0 {
-		return fmt.Sprintf("[%s] Consolidate stack: Stack consolidation", scope)
-	}
-
-	// Use the title of the top-most PR as the main title
-	topBranch := branches[len(branches)-1]
-	branch := g.engine.GetBranch(topBranch.BranchName)
-	if prInfo, err := branch.GetPrInfo(); err == nil && prInfo != nil {
-		return fmt.Sprintf("[%s] Consolidate stack: %s", scope, prInfo.Title())
-	}
-	return fmt.Sprintf("[%s] Consolidate stack: %s", scope, topBranch.BranchName)
-}
-
-// generateMultiStackBody creates body for multi-stack PRs
-func (g *PRContentGenerator) generateMultiStackBody(included []MultiStackInfo, excluded []MultiStackExcluded, scope string) string {
-	var body strings.Builder
-
-	body.WriteString(fmt.Sprintf("## Multi-Stack Consolidation: %s\n\n", scope))
-	body.WriteString("This PR consolidates multiple stacks into a single atomic merge.\n\n")
-
-	// List included stacks
-	body.WriteString("### Included Stacks\n\n")
-	for i, stack := range included {
-		body.WriteString(fmt.Sprintf("%d. **%s** (%d branches)\n", i+1, stack.RootBranch, len(stack.AllBranches)))
-		for _, branch := range stack.AllBranches {
-			body.WriteString(fmt.Sprintf("   - `%s`\n", branch))
+// generateBody creates the PR body with branches, exclusions, and stack tree.
+func (g *PRContentGenerator) generateBody(branches []pr.MergeBranch, excluded []pr.ExcludedBranch) string {
+	// Build stack tree
+	treeBranches := make([]pr.StackTreeBranch, len(branches))
+	for i, branch := range branches {
+		b := g.engine.GetBranch(branch.Name)
+		depth := g.calculateDepth(b)
+		treeBranches[i] = pr.StackTreeBranch{
+			Name:     branch.Name,
+			Depth:    depth,
+			PRNumber: branch.PRNumber,
 		}
-		body.WriteString("\n")
 	}
 
-	// List excluded stacks if any
-	if len(excluded) > 0 {
-		body.WriteString("### Excluded Stacks\n\n")
-		for _, ex := range excluded {
-			body.WriteString(fmt.Sprintf("- **%s** — %s\n", ex.Stack.RootBranch, ex.Reason))
-		}
-		body.WriteString("\n")
-	}
+	stackTree := pr.FormatStackTree(pr.StackTreeParams{
+		TrunkName: g.engine.Trunk().GetName(),
+		Branches:  treeBranches,
+	})
 
-	g.addCommonSections(&body)
-	body.WriteString("\n---\n")
-	body.WriteString("Generated by `stackit merge --multi-stack`\n")
-
-	return body.String()
+	return pr.FormatMergeBody(pr.MergeBodyParams{
+		Branches:  branches,
+		Excluded:  excluded,
+		StackTree: stackTree,
+	})
 }
 
-// generateConsolidationBody creates body for consolidation PRs
-func (g *PRContentGenerator) generateConsolidationBody(branches []BranchMergeInfo, scope string) string {
-	var body strings.Builder
+// collectMultiStackBranches gathers all branches from included stacks.
+func (g *PRContentGenerator) collectMultiStackBranches(included []MultiStackInfo) []pr.MergeBranch {
+	var branches []pr.MergeBranch
+	for _, stack := range included {
+		for _, branchName := range stack.AllBranches {
+			branch := g.engine.GetBranch(branchName)
+			mb := pr.MergeBranch{Name: branchName}
 
-	body.WriteString(fmt.Sprintf("## Stack Consolidation: %s\n\n", scope))
-	body.WriteString("This PR consolidates the following stack of changes into a single merge:\n\n")
+			if prInfo, err := branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Number() != nil {
+				mb.PRNumber = *prInfo.Number()
+				mb.PRTitle = prInfo.Title()
+			}
 
-	// List branches with PR numbers
+			branches = append(branches, mb)
+		}
+	}
+	return branches
+}
+
+// convertBranchMergeInfo converts BranchMergeInfo to MergeBranch.
+func (g *PRContentGenerator) convertBranchMergeInfo(branches []BranchMergeInfo) []pr.MergeBranch {
+	result := make([]pr.MergeBranch, len(branches))
 	for i, branchInfo := range branches {
-		branch := g.engine.GetBranch(branchInfo.BranchName)
-		if prInfo, err := branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Number() != nil {
-			body.WriteString(fmt.Sprintf("%d. **PR #%d**: %s\n", i+1, *prInfo.Number(), prInfo.Title()))
-		} else {
-			body.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, branchInfo.BranchName))
-		}
-	}
-
-	g.addCommonSections(&body)
-	g.addStackStructure(&body, branches)
-
-	return body.String()
-}
-
-// addCommonSections adds the benefits and after merge sections
-func (g *PRContentGenerator) addCommonSections(body *strings.Builder) {
-	body.WriteString("\n### Benefits\n")
-	body.WriteString("- ✅ Single CI run validates entire stack\n")
-	body.WriteString("- ✅ Atomic merge prevents partial stack states\n")
-	body.WriteString("- ✅ Faster than sequential merging\n")
-	body.WriteString("- ✅ Cleaner merge history\n")
-
-	body.WriteString("\n### After Merge\n")
-	body.WriteString("Individual PRs will be automatically documented and closed.\n")
-}
-
-// addStackStructure adds the ASCII tree visualization
-func (g *PRContentGenerator) addStackStructure(body *strings.Builder, branches []BranchMergeInfo) {
-	body.WriteString("\n### Stack Structure\n")
-	body.WriteString("```\n")
-	body.WriteString(g.buildStackTree(branches))
-	body.WriteString("```\n")
-}
-
-// buildStackTree creates an ASCII tree representation of the stack
-func (g *PRContentGenerator) buildStackTree(branches []BranchMergeInfo) string {
-	var tree strings.Builder
-	trunkName := g.engine.Trunk().GetName()
-
-	tree.WriteString(trunkName + "\n")
-
-	for _, branchInfo := range branches {
-		branch := g.engine.GetBranch(branchInfo.BranchName)
-		depth := 0
-		parent := branch.GetParent()
-		for parent != nil && !parent.IsTrunk() {
-			depth++
-			parent = parent.GetParent()
+		mb := pr.MergeBranch{
+			Name:     branchInfo.BranchName,
+			PRNumber: branchInfo.PRNumber,
 		}
 
-		indent := strings.Repeat("  ", depth+1)
-		prSuffix := ""
+		// Get PR title from engine if we have a PR number
 		if branchInfo.PRNumber > 0 {
-			prSuffix = fmt.Sprintf(" (PR #%d)", branchInfo.PRNumber)
+			branch := g.engine.GetBranch(branchInfo.BranchName)
+			if prInfo, err := branch.GetPrInfo(); err == nil && prInfo != nil {
+				mb.PRTitle = prInfo.Title()
+			}
 		}
-		tree.WriteString(fmt.Sprintf("%s├─ %s%s\n", indent, branchInfo.BranchName, prSuffix))
+
+		result[i] = mb
+	}
+	return result
+}
+
+// convertExcluded converts MultiStackExcluded to ExcludedBranch.
+func (g *PRContentGenerator) convertExcluded(excluded []MultiStackExcluded) []pr.ExcludedBranch {
+	if len(excluded) == 0 {
+		return nil
 	}
 
-	return tree.String()
+	result := make([]pr.ExcludedBranch, len(excluded))
+	for i, ex := range excluded {
+		result[i] = pr.ExcludedBranch{
+			Name:   ex.Stack.RootBranch,
+			Reason: ex.Reason,
+		}
+	}
+	return result
+}
+
+// collectScopes gathers scope values for all branches.
+func (g *PRContentGenerator) collectScopes(branches []pr.MergeBranch) []string {
+	scopes := make([]string, len(branches))
+	for i, mb := range branches {
+		branch := g.engine.GetBranch(mb.Name)
+		scope := g.engine.GetScope(branch)
+		scopes[i] = scope.String()
+	}
+	return scopes
+}
+
+// calculateDepth computes how deep a branch is in the stack.
+func (g *PRContentGenerator) calculateDepth(branch engine.Branch) int {
+	depth := 0
+	parent := branch.GetParent()
+	for parent != nil && !parent.IsTrunk() {
+		depth++
+		parent = parent.GetParent()
+	}
+	return depth
 }

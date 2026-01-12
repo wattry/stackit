@@ -3,40 +3,17 @@ package submit
 
 import (
 	"fmt"
-	"regexp"
-	"strings"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/pr"
 	"stackit.dev/stackit/internal/tui"
 )
 
-var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
-
 // GetPRTitle gets the PR title, prompting if needed
-func GetPRTitle(branch engine.Branch, editInline bool, existingTitle string, scope string) (string, error) {
-	branchName := branch.GetName()
-	title := existingTitle
-	if title == "" {
-		commits, err := branch.GetAllCommits(engine.CommitFormatSubject)
-		if err != nil || len(commits) == 0 {
-			title = branchName
-		} else {
-			// GetAllCommits returns newest to oldest, so oldest is last
-			title = commits[len(commits)-1]
-		}
-	}
-
-	if scope != "" {
-		if scopeRegex.MatchString(title) {
-			if !strings.HasPrefix(strings.ToUpper(title), "["+strings.ToUpper(scope)+"]") {
-				title = scopeRegex.ReplaceAllString(title, "["+scope+"] ")
-			}
-		} else {
-			title = fmt.Sprintf("[%s] %s", scope, title)
-		}
-	}
+func GetPRTitle(branch engine.Branch, editInline bool, existingTitle string, scope engine.Scope) (string, error) {
+	title := pr.GenerateTitle(branch, existingTitle, scope)
 
 	if !editInline {
 		return title, nil
@@ -52,31 +29,7 @@ func GetPRTitle(branch engine.Branch, editInline bool, existingTitle string, sco
 
 // GetPRBody gets the PR body, prompting if needed
 func GetPRBody(branch engine.Branch, editInline bool, existingBody string) (string, error) {
-	body := existingBody
-	if body == "" {
-		messages, err := branch.GetAllCommits(engine.CommitFormatMessage)
-		if err == nil && len(messages) > 0 {
-			if len(messages) == 1 {
-				// Use body (skip first line which is subject)
-				lines := strings.Split(messages[0], "\n")
-				if len(lines) > 1 {
-					body = strings.Join(lines[1:], "\n")
-				}
-			} else {
-				// Format as a bulleted list of subjects in chronological order
-				var sb strings.Builder
-				// GetAllCommits returns newest to oldest
-				for i := len(messages) - 1; i >= 0; i-- {
-					msg := messages[i]
-					subject := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0])
-					if subject != "" {
-						sb.WriteString("- " + subject + "\n")
-					}
-				}
-				body = strings.TrimSpace(sb.String())
-			}
-		}
-	}
+	body := pr.GenerateBody(branch, existingBody)
 
 	if !editInline {
 		return body, nil
@@ -145,7 +98,7 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 
 	// Handle Title
 	if shouldEditTitle || metadata.Title == "" {
-		title, err := GetPRTitle(branch, shouldEditTitle, metadata.Title, scope.String())
+		title, err := GetPRTitle(branch, shouldEditTitle, metadata.Title, scope)
 		if err != nil {
 			return nil, err
 		}

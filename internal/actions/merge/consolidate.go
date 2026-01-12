@@ -197,8 +197,7 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 }
 
 func (c *ConsolidateMergeExecutor) createConsolidationPR(ctx context.Context, branchName string) (*github.PullRequestInfo, error) {
-	scope := c.getStackScope()
-	content := c.prGenerator.GenerateConsolidationPR(c.plan.BranchesToMerge, scope)
+	content := c.prGenerator.GenerateConsolidationPR(c.plan.BranchesToMerge)
 
 	owner, repo := c.getOwnerRepo()
 	opts := github.CreatePROptions{

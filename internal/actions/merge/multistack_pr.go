@@ -71,8 +71,7 @@ func (p *MultiStackPRCreator) CreatePR(ctx context.Context, branchName string, i
 		return nil, fmt.Errorf("could not determine repository owner/name")
 	}
 
-	scope := p.getScopeFromStacks(included)
-	content := p.prGenerator.GenerateMultiStackPR(included, excluded, scope)
+	content := p.prGenerator.GenerateMultiStackPR(included, excluded)
 
 	opts := github.CreatePROptions{
 		Title: content.Title,
@@ -88,22 +87,6 @@ func (p *MultiStackPRCreator) CreatePR(ctx context.Context, branchName string, i
 	}
 
 	return pr, nil
-}
-
-// getScopeFromStacks extracts the common scope from included stacks
-func (p *MultiStackPRCreator) getScopeFromStacks(included []MultiStackInfo) string {
-	if len(included) == 0 {
-		return "multi-stack"
-	}
-
-	// Get scope from the first stack
-	scope := included[0].Scope
-	if scope != "" {
-		return scope
-	}
-
-	// Fallback to "multi-stack" if no scope found
-	return "multi-stack"
 }
 
 // WaitAndMerge waits for CI to pass and auto-merges the PR

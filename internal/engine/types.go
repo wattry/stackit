@@ -3,6 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/errors"
@@ -117,6 +119,38 @@ func (s *Scope) UnmarshalJSON(data []byte) error {
 	}
 	*s = NewScope(str)
 	return nil
+}
+
+// scopeRegex matches scope prefixes like "[PROJ-123]" at the start of titles.
+var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
+
+// ApplyToTitle adds or replaces a scope prefix in a title.
+// If the title already has a scope prefix and it differs from this scope, it's replaced.
+// If no scope prefix exists, this scope is prepended.
+// Returns the original title if this scope is empty.
+func (s Scope) ApplyToTitle(title string) string {
+	if s.IsEmpty() {
+		return title
+	}
+
+	if scopeRegex.MatchString(title) {
+		// Title already has a scope prefix - replace if different
+		if !strings.HasPrefix(strings.ToUpper(title), "["+strings.ToUpper(s.value)+"]") {
+			return scopeRegex.ReplaceAllString(title, "["+s.value+"] ")
+		}
+		return title
+	}
+
+	// No scope prefix, add it
+	return fmt.Sprintf("[%s] %s", s.value, title)
+}
+
+// TitleNeedsUpdate checks if a title needs to be updated due to this scope.
+func (s Scope) TitleNeedsUpdate(title string) bool {
+	if title == "" || s.IsEmpty() {
+		return false
+	}
+	return s.ApplyToTitle(title) != title
 }
 
 // DeletionStatus represents the deletion status of a branch
@@ -313,6 +347,48 @@ func (b Branch) EnsureCanModify() error {
 // GetPRSubmissionStatus returns the PR submission status for this branch
 func (b Branch) GetPRSubmissionStatus() (PRSubmissionStatus, error) {
 	return b.reader.getPRSubmissionStatus(b)
+}
+
+// DefaultPRTitle returns the default PR title for this branch.
+// Uses the oldest commit subject, falling back to the branch name.
+func (b Branch) DefaultPRTitle() string {
+	commits, err := b.GetAllCommits(CommitFormatSubject)
+	if err != nil || len(commits) == 0 {
+		return b.name
+	}
+	// GetAllCommits returns newest to oldest, so oldest is last
+	return commits[len(commits)-1]
+}
+
+// DefaultPRBody returns the default PR body for this branch.
+// For single commit: uses the commit body (skips subject line).
+// For multiple commits: creates a bulleted list of subjects in chronological order.
+func (b Branch) DefaultPRBody() string {
+	messages, err := b.GetAllCommits(CommitFormatMessage)
+	if err != nil || len(messages) == 0 {
+		return ""
+	}
+
+	if len(messages) == 1 {
+		// Use body (skip first line which is subject)
+		lines := strings.Split(messages[0], "\n")
+		if len(lines) > 1 {
+			return strings.Join(lines[1:], "\n")
+		}
+		return ""
+	}
+
+	// Format as a bulleted list of subjects in chronological order
+	var sb strings.Builder
+	// GetAllCommits returns newest to oldest, so iterate in reverse
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		subject := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0])
+		if subject != "" {
+			sb.WriteString("- " + subject + "\n")
+		}
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // PrInfo represents PR information for a branch
