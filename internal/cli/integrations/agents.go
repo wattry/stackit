@@ -220,6 +220,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 		"stack-status.md",
 		"stack-submit.md",
 		"stack-sync.md",
+		"stack-verify.md",
 	}
 
 	for _, filename := range commands {
@@ -282,6 +283,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintln(out, "  /stack-status  - View stack state and health")
 	_, _ = fmt.Fprintln(out, "  /stack-submit  - Submit PRs with generated descriptions")
 	_, _ = fmt.Fprintln(out, "  /stack-sync    - Sync with trunk and cleanup")
+	_, _ = fmt.Fprintln(out, "  /stack-verify  - Verify stack health by running checks")
 
 	if !local {
 		_, _ = fmt.Fprintln(out)
