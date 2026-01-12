@@ -17,6 +17,7 @@ func NewAbsorbCmd() *cobra.Command {
 		force        bool
 		patch        bool
 		showConflict bool
+		jsonOutput   bool
 	)
 
 	cmd := &cobra.Command{
@@ -53,6 +54,7 @@ Use --show-conflict to see the current conflict state and what changes were bein
 					DryRun: dryRun,
 					Force:  force,
 					Patch:  patch,
+					JSON:   jsonOutput,
 				}, handler)
 			})
 		},
@@ -63,6 +65,7 @@ Use --show-conflict to see the current conflict state and what changes were bein
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Do not prompt for confirmation; apply the hunks to the commits immediately.")
 	cmd.Flags().BoolVarP(&patch, "patch", "p", false, "Pick hunks to stage before absorbing.")
 	cmd.Flags().BoolVar(&showConflict, "show-conflict", false, "Show the current absorb conflict state")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output machine-readable JSON summary (works with --dry-run for preview)")
 
 	return cmd
 }

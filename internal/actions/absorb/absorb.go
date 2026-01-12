@@ -23,6 +23,7 @@ type Options struct {
 	DryRun bool
 	Force  bool
 	Patch  bool
+	JSON   bool // Output machine-readable JSON summary
 }
 
 // Action performs the absorb operation
@@ -210,6 +211,28 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			}
 		}
 		printDryRunOutput(flatHunksByCommit, unabsorbedHunks, eng, out)
+
+		// Output JSON if requested (works with dry-run for preview)
+		if opts.JSON {
+			newFiles, err := ctx.Git().GetUntrackedFiles(ctx.Context)
+			if err != nil {
+				out.Debug("Failed to get untracked files: %v", err)
+			}
+
+			planJSON, err := GeneratePlanJSON(
+				currentBranch.GetName(),
+				hunkTargets,
+				unabsorbedHunks,
+				newFiles,
+				eng,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to generate JSON: %w", err)
+			}
+			out.Print(string(planJSON))
+			out.Newline()
+		}
+
 		// Don't call Complete() for dry-run - no actual changes made
 		return nil
 	}
@@ -310,5 +333,27 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		Unabsorbed:  len(unabsorbedHunks),
 		BranchCount: len(hunksByBranch),
 	})
+
+	// Output JSON summary if requested
+	if opts.JSON {
+		newFiles, err := ctx.Git().GetUntrackedFiles(ctx.Context)
+		if err != nil {
+			out.Debug("Failed to get untracked files: %v", err)
+		}
+
+		jsonOutput, err := GeneratePlanJSON(
+			currentBranch.GetName(),
+			hunkTargets,
+			unabsorbedHunks,
+			newFiles,
+			eng,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON: %w", err)
+		}
+		out.Print(string(jsonOutput))
+		out.Newline()
+	}
+
 	return nil
 }

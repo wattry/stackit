@@ -341,6 +341,10 @@ func (d *demoGitRunner) HasUntrackedFiles(_ context.Context) (bool, error) {
 	return false, nil
 }
 
+func (d *demoGitRunner) GetUntrackedFiles(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (d *demoGitRunner) AddAll(_ context.Context) error {
 	return nil
 }

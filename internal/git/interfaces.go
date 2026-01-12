@@ -107,6 +107,7 @@ type StagingOperations interface {
 	HasStagedChanges(ctx context.Context) (bool, error)
 	HasUnstagedChanges(ctx context.Context) (bool, error)
 	HasUntrackedFiles(ctx context.Context) (bool, error)
+	GetUntrackedFiles(ctx context.Context) ([]string, error)
 	ParseStagedHunks(ctx context.Context) ([]Hunk, error)
 }
 
