@@ -19,8 +19,7 @@ Diagnose and fix stack problems, including build/lint/test failures.
 Check the context and look for these indicators:
 
 **Rebase in progress** (git status shows "rebase in progress" or "interactive rebase"):
-- Guide user through conflict resolution
-- Then `command stackit continue` or `command stackit abort`
+- Follow the Rebase Conflict Resolution Workflow below
 
 **Build/lint/test failures** (user reports build errors, or you see compiler errors):
 - Follow the Build Failure Workflow below
@@ -37,7 +36,52 @@ Check the context and look for these indicators:
 **Not on tracked branch** (current branch not shown in stackit log with ◉):
 - Guide user to checkout a tracked branch first
 
-### 2. Build Failure Workflow
+### 2. Rebase Conflict Resolution Workflow
+
+When a rebase is in progress with conflicts:
+
+**Note:** Being in a detached HEAD state during rebase is normal and expected. This is not an error.
+
+#### Step 1: Identify conflicting files
+Check `git status` to see which files have conflicts (marked as "both modified" or "UU").
+
+#### Step 2: Resolve conflicts
+- Read the conflicting files
+- Look for conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
+- Edit to resolve, keeping the correct version of the code
+- Understanding the conflict context helps: HEAD is typically the newer refactored code, the incoming commit is the older version being rebased
+
+#### Step 3: Run checks BEFORE continuing
+This is critical - run the project's check command to catch any issues early:
+```bash
+just check  # or the project's equivalent (go build, npm test, etc.)
+```
+
+Fix any lint errors, unused variables, or build failures NOW. This prevents having to abort and redo the rebase.
+
+#### Step 4: Stage and continue
+```bash
+command stackit add .
+command stackit continue
+```
+
+#### Step 5: If you amended a commit, restack children
+If you made additional fixes and amended them into a commit:
+```bash
+git add -A
+git commit --amend --no-edit
+command stackit restack --no-interactive
+```
+
+Child branches need restacking after an amend because the commit SHA changed.
+
+#### Step 6: Verify
+```bash
+command stackit log  # Should show clean tree, no "needs restack"
+just check           # All checks should pass
+```
+
+### 3. Build Failure Workflow
 
 #### Step 0: Pre-checks
 Before running foreach, verify:
@@ -102,9 +146,7 @@ command stackit restack --no-interactive
 This rebases all child branches onto the fixed branch, propagating your fix.
 
 **If restack has conflicts**:
-- Help user resolve the conflicts
-- Then run `command stackit continue` to proceed
-- Or `command stackit abort` to cancel
+- Follow the Rebase Conflict Resolution Workflow (Section 2) above
 
 #### Step 6: Verify all branches now pass
 ```bash
@@ -113,7 +155,7 @@ command stackit foreach --stack "<check-command>" 2>&1
 
 If it stops at another failure, repeat from Step 2 (there may be multiple independent issues).
 
-### 3. After Fixes
+### 4. After Fixes
 
 Verify stack is healthy:
 - `command stackit log` shows clean tree
@@ -130,7 +172,7 @@ The restack command automatically propagates your fix to all child branches.
 
 **Uncommitted changes**: Check git status first, ask user to commit/stash.
 
-**Rebase already in progress**: Use `stackit continue` or `stackit abort` before foreach.
+**Rebase already in progress**: Follow the Rebase Conflict Resolution Workflow (Section 2) before using foreach.
 
 **Not on tracked branch**: Guide user to checkout a tracked branch first.
 
@@ -138,9 +180,13 @@ The restack command automatically propagates your fix to all child branches.
 
 **Multiple independent failures**: After fixing one, re-run foreach to find next failure.
 
+**After amending a commit**: Always run `command stackit restack --no-interactive` because child branches reference the old commit SHA.
+
 ## Do NOT
 - Fix the same bug on multiple branches manually
 - Use `git checkout` directly - use `command stackit checkout` instead
+- Use `git rebase --continue` - use `command stackit continue` instead (it handles metadata properly)
+- Use `git rebase --abort` - use `command stackit abort` instead
 - Make destructive changes without user confirmation
 - Loop indefinitely on fixes (max 2 attempts per issue type)
 - Skip asking what check command to use if unclear
