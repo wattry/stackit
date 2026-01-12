@@ -1,10 +1,6 @@
 package engine
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
-
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -173,8 +169,6 @@ func (e *engineImpl) getPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	return e.GetPRSubmissionStatus(branch)
 }
 
-var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
-
 // prTitleNeedsUpdate checks if the PR title needs to be updated due to scope changes
 func (e *engineImpl) prTitleNeedsUpdate(branch Branch, prInfo *PrInfo) bool {
 	if prInfo == nil || prInfo.Title() == "" {
@@ -182,20 +176,5 @@ func (e *engineImpl) prTitleNeedsUpdate(branch Branch, prInfo *PrInfo) bool {
 	}
 
 	scope := e.GetScope(branch)
-	updatedTitle := prInfo.Title()
-
-	if !scope.IsEmpty() {
-		// If title already has a scope prefix, replace it
-		if scopeRegex.MatchString(updatedTitle) {
-			// Only replace if it's NOT already the correct scope
-			if !strings.HasPrefix(strings.ToUpper(updatedTitle), "["+strings.ToUpper(scope.String())+"]") {
-				updatedTitle = scopeRegex.ReplaceAllString(updatedTitle, "["+scope.String()+"] ")
-			}
-		} else {
-			// No scope prefix, add it
-			updatedTitle = fmt.Sprintf("[%s] %s", scope.String(), updatedTitle)
-		}
-	}
-
-	return updatedTitle != prInfo.Title()
+	return scope.TitleNeedsUpdate(prInfo.Title())
 }

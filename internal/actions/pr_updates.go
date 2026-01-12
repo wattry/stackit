@@ -1,16 +1,11 @@
 package actions
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
-
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/pr"
 	"stackit.dev/stackit/internal/utils"
 )
-
-var scopeRegex = regexp.MustCompile(`^\[[^\]]+\]\s*`)
 
 // UpdateStackPRMetadata updates PR titles and body footers for a list of branches
 func UpdateStackPRMetadata(ctx *app.Context, branches []string, repoOwner, repoName string) {
@@ -47,19 +42,10 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 	currentTitle := latestPR.Title
 	currentBody := latestPR.Body
 
-	updatedTitle := currentTitle
-	if !scope.IsEmpty() {
-		if scopeRegex.MatchString(updatedTitle) {
-			if !strings.HasPrefix(strings.ToUpper(updatedTitle), "["+strings.ToUpper(scope.String())+"]") {
-				updatedTitle = scopeRegex.ReplaceAllString(updatedTitle, "["+scope.String()+"] ")
-			}
-		} else {
-			updatedTitle = fmt.Sprintf("[%s] %s", scope.String(), updatedTitle)
-		}
-	}
+	updatedTitle := scope.ApplyToTitle(currentTitle)
 
-	footer := CreatePRBodyFooter(name, ctx.Engine)
-	updatedBody := UpdatePRBodyFooter(currentBody, footer)
+	footer := pr.CreatePRBodyFooter(name, ctx.Engine)
+	updatedBody := pr.UpdatePRBodyFooter(currentBody, footer)
 
 	// 3. Apply updates if needed (Option 2)
 	// Don't update body if:
