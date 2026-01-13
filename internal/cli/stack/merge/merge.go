@@ -22,6 +22,7 @@ func NewMergeCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 	var (
 		dryRun bool
 		force  bool
+		noWait bool
 	)
 
 	cmd := &cobra.Command{
@@ -52,16 +53,17 @@ Examples:
 					defer runner.Cleanup()
 				}
 
-				// Cast to InteractiveHandler and verify it supports interactive prompts
+				// NewMergeUI returns an interactive handler when TTY is available
+				// (which we've verified above), so this cast should always succeed
 				interactiveHandler, ok := handler.(mergeAction.InteractiveHandler)
-				if !ok || !interactiveHandler.IsInteractive() {
-					return fmt.Errorf("interactive mode requires a TTY")
+				if !ok {
+					return fmt.Errorf("failed to initialize interactive handler")
 				}
 
 				err := mergeAction.RunWizard(ctx, interactiveHandler, mergeAction.WizardOptions{
 					DryRun: dryRun,
 					Force:  force,
-					Wait:   true, // Default to wait for automerge
+					Wait:   !noWait,
 				})
 
 				// Handle post-merge follow-up action
@@ -79,6 +81,7 @@ Examples:
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
+	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Don't wait for merge, return after enabling automerge")
 
 	// Add subcommands
 	cmd.AddCommand(NewNextCmd(postMergeHandler))

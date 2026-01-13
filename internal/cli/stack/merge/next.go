@@ -181,7 +181,8 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 	return performPostMergeCleanup(ctx, bottomPR.BranchName, upstackBranches)
 }
 
-// findBottomUnmergedPR finds the bottom-most unmerged PR in the current stack
+// findBottomUnmergedPR finds the bottom-most unmerged PR in the current stack.
+// It returns the PR info and a list of all branches that will need restacking after the merge.
 func findBottomUnmergedPR(ctx *app.Context) (*mergeAction.BranchMergeInfo, []string, error) {
 	eng := ctx.Engine
 
@@ -204,7 +205,7 @@ func findBottomUnmergedPR(ctx *app.Context) (*mergeAction.BranchMergeInfo, []str
 	rng := engine.StackRange{RecursiveParents: true}
 	parentBranches := graph.Range(*currentBranch, rng)
 
-	// Build list of branches (excluding trunk)
+	// Build list of branches (excluding trunk), ordered from bottom to top
 	allBranches := make([]string, 0, len(parentBranches)+1)
 	for _, branch := range parentBranches {
 		if !branch.IsTrunk() {
@@ -213,26 +214,28 @@ func findBottomUnmergedPR(ctx *app.Context) (*mergeAction.BranchMergeInfo, []str
 	}
 	allBranches = append(allBranches, currentBranch.GetName())
 
-	// Get upstack branches (children of current)
-	upstackBranches := []string{}
-	upstack := graph.Range(*currentBranch, engine.StackRange{RecursiveChildren: true})
-	for _, ub := range upstack {
-		if ub.IsTracked() {
-			upstackBranches = append(upstackBranches, ub.GetName())
+	// Batch load metadata
+	allMeta, metaErrors := eng.Git().BatchReadMetadata(allBranches)
+	// Log any errors but don't fail - missing metadata just means no PR info
+	for branch, metaErr := range metaErrors {
+		if metaErr != nil {
+			ctx.Output.Debug("failed to load metadata for %s: %v", branch, metaErr)
 		}
 	}
-
-	// Batch load metadata
-	allMeta, _ := eng.Git().BatchReadMetadata(allBranches)
 
 	// Batch load CI status
 	var allCheckStatuses map[string]*github.CheckStatus
 	if ctx.GitHubClient != nil {
-		allCheckStatuses, _ = ctx.GitHubClient.BatchGetPRChecksStatus(ctx.Context, allBranches)
+		var checksErr error
+		allCheckStatuses, checksErr = ctx.GitHubClient.BatchGetPRChecksStatus(ctx.Context, allBranches)
+		if checksErr != nil {
+			// Log but don't fail - CI status is optional
+			ctx.Output.Debug("failed to load CI status: %v", checksErr)
+		}
 	}
 
 	// Find the first unmerged PR (from bottom up)
-	for _, branchName := range allBranches {
+	for i, branchName := range allBranches {
 		meta := allMeta[branchName]
 		prInfo := engine.NewPrInfoFromMeta(meta)
 
@@ -274,6 +277,23 @@ func findBottomUnmergedPR(ctx *app.Context) (*mergeAction.BranchMergeInfo, []str
 			matchesRemote = status.Matches()
 		}
 
+		// Calculate upstack branches: everything after this branch in allBranches,
+		// plus any children of the current branch
+		upstackBranches := make([]string, 0)
+
+		// Add branches between merged branch and current (these are in allBranches after index i)
+		if i+1 < len(allBranches) {
+			upstackBranches = append(upstackBranches, allBranches[i+1:]...)
+		}
+
+		// Add children of current branch (branches above current in the stack)
+		upstack := graph.Range(*currentBranch, engine.StackRange{RecursiveChildren: true})
+		for _, ub := range upstack {
+			if ub.IsTracked() {
+				upstackBranches = append(upstackBranches, ub.GetName())
+			}
+		}
+
 		return &mergeAction.BranchMergeInfo{
 			BranchName:    branchName,
 			PRNumber:      *prInfo.Number(),
@@ -284,7 +304,8 @@ func findBottomUnmergedPR(ctx *app.Context) (*mergeAction.BranchMergeInfo, []str
 		}, upstackBranches, nil
 	}
 
-	return nil, upstackBranches, nil
+	// No unmerged PR found - return empty upstack (nothing to restack)
+	return nil, nil, nil
 }
 
 // performPostMergeCleanup performs cleanup after a PR is merged

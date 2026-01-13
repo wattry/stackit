@@ -547,11 +547,17 @@ func WaitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, tim
 			return fmt.Errorf("PR was closed without merging")
 		}
 
-		// Check if auto-merge was disabled (might indicate conflicts)
+		// Check if auto-merge was disabled (might indicate conflicts or other issues)
 		autoMerge, err := GetAutoMergeStatus(ctx, runner, prNodeID)
 		if err == nil && !autoMerge.Enabled {
-			// Auto-merge was disabled, check for conflicts
-			if !state.Mergeable {
+			// Re-check PR state to avoid race condition where PR merged between checks
+			freshState, freshErr := GetPRMergeableState(ctx, runner, prNodeID)
+			if freshErr == nil && freshState.State == "MERGED" {
+				return nil // PR merged successfully
+			}
+
+			// Auto-merge was disabled and PR is not merged
+			if freshErr == nil && !freshState.Mergeable {
 				return fmt.Errorf("auto-merge was disabled due to merge conflicts. Please resolve conflicts and try again")
 			}
 			return fmt.Errorf("auto-merge was disabled. This may indicate a problem with the PR")

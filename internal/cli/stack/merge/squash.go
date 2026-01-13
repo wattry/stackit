@@ -200,15 +200,23 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 	}
 	out.Newline()
 
-	// If interactive and no stacks specified, confirm proceeding with all stacks
-	if len(opts.stacks) == 0 && ctx.Interactive {
-		confirmed, err := tui.PromptConfirm(fmt.Sprintf("Combine all %d stacks?", len(availableStacks)), true)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			out.Info("Canceled. Use --stacks to select specific stacks.")
-			return nil
+	// If no stacks specified, confirm proceeding with all stacks
+	if len(opts.stacks) == 0 {
+		if !ctx.Interactive {
+			// Non-interactive mode requires explicit stack selection or --yes
+			if !opts.yes {
+				return fmt.Errorf("no stacks specified. Use --stacks to select stacks or --yes to combine all %d stacks", len(availableStacks))
+			}
+			out.Info("Combining all %d stacks (--yes specified)", len(availableStacks))
+		} else {
+			confirmed, err := tui.PromptConfirm(fmt.Sprintf("Combine all %d stacks?", len(availableStacks)), true)
+			if err != nil {
+				return err
+			}
+			if !confirmed {
+				out.Info("Canceled. Use --stacks to select specific stacks.")
+				return nil
+			}
 		}
 	}
 
@@ -231,14 +239,8 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 		out.Warn("  Excluded: %d stacks", len(result.ExcludedStacks))
 	}
 
-	// If --no-wait was used, show tip
+	// If --no-wait was used, enable automerge and return immediately
 	if opts.noWait {
-		out.Newline()
-		out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
-	}
-
-	// Enable automerge on the consolidation PR
-	if !opts.noWait {
 		prNodeID, err := getPRNodeID(ctx, result.PRNumber)
 		if err != nil {
 			out.Warn("Could not enable automerge: %v", err)
@@ -251,7 +253,10 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 				out.Success("Automerge enabled - PR will merge when CI passes")
 			}
 		}
+		out.Newline()
+		out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
 	}
+	// When Wait=true (default), ExecuteMultiStack already waits for CI and merges the PR
 
 	return nil
 }
