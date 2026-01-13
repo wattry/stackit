@@ -19,9 +19,9 @@ const (
 	prStateOpen = "OPEN"
 )
 
-// getMergeMethod returns the merge method to use for PR merges.
+// GetMergeMethod returns the merge method to use for PR merges.
 // If not configured, it prompts the user to select one and saves it to config.
-func getMergeMethod(ctx *app.Context, githubClient github.Client) (github.MergeMethod, error) {
+func GetMergeMethod(ctx *app.Context, githubClient github.Client) (github.MergeMethod, error) {
 	// Load config
 	cfg, err := config.LoadConfig(ctx.RepoRoot)
 	if err != nil {
@@ -248,7 +248,7 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		out.Debug("Executing StepMergePR for branch %s", step.BranchName)
 
 		// Get merge method (prompts user if not configured)
-		mergeMethod, err := getMergeMethod(ctx, githubClient)
+		mergeMethod, err := GetMergeMethod(ctx, githubClient)
 		if err != nil {
 			out.Debug("Failed to get merge method: %v", err)
 			return fmt.Errorf("failed to get merge method: %w", err)

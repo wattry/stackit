@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v62/github"
 	"golang.org/x/oauth2"
@@ -331,6 +332,241 @@ func executeGraphQLQuery(ctx context.Context, runner git.Runner, query string, v
 	}
 
 	return body, nil
+}
+
+// AutoMergeStatus represents the state of GitHub's auto-merge feature on a PR
+type AutoMergeStatus struct {
+	Enabled     bool
+	EnabledAt   string
+	EnabledBy   string
+	MergeMethod string
+}
+
+// EnableAutoMerge enables GitHub's auto-merge feature on a PR.
+// This requires the repository to have auto-merge enabled in settings.
+func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, mergeMethod MergeMethod) error {
+	mutation := `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+		enablePullRequestAutoMerge(input: {
+			pullRequestId: $pullRequestId
+			mergeMethod: $mergeMethod
+		}) {
+			pullRequest {
+				autoMergeRequest {
+					enabledAt
+				}
+			}
+		}
+	}`
+
+	// Convert our MergeMethod to GitHub's GraphQL enum format
+	var graphqlMethod string
+	switch mergeMethod {
+	case MergeMethodMerge:
+		graphqlMethod = "MERGE"
+	case MergeMethodSquash:
+		graphqlMethod = "SQUASH"
+	case MergeMethodRebase:
+		graphqlMethod = "REBASE"
+	default:
+		graphqlMethod = "SQUASH"
+	}
+
+	variables := map[string]interface{}{
+		"pullRequestId": prNodeID,
+		"mergeMethod":   graphqlMethod,
+	}
+
+	_, err := executeGraphQLQuery(ctx, runner, mutation, variables)
+	if err != nil {
+		// Check for common error cases
+		if strings.Contains(err.Error(), "auto-merge is not allowed") || strings.Contains(err.Error(), "Pull request auto-merge is not enabled") {
+			return fmt.Errorf("auto-merge is not enabled for this repository. Enable it in repository settings under 'Pull Requests' → 'Allow auto-merge'")
+		}
+		if strings.Contains(err.Error(), "Pull request is not in a mergeable state") {
+			return fmt.Errorf("PR has merge conflicts. Please resolve conflicts before enabling auto-merge")
+		}
+		return fmt.Errorf("failed to enable auto-merge: %w", err)
+	}
+
+	return nil
+}
+
+// DisableAutoMerge disables GitHub's auto-merge feature on a PR.
+func DisableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string) error {
+	mutation := `mutation DisableAutoMerge($pullRequestId: ID!) {
+		disablePullRequestAutoMerge(input: {
+			pullRequestId: $pullRequestId
+		}) {
+			pullRequest {
+				id
+			}
+		}
+	}`
+
+	variables := map[string]interface{}{
+		"pullRequestId": prNodeID,
+	}
+
+	_, err := executeGraphQLQuery(ctx, runner, mutation, variables)
+	if err != nil {
+		return fmt.Errorf("failed to disable auto-merge: %w", err)
+	}
+
+	return nil
+}
+
+// GetAutoMergeStatus checks if auto-merge is enabled on a PR and returns its status.
+func GetAutoMergeStatus(ctx context.Context, runner git.Runner, prNodeID string) (*AutoMergeStatus, error) {
+	query := `query GetAutoMergeStatus($nodeId: ID!) {
+		node(id: $nodeId) {
+			... on PullRequest {
+				autoMergeRequest {
+					enabledAt
+					enabledBy {
+						login
+					}
+					mergeMethod
+				}
+			}
+		}
+	}`
+
+	variables := map[string]interface{}{
+		"nodeId": prNodeID,
+	}
+
+	body, err := executeGraphQLQuery(ctx, runner, query, variables)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get auto-merge status: %w", err)
+	}
+
+	var response struct {
+		Data struct {
+			Node struct {
+				AutoMergeRequest *struct {
+					EnabledAt string `json:"enabledAt"`
+					EnabledBy *struct {
+						Login string `json:"login"`
+					} `json:"enabledBy"`
+					MergeMethod string `json:"mergeMethod"`
+				} `json:"autoMergeRequest"`
+			} `json:"node"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse auto-merge status response: %w", err)
+	}
+
+	status := &AutoMergeStatus{
+		Enabled: response.Data.Node.AutoMergeRequest != nil,
+	}
+
+	if response.Data.Node.AutoMergeRequest != nil {
+		status.EnabledAt = response.Data.Node.AutoMergeRequest.EnabledAt
+		status.MergeMethod = response.Data.Node.AutoMergeRequest.MergeMethod
+		if response.Data.Node.AutoMergeRequest.EnabledBy != nil {
+			status.EnabledBy = response.Data.Node.AutoMergeRequest.EnabledBy.Login
+		}
+	}
+
+	return status, nil
+}
+
+// PRMergeableState represents the mergeable state of a PR
+type PRMergeableState struct {
+	Mergeable      bool   // True if PR can be merged without conflicts
+	MergeStateText string // MERGEABLE, CONFLICTING, UNKNOWN
+	State          string // OPEN, CLOSED, MERGED
+}
+
+// GetPRMergeableState checks if a PR has merge conflicts.
+func GetPRMergeableState(ctx context.Context, runner git.Runner, prNodeID string) (*PRMergeableState, error) {
+	query := `query GetPRMergeableState($nodeId: ID!) {
+		node(id: $nodeId) {
+			... on PullRequest {
+				mergeable
+				mergeStateStatus
+				state
+			}
+		}
+	}`
+
+	variables := map[string]interface{}{
+		"nodeId": prNodeID,
+	}
+
+	body, err := executeGraphQLQuery(ctx, runner, query, variables)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PR mergeable state: %w", err)
+	}
+
+	var response struct {
+		Data struct {
+			Node struct {
+				Mergeable        string `json:"mergeable"`
+				MergeStateStatus string `json:"mergeStateStatus"`
+				State            string `json:"state"`
+			} `json:"node"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse PR mergeable state response: %w", err)
+	}
+
+	return &PRMergeableState{
+		Mergeable:      response.Data.Node.Mergeable == "MERGEABLE",
+		MergeStateText: response.Data.Node.MergeStateStatus,
+		State:          response.Data.Node.State,
+	}, nil
+}
+
+// WaitForPRMerge polls until a PR is merged or times out.
+// Returns nil if the PR is merged, error otherwise.
+func WaitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, timeout time.Duration, pollInterval time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		state, err := GetPRMergeableState(ctx, runner, prNodeID)
+		if err != nil {
+			return fmt.Errorf("failed to check PR state: %w", err)
+		}
+
+		if state.State == "MERGED" {
+			return nil
+		}
+
+		if state.State == "CLOSED" {
+			return fmt.Errorf("PR was closed without merging")
+		}
+
+		// Check if auto-merge was disabled (might indicate conflicts or other issues)
+		autoMerge, err := GetAutoMergeStatus(ctx, runner, prNodeID)
+		if err == nil && !autoMerge.Enabled {
+			// Re-check PR state to avoid race condition where PR merged between checks
+			freshState, freshErr := GetPRMergeableState(ctx, runner, prNodeID)
+			if freshErr == nil && freshState.State == "MERGED" {
+				return nil // PR merged successfully
+			}
+
+			// Auto-merge was disabled and PR is not merged
+			if freshErr == nil && !freshState.Mergeable {
+				return fmt.Errorf("auto-merge was disabled due to merge conflicts. Please resolve conflicts and try again")
+			}
+			return fmt.Errorf("auto-merge was disabled. This may indicate a problem with the PR")
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	return fmt.Errorf("timed out waiting for PR to be merged after %v", timeout)
 }
 
 // updatePRDraftStatus updates the draft status of a PR using GitHub's GraphQL API
