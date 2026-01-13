@@ -46,10 +46,14 @@ Use --local to install files in the current repository instead.
 This will create:
   - .cursor/rules/stackit.md (for Cursor)
   - .claude/skills/stackit/ (Claude Code skill)
+  - .claude/skills/stackit/subagents/ (Haiku subagent templates)
   - .claude/commands/ (Claude Code slash commands)
 
 These files contain instructions for AI agents on how to use stackit commands
-to manage stacked branches, create commits, submit PRs, and more.`,
+to manage stacked branches, create commits, submit PRs, and more.
+
+Subagent templates enable cost-effective delegation of tasks like commit message
+and PR description generation to the faster Haiku model.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
@@ -138,6 +142,11 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 		return fmt.Errorf("failed to create scripts directory: %w", err)
 	}
 
+	subagentsDir := filepath.Join(skillDir, "subagents")
+	if err := os.MkdirAll(subagentsDir, 0750); err != nil {
+		return fmt.Errorf("failed to create subagents directory: %w", err)
+	}
+
 	// Write command reference files
 	commandRefFiles := []string{
 		"navigation.md",
@@ -204,6 +213,25 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 		}
 	}
 
+	// Write subagent files
+	subagentFiles := []string{
+		"commit-message.md",
+		"review-triage.md",
+	}
+
+	for _, filename := range subagentFiles {
+		templatePath := "agents/templates/subagents/" + filename
+		content, err := agentTemplates.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
+		}
+
+		filePath := filepath.Join(subagentsDir, filename)
+		if err := os.WriteFile(filePath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
+
 	// Create .claude/commands directory
 	commandsDir := filepath.Join(baseDir, ".claude", "commands")
 	if err := os.MkdirAll(commandsDir, 0750); err != nil {
@@ -217,6 +245,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 		"stack-fix.md",
 		"stack-fold.md",
 		"stack-restack.md",
+		"stack-review.md",
 		"stack-status.md",
 		"stack-submit.md",
 		"stack-sync.md",
@@ -266,9 +295,10 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/commands/ (4 reference files)\n", getDisplayPath(baseDir, local))
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/workflows/ (4 workflow guides)\n", getDisplayPath(baseDir, local))
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/scripts/ (1 utility script)\n", getDisplayPath(baseDir, local))
+	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/subagents/ (2 subagent templates)\n", getDisplayPath(baseDir, local))
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Slash commands:")
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/commands/stack-*.md (8 commands)\n", getDisplayPath(baseDir, local))
+	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/commands/stack-*.md (%d commands)\n", getDisplayPath(baseDir, local), len(commands))
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Cursor integration:")
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.cursor/rules/stackit.md\n", getDisplayPath(baseDir, local))
@@ -280,6 +310,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintln(out, "  /stack-fix     - Diagnose and fix stack issues")
 	_, _ = fmt.Fprintln(out, "  /stack-fold    - Fold granular branches into parents")
 	_, _ = fmt.Fprintln(out, "  /stack-restack - Rebase all branches in stack")
+	_, _ = fmt.Fprintln(out, "  /stack-review  - Apply PR review comments and mark resolved")
 	_, _ = fmt.Fprintln(out, "  /stack-status  - View stack state and health")
 	_, _ = fmt.Fprintln(out, "  /stack-submit  - Submit PRs with generated descriptions")
 	_, _ = fmt.Fprintln(out, "  /stack-sync    - Sync with trunk and cleanup")

@@ -18,17 +18,44 @@ $ARGUMENTS
 
 ## Instructions
 
-1. Check the branch info JSON - if parent branch doesn't exist, run `command stackit sync` first
-2. For branches without PRs, prepare PR metadata:
-   - Check for .github/pull_request_template.md for format requirements
-   - Title: first commit message line
-   - Body: summary of commits + test plan
-3. Run submit command:
-   - Current branch: `command stackit submit --no-interactive`
-   - Entire stack: `command stackit submit --stack --no-interactive`
-   - As drafts: add `--draft`
-4. Report created/updated PR URLs
+### Step 1: Pre-flight Checks
+
+Check the branch info JSON:
+- If parent branch doesn't exist or was deleted, run `command stackit sync --no-interactive` first
+- If there are uncommitted changes, warn the user
+
+### Step 2: Identify Branches Needing PRs
+
+From the stack state, identify which branches need PR descriptions generated:
+- Branches without existing PRs need full title + body generation
+- Branches with PRs may just need updates
+
+### Step 3: Submit PRs
+
+Run submit command:
+
+**Current branch only:**
+```bash
+command stackit submit --no-interactive
+```
+
+**Entire stack:**
+```bash
+command stackit submit --stack --no-interactive
+```
+
+**As drafts:** add `--draft`
+
+When stackit prompts for title and body (in interactive mode) or when generating PR content:
+- **Title**: Use first commit subject, keep under 72 chars
+- **Body**: Summarize changes with bullet points + include test plan
+
+Check `.github/pull_request_template.md` and `CONTRIBUTING.md` for format requirements.
+
+### Step 4: Report Results
+
+Report the created/updated PR URLs to the user.
 
 ## Do NOT
 - Submit if parent branch was deleted (run sync first)
-- Create PRs with placeholder or empty descriptions
+- Create PRs with placeholder content ("TODO", "TBD", empty sections)

@@ -1,5 +1,5 @@
 {
-  "name": "Create branch with auto-generated name",
+  "name": "Create branch with subagent-generated commit message",
   "skills": ["stackit"],
   "query": "I made changes to auth.go that add user authentication. Create a new branch in my stack.",
   "setup_commands": [
@@ -14,18 +14,25 @@
   ],
   "expected_behavior": [
     "Runs 'stackit log' to check current state",
-    "Checks README.md or CONTRIBUTING.md for commit message guidelines",
-    "Generates a conventional commit message with type prefix (e.g., 'feat:', 'fix:')",
-    "Validates message has clear description and follows format",
-    "Uses pipe format: echo 'message' | stackit create",
+    "Gathers context for subagent:",
+    "  - Staged diff via git diff --cached",
+    "  - Recent commits via git log --oneline",
+    "  - Project conventions from CONTRIBUTING.md/README.md if exists",
+    "Spawns haiku subagent using Task tool with model: haiku",
+    "Subagent prompt includes diff content and style reference",
+    "Parses subagent response to extract commit message",
+    "Generated message follows project conventions or matches recent commits",
+    "Uses pipe format: echo 'message' | stackit create --no-interactive",
     "Does NOT specify branch name (lets stackit auto-generate)",
     "Runs 'stackit log' after creation to show new state",
     "Does NOT use 'git commit' or 'git checkout' directly"
   ],
   "anti_patterns": [
+    "Generates commit message directly without using haiku subagent",
+    "Uses main model (sonnet/opus) for message generation",
     "Uses 'git commit' instead of stackit",
     "Manually specifies branch name when not requested",
-    "Skips validation of commit message quality",
+    "Skips gathering context (diff, recent commits) for subagent",
     "Uses 'stackit create -m' flag instead of pipe format"
   ]
 }
