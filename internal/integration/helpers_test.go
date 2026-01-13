@@ -559,3 +559,73 @@ func (s *TestShell) ExpectStackStructure(expected map[string]string) *TestShell 
 	}
 	return s
 }
+
+// PRMetadata contains options for setting PR metadata
+type PRMetadata struct {
+	Number int
+	State  string // "OPEN", "MERGED", "CLOSED"
+	Draft  bool
+	URL    string
+}
+
+// SetPrMetadata sets full PR metadata for a branch.
+func (s *TestShell) SetPrMetadata(branch string, pr PRMetadata) *TestShell {
+	s.t.Helper()
+
+	// Read existing metadata
+	refName := "refs/stackit/metadata/" + branch
+	cmd := exec.Command("git", "show-ref", "-s", refName)
+	cmd.Dir = s.scene.Dir
+	shaOutput, err := cmd.Output()
+
+	var meta map[string]interface{}
+	if err == nil {
+		// Ref exists, read it
+		sha := strings.TrimSpace(string(shaOutput))
+		cmd = exec.Command("git", "cat-file", "-p", sha)
+		cmd.Dir = s.scene.Dir
+		blobOutput, err := cmd.Output()
+		require.NoError(s.t, err, "failed to read metadata blob for %s", branch)
+		err = json.Unmarshal(blobOutput, &meta)
+		require.NoError(s.t, err, "failed to parse metadata for %s", branch)
+	} else {
+		// No existing metadata
+		meta = make(map[string]interface{})
+	}
+
+	// Update PR info
+	prInfo := make(map[string]interface{})
+	if pr.Number > 0 {
+		prInfo["number"] = pr.Number
+	}
+	if pr.State != "" {
+		prInfo["state"] = pr.State
+	}
+	if pr.Draft {
+		prInfo["draft"] = pr.Draft
+	}
+	if pr.URL != "" {
+		prInfo["url"] = pr.URL
+	}
+	meta["prInfo"] = prInfo
+
+	// Write back
+	jsonData, err := json.Marshal(meta)
+	require.NoError(s.t, err, "failed to marshal metadata")
+
+	// Create blob
+	cmd = exec.Command("git", "hash-object", "-w", "--stdin")
+	cmd.Dir = s.scene.Dir
+	cmd.Stdin = strings.NewReader(string(jsonData))
+	newShaOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to create metadata blob")
+
+	// Update ref
+	newSha := strings.TrimSpace(string(newShaOutput))
+	cmd = exec.Command("git", "update-ref", refName, newSha)
+	cmd.Dir = s.scene.Dir
+	err = cmd.Run()
+	require.NoError(s.t, err, "failed to update metadata ref")
+
+	return s
+}
