@@ -146,9 +146,13 @@ This pushes both branches and creates two PRs on GitHub, with `add-logic` correc
 ### 6. Merge your stack
 Once your PRs are approved, merge the entire stack:
 ```bash
-stackit merge
+stackit merge          # Interactive wizard
+stackit merge next     # Merge bottom PR, then restack
+stackit merge squash   # Consolidate into single PR and merge
 ```
-This merges all approved PRs in your stack, bottom-up, and cleans up the merged branches.
+- `stackit merge` launches an interactive wizard to guide you through merging
+- `stackit merge next` merges the bottom-most unmerged PR using GitHub automerge, then restacks remaining branches
+- `stackit merge squash` consolidates all branches into a single PR for atomic merging
 
 ---
 
@@ -240,7 +244,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit foreach` | Run a shell command on each branch in the stack (default: upstack) |
 | `stackit submit` | Push branches and create/update GitHub PRs (alias: `ss` for `--stack`) |
 | `stackit sync` | Pull trunk, delete merged branches, and restack |
-| `stackit merge` | Merge approved PRs and clean up merged branches |
+| `stackit merge` | Interactive merge wizard (use `merge next` or `merge squash` for non-interactive) |
 | `stackit reorder` | Interactively reorder branches in your stack |
 | `stackit move` | Rebase a branch (and its children) onto a new parent |
 | `stackit pluck` | Extract a single branch from a stack (reparents children to grandparent) |

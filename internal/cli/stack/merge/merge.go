@@ -1,0 +1,88 @@
+// Package merge provides CLI commands for merging stacked PRs.
+package merge
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	mergeAction "stackit.dev/stackit/internal/actions/merge"
+	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/cli/common"
+)
+
+// PostMergeHandler handles post-merge actions like syncing trunk.
+// This is injected by the parent package to avoid circular dependencies.
+type PostMergeHandler func(ctx *app.Context, action mergeAction.PostMergeAction) error
+
+// NewMergeCmd creates the merge command with subcommands.
+// postMergeHandler is called when a post-merge action is required (e.g., syncing trunk).
+func NewMergeCmd(postMergeHandler PostMergeHandler) *cobra.Command {
+	var (
+		dryRun bool
+		force  bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "merge",
+		Short: "Merge pull requests for a stack",
+		Long: `Merge pull requests associated with your stack.
+
+When run without a subcommand, an interactive wizard guides you through the merge process.
+
+Subcommands:
+  next    Merge the next (bottom-most) unmerged PR in the stack
+  squash  Consolidate all branches into a single PR and merge atomically
+
+Examples:
+  stackit merge             # Interactive wizard
+  stackit merge next        # Merge bottom PR, restack, stop
+  stackit merge squash      # Consolidate all branches into single PR`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
+				// Must be interactive for wizard mode
+				if !ctx.Interactive {
+					return fmt.Errorf("merge wizard requires a TTY. Use 'merge next' or 'merge squash' for non-interactive mode")
+				}
+
+				runner, handler := NewMergeUI(ctx.Output, ctx.Logger)
+				if runner != nil {
+					defer runner.Cleanup()
+				}
+
+				// Cast to InteractiveHandler and verify it supports interactive prompts
+				interactiveHandler, ok := handler.(mergeAction.InteractiveHandler)
+				if !ok || !interactiveHandler.IsInteractive() {
+					return fmt.Errorf("interactive mode requires a TTY")
+				}
+
+				err := mergeAction.RunWizard(ctx, interactiveHandler, mergeAction.WizardOptions{
+					DryRun: dryRun,
+					Force:  force,
+					Wait:   true, // Default to wait for automerge
+				})
+
+				// Handle post-merge follow-up action
+				var postMerge *mergeAction.PostMergeActionRequired
+				if errors.As(err, &postMerge) {
+					if postMergeHandler != nil {
+						return postMergeHandler(ctx, postMerge.Action)
+					}
+					return nil
+				}
+				return err
+			})
+		},
+	}
+
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
+	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
+
+	// Add subcommands
+	cmd.AddCommand(NewNextCmd(postMergeHandler))
+	cmd.AddCommand(NewSquashCmd(postMergeHandler))
+
+	return cmd
+}
