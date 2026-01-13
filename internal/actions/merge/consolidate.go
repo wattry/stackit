@@ -221,7 +221,7 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 	expectChecks := AnyPRHasChecks(c.plan.BranchesToMerge)
 
 	// Get merge method (prompts user if not configured)
-	mergeMethod, err := getMergeMethod(c.ctx, c.ctx.GitHubClient)
+	mergeMethod, err := GetMergeMethod(c.ctx, c.ctx.GitHubClient)
 	if err != nil {
 		return fmt.Errorf("failed to get merge method: %w", err)
 	}

@@ -33,6 +33,7 @@ func NewNextCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		yes    bool
 		force  bool
 		noWait bool
+		method string
 	)
 
 	cmd := &cobra.Command{
@@ -55,6 +56,7 @@ immediately after enabling automerge.`,
 					yes:    yes,
 					force:  force,
 					noWait: noWait,
+					method: method,
 				}, postMergeHandler)
 			})
 		},
@@ -64,6 +66,7 @@ immediately after enabling automerge.`,
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Don't wait for merge, return after enabling automerge")
+	cmd.Flags().StringVar(&method, "method", "", "Merge method (squash, merge, rebase). Uses config merge.method if not specified")
 
 	return cmd
 }
@@ -73,6 +76,7 @@ type mergeNextOptions struct {
 	yes    bool
 	force  bool
 	noWait bool
+	method string
 }
 
 func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler PostMergeHandler) error {
@@ -147,9 +151,32 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 		return fmt.Errorf("PR #%d has merge conflicts. Please resolve conflicts first", bottomPR.PRNumber)
 	}
 
+	// Determine merge method: flag > config > prompt
+	var mergeMethod github.MergeMethod
+	if opts.method != "" {
+		// Flag override
+		switch opts.method {
+		case "squash":
+			mergeMethod = github.MergeMethodSquash
+		case "merge":
+			mergeMethod = github.MergeMethodMerge
+		case "rebase":
+			mergeMethod = github.MergeMethodRebase
+		default:
+			return fmt.Errorf("invalid merge method: %s (must be squash, merge, or rebase)", opts.method)
+		}
+	} else {
+		// Use config or prompt user
+		var err error
+		mergeMethod, err = mergeAction.GetMergeMethod(ctx, ctx.GitHubClient)
+		if err != nil {
+			return fmt.Errorf("failed to determine merge method: %w", err)
+		}
+	}
+
 	// Enable automerge
-	out.Info("Enabling automerge on PR #%d...", bottomPR.PRNumber)
-	if err := github.EnableAutoMerge(ctx.Context, eng.Git(), prInfo.NodeID, github.MergeMethodSquash); err != nil {
+	out.Info("Enabling automerge on PR #%d (method: %s)...", bottomPR.PRNumber, mergeMethod)
+	if err := github.EnableAutoMerge(ctx.Context, eng.Git(), prInfo.NodeID, mergeMethod); err != nil {
 		return fmt.Errorf("failed to enable automerge: %w", err)
 	}
 	out.Success("Automerge enabled on PR #%d", bottomPR.PRNumber)
