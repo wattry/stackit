@@ -148,6 +148,30 @@ chore: update dependencies
 - Follow the existing code style in the repository
 - Write clear, self-documenting code
 - Add comments for complex logic
+- Prefer early returns over deep nesting
+- Always handle errors explicitly; never ignore them with `_`
+- Wrap errors with context: `fmt.Errorf("context: %w", err)`
+
+## Project Structure
+
+```
+stackit/
+├── cmd/stackit/       # CLI entry point and command definitions
+├── internal/
+│   ├── actions/       # High-level business logic for CLI commands
+│   ├── engine/        # Core logic for branch relationships and metadata
+│   ├── git/           # Low-level Git operations
+│   └── utils/         # Shared utilities
+```
+
+## Philosophy
+
+When contributing, keep these principles in mind:
+
+1. **Safety First**: Operations should be non-destructive and undoable with `stackit undo`
+2. **Speed**: Common operations should be fast and require minimal context switching
+3. **Visibility**: Users should always know where they are in their stack
+4. **Git Native**: Use standard Git refs and metadata under the hood
 
 ## Questions?
 

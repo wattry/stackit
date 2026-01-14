@@ -4,6 +4,22 @@
 
 **Stackit** is a command-line tool that makes working with stacked changes fast and intuitive.
 
+## Table of Contents
+
+- [What is Stacking?](#what-is-stacking)
+- [Features](#features)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Command Reference](#command-reference)
+- [Common Workflows](#common-workflows)
+- [Claude Code Integration](#claude-code-integration)
+- [Branch Protection](#frozen--locked-branches)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+
+---
+
 ## What is Stacking?
 
 Stacked changes (or "stacked diffs") is a development workflow where you break a large feature into small, focused branches that build on top of each other. Instead of one massive Pull Request, you have a "stack" of smaller PRs. Stacks can be linear (a simple chain of branches) or they can branch out into a tree structure when you need to work on multiple parallel features that share a common base.
@@ -382,66 +398,85 @@ stackit config --list
 
 ---
 
-## Requirements
+## Troubleshooting
+
+### "Branch not tracked by stackit"
+
+If you see this error, the branch wasn't created with `stackit create`. You can manually track it:
+
+```bash
+stackit track
+```
+
+### Merge conflicts during restack
+
+When `stackit restack` encounters conflicts:
+
+1. Resolve the conflicts in your editor
+2. Stage the resolved files: `git add .`
+3. Continue the restack: `stackit continue`
+
+Or abort and try a different approach: `stackit abort`
+
+### Recovering from a failed operation
+
+Stackit automatically saves state before operations. To undo:
+
+```bash
+stackit undo
+```
+
+This restores branches and metadata to the state before the last command.
+
+### Stack is out of sync with remote
+
+If your local stack diverged from remote (e.g., after force-pushes by collaborators):
+
+```bash
+stackit sync
+```
+
+This pulls the latest trunk, cleans up merged branches, and restacks.
+
+### PR base branch is wrong on GitHub
+
+If a PR's base branch is pointing to the wrong parent:
+
+```bash
+stackit submit --stack
+```
+
+This updates all PRs in the stack with correct base branches.
+
+### "Cannot modify frozen/locked branch"
+
+Frozen branches are protected from modification. To make changes:
+
+```bash
+stackit unfreeze <branch>  # For locally frozen branches
+stackit unlock <branch>    # For shared locked branches
+```
+
+### Need more help?
+
+Run the doctor command to diagnose common issues:
+
+```bash
+stackit doctor
+```
+
+---
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Requirements
 
 - **Git 2.25+**
 - **GitHub CLI (`gh`)** for PR operations
 - **Go 1.25+** (if building from source)
 
-## Development
-
-```bash
-# Run tests and linter
-just check
-
-# Build locally
-just build
-```
-
-## Philosophy
-
-1. **Safety First**: Operations are non-destructive and can be undone with `stackit undo`.
-2. **Speed**: Common operations should be fast and require minimal context switching.
-3. **Visibility**: You should always know exactly where you are in your stack.
-4. **Git Native**: Stackit uses standard Git refs and metadata under the hood.
-
 ## License
 
 MIT
-
----
-
-## Hack on Stackit
-
-### Building from Source
-
-Requires Go 1.25+:
-
-```bash
-git clone https://github.com/getstackit/stackit
-cd stackit
-go build -o stackit ./cmd/stackit
-# Move to your PATH
-mv stackit /usr/local/bin/
-```
-
-### Using Just
-
-If you have [just](https://github.com/casey/just) installed:
-
-```bash
-just build
-just install
-```
-
-The `just build` command will also create a local `st` symlink for convenience.
-
-### Development
-
-```bash
-# Run tests and linter
-just check
-
-# Build locally
-just build
-```
