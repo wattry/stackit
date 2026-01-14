@@ -1,7 +1,7 @@
 ---
 description: Create a new stacked branch with intelligent naming
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Task
-argument-hint: [optional-branch-name]
+allowed-tools: Bash(stackit:*), Bash(git:*), Read
+argument-hint: [-m "message"] [branch-name]
 ---
 
 # Stack Create
@@ -10,7 +10,7 @@ Create a new stacked branch on top of the current branch.
 
 ## CRITICAL: Required Workflow
 
-**You MUST stage changes BEFORE running `command stackit create`.** The command creates a branch AND commits staged changes in one atomic operation.
+**`command stackit create` requires staged changes.** It creates a branch AND commits staged changes in one atomic operation.
 
 ```bash
 # CORRECT workflow:
@@ -28,106 +28,72 @@ When creating new stacked branches, NEVER use:
 - `git commit` - Always use `command stackit create` instead
 - `git checkout -b` - Use `command stackit create` which handles both
 
-## Context
+## Context (pre-staging)
 - Current branch: !`git branch --show-current`
-- Staged changes: !`git diff --cached --stat`
-- Staged diff (first 200 lines): !`git diff --cached | head -200`
-- Recent commits: !`git log --oneline -5 2>&1`
-- Stack state: !`command stackit log --no-interactive 2>&1`
-
-**Note:** The staged diff is truncated to 200 lines. For very large changes, focus on the diff stats and file names to understand scope, then read specific files if needed for context.
+- Unstaged changes: !`git diff --stat 2>&1 | head -20`
+- Staged changes: !`git diff --cached --stat 2>&1 | head -20`
+- Recent commits (for style): !`git log --oneline -5 2>&1`
 
 ## Arguments
 $ARGUMENTS
 
 ## Instructions
 
-### Step 1: Check for Staged Changes
+### Step 1: Ensure Changes Are Staged
 
-If no staged changes exist:
-- Ask user what to stage, OR
-- Run `git add --all` if user confirms
+**If staged changes already exist:** Skip to Step 2.
 
-### Step 2: Check Current Position
+**If only unstaged changes exist:** Auto-stage all changes:
+```bash
+git add --all
+```
 
-If on trunk (main/master):
-- Warn user and confirm they want to create a stack from trunk
+**If no changes at all:** Stop and inform the user there's nothing to commit.
+
+### Step 2: Gather Diff Context
+
+After staging is confirmed, get the diff for commit message generation:
+```bash
+git diff --cached
+```
 
 ### Step 3: Get Commit Message
 
 **If user provided a message** (via $ARGUMENTS like `-m "message"`):
 - Use the provided message directly, skip to Step 4
 
-**Otherwise, generate using subagent:**
+**Otherwise, generate the commit message inline:**
 
-Use the Task tool to spawn a **haiku** subagent. The context from the inline commands above (staged diff, recent commits) is already available - use those values directly in the subagent prompt.
-
-Gather additional context only for project conventions:
-```bash
-# Check for commit conventions in project docs
-head -100 CONTRIBUTING.md 2>/dev/null || head -50 README.md 2>/dev/null || echo ""
-```
-
-**Spawn the commit message subagent:**
-
-Use Task tool with `model: haiku` and `subagent_type: general-purpose`. Insert the actual values from the Context section above:
-
-```
-Generate a commit message for these staged changes.
-
-Diff stats:
-<INSERT: actual output from "Staged changes" context>
-
-Diff content:
-<INSERT: actual output from "Staged diff" context>
-
-Recent commits (for style reference):
-<INSERT: actual output from "Recent commits" context>
-
-Project conventions (if any):
-<INSERT: conventions from CONTRIBUTING.md/README.md, or "None documented">
-
-Generate a commit message:
+Using the diff from Step 2 and the recent commits style from Context, generate a commit message:
 - Under 72 chars for first line
-- Match style of recent commits
-- Follow project conventions if documented
+- Follow Conventional Commits if the project uses them (check recent commits)
 - Imperative mood ("Add" not "Added")
+- Match the style of recent commits
 
-Respond with:
-MESSAGE:
-<the commit message>
-END_MESSAGE
-```
-
-**Parse the subagent response:** Extract the commit message between `MESSAGE:` and `END_MESSAGE` markers.
+For simple/obvious changes (single-purpose diffs, documentation, bug fixes), generate directly.
+For complex changes (large diffs, multiple concerns), ask the user for guidance.
 
 ### Step 4: Create the Branch
 
-Run the create command with the generated message. Use a heredoc to handle multi-line messages and special characters safely:
+Run the create command. Use a heredoc for messages with special characters:
 
+```bash
+echo "<commit_message>" | command stackit create [branch-name] --no-interactive
+```
+
+Or with heredoc for complex messages:
 ```bash
 command stackit create [branch-name] --no-interactive <<'EOF'
 <commit_message>
 EOF
 ```
 
-Or for single-line messages without special characters:
-```bash
-echo "<commit_message>" | command stackit create [branch-name] --no-interactive
-```
-
 - Branch name is optional; stackit auto-generates from commit message
-- Use heredoc (`<<'EOF'`) if the message contains quotes, newlines, or special shell characters
 
-### Step 5: Confirm Success
-
-Show the new stack state:
-
-```bash
-command stackit log --no-interactive
-```
+The command outputs the result including the new branch name. No additional commands needed.
 
 ## Do NOT
 - Run `command stackit create` without staged changes (creates empty branch)
 - Use `git commit` after creating a branch - this bypasses stackit
-- Generate commit messages with the main model when no message was provided (use haiku subagent)
+- Run `git status` or `git diff --stat` redundantly - trust the context
+- Run `stackit log` after create - the create output is sufficient
