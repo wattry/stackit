@@ -15,13 +15,12 @@ func (e *engineImpl) IsTrunk(branch Branch) bool {
 	return branchName == e.trunk
 }
 
-// IsTracked checks if a branch is tracked (has metadata)
+// IsTracked checks if a branch is tracked (has a parent in metadata)
 func (e *engineImpl) IsTracked(branch Branch) bool {
-	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	_, ok := e.parentMap[branchName]
-	return ok
+	state := e.branchState.Get(branch)
+	return state != nil && state.Parent != ""
 }
 
 // GetScope returns the scope for a branch, inheriting from parent if not set
@@ -38,18 +37,21 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 		}
 		visited[current] = true
 
-		if scopeStr, ok := e.scopeMap[current]; ok && scopeStr != "" {
-			scope := NewScope(scopeStr)
+		state := e.branchState.GetByName(current)
+		if state == nil {
+			break
+		}
+		if state.HasScope() {
+			scope := state.GetScope()
 			if scope.IsNone() {
 				return Empty()
 			}
 			return scope
 		}
-		parent, ok := e.parentMap[current]
-		if !ok || parent == e.trunk {
+		if state.Parent == "" || state.Parent == e.trunk {
 			break
 		}
-		current = parent
+		current = state.Parent
 	}
 	return Empty()
 }
@@ -58,28 +60,40 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 func (e *engineImpl) IsLocked(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return LockReason(e.lockedMap[branch.GetName()]).IsLocked()
+	if state := e.branchState.Get(branch); state != nil {
+		return state.IsLocked()
+	}
+	return false
 }
 
 // GetLockReason returns the reason why a branch is locked
 func (e *engineImpl) GetLockReason(branch Branch) LockReason {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return LockReason(e.lockedMap[branch.GetName()])
+	if state := e.branchState.Get(branch); state != nil {
+		return state.LockReason
+	}
+	return LockReasonNone
 }
 
 // IsFrozen checks if a branch is frozen
 func (e *engineImpl) IsFrozen(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.frozenMap[branch.GetName()]
+	if state := e.branchState.Get(branch); state != nil {
+		return state.Frozen
+	}
+	return false
 }
 
 // GetBranchType returns the branch type for a branch
 func (e *engineImpl) GetBranchType(branch Branch) git.BranchType {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return git.BranchType(e.branchTypeMap[branch.GetName()])
+	if state := e.branchState.Get(branch); state != nil {
+		return state.BranchType
+	}
+	return ""
 }
 
 // IsWorktreeAnchor checks if a branch is a worktree anchor branch
@@ -108,11 +122,9 @@ func (e *engineImpl) SetBranchType(branch Branch, branchType git.BranchType) err
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
-	// Update in-memory map
-	if branchType != "" {
-		e.branchTypeMap[branchName] = string(branchType)
-	} else {
-		delete(e.branchTypeMap, branchName)
+	// Update in-memory state
+	if state := e.branchState.GetByName(branchName); state != nil {
+		state.BranchType = branchType
 	}
 
 	return nil
@@ -120,15 +132,13 @@ func (e *engineImpl) SetBranchType(branch Branch, branchType git.BranchType) err
 
 // GetExplicitScope returns the explicit scope set for a branch (no inheritance)
 func (e *engineImpl) GetExplicitScope(branch Branch) Scope {
-	branchName := branch.GetName()
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	scopeStr := e.scopeMap[branchName]
-	if scopeStr == "" {
-		return Empty()
+	if state := e.branchState.Get(branch); state != nil && state.HasScope() {
+		return state.GetScope()
 	}
-	return NewScope(scopeStr)
+	return Empty()
 }
 
 // getExplicitScope is an internal method for Branch type
@@ -145,15 +155,15 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 	}
 
 	e.mu.RLock()
-	parent, ok := e.parentMap[branchName]
+	state := e.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
-	if !ok {
+	if state == nil {
 		return true // Not tracked, consider it fixed
 	}
 
 	// Get current parent revision
-	parentRev, err := e.git.GetRevision(parent)
+	parentRev, err := e.git.GetRevision(state.Parent)
 	if err != nil {
 		return false // Can't determine, assume needs restack
 	}
@@ -176,7 +186,11 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 func (e *engineImpl) GetBranchRemoteStatus(branch Branch) (BranchRemoteStatus, error) {
 	branchName := branch.GetName()
 	e.mu.RLock()
-	remoteSha, hasCachedRemote := e.remoteShas[branchName]
+	state := e.branchState.Get(branch)
+	var remoteSha string
+	if state != nil {
+		remoteSha = state.RemoteSHA
+	}
 	e.mu.RUnlock()
 
 	localSha, err := e.git.GetRevision(branchName)
@@ -184,7 +198,7 @@ func (e *engineImpl) GetBranchRemoteStatus(branch Branch) (BranchRemoteStatus, e
 		localSha = "" // Branch doesn't exist locally
 	}
 
-	if !hasCachedRemote {
+	if remoteSha == "" {
 		// Fall back to local remote tracking branch
 		remoteSha, err = e.git.GetRemoteRevision(branchName)
 		if err != nil {
@@ -233,13 +247,13 @@ func (e *engineImpl) IsMergedIntoTrunk(ctx context.Context, branchName string) (
 // IsBranchEmpty checks if a branch has no changes compared to its parent
 func (e *engineImpl) IsBranchEmpty(ctx context.Context, branchName string) (bool, error) {
 	e.mu.RLock()
-	parent, ok := e.parentMap[branchName]
+	state := e.branchState.GetByName(branchName)
 	trunk := e.trunk
 	e.mu.RUnlock()
 
-	if !ok {
-		// If not tracked, compare to trunk
-		parent = trunk
+	parent := trunk
+	if state != nil {
+		parent = state.Parent
 	}
 
 	// Get parent revision

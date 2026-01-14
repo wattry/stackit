@@ -10,21 +10,87 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
+// BranchState holds the cached metadata state for a single branch.
+// This consolidates what was previously stored in separate maps.
+type BranchState struct {
+	Parent        string         // Parent branch name
+	Scope         string         // Scope string (may be empty)
+	LockReason    git.LockReason // Lock reason (empty if not locked)
+	Frozen        bool           // Whether branch is frozen (local-only state)
+	BranchType    git.BranchType // Branch type (worktree-anchor, utility, etc.)
+	RemoteSHA     string         // Remote SHA (populated by PopulateRemoteShas)
+	LocalModified bool           // Has local metadata changes not yet pushed
+}
+
+// HasScope returns true if this branch has an explicit scope set.
+func (s *BranchState) HasScope() bool {
+	return s.Scope != ""
+}
+
+// GetScope returns the scope as a Scope type.
+func (s *BranchState) GetScope() Scope {
+	return NewScope(s.Scope)
+}
+
+// IsLocked returns true if this branch is locked.
+func (s *BranchState) IsLocked() bool {
+	return s.LockReason.IsLocked()
+}
+
+// BranchStateMap is a map of branch names to their state.
+type BranchStateMap map[string]*BranchState
+
+// Get returns the state for a branch, or nil if not found.
+func (m BranchStateMap) Get(branch Branch) *BranchState {
+	return m[branch.GetName()]
+}
+
+// GetByName returns the state for a branch name, or nil if not found.
+func (m BranchStateMap) GetByName(name string) *BranchState {
+	return m[name]
+}
+
+// Has returns true if the branch exists in the map.
+func (m BranchStateMap) Has(branch Branch) bool {
+	_, ok := m[branch.GetName()]
+	return ok
+}
+
+// HasByName returns true if the branch name exists in the map.
+func (m BranchStateMap) HasByName(name string) bool {
+	_, ok := m[name]
+	return ok
+}
+
+// Set sets the state for a branch.
+func (m BranchStateMap) Set(name string, state *BranchState) {
+	m[name] = state
+}
+
+// Delete removes a branch from the map.
+func (m BranchStateMap) Delete(name string) {
+	delete(m, name)
+}
+
+// GetOrCreate returns the state for a branch, creating it if it doesn't exist.
+func (m BranchStateMap) GetOrCreate(name string) *BranchState {
+	if state, ok := m[name]; ok {
+		return state
+	}
+	state := &BranchState{}
+	m[name] = state
+	return state
+}
+
 // engineImpl is a minimal implementation of the Engine interface
 type engineImpl struct {
 	repoRoot          string
 	trunk             string
 	currentBranch     string
 	branches          []string
-	parentMap         map[string]string    // branch -> parent
-	childrenMap       map[string][]string  // branch -> children
-	scopeMap          map[string]string    // branch -> scope
-	lockedMap         map[string]string    // branch -> lock reason (empty if not locked)
-	frozenMap         map[string]bool      // branch -> frozen (local-only)
-	branchTypeMap     map[string]string    // branch -> branch type (worktree-anchor, utility, etc.)
-	remoteShas        map[string]string    // branch -> remote SHA (populated by PopulateRemoteShas)
-	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata
-	localModified     map[string]bool      // branches with local changes not yet pushed
+	branchState       BranchStateMap       // branch -> consolidated state
+	childrenMap       map[string][]string  // branch -> children (computed from parents)
+	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata (can include non-local branches)
 	maxUndoStackDepth int
 	git               git.Runner
 	writer            io.Writer
@@ -63,14 +129,9 @@ func NewEngine(opts Options) (Engine, error) {
 	e := &engineImpl{
 		repoRoot:          opts.RepoRoot,
 		trunk:             opts.Trunk,
-		parentMap:         make(map[string]string),
+		branchState:       make(BranchStateMap),
 		childrenMap:       make(map[string][]string),
-		scopeMap:          make(map[string]string),
-		lockedMap:         make(map[string]string),
-		frozenMap:         make(map[string]bool),
-		remoteShas:        make(map[string]string),
 		remoteMetaCache:   make(map[string]*git.Meta),
-		localModified:     make(map[string]bool),
 		maxUndoStackDepth: maxDepth,
 		git:               g,
 		writer:            writer,
@@ -167,15 +228,21 @@ func (e *engineImpl) PopulateRemoteShas() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	// Clear existing remote SHAs
+	for _, state := range e.branchState {
+		state.RemoteSHA = ""
+	}
+
 	if err != nil {
 		// Don't fail if we can't fetch remote SHAs (e.g., offline)
-		// But ensure the map is at least initialized
-		if e.remoteShas == nil {
-			e.remoteShas = make(map[string]string)
-		}
 		return nil
 	}
 
-	e.remoteShas = remoteShas
+	// Set RemoteSHA for tracked branches that have a remote
+	for branchName, sha := range remoteShas {
+		if state := e.branchState.GetByName(branchName); state != nil {
+			state.RemoteSHA = sha
+		}
+	}
 	return nil
 }

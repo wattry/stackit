@@ -216,6 +216,18 @@ func Run[T any](items []T, worker func(item T)) {
 	wg.Wait()
 }
 
+// ShortRevision returns a shortened version of a git revision hash.
+// Returns at most maxLen characters, defaulting to 7 if maxLen <= 0.
+func ShortRevision(rev string, maxLen int) string {
+	if maxLen <= 0 {
+		maxLen = 7
+	}
+	if len(rev) <= maxLen {
+		return rev
+	}
+	return rev[:maxLen]
+}
+
 // RunWithWorkers runs the given worker function for each item in the slice in parallel with a specified number of workers.
 func RunWithWorkers[T any](items []T, numWorkers int, worker func(item T)) {
 	if len(items) == 0 {

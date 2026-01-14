@@ -39,11 +39,12 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	branchName := branch.GetName()
 	e.mu.RLock()
 	trunk := e.trunk
-	parent, ok := e.parentMap[branchName]
+	state := e.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
-	if !ok {
-		parent = trunk
+	parent := trunk
+	if state != nil {
+		parent = state.Parent
 	}
 
 	// Get base revision (stored parent revision)
@@ -83,11 +84,12 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	branchName := branch.GetName()
 	e.mu.RLock()
 	trunk := e.trunk
-	parent, ok := e.parentMap[branchName]
+	state := e.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
-	if !ok {
-		parent = trunk
+	parent := trunk
+	if state != nil {
+		parent = state.Parent
 	}
 
 	// Get base revision (stored parent revision)

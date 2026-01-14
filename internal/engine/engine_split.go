@@ -97,7 +97,9 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		}
 
 		// Update in-memory cache
-		e.parentMap[branchName] = branchParentName
+		e.branchState.Set(branchName, &BranchState{
+			Parent: branchParentName,
+		})
 		e.childrenMap[branchParentName] = append(e.childrenMap[branchParentName], branchName)
 		slices.Sort(e.childrenMap[branchParentName])
 
@@ -167,9 +169,9 @@ func (e *engineImpl) DetachAndResetBranchChanges(ctx context.Context, branchName
 	}
 
 	// Get the parent branch
-	parentBranchName := e.parentMap[branchName]
-	if parentBranchName == "" {
-		parentBranchName = e.trunk
+	parentBranchName := e.trunk
+	if state := e.branchState.GetByName(branchName); state != nil {
+		parentBranchName = state.Parent
 	}
 
 	// Get the merge base between this branch and its parent

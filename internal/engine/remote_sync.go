@@ -154,14 +154,12 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 		return nil
 	}
 
-	// Update local metadata maps
-	if remote.LockReason != git.LockReasonNone {
-		e.lockedMap[branchName] = string(remote.LockReason)
-	} else {
-		delete(e.lockedMap, branchName)
-	}
-	if remote.Scope != nil {
-		e.scopeMap[branchName] = *remote.Scope
+	// Update local branch state
+	if state := e.branchState.GetByName(branchName); state != nil {
+		state.LockReason = remote.LockReason
+		if remote.Scope != nil {
+			state.Scope = *remote.Scope
+		}
 	}
 
 	// Read existing local metadata to preserve fields not in remote (like PrInfo)
@@ -287,7 +285,9 @@ func (e *engineImpl) AcceptRemoteMetadata(branch string) error {
 func (e *engineImpl) RejectRemoteMetadata(branch string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.localModified[branch] = true
+	if state := e.branchState.GetByName(branch); state != nil {
+		state.LocalModified = true
+	}
 }
 
 // HasLocalModifications checks if a branch has local metadata changes that differ from its original fetched state
@@ -295,7 +295,7 @@ func (e *engineImpl) HasLocalModifications(branch string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if e.localModified[branch] {
+	if state := e.branchState.GetByName(branch); state != nil && state.LocalModified {
 		return true
 	}
 

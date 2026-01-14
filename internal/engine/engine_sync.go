@@ -113,21 +113,25 @@ func (e *engineImpl) restackBranch(
 	}
 
 	e.mu.RLock()
-	parent, ok := e.parentMap[branchName]
+	state := e.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
-	if !ok {
+	var parent string
+	tracked := state != nil
+	if tracked {
+		parent = state.Parent
+	} else {
 		// RESILIENCY: Try to auto-discover parent if branch is not tracked
 		ancestors, err := e.FindMostRecentTrackedAncestors(ctx, branchName)
 		if err == nil && len(ancestors) > 0 {
 			parent = ancestors[0]
 			// Auto-track the branch
 			if err := e.TrackBranch(ctx, branchName, parent); err == nil {
-				ok = true
+				tracked = true
 			}
 		}
 
-		if !ok {
+		if !tracked {
 			return RestackBranchResult{Result: RestackUnneeded}, fmt.Errorf("branch %s is not tracked", branchName)
 		}
 	}
@@ -535,15 +539,15 @@ func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (Re
 	allInvolvedBranches := make(map[string]bool)
 	for _, name := range branchNames {
 		allInvolvedBranches[name] = true
-		// Crawl up the parent map to find all ancestors
+		// Crawl up the branch state to find all ancestors
 		current := name
 		for {
-			parent, ok := e.parentMap[current]
-			if !ok || parent == e.trunk || allInvolvedBranches[parent] {
+			state := e.branchState.GetByName(current)
+			if state == nil || state.Parent == e.trunk || allInvolvedBranches[state.Parent] {
 				break
 			}
-			allInvolvedBranches[parent] = true
-			current = parent
+			allInvolvedBranches[state.Parent] = true
+			current = state.Parent
 		}
 	}
 	// Also include trunk
