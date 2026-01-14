@@ -64,8 +64,8 @@ func (e *engineImpl) GetParent(branch Branch) *Branch {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if parent, ok := e.parentMap[branch.GetName()]; ok {
-		b := NewBranch(parent, e)
+	if state := e.branchState.Get(branch); state != nil {
+		b := NewBranch(state.Parent, e)
 		return &b
 	}
 	return nil
@@ -106,7 +106,7 @@ func (e *engineImpl) FindMostRecentTrackedAncestors(ctx context.Context, branchN
 		}
 
 		// Only consider tracked branches
-		if _, ok := e.parentMap[candidate]; !ok {
+		if !e.branchState.HasByName(candidate) {
 			continue
 		}
 
@@ -189,18 +189,18 @@ func (e *engineImpl) SortBranchesTopologically(branches []Branch) []Branch {
 
 		e.mu.RLock()
 		isTrunk := branchName == e.trunk
-		parent := e.parentMap[branchName]
+		state := e.branchState.GetByName(branchName)
 		e.mu.RUnlock()
 
 		if isTrunk {
 			depths[branchName] = 0
 			return 0
 		}
-		if parent == "" || e.IsTrunk(NewBranch(parent, e)) {
+		if state == nil || state.Parent == "" || e.IsTrunk(NewBranch(state.Parent, e)) {
 			depths[branchName] = 1
 			return 1
 		}
-		depths[branchName] = getDepth(parent) + 1
+		depths[branchName] = getDepth(state.Parent) + 1
 		return depths[branchName]
 	}
 

@@ -27,6 +27,7 @@ type Context struct {
 	Logger       output.Logger
 	RepoRoot     string
 	GitHubClient github.Client
+	Config       *config.Config // Cached config to avoid repeated loading
 
 	// Global settings from flags
 	Interactive bool
@@ -293,6 +294,7 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 
 	runtimeCtx := NewContext(eng, WithRepoRoot(repoRoot), WithGlobalOptions(opts), WithWriter(writer), WithLogger(logger))
 	runtimeCtx.Context = ctx
+	runtimeCtx.Config = cfg // Store config for reuse
 
 	// Try to create real GitHub client (may fail if no token)
 	ghClient, err := github.NewGitHubClient(ctx, runtimeCtx.Git())

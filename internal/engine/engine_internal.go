@@ -34,7 +34,7 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	return nil
 }
 
-// applyRebuild updates the internal state maps from the provided metadata results.
+// applyRebuild updates the internal state from the provided metadata results.
 // The caller MUST hold the engine's write lock (e.mu).
 func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMeta map[string]*git.Meta, allLocalMeta map[string]*git.LocalMeta) {
 	e.branches = branches
@@ -42,42 +42,46 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 		e.currentBranch = currentBranch
 	}
 
-	// Reset maps
-	e.parentMap = make(map[string]string)
+	// Reset state
+	e.branchState = make(BranchStateMap)
 	e.childrenMap = make(map[string][]string)
-	e.scopeMap = make(map[string]string)
-	e.lockedMap = make(map[string]string)
-	e.frozenMap = make(map[string]bool)
-	e.branchTypeMap = make(map[string]string)
 
-	// Collect results and populate maps sequentially to avoid lock contention/races
+	// Collect results and populate state sequentially to avoid lock contention/races
 	for name, meta := range allMeta {
 		if name == e.trunk {
 			continue // Trunk branches should never be tracked
 		}
 
-		if meta.ParentBranchName != nil {
-			parent := *meta.ParentBranchName
-			if parent == name {
-				continue // Skip self-parenting to avoid cycles
-			}
-			e.parentMap[name] = parent
-			e.childrenMap[parent] = append(e.childrenMap[parent], name)
+		if meta.ParentBranchName == nil {
+			continue // No parent means not tracked
+		}
+
+		parent := *meta.ParentBranchName
+		if parent == name {
+			continue // Skip self-parenting to avoid cycles
+		}
+
+		// Create or get branch state
+		state := &BranchState{
+			Parent:     parent,
+			LockReason: meta.LockReason,
+			BranchType: meta.BranchType,
 		}
 		if meta.Scope != nil {
-			e.scopeMap[name] = *meta.Scope
+			state.Scope = *meta.Scope
 		}
-		if meta.LockReason != LockReasonNone {
-			e.lockedMap[name] = string(meta.LockReason)
-		}
-		if meta.BranchType != "" {
-			e.branchTypeMap[name] = string(meta.BranchType)
-		}
+
+		e.branchState.Set(name, state)
+		e.childrenMap[parent] = append(e.childrenMap[parent], name)
 	}
 
+	// Apply local metadata (frozen state)
+	// Note: We create a BranchState entry for frozen branches even if they're not
+	// tracked, since frozen status is independent of tracked status.
 	for name, meta := range allLocalMeta {
 		if meta.Frozen {
-			e.frozenMap[name] = true
+			state := e.branchState.GetOrCreate(name)
+			state.Frozen = true
 		}
 	}
 
@@ -93,93 +97,77 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 		return
 	}
 
+	// Get the old parent before updating (for children map maintenance)
+	var oldParent string
+	if oldState := e.branchState.GetByName(branchName); oldState != nil {
+		oldParent = oldState.Parent
+	}
+
 	// Read metadata for this branch
 	meta, err := e.git.ReadMetadata(branchName)
 	if err != nil {
-		// If metadata doesn't exist, remove branch from all maps
-		if oldParent, exists := e.parentMap[branchName]; exists {
-			delete(e.parentMap, branchName)
-			// Remove from old parent's children list
-			if children, ok := e.childrenMap[oldParent]; ok {
-				if i := slices.Index(children, branchName); i >= 0 {
-					e.childrenMap[oldParent] = slices.Delete(children, i, i+1)
-				}
-				// Remove empty children lists
-				if len(e.childrenMap[oldParent]) == 0 {
-					delete(e.childrenMap, oldParent)
-				}
-			}
+		// If metadata doesn't exist, remove branch from state and children map
+		if oldParent != "" {
+			e.removeFromChildren(oldParent, branchName)
 		}
-		delete(e.scopeMap, branchName)
-		delete(e.lockedMap, branchName)
-		delete(e.frozenMap, branchName)
+		e.branchState.Delete(branchName)
+		return
 	}
 
 	// Read local metadata too
 	localMeta, _ := e.git.ReadLocalMetadata(branchName)
 
-	// Get the old parent before updating
-	oldParent := e.parentMap[branchName]
-
-	// Update parent map
-	if meta.ParentBranchName != nil {
-		e.parentMap[branchName] = *meta.ParentBranchName
-	} else {
-		delete(e.parentMap, branchName)
-	}
-
-	// Update scope map
-	if meta.Scope != nil {
-		e.scopeMap[branchName] = *meta.Scope
-	} else {
-		delete(e.scopeMap, branchName)
-	}
-
-	// Update locked map
-	if meta.LockReason != LockReasonNone {
-		e.lockedMap[branchName] = string(meta.LockReason)
-	} else {
-		delete(e.lockedMap, branchName)
-	}
-
-	// Update branch type map
-	if meta.BranchType != "" {
-		e.branchTypeMap[branchName] = string(meta.BranchType)
-	} else {
-		delete(e.branchTypeMap, branchName)
-	}
-
-	// Update frozen map
-	if localMeta != nil && localMeta.Frozen {
-		e.frozenMap[branchName] = true
-	} else {
-		delete(e.frozenMap, branchName)
-	}
-
-	// Update children map - remove from old parent, add to new parent
+	// Determine new parent
 	newParent := ""
 	if meta.ParentBranchName != nil {
 		newParent = *meta.ParentBranchName
 	}
 
-	// Remove from old parent's children if parent changed
-	if oldParent != "" && oldParent != newParent {
-		if children, ok := e.childrenMap[oldParent]; ok {
-			if i := slices.Index(children, branchName); i >= 0 {
-				e.childrenMap[oldParent] = slices.Delete(children, i, i+1)
-			}
-			// Remove empty children lists
-			if len(e.childrenMap[oldParent]) == 0 {
-				delete(e.childrenMap, oldParent)
-			}
+	// If no parent, branch is not tracked - remove it
+	if newParent == "" {
+		if oldParent != "" {
+			e.removeFromChildren(oldParent, branchName)
 		}
+		e.branchState.Delete(branchName)
+		return
 	}
 
-	// Add to new parent's children if it has a parent
-	if newParent != "" {
+	// Create or update branch state
+	state := &BranchState{
+		Parent:     newParent,
+		LockReason: meta.LockReason,
+		BranchType: meta.BranchType,
+	}
+	if meta.Scope != nil {
+		state.Scope = *meta.Scope
+	}
+	if localMeta != nil {
+		state.Frozen = localMeta.Frozen
+	}
+
+	e.branchState.Set(branchName, state)
+
+	// Update children map - remove from old parent, add to new parent
+	if oldParent != "" && oldParent != newParent {
+		e.removeFromChildren(oldParent, branchName)
+	}
+
+	// Add to new parent's children if not already there
+	if newParent != "" && (oldParent == "" || oldParent != newParent) {
 		e.childrenMap[newParent] = append(e.childrenMap[newParent], branchName)
-		// Sort for deterministic traversal
 		slices.Sort(e.childrenMap[newParent])
+	}
+}
+
+// removeFromChildren removes a branch from its parent's children list
+func (e *engineImpl) removeFromChildren(parent, child string) {
+	if children, ok := e.childrenMap[parent]; ok {
+		if i := slices.Index(children, child); i >= 0 {
+			e.childrenMap[parent] = slices.Delete(children, i, i+1)
+		}
+		if len(e.childrenMap[parent]) == 0 {
+			delete(e.childrenMap, parent)
+		}
 	}
 }
 
@@ -259,18 +247,23 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 // findNearestValidAncestor finds the nearest ancestor that hasn't been merged/deleted
 // Returns trunk if all ancestors have been merged
 func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName string, metaMap map[string]*git.Meta) string {
-	current := e.parentMap[branchName]
+	// Get the starting parent from branchState
+	state := e.branchState.GetByName(branchName)
+	if state == nil {
+		return e.trunk
+	}
+	current := state.Parent
 
 	for current != "" && current != e.trunk {
 		if !e.shouldReparentBranch(ctx, current, metaMap) {
 			return current
 		}
 		// Move to the next parent
-		parent, ok := e.parentMap[current]
-		if !ok {
+		parentState := e.branchState.GetByName(current)
+		if parentState == nil {
 			break
 		}
-		current = parent
+		current = parentState.Parent
 	}
 
 	return e.trunk

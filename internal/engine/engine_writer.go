@@ -167,9 +167,9 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	copy(children, e.childrenMap[branchName])
 
 	// Get parent
-	parent, ok := e.parentMap[branchName]
-	if !ok {
-		parent = e.trunk
+	parent := e.trunk
+	if state := e.branchState.GetByName(branchName); state != nil {
+		parent = state.Parent
 	}
 
 	// If deleting current branch, switch to trunk first
@@ -215,7 +215,7 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	}
 
 	// Remove from maps
-	delete(e.parentMap, branchName)
+	e.branchState.Delete(branchName)
 	delete(e.childrenMap, branchName)
 
 	// Remove from branches list
@@ -369,11 +369,13 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
-	// Update in-memory map
-	if scope.IsEmpty() {
-		delete(e.scopeMap, branchName)
-	} else {
-		e.scopeMap[branchName] = scope.String()
+	// Update in-memory state
+	if state := e.branchState.GetByName(branchName); state != nil {
+		if scope.IsEmpty() {
+			state.Scope = ""
+		} else {
+			state.Scope = scope.String()
+		}
 	}
 
 	return nil
@@ -402,11 +404,9 @@ func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockR
 		// Update locked status
 		meta.LockReason = reason
 
-		// Update in-memory map
-		if reason.IsLocked() {
-			e.lockedMap[branchName] = string(reason)
-		} else {
-			delete(e.lockedMap, branchName)
+		// Update in-memory state
+		if state := e.branchState.GetByName(branchName); state != nil {
+			state.LockReason = reason
 		}
 
 		// Write metadata
@@ -454,12 +454,9 @@ func (e *engineImpl) SetFrozen(branches []Branch, frozen bool) (BatchFreezeResul
 			continue
 		}
 
-		// Update in-memory map
-		if frozen {
-			e.frozenMap[branchName] = true
-		} else {
-			delete(e.frozenMap, branchName)
-		}
+		// Update in-memory state (create entry if needed for untracked branches)
+		state := e.branchState.GetOrCreate(branchName)
+		state.Frozen = frozen
 
 		result.AffectedBranches = append(result.AffectedBranches, branchName)
 	}
@@ -680,24 +677,24 @@ func (e *engineImpl) GetStackRootForBranch(branch Branch) string {
 	}
 
 	// Check if branch is tracked at all
-	if _, ok := e.parentMap[branchName]; !ok {
+	if !e.branchState.HasByName(branchName) {
 		return "" // Untracked branch has no stack root
 	}
 
 	current := branchName
 	for {
-		parent, ok := e.parentMap[current]
-		if !ok {
+		state := e.branchState.GetByName(current)
+		if state == nil {
 			// Should not happen since we checked above, but handle gracefully
 			return ""
 		}
 
 		// If parent is trunk, current is the stack root
-		if parent == e.trunk {
+		if state.Parent == e.trunk {
 			return current
 		}
 
-		current = parent
+		current = state.Parent
 	}
 }
 
@@ -811,8 +808,9 @@ func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, p
 		}
 	}
 
-	// Add to new parent's children
-	e.parentMap[branchName] = parentBranchName
+	// Update branchState with new parent
+	state := e.branchState.GetOrCreate(branchName)
+	state.Parent = parentBranchName
 	if e.childrenMap[parentBranchName] == nil {
 		e.childrenMap[parentBranchName] = []string{}
 	}

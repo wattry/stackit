@@ -11,6 +11,15 @@ Thank you for your interest in contributing to Stackit! This document outlines t
 - **GitHub CLI (`gh`)** for PR operations
 - **[just](https://github.com/casey/just)** (optional, but recommended for running development commands)
 
+### Quick Setup (macOS/Linux)
+
+Install all development dependencies with Homebrew:
+```bash
+brew bundle
+```
+
+This installs: just, golangci-lint, ripgrep, fd, ast-grep, jq, yq, and tokei.
+
 ### Setting Up Your Development Environment
 
 1. Fork and clone the repository:
