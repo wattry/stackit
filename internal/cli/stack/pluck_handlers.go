@@ -1,9 +1,8 @@
 package stack
 
 import (
-	"sync"
-
 	"stackit.dev/stackit/internal/actions/pluck"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -22,24 +21,23 @@ func NewPluckUI(out output.Output, _ output.Logger, interactive bool) (*tui.Runn
 
 // SimplePluckHandler provides streaming text output for pluck operations
 type SimplePluckHandler struct {
-	splog        output.Output
-	mu           sync.Mutex
+	common.BaseHandler
 	sourceBranch string
 	oldParent    string
 	newParent    string
 }
 
 // NewSimplePluckHandler creates a new SimplePluckHandler
-func NewSimplePluckHandler(splog output.Output) *SimplePluckHandler {
+func NewSimplePluckHandler(out output.Output) *SimplePluckHandler {
 	return &SimplePluckHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of pluck
 func (h *SimplePluckHandler) Start(sourceBranch, oldParent, newParent string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.sourceBranch = sourceBranch
 	h.oldParent = oldParent
 	h.newParent = newParent
@@ -60,14 +58,6 @@ func (h *SimplePluckHandler) Complete(_ pluck.Result) {
 	// Output already handled by the action
 }
 
-// Cleanup is a no-op for the simple handler
-func (h *SimplePluckHandler) Cleanup() {}
-
-// IsInteractive returns false for simple handler
-func (h *SimplePluckHandler) IsInteractive() bool {
-	return false
-}
-
 // PromptConfirmPluck returns true (auto-confirm) for simple handler (non-interactive)
 func (h *SimplePluckHandler) PromptConfirmPluck(_ pluck.Preview) (bool, error) {
 	return true, nil
@@ -79,9 +69,9 @@ type InteractivePluckHandler struct {
 }
 
 // NewInteractivePluckHandler creates a new InteractivePluckHandler
-func NewInteractivePluckHandler(splog output.Output) *InteractivePluckHandler {
+func NewInteractivePluckHandler(out output.Output) *InteractivePluckHandler {
 	return &InteractivePluckHandler{
-		SimplePluckHandler: SimplePluckHandler{splog: splog},
+		SimplePluckHandler: *NewSimplePluckHandler(out),
 	}
 }
 
@@ -92,45 +82,45 @@ func (h *InteractivePluckHandler) IsInteractive() bool {
 
 // PromptConfirmPluck displays a preview of the pluck and asks for confirmation
 func (h *InteractivePluckHandler) PromptConfirmPluck(preview pluck.Preview) (bool, error) {
-	h.splog.Newline()
-	h.splog.Info("Pluck Preview:")
-	h.splog.Info("  Branch: %s", style.ColorBranchName(preview.SourceBranch, true))
-	h.splog.Info("  From:   %s", style.ColorBranchName(preview.OldParent, false))
-	h.splog.Info("  To:     %s", style.ColorBranchName(preview.NewParent, false))
+	h.Output.Newline()
+	h.Output.Info("Pluck Preview:")
+	h.Output.Info("  Branch: %s", style.ColorBranchName(preview.SourceBranch, true))
+	h.Output.Info("  From:   %s", style.ColorBranchName(preview.OldParent, false))
+	h.Output.Info("  To:     %s", style.ColorBranchName(preview.NewParent, false))
 
 	if len(preview.Commits) > 0 {
-		h.splog.Newline()
-		h.splog.Info("Commits to be moved (%d):", len(preview.Commits))
+		h.Output.Newline()
+		h.Output.Info("Commits to be moved (%d):", len(preview.Commits))
 		for _, commit := range preview.Commits {
-			h.splog.Info("  • %s", commit)
+			h.Output.Info("  • %s", commit)
 		}
 	}
 
 	if len(preview.Children) > 0 {
-		h.splog.Newline()
-		h.splog.Info("Children to be reparented to %s (%d):",
+		h.Output.Newline()
+		h.Output.Info("Children to be reparented to %s (%d):",
 			style.ColorBranchName(preview.ChildNewParent, false),
 			len(preview.Children))
 		for _, child := range preview.Children {
-			h.splog.Info("  • %s", style.ColorBranchName(child, false))
+			h.Output.Info("  • %s", style.ColorBranchName(child, false))
 		}
 	}
 
-	h.splog.Newline()
-	h.splog.Info("This will:")
+	h.Output.Newline()
+	h.Output.Info("This will:")
 	if len(preview.Children) > 0 {
-		h.splog.Info("  1. Reparent %d children to %s",
+		h.Output.Info("  1. Reparent %d children to %s",
 			len(preview.Children),
 			style.ColorBranchName(preview.ChildNewParent, false))
-		h.splog.Info("  2. Move %s to %s",
+		h.Output.Info("  2. Move %s to %s",
 			style.ColorBranchName(preview.SourceBranch, true),
 			style.ColorBranchName(preview.NewParent, false))
 	} else {
-		h.splog.Info("  1. Move %s to %s",
+		h.Output.Info("  1. Move %s to %s",
 			style.ColorBranchName(preview.SourceBranch, true),
 			style.ColorBranchName(preview.NewParent, false))
 	}
-	h.splog.Newline()
+	h.Output.Newline()
 
 	return tui.PromptConfirm("Proceed with pluck?", true)
 }

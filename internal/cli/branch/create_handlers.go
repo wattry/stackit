@@ -1,9 +1,8 @@
 package branch
 
 import (
-	"sync"
-
 	"stackit.dev/stackit/internal/actions/create"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -21,60 +20,51 @@ func NewCreateUI(out output.Output, _ output.Logger) (*tui.Runner, create.Handle
 
 // SimpleCreateHandler provides streaming text output for create operations
 type SimpleCreateHandler struct {
-	splog        output.Output
-	mu           sync.Mutex
+	common.BaseHandler
 	parentBranch string
 }
 
 // NewSimpleCreateHandler creates a new SimpleCreateHandler
-func NewSimpleCreateHandler(splog output.Output) *SimpleCreateHandler {
+func NewSimpleCreateHandler(out output.Output) *SimpleCreateHandler {
 	return &SimpleCreateHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of create
 func (h *SimpleCreateHandler) Start(parentBranch string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.parentBranch = parentBranch
 }
 
 // OnStep is called for each step in the create process
 func (h *SimpleCreateHandler) OnStep(step create.Step, status create.StepStatus, message string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	// Only show meaningful messages for completed/failed steps
 	switch status {
 	case create.StatusCompleted:
 		h.printStepCompleted(step, message)
 	case create.StatusFailed:
-		h.splog.Error("Failed: %s", message)
+		h.Output.Error("Failed: %s", message)
 	case create.StatusSkipped:
 		// Skip silently for most steps
 		if step == create.StepCommit {
-			h.splog.Info("No staged changes; created a branch with no commit.")
+			h.Output.Info("No staged changes; created a branch with no commit.")
 		}
 	}
 }
 
 // Complete is called when create finishes
 func (h *SimpleCreateHandler) Complete(result create.Result) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
-	h.splog.Info("Created branch %s on %s",
+	h.Output.Info("Created branch %s on %s",
 		style.ColorBranchName(result.BranchName, true),
 		style.ColorBranchName(result.ParentBranch, false))
-}
-
-// Cleanup is a no-op for the simple handler
-func (h *SimpleCreateHandler) Cleanup() {}
-
-// IsInteractive returns false for simple handler
-func (h *SimpleCreateHandler) IsInteractive() bool {
-	return false
 }
 
 // PromptStageChanges returns false for simple handler (non-interactive)

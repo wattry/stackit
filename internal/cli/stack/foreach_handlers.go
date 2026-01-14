@@ -5,9 +5,9 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 
 	"stackit.dev/stackit/internal/actions/foreach"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	foreachComponent "stackit.dev/stackit/internal/tui/components/foreach"
@@ -30,10 +30,9 @@ func NewForeachUI(out output.Output, logger output.Logger, parallel bool) (*tui.
 
 // SimpleForeachHandler implements foreach.Handler with line-by-line output
 type SimpleForeachHandler struct {
-	splog         output.Output
+	common.BaseHandler
 	out           io.Writer
 	items         map[string]*foreachBranchItem
-	mu            sync.Mutex
 	started       bool
 	currentBranch string
 	parallel      bool
@@ -44,19 +43,19 @@ type foreachBranchItem struct {
 }
 
 // NewSimpleForeachHandler creates a new simple foreach handler
-func NewSimpleForeachHandler(splog output.Output, parallel bool) *SimpleForeachHandler {
+func NewSimpleForeachHandler(out output.Output, parallel bool) *SimpleForeachHandler {
 	return &SimpleForeachHandler{
-		splog:    splog,
-		out:      os.Stdout,
-		items:    make(map[string]*foreachBranchItem),
-		parallel: parallel,
+		BaseHandler: common.NewBaseHandler(out),
+		out:         os.Stdout,
+		items:       make(map[string]*foreachBranchItem),
+		parallel:    parallel,
 	}
 }
 
 // OnEvent handles events from the foreach action
 func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	switch ev := e.(type) {
 	case foreach.StackDisplayEvent:
@@ -94,81 +93,66 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 		switch ev.Status {
 		case foreach.StatusRunning:
 			// Sequential mode - show "Running on branch..."
-			h.splog.Info("\nRunning on branch %s...", style.ColorBranchName(ev.BranchName, isCurrent))
+			h.Output.Info("\nRunning on branch %s...", style.ColorBranchName(ev.BranchName, isCurrent))
 
 		case foreach.StatusDone:
 			// In sequential mode, we've already printed "Running on branch..."
 			// Just show the output and completion status.
 			output := strings.TrimSpace(ev.Output)
 			if len(output) > 0 {
-				h.splog.Info("%s", strings.TrimSuffix(output, "\n"))
+				h.Output.Info("%s", strings.TrimSuffix(output, "\n"))
 			}
-			h.splog.Info("✓ Command succeeded on branch %s", style.ColorBranchName(ev.BranchName, isCurrent))
+			h.Output.Info("✓ Command succeeded on branch %s", style.ColorBranchName(ev.BranchName, isCurrent))
 
 		case foreach.StatusError:
 			// In sequential mode, we've already printed "Running on branch..."
 			// Just show the output and error status.
 			output := strings.TrimSpace(ev.Output)
 			if len(output) > 0 {
-				h.splog.Info("%s", strings.TrimSuffix(output, "\n"))
+				h.Output.Info("%s", strings.TrimSuffix(output, "\n"))
 			}
-			h.splog.Error("✗ Command failed on branch %s: %v", style.ColorBranchName(ev.BranchName, isCurrent), ev.Error)
+			h.Output.Error("✗ Command failed on branch %s: %v", style.ColorBranchName(ev.BranchName, isCurrent), ev.Error)
 		}
 
 	case foreach.CompletionEvent:
 		// Show consolidated output summary
 		if len(ev.Results) > 0 {
-			h.splog.Newline()
-			h.splog.Info("Summary:")
-			successCount := 0
-			failCount := 0
-			for _, result := range ev.Results {
-				switch result.Status {
-				case foreach.StatusDone:
-					successCount++
-					h.splog.Info("  ✓ %s", style.ColorBranchName(result.BranchName, result.BranchName == h.currentBranch))
-					if result.Output != "" {
-						output := strings.TrimSpace(result.Output)
-						if len(output) > 0 {
-							// Indent output
-							lines := strings.Split(output, "\n")
-							for _, line := range lines {
-								if strings.TrimSpace(line) != "" {
-									h.splog.Info("    %s", line)
-								}
-							}
-						}
-					}
-				case foreach.StatusError:
-					failCount++
-					h.splog.Error("  ✗ %s", style.ColorBranchName(result.BranchName, result.BranchName == h.currentBranch))
-					if result.Error != nil {
-						h.splog.Error("    Error: %v", result.Error)
-					}
-					if result.Output != "" {
-						output := strings.TrimSpace(result.Output)
-						if len(output) > 0 {
-							// Indent output
-							lines := strings.Split(output, "\n")
-							for _, line := range lines {
-								if strings.TrimSpace(line) != "" {
-									h.splog.Info("    %s", line)
-								}
-							}
-						}
-					}
-				}
-			}
-			h.splog.Newline()
+			h.Output.Newline()
+			h.Output.Info("Summary:")
+			results := convertToCommonResults(ev.Results, func(name string) bool { return name == h.currentBranch })
+			successCount, failCount := common.FormatBranchSummary(h.Output, results)
+			h.Output.Newline()
 			if failCount > 0 {
-				h.splog.Info("Completed: %d succeeded, %d failed", successCount, failCount)
+				h.Output.Info("Completed: %d succeeded, %d failed", successCount, failCount)
 			} else {
-				h.splog.Info("All branches completed successfully (%d total)", successCount)
+				h.Output.Info("All branches completed successfully (%d total)", successCount)
 			}
 		} else if !ev.Success && ev.Message != "" {
-			h.splog.Info("%s", ev.Message)
+			h.Output.Info("%s", ev.Message)
 		}
 	}
+}
+
+// convertToCommonResults converts foreach.BranchResult slice to common.BranchResult slice.
+// The isCurrentFn callback determines if each branch is the current branch.
+func convertToCommonResults(results []foreach.BranchResult, isCurrentFn func(branchName string) bool) []common.BranchResult {
+	commonResults := make([]common.BranchResult, len(results))
+	for i, r := range results {
+		var status common.BranchResultStatus
+		if r.Status == foreach.StatusDone {
+			status = common.StatusDone
+		} else {
+			status = common.StatusError
+		}
+		commonResults[i] = common.BranchResult{
+			BranchName: r.BranchName,
+			Status:     status,
+			Output:     r.Output,
+			Error:      r.Error,
+			IsCurrent:  isCurrentFn(r.BranchName),
+		}
+	}
+	return commonResults
 }
 
 // InteractiveForeachHandler implements foreach.Handler with bubbletea for animated progress
@@ -275,45 +259,11 @@ func (h *InteractiveForeachHandler) printSummary(results []foreach.BranchResult)
 
 	h.out.Newline()
 	h.out.Info("Summary:")
-	successCount := 0
-	failCount := 0
-	for _, result := range results {
-		switch result.Status {
-		case foreach.StatusDone:
-			successCount++
-			isCurrent := h.stack != nil && result.BranchName == h.stack.CurrentBranch
-			h.out.Info("  ✓ %s", style.ColorBranchName(result.BranchName, isCurrent))
-			if result.Output != "" {
-				resultOutput := strings.TrimSpace(result.Output)
-				if len(resultOutput) > 0 {
-					lines := strings.Split(resultOutput, "\n")
-					for _, line := range lines {
-						if strings.TrimSpace(line) != "" {
-							h.out.Info("    %s", line)
-						}
-					}
-				}
-			}
-		case foreach.StatusError:
-			failCount++
-			isCurrent := h.stack != nil && result.BranchName == h.stack.CurrentBranch
-			h.out.Error("  ✗ %s", style.ColorBranchName(result.BranchName, isCurrent))
-			if result.Error != nil {
-				h.out.Error("    Error: %v", result.Error)
-			}
-			if result.Output != "" {
-				resultOutput := strings.TrimSpace(result.Output)
-				if len(resultOutput) > 0 {
-					lines := strings.Split(resultOutput, "\n")
-					for _, line := range lines {
-						if strings.TrimSpace(line) != "" {
-							h.out.Info("    %s", line)
-						}
-					}
-				}
-			}
-		}
+	isCurrentFn := func(name string) bool {
+		return h.stack != nil && name == h.stack.CurrentBranch
 	}
+	commonResults := convertToCommonResults(results, isCurrentFn)
+	successCount, failCount := common.FormatBranchSummary(h.out, commonResults)
 	h.out.Newline()
 	if failCount > 0 {
 		h.out.Info("Completed: %d succeeded, %d failed", successCount, failCount)

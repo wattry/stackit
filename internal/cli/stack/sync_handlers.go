@@ -6,17 +6,12 @@ import (
 	stdsync "sync"
 
 	syncAction "stackit.dev/stackit/internal/actions/sync"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	syncComponent "stackit.dev/stackit/internal/tui/components/sync"
 	"stackit.dev/stackit/internal/tui/style"
-)
-
-const (
-	reasonNoRestackNeeded = "does not need restacking"
-	reasonLocked          = "is locked"
-	reasonFrozen          = "is frozen"
 )
 
 // NewSyncUI creates a runner and handler pair for sync operations.
@@ -34,32 +29,31 @@ func NewSyncUI(out output.Output, logger output.Logger) (*tui.Runner, syncAction
 
 // SimpleSyncHandler provides streaming text output for non-TTY environments
 type SimpleSyncHandler struct {
-	splog        output.Output
+	common.BaseHandler
 	currentPhase syncAction.Phase
-	mu           stdsync.Mutex
 	totalOps     int
 	currentOp    int
 }
 
 // NewSimpleSyncHandler creates a new SimpleSyncHandler
-func NewSimpleSyncHandler(splog output.Output) *SimpleSyncHandler {
+func NewSimpleSyncHandler(out output.Output) *SimpleSyncHandler {
 	return &SimpleSyncHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of sync
 func (h *SimpleSyncHandler) Start(totalOps int) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.totalOps = totalOps
 	h.currentOp = 0
 }
 
 // EmitEvent handles progress updates
 func (h *SimpleSyncHandler) EmitEvent(event syncAction.Event) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	// Handle phase transitions
 	if event.Type == syncAction.EventStarted && event.Phase != h.currentPhase {
@@ -75,15 +69,15 @@ func (h *SimpleSyncHandler) EmitEvent(event syncAction.Event) {
 
 // Complete is called when sync finishes
 func (h *SimpleSyncHandler) Complete(summary syncAction.Summary) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	// Print blank line before summary
-	h.splog.Newline()
+	h.Output.Newline()
 
 	// Handle up-to-date case
 	if summary.UpToDate {
-		h.splog.Info("✨ Everything is up to date!")
+		h.Output.Info("✨ Everything is up to date!")
 		return
 	}
 
@@ -99,28 +93,28 @@ func (h *SimpleSyncHandler) IsInteractive() bool { return false }
 
 // PromptMetadataConflict implements Handler. Logs warning and returns false (keep local) in non-interactive mode.
 func (h *SimpleSyncHandler) PromptMetadataConflict(diff *engine.MetadataDiff) (bool, error) {
-	h.splog.Warn("Metadata conflict for %s (keeping local):",
+	h.Output.Warn("Metadata conflict for %s (keeping local):",
 		style.ColorBranchName(diff.Branch, false))
 	for _, fd := range diff.Differences {
-		h.splog.Warn("  %s: %v (local) vs %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
+		h.Output.Warn("  %s: %v (local) vs %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
 	}
-	h.splog.Info("  Use interactive mode to accept remote changes")
+	h.Output.Info("  Use interactive mode to accept remote changes")
 	return false, nil
 }
 
 // PromptOrphanedMetadata implements Handler. Logs warning and returns false (accept deletion) in non-interactive mode.
 func (h *SimpleSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (bool, error) {
-	h.splog.Warn("Orphaned metadata for %s (accepting deletion):",
+	h.Output.Warn("Orphaned metadata for %s (accepting deletion):",
 		style.ColorBranchName(info.BranchName, false))
 	if info.LocalMeta != nil {
 		if info.LocalMeta.LockReason.IsLocked() {
-			h.splog.Warn("  lockReason: %s", info.LocalMeta.LockReason)
+			h.Output.Warn("  lockReason: %s", info.LocalMeta.LockReason)
 		}
 		if info.LocalMeta.Scope != nil {
-			h.splog.Warn("  scope: %s", *info.LocalMeta.Scope)
+			h.Output.Warn("  scope: %s", *info.LocalMeta.Scope)
 		}
 	}
-	h.splog.Info("  Use interactive mode to push local changes")
+	h.Output.Info("  Use interactive mode to push local changes")
 	return false, nil
 }
 
@@ -136,18 +130,18 @@ func (h *SimpleSyncHandler) PromptBranchDeletions(branches map[string]string) (m
 func (h *SimpleSyncHandler) printPhaseHeader(phase syncAction.Phase) {
 	// Add spacing between phases (but not before first phase)
 	if h.currentPhase != "" {
-		h.splog.Newline()
+		h.Output.Newline()
 	}
 
 	switch phase {
 	case syncAction.PhaseTrunk:
-		h.splog.Info("📥 Pulling from remote...")
+		h.Output.Info("📥 Pulling from remote...")
 	case syncAction.PhaseGitHub:
-		h.splog.Info("🔄 Fetching PR info from GitHub...")
+		h.Output.Info("🔄 Fetching PR info from GitHub...")
 	case syncAction.PhaseClean:
-		h.splog.Info("🧹 Cleaning branches...")
+		h.Output.Info("🧹 Cleaning branches...")
 	case syncAction.PhaseRestack:
-		h.splog.Info("📚 Restacking branches...")
+		h.Output.Info("📚 Restacking branches...")
 	}
 }
 
@@ -167,18 +161,18 @@ func (h *SimpleSyncHandler) printEventLine(event syncAction.Event) {
 func (h *SimpleSyncHandler) printTrunkEvent(event syncAction.Event) {
 	if event.Type == syncAction.EventCompleted {
 		if event.NewRevision != "" {
-			h.splog.Info("  %s fast-forwarded to %s",
+			h.Output.Info("  %s fast-forwarded to %s",
 				style.ColorBranchName(event.Branch, false),
 				style.ColorDim(event.NewRevision))
 		} else {
-			h.splog.Info("  %s is up to date", style.ColorBranchName(event.Branch, false))
+			h.Output.Info("  %s is up to date", style.ColorBranchName(event.Branch, false))
 		}
 	}
 }
 
 func (h *SimpleSyncHandler) printGitHubEvent(event syncAction.Event) {
 	if event.Type == syncAction.EventCompleted && event.Message != "" {
-		h.splog.Info("  %s", event.Message)
+		h.Output.Info("  %s", event.Message)
 	}
 }
 
@@ -188,7 +182,7 @@ func (h *SimpleSyncHandler) printCleanEvent(event syncAction.Event) {
 		if event.PRNumber != nil {
 			prInfo = fmt.Sprintf(" (PR #%d)", *event.PRNumber)
 		}
-		h.splog.Info("  Deleted %s%s %s",
+		h.Output.Info("  Deleted %s%s %s",
 			style.ColorBranchName(event.Branch, false),
 			prInfo,
 			style.ColorDim(event.Message))
@@ -213,31 +207,31 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 				msg += fmt.Sprintf(" on %s", style.ColorBranchName(event.Parent, false))
 			}
 			msg += fmt.Sprintf(" -> %s", style.ColorDim(event.NewRevision))
-			h.splog.Info("  %s", msg)
+			h.Output.Info("  %s", msg)
 		} else {
-			reason := reasonNoRestackNeeded
+			reason := common.ReasonNoRestackNeeded
 			if event.IsLocked() {
-				reason = fmt.Sprintf("%s: %s", reasonLocked, event.LockReason)
+				reason = fmt.Sprintf("%s: %s", common.ReasonLocked, event.LockReason)
 			} else if event.Frozen {
-				reason = reasonFrozen
+				reason = common.ReasonFrozen
 			}
 
 			msg := fmt.Sprintf("%s%s %s", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo, reason)
-			if reason == reasonNoRestackNeeded && event.Parent != "" {
+			if reason == common.ReasonNoRestackNeeded && event.Parent != "" {
 				msg = fmt.Sprintf("%s%s does not need to be restacked on %s.",
 					style.ColorBranchName(event.Branch, event.IsCurrent),
 					prInfo,
 					style.ColorBranchName(event.Parent, false))
 			}
-			h.splog.Info("  %s", msg)
+			h.Output.Info("  %s", msg)
 		}
 	case syncAction.EventSkipped:
 		if event.Conflict {
-			h.splog.Warn("Skipped %s%s (conflict)",
+			h.Output.Warn("Skipped %s%s (conflict)",
 				style.ColorBranchName(event.Branch, event.IsCurrent),
 				prInfo)
 		} else {
-			h.splog.Info("  Skipped %s%s %s",
+			h.Output.Info("  Skipped %s%s %s",
 				style.ColorBranchName(event.Branch, event.IsCurrent),
 				prInfo,
 				style.ColorDim(event.Message))
@@ -249,12 +243,12 @@ func (h *SimpleSyncHandler) printSummary(summary syncAction.Summary) {
 	parts := syncAction.FormatSummaryParts(summary)
 
 	if len(parts) > 0 {
-		h.splog.Info("✅ Summary: %s", strings.Join(parts, ", "))
+		h.Output.Info("✅ Summary: %s", strings.Join(parts, ", "))
 	}
 
 	// Print actionable advice for conflicts
 	if len(summary.ConflictBranches) > 0 {
-		h.splog.Info("  Run %s to resolve and continue",
+		h.Output.Info("  Run %s to resolve and continue",
 			style.ColorCyan(fmt.Sprintf("st restack %s", summary.ConflictBranches[0])))
 	}
 }
@@ -269,7 +263,7 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
 	// Log reparenting info if applicable
 	if reparented {
-		h.splog.Info("Reparented %s from %s to %s (parent was merged/deleted).",
+		h.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
 			style.ColorBranchName(branch, isCurrent),
 			style.ColorBranchName(oldParent, false),
 			style.ColorBranchName(newParent, false))
@@ -300,10 +294,10 @@ func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.Res
 
 // OnRestackComplete implements RestackHandler for standalone restack operations
 func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts []string) {
-	h.splog.Newline()
+	h.Output.Newline()
 
 	if restacked == 0 && skipped == 0 {
-		h.splog.Info("✨ All branches are up to date!")
+		h.Output.Info("✨ All branches are up to date!")
 		return
 	}
 
@@ -316,11 +310,11 @@ func (h *SimpleSyncHandler) OnRestackComplete(restacked, skipped int, conflicts 
 	}
 
 	if len(parts) > 0 {
-		h.splog.Info("✅ Summary: %s", strings.Join(parts, ", "))
+		h.Output.Info("✅ Summary: %s", strings.Join(parts, ", "))
 	}
 
 	if len(conflicts) > 0 {
-		h.splog.Info("  Run %s to resolve and continue",
+		h.Output.Info("  Run %s to resolve and continue",
 			style.ColorCyan(fmt.Sprintf("st restack %s", conflicts[0])))
 	}
 }
@@ -440,14 +434,14 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 				msg += fmt.Sprintf(" -> %s", event.NewRevision)
 				return msg
 			}
-			reason := reasonNoRestackNeeded
+			reason := common.ReasonNoRestackNeeded
 			if event.IsLocked() {
-				reason = fmt.Sprintf("%s: %s", reasonLocked, event.LockReason)
+				reason = fmt.Sprintf("%s: %s", common.ReasonLocked, event.LockReason)
 			} else if event.Frozen {
-				reason = reasonFrozen
+				reason = common.ReasonFrozen
 			}
 
-			if reason == reasonNoRestackNeeded && event.Parent != "" {
+			if reason == common.ReasonNoRestackNeeded && event.Parent != "" {
 				return fmt.Sprintf("%s%s does not need to be restacked on %s.",
 					displayName,
 					prInfo,
@@ -555,14 +549,14 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 		msg += fmt.Sprintf(" -> %s", newRev)
 		return msg
 	case syncAction.RestackUnneeded:
-		reason := reasonNoRestackNeeded
+		reason := common.ReasonNoRestackNeeded
 		if lockReason.IsLocked() {
-			reason = fmt.Sprintf("%s: %s", reasonLocked, lockReason)
+			reason = fmt.Sprintf("%s: %s", common.ReasonLocked, lockReason)
 		} else if frozen {
-			reason = reasonFrozen
+			reason = common.ReasonFrozen
 		}
 
-		if reason == reasonNoRestackNeeded && parent != "" {
+		if reason == common.ReasonNoRestackNeeded && parent != "" {
 			return fmt.Sprintf("%s%s does not need to be restacked on %s.",
 				displayName,
 				prInfo,

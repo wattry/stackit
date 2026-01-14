@@ -2,9 +2,9 @@ package stack
 
 import (
 	"fmt"
-	"sync"
 
 	"stackit.dev/stackit/internal/actions/move"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -23,24 +23,23 @@ func NewMoveUI(out output.Output, _ output.Logger, interactive bool) (*tui.Runne
 
 // SimpleMoveHandler provides streaming text output for move operations
 type SimpleMoveHandler struct {
-	splog        output.Output
-	mu           sync.Mutex
+	common.BaseHandler
 	sourceBranch string
 	oldParent    string
 	newParent    string
 }
 
 // NewSimpleMoveHandler creates a new SimpleMoveHandler
-func NewSimpleMoveHandler(splog output.Output) *SimpleMoveHandler {
+func NewSimpleMoveHandler(out output.Output) *SimpleMoveHandler {
 	return &SimpleMoveHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of move
 func (h *SimpleMoveHandler) Start(sourceBranch, oldParent, newParent string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.sourceBranch = sourceBranch
 	h.oldParent = oldParent
 	h.newParent = newParent
@@ -53,9 +52,9 @@ func (h *SimpleMoveHandler) OnStep(_ move.Step, _ move.StepStatus, _ string) {
 
 // OnRename is called when a branch is renamed due to scope change
 func (h *SimpleMoveHandler) OnRename(oldName, newName string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.splog.Info("Renamed branch %s to %s",
+	h.Lock()
+	defer h.Unlock()
+	h.Output.Info("Renamed branch %s to %s",
 		style.ColorBranchName(oldName, false),
 		style.ColorBranchName(newName, true))
 }
@@ -65,18 +64,10 @@ func (h *SimpleMoveHandler) Complete(_ move.Result) {
 	// Output already handled by the action
 }
 
-// Cleanup is a no-op for the simple handler
-func (h *SimpleMoveHandler) Cleanup() {}
-
-// IsInteractive returns false for simple handler
-func (h *SimpleMoveHandler) IsInteractive() bool {
-	return false
-}
-
 // PromptRename returns false for simple handler (non-interactive)
 func (h *SimpleMoveHandler) PromptRename(_, oldScope, newScope string) (bool, error) {
 	// In non-interactive mode, print a message but don't rename
-	h.splog.Info("Branch name contains '%s', but its scope will now be '%s'. Use interactive mode to rename.",
+	h.Output.Info("Branch name contains '%s', but its scope will now be '%s'. Use interactive mode to rename.",
 		oldScope, newScope)
 	return false, nil
 }
@@ -92,9 +83,9 @@ type InteractiveMoveHandler struct {
 }
 
 // NewInteractiveMoveHandler creates a new InteractiveMoveHandler
-func NewInteractiveMoveHandler(splog output.Output) *InteractiveMoveHandler {
+func NewInteractiveMoveHandler(out output.Output) *InteractiveMoveHandler {
 	return &InteractiveMoveHandler{
-		SimpleMoveHandler: SimpleMoveHandler{splog: splog},
+		SimpleMoveHandler: *NewSimpleMoveHandler(out),
 	}
 }
 
@@ -110,36 +101,36 @@ func (h *InteractiveMoveHandler) PromptRename(_, oldScope, newScope string) (boo
 
 // PromptConfirmMove displays a preview of the move and asks for confirmation
 func (h *InteractiveMoveHandler) PromptConfirmMove(preview move.Preview) (bool, error) {
-	h.splog.Newline()
-	h.splog.Info("Move Preview:")
-	h.splog.Info("  Branch: %s", style.ColorBranchName(preview.SourceBranch, true))
-	h.splog.Info("  From:   %s", style.ColorBranchName(preview.OldParent, false))
-	h.splog.Info("  To:     %s", style.ColorBranchName(preview.NewParent, false))
+	h.Output.Newline()
+	h.Output.Info("Move Preview:")
+	h.Output.Info("  Branch: %s", style.ColorBranchName(preview.SourceBranch, true))
+	h.Output.Info("  From:   %s", style.ColorBranchName(preview.OldParent, false))
+	h.Output.Info("  To:     %s", style.ColorBranchName(preview.NewParent, false))
 
 	if len(preview.Commits) > 0 {
-		h.splog.Newline()
-		h.splog.Info("Commits to be moved (%d):", len(preview.Commits))
+		h.Output.Newline()
+		h.Output.Info("Commits to be moved (%d):", len(preview.Commits))
 		for _, commit := range preview.Commits {
-			h.splog.Info("  • %s", commit)
+			h.Output.Info("  • %s", commit)
 		}
 	}
 
 	if len(preview.Descendants) > 0 {
-		h.splog.Newline()
-		h.splog.Info("Descendants to be restacked (%d):", len(preview.Descendants))
+		h.Output.Newline()
+		h.Output.Info("Descendants to be restacked (%d):", len(preview.Descendants))
 		for _, desc := range preview.Descendants {
-			h.splog.Info("  • %s", style.ColorBranchName(desc, false))
+			h.Output.Info("  • %s", style.ColorBranchName(desc, false))
 		}
 	}
 
-	h.splog.Newline()
-	h.splog.Info("This will rebase %s's commits onto %s.",
+	h.Output.Newline()
+	h.Output.Info("This will rebase %s's commits onto %s.",
 		style.ColorBranchName(preview.SourceBranch, true),
 		style.ColorBranchName(preview.NewParent, false))
 	if len(preview.Descendants) > 0 {
-		h.splog.Info("All descendant branches will be automatically restacked.")
+		h.Output.Info("All descendant branches will be automatically restacked.")
 	}
-	h.splog.Newline()
+	h.Output.Newline()
 
 	return tui.PromptConfirm("Proceed with move?", true)
 }
