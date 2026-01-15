@@ -54,6 +54,9 @@ type BranchAnnotation struct {
 	// WorktreePath is set if this branch is the stack root of a managed worktree
 	WorktreePath string
 
+	// IsEmptyWorktree indicates this is a worktree anchor with no child branches
+	IsEmptyWorktree bool
+
 	// LocalSHA is the short commit SHA of the branch head (for debugging/diagnostics)
 	LocalSHA string
 }
@@ -67,6 +70,7 @@ type RenderOptions struct {
 	OmitCurrentBranch bool
 	NoStyleBranchName bool
 	HideStats         bool
+	HideSummary       bool // Hide the summary line (stats, PR info, CI status)
 	ShowSHAs          bool // Show commit SHAs next to branch names
 	SelectedBranch    string
 	Collapsed         map[string]bool
@@ -156,6 +160,7 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		omitCurrentBranch: opts.OmitCurrentBranch,
 		noStyleBranchName: opts.NoStyleBranchName,
 		hideStats:         opts.HideStats,
+		hideSummary:       opts.HideSummary,
 		showSHAs:          opts.ShowSHAs,
 		overallIndent:     &overallIndent,
 		selectedBranch:    opts.SelectedBranch,
@@ -199,6 +204,7 @@ type treeRenderArgs struct {
 	omitCurrentBranch bool
 	noStyleBranchName bool
 	hideStats         bool
+	hideSummary       bool
 	showSHAs          bool
 	skipBranchingLine bool
 	overallIndent     *int
@@ -266,6 +272,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 			omitCurrentBranch: args.omitCurrentBranch,
 			noStyleBranchName: args.noStyleBranchName,
 			hideStats:         args.hideStats,
+			hideSummary:       args.hideSummary,
 			showSHAs:          args.showSHAs,
 			overallIndent:     args.overallIndent,
 			selectedBranch:    args.selectedBranch,
@@ -335,6 +342,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 			branchName:        branchName,
 			indentLevel:       args.indentLevel,
 			parentScopes:      args.parentScopes,
+			hideSummary:       args.hideSummary,
 			showSHAs:          args.showSHAs,
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
@@ -412,6 +420,15 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 		// Add annotation
 		annotation := r.Annotations[args.branchName]
 		line += r.formatAnnotation(annotation, args.noStyleBranchName)
+
+		// Add empty worktree indicator
+		if annotation.IsEmptyWorktree {
+			line += " " + style.ColorDim("<empty>")
+		}
+		// Add worktree indicator
+		if annotation.WorktreePath != "" {
+			line += " " + style.ColorDim("📂 worktree")
+		}
 
 		// Add restack indicator
 		if !args.noStyleBranchName && !r.isBranchFixed(args.branchName) {
@@ -638,7 +655,11 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	if annotation.IsFrozen {
 		coloredBranchName += " " + style.IconFrozen() + " " + style.ColorDim("(frozen)")
 	}
-	// Worktree indicator (only for stack roots with managed worktrees)
+	// Empty worktree indicator
+	if annotation.IsEmptyWorktree {
+		coloredBranchName += " " + style.ColorDim("<empty>")
+	}
+	// Worktree indicator (for stack roots with managed worktrees or empty worktree anchors)
 	if annotation.WorktreePath != "" {
 		coloredBranchName += " " + style.ColorDim("📂 worktree")
 	}
@@ -654,12 +675,14 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		return result
 	}
 
-	// LINE 2: Summary line with PR# → Review → CI → Stats
-	branchPipe := styleObj.Render("│")
-	summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
+	// LINE 2: Summary line with PR# → Review → CI → Stats (skip if hideSummary)
+	if !args.hideSummary {
+		branchPipe := styleObj.Render("│")
+		summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
 
-	if summaryLine != "" {
-		result = append(result, style.SelectionPadding+prefix+branchPipe+"  "+summaryLine)
+		if summaryLine != "" {
+			result = append(result, style.SelectionPadding+prefix+branchPipe+"  "+summaryLine)
+		}
 	}
 
 	// Trailing spacer line
