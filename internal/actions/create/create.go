@@ -164,7 +164,6 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		handler.OnStep(StepCommit, StatusCompleted, "Changes committed")
 	} else {
 		handler.OnStep(StepCommit, StatusSkipped, "No staged changes")
-		out.Info("No staged changes; created a branch with no commit.")
 	}
 
 	// Track the branch with current branch as parent
