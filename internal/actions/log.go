@@ -56,8 +56,20 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 		}
 	}
 
-	// Create tree renderer
-	renderer := tui.NewStackTreeRenderer(ctx.Engine)
+	// Detect empty worktrees (worktree anchors with no children)
+	emptyWorktrees := getEmptyWorktrees(ctx)
+
+	// Create tree renderer - use empty worktrees-aware version if we have any
+	var renderer *tree.StackTreeRenderer
+	if len(emptyWorktrees) > 0 {
+		emptyWorktreeNames := make(map[string]bool)
+		for name := range emptyWorktrees {
+			emptyWorktreeNames[name] = true
+		}
+		renderer = tui.NewStackTreeRendererWithEmptyWorktrees(ctx.Engine, emptyWorktreeNames)
+	} else {
+		renderer = tui.NewStackTreeRenderer(ctx.Engine)
+	}
 
 	// Render the stack
 	// First, collect annotations for all branches in the stack using a worker pool
@@ -86,7 +98,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 
 	if len(allBranches) > 0 {
 		utils.Run(allBranches, func(branchObj engine.Branch) {
-			annotation := getBranchAnnotation(ctx, branchObj, opts, ciStatuses)
+			annotation := getBranchAnnotation(ctx, branchObj, opts, ciStatuses, emptyWorktrees)
 			results <- result{branchObj.GetName(), annotation}
 		})
 	}
@@ -163,7 +175,41 @@ func getUntrackedBranchNames(ctx *app.Context) []string {
 	return untracked
 }
 
-func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOptions, ciStatuses map[string]*github.CheckStatus) tree.BranchAnnotation {
+// getEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
+// for worktrees that have no child branches (empty worktrees).
+func getEmptyWorktrees(ctx *app.Context) map[string]*engine.WorktreeInfo {
+	emptyWorktrees := make(map[string]*engine.WorktreeInfo)
+
+	worktrees, err := ctx.Engine.ListManagedWorktrees()
+	if err != nil {
+		return emptyWorktrees
+	}
+
+	for i := range worktrees {
+		wt := &worktrees[i]
+		anchor := ctx.Engine.GetBranch(wt.AnchorBranch)
+		if !anchor.IsTracked() || !anchor.IsWorktreeAnchor() {
+			continue
+		}
+
+		// Check if anchor has any children
+		hasChildren := false
+		for _, depth := range ctx.Engine.BranchesDepthFirst(anchor) {
+			if depth > 0 {
+				hasChildren = true
+				break
+			}
+		}
+
+		if !hasChildren {
+			emptyWorktrees[wt.AnchorBranch] = wt
+		}
+	}
+
+	return emptyWorktrees
+}
+
+func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOptions, ciStatuses map[string]*github.CheckStatus, emptyWorktrees map[string]*engine.WorktreeInfo) tree.BranchAnnotation {
 	annotation := tui.GetBranchAnnotation(ctx.Engine, branchObj)
 
 	// CI status (only in FULL mode)
@@ -177,6 +223,13 @@ func getBranchAnnotation(ctx *app.Context, branchObj engine.Branch, opts LogOpti
 				annotation.CheckStatus = tree.CheckStatusFailing
 			}
 		}
+	}
+
+	// Check if this is an empty worktree anchor
+	if wtInfo, ok := emptyWorktrees[branchObj.GetName()]; ok {
+		annotation.IsEmptyWorktree = true
+		annotation.WorktreePath = wtInfo.Path
+		return annotation
 	}
 
 	// Check if this branch is a stack root with a managed worktree

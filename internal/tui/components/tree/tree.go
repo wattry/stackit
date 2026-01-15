@@ -54,6 +54,9 @@ type BranchAnnotation struct {
 	// WorktreePath is set if this branch is the stack root of a managed worktree
 	WorktreePath string
 
+	// IsEmptyWorktree indicates this is a worktree anchor with no child branches
+	IsEmptyWorktree bool
+
 	// LocalSHA is the short commit SHA of the branch head (for debugging/diagnostics)
 	LocalSHA string
 }
@@ -418,6 +421,15 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 		annotation := r.Annotations[args.branchName]
 		line += r.formatAnnotation(annotation, args.noStyleBranchName)
 
+		// Add empty worktree indicator
+		if annotation.IsEmptyWorktree {
+			line += " " + style.ColorDim("<empty>")
+		}
+		// Add worktree indicator
+		if annotation.WorktreePath != "" {
+			line += " " + style.ColorDim("📂 worktree")
+		}
+
 		// Add restack indicator
 		if !args.noStyleBranchName && !r.isBranchFixed(args.branchName) {
 			line += " (needs restack)"
@@ -643,7 +655,11 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	if annotation.IsFrozen {
 		coloredBranchName += " " + style.IconFrozen() + " " + style.ColorDim("(frozen)")
 	}
-	// Worktree indicator (only for stack roots with managed worktrees)
+	// Empty worktree indicator
+	if annotation.IsEmptyWorktree {
+		coloredBranchName += " " + style.ColorDim("<empty>")
+	}
+	// Worktree indicator (for stack roots with managed worktrees or empty worktree anchors)
 	if annotation.WorktreePath != "" {
 		coloredBranchName += " " + style.ColorDim("📂 worktree")
 	}
