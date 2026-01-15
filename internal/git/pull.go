@@ -55,6 +55,23 @@ func (r *runner) PullBranch(ctx context.Context, remote, branchName string) (Pul
 	// Check if it's a fast-forward (remote is ahead of local)
 	isRemoteAhead, err := r.IsAncestor(oldRev, remoteRev)
 	if err == nil && isRemoteAhead {
+		// Before updating the ref, check if this branch is checked out in another worktree.
+		// update-ref is global and will affect all worktrees, so we need to sync any
+		// worktree that has this branch checked out to avoid corrupting its index/working tree.
+		//
+		// IMPORTANT: We must check for uncommitted changes BEFORE the update-ref,
+		// because after update-ref the worktree will appear to have inverse changes
+		// (old content vs new HEAD), which would cause the check to fail.
+		var otherWorktreePath string
+		var otherWorktreeClean bool
+		if currentBranch != branchName {
+			otherWorktreePath, _ = r.GetWorktreePathForBranch(ctx, branchName)
+			if otherWorktreePath != "" {
+				hasChanges, err := r.WorktreeHasUncommittedChanges(ctx, otherWorktreePath)
+				otherWorktreeClean = err == nil && !hasChanges
+			}
+		}
+
 		// Update the local branch reference to the remote commit (fast-forward)
 		_, err = r.RunGitCommandWithContext(ctx, "update-ref", "refs/heads/"+branchName, remoteRev)
 		if err != nil {
@@ -73,6 +90,13 @@ func (r *runner) PullBranch(ctx context.Context, remote, branchName string) (Pul
 			_ = r.HardReset(ctx, "HEAD")
 		} else if currentRev != "" {
 			_ = r.CheckoutDetached(ctx, currentRev)
+		}
+
+		// If this branch is checked out in another worktree that was clean before
+		// the update-ref, we need to reset that worktree to match the new HEAD.
+		// Otherwise the worktree's index/working tree will appear as inverse changes.
+		if otherWorktreePath != "" && otherWorktreeClean {
+			_ = r.ResetWorktreeWorkingDir(ctx, otherWorktreePath)
 		}
 
 		return PullDone, nil
