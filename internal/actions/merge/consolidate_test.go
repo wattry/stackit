@@ -32,7 +32,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		s.Checkout("branch2")
 
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    false,
 		})
 		require.NoError(t, err)
@@ -73,14 +73,14 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		require.NoError(t, err)
 
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true, // Skip remote sync checks
 			Wait:     true,
 		})
 		require.NoError(t, err)
 
 		// Verify plan has the expected structure
-		require.Equal(t, merge.StrategyConsolidate, plan.Strategy)
+		require.Equal(t, merge.StrategySquash, plan.Strategy)
 		require.Len(t, plan.BranchesToMerge, 2)
 		require.Len(t, plan.Steps, 4)
 		require.Equal(t, merge.StepConsolidate, plan.Steps[0].StepType)
@@ -106,7 +106,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		s.Checkout("branch2")
 
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true,
 		})
 		require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 		s.Checkout("batch/feature-b")
 
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true,
 		})
 		require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 
 		// Verify the executor understands the scope
 		require.NotNil(t, executor)
-		require.Equal(t, merge.StrategyConsolidate, plan.Strategy)
+		require.Equal(t, merge.StrategySquash, plan.Strategy)
 		require.Len(t, plan.BranchesToMerge, 2)
 	})
 
@@ -165,7 +165,7 @@ func TestConsolidateMergeExecutor(t *testing.T) {
 
 		// This should not create a consolidation plan since there's nothing to merge
 		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true,
 		})
 
@@ -197,7 +197,7 @@ func TestConsolidationStepExecution(t *testing.T) {
 		s.Checkout("branch2")
 
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true,
 			Wait:     true,
 		})
@@ -231,7 +231,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 		s.Checkout("branch2")
 
 		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    false,
 		})
 
@@ -262,7 +262,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 
 		// Without force, should fail validation
 		_, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    false,
 		})
 		require.NoError(t, err)
@@ -271,7 +271,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 		// With force, should succeed
 		var plan *merge.Plan
 		plan, validation, err = merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true,
 		})
 		require.NoError(t, err)
@@ -303,7 +303,7 @@ func TestConsolidationErrorHandling(t *testing.T) {
 		require.NoError(t, err)
 
 		plan, _, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    true,
 		})
 		require.NoError(t, err)

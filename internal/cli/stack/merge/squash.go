@@ -101,7 +101,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 
 	// Create consolidation plan
 	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
-		Strategy: mergeAction.StrategyConsolidate,
+		Strategy: mergeAction.StrategySquash,
 		Force:    opts.force,
 		Scope:    opts.scope,
 		Wait:     !opts.noWait,
@@ -151,7 +151,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 	actionOpts := mergeAction.Options{
 		DryRun:         false,
 		Confirm:        false, // Already confirmed
-		Strategy:       mergeAction.StrategyConsolidate,
+		Strategy:       mergeAction.StrategySquash,
 		Force:          opts.force,
 		Wait:           !opts.noWait,
 		Scope:          opts.scope,

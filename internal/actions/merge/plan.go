@@ -19,10 +19,8 @@ type Strategy string
 const (
 	// StrategyBottomUp merges PRs from the bottom of the stack up to the current branch
 	StrategyBottomUp Strategy = "bottom-up"
-	// StrategyTopDown merges the entire stack into a single PR
-	StrategyTopDown Strategy = "top-down"
-	// StrategyConsolidate creates a single PR containing all stack commits for atomic merging
-	StrategyConsolidate Strategy = "consolidate"
+	// StrategySquash creates a single PR containing all stack commits for atomic merging
+	StrategySquash Strategy = "squash"
 )
 
 // StepType represents the type of step in a merge plan
@@ -406,10 +404,8 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 	// 7. Build ordered steps based on strategy
 	var steps []PlanStep
 	switch opts.Strategy {
-	case StrategyTopDown:
-		steps = buildTopDownSteps(finalBranchesToMerge, planCurrentBranch, upstackBranches)
-	case StrategyConsolidate:
-		steps = buildConsolidateSteps(finalBranchesToMerge, upstackBranches, opts.Wait)
+	case StrategySquash:
+		steps = buildSquashSteps(finalBranchesToMerge, upstackBranches, opts.Wait)
 	default: // StrategyBottomUp or default
 		steps = buildBottomUpSteps(finalBranchesToMerge, upstackBranches)
 	}
@@ -487,74 +483,7 @@ func buildBottomUpSteps(branchesToMerge []BranchMergeInfo, upstackBranches []str
 	return steps
 }
 
-func buildTopDownSteps(branchesToMerge []BranchMergeInfo, currentBranch string, upstackBranches []string) []PlanStep {
-	steps := []PlanStep{}
-
-	if len(branchesToMerge) == 0 {
-		return steps
-	}
-
-	currentBranchInfo := branchesToMerge[len(branchesToMerge)-1]
-
-	steps = append(steps, PlanStep{
-		StepType:    StepUpdatePRBase,
-		BranchName:  currentBranch,
-		PRNumber:    currentBranchInfo.PRNumber,
-		Description: fmt.Sprintf("Rebase %s onto trunk and update PR #%d base", currentBranch, currentBranchInfo.PRNumber),
-	})
-
-	steps = append(steps, PlanStep{
-		StepType:     StepWaitCI,
-		BranchName:   currentBranch,
-		PRNumber:     currentBranchInfo.PRNumber,
-		Description:  fmt.Sprintf("Wait for CI checks on PR #%d (%s)", currentBranchInfo.PRNumber, currentBranch),
-		WaitTimeout:  DefaultCITimeout,
-		ExpectChecks: currentBranchInfo.HasChecks(),
-	})
-
-	steps = append(steps, PlanStep{
-		StepType:    StepMergePR,
-		BranchName:  currentBranch,
-		PRNumber:    currentBranchInfo.PRNumber,
-		Description: fmt.Sprintf("Merge PR #%d (%s)", currentBranchInfo.PRNumber, currentBranch),
-	})
-
-	steps = append(steps, PlanStep{
-		StepType:    StepPullTrunk,
-		BranchName:  "",
-		PRNumber:    0,
-		Description: "Pull trunk to get merged changes",
-	})
-
-	for _, branchInfo := range branchesToMerge[:len(branchesToMerge)-1] {
-		steps = append(steps, PlanStep{
-			StepType:    StepDeleteBranch,
-			BranchName:  branchInfo.BranchName,
-			PRNumber:    0,
-			Description: fmt.Sprintf("Delete local branch %s", branchInfo.BranchName),
-		})
-	}
-
-	steps = append(steps, PlanStep{
-		StepType:    StepDeleteBranch,
-		BranchName:  currentBranch,
-		PRNumber:    0,
-		Description: fmt.Sprintf("Delete local branch %s", currentBranch),
-	})
-
-	for _, upstackBranch := range upstackBranches {
-		steps = append(steps, PlanStep{
-			StepType:    StepRestack,
-			BranchName:  upstackBranch,
-			PRNumber:    0,
-			Description: fmt.Sprintf("Restack %s onto trunk", upstackBranch),
-		})
-	}
-
-	return steps
-}
-
-func buildConsolidateSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string, wait bool) []PlanStep {
+func buildSquashSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string, wait bool) []PlanStep {
 	steps := []PlanStep{}
 
 	desc := "Consolidate %d branches into single PR"
@@ -632,8 +561,67 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	}
 
 	result.WriteString("Merge Plan:\n")
-	for i, step := range plan.Steps {
-		result.WriteString(fmt.Sprintf("  %d. %s\n", i+1, step.Description))
+	if plan.Strategy == StrategySquash {
+		// For squash strategy, show grouped steps that match the TUI display
+		result.WriteString(formatSquashPlanSteps(plan))
+	} else {
+		// For bottom-up strategy, show individual steps
+		for i, step := range plan.Steps {
+			result.WriteString(fmt.Sprintf("  %d. %s\n", i+1, step.Description))
+		}
+	}
+
+	return result.String()
+}
+
+// formatSquashPlanSteps formats squash plan steps in a grouped format
+func formatSquashPlanSteps(plan *Plan) string {
+	var result strings.Builder
+	stepNum := 1
+
+	// 1. Consolidation step
+	hasConsolidate := false
+	for _, step := range plan.Steps {
+		if step.StepType == StepConsolidate {
+			hasConsolidate = true
+			result.WriteString(fmt.Sprintf("  %d. %s\n", stepNum, step.Description))
+			stepNum++
+			break
+		}
+	}
+
+	// 2. Sync trunk (if present)
+	for _, step := range plan.Steps {
+		if step.StepType == StepPullTrunk {
+			result.WriteString(fmt.Sprintf("  %d. Sync trunk\n", stepNum))
+			stepNum++
+			break
+		}
+	}
+
+	// 3. Cleanup branches (count delete steps)
+	deleteCount := 0
+	for _, step := range plan.Steps {
+		if step.StepType == StepDeleteBranch {
+			deleteCount++
+		}
+	}
+	if deleteCount > 0 {
+		result.WriteString(fmt.Sprintf("  %d. Cleanup %d merged branches\n", stepNum, deleteCount))
+		stepNum++
+	}
+
+	// 4. Restack upstack branches (if any)
+	if len(plan.UpstackBranches) > 0 {
+		result.WriteString(fmt.Sprintf("  %d. Restack %d upstack branches\n", stepNum, len(plan.UpstackBranches)))
+	}
+
+	// If no consolidate step found (shouldn't happen), fall back to listing all steps
+	if !hasConsolidate {
+		result.Reset()
+		for i, step := range plan.Steps {
+			result.WriteString(fmt.Sprintf("  %d. %s\n", i+1, step.Description))
+		}
 	}
 
 	return result.String()

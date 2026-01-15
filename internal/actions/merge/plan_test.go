@@ -335,7 +335,7 @@ func TestCreateMergePlan(t *testing.T) {
 		s.Checkout("branch2")
 
 		plan, validation, err := merge.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, s.Context.GitHubClient, merge.CreatePlanOptions{
-			Strategy: merge.StrategyConsolidate,
+			Strategy: merge.StrategySquash,
 			Force:    false,
 			Wait:     true,
 		})
@@ -343,7 +343,7 @@ func TestCreateMergePlan(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, plan)
 		require.NotNil(t, validation)
-		require.Equal(t, merge.StrategyConsolidate, plan.Strategy)
+		require.Equal(t, merge.StrategySquash, plan.Strategy)
 		require.Equal(t, "branch2", plan.CurrentBranch)
 		require.Len(t, plan.BranchesToMerge, 2)
 

@@ -13,14 +13,14 @@ func TestDetermineRecommendedStrategy(t *testing.T) {
 		want        Strategy
 	}{
 		{
-			name:        "zero branches returns top-down",
+			name:        "zero branches returns bottom-up",
 			branchCount: 0,
-			want:        StrategyTopDown,
+			want:        StrategyBottomUp,
 		},
 		{
-			name:        "one branch returns top-down",
+			name:        "one branch returns bottom-up",
 			branchCount: 1,
-			want:        StrategyTopDown,
+			want:        StrategyBottomUp,
 		},
 		{
 			name:        "two branches returns bottom-up",
@@ -28,14 +28,14 @@ func TestDetermineRecommendedStrategy(t *testing.T) {
 			want:        StrategyBottomUp,
 		},
 		{
-			name:        "three branches returns consolidate",
+			name:        "three branches returns squash",
 			branchCount: 3,
-			want:        StrategyConsolidate,
+			want:        StrategySquash,
 		},
 		{
-			name:        "many branches returns consolidate",
+			name:        "many branches returns squash",
 			branchCount: 10,
-			want:        StrategyConsolidate,
+			want:        StrategySquash,
 		},
 	}
 
