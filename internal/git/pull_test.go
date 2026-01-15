@@ -190,6 +190,124 @@ func TestPullBranch_WithReload(t *testing.T) {
 	require.NoError(t, err, "go-git should still see old commits")
 }
 
+func TestPullBranch_WorktreeCorruptsMainWorkspace(t *testing.T) {
+	// This test reproduces a critical bug where pulling trunk in a worktree
+	// corrupts the main workspace's index/working tree.
+	//
+	// Scenario (matching the real bug report):
+	// 1. Main workspace is on "main" with a CLEAN working tree (no local changes)
+	// 2. A PR is merged on GitHub, updating remote main
+	// 3. A temporary worktree is created at detached HEAD
+	// 4. In the worktree, PullBranch is called for "main"
+	// 5. PullBranch does update-ref to update refs/heads/main globally
+	// 6. But the hard reset only happens if the WORKTREE is on main (it's not - it's detached)
+	// 7. Result: Main workspace now has index/working tree at OLD commit,
+	//    but HEAD points to NEW commit - appearing as INVERSE staged changes
+	//
+	// Root cause: update-ref is global but the index sync is local to the worktree.
+
+	// 1. Setup a "remote" repository with initial content
+	remoteScene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial content", "shared")
+	})
+	remotePath, err := remoteScene.Repo.CreateBareRemote("upstream")
+	require.NoError(t, err)
+	err = remoteScene.Repo.PushBranch("upstream", "main")
+	require.NoError(t, err)
+
+	// 2. Clone to local repository (this will be the "main workspace")
+	localDir, err := os.MkdirTemp("", "stackit-test-main-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(localDir) })
+
+	cmd := exec.Command("git", "clone", "--branch", "main", remotePath, localDir)
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	// Create runner for main workspace
+	mainRunner := git.NewRunnerWithPath(localDir, nil)
+	err = mainRunner.InitDefaultRepo()
+	require.NoError(t, err)
+
+	// 3. Simulate a PR: MODIFY the existing shared file on remote
+	err = remoteScene.Repo.CreateAndCheckoutBranch("feature")
+	require.NoError(t, err)
+	// Modify the existing shared_test.txt file with new content
+	err = remoteScene.Repo.CreateChangeAndCommit("modified content from PR", "shared")
+	require.NoError(t, err)
+
+	// Merge the feature into main on remote
+	err = remoteScene.Repo.CheckoutBranch("main")
+	require.NoError(t, err)
+	err = remoteScene.Repo.RunGitCommand("merge", "--no-ff", "feature", "-m", "Merge PR #528")
+	require.NoError(t, err)
+	err = remoteScene.Repo.PushBranch("upstream", "main")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// 4. Main workspace is CLEAN - no local changes (this is the key difference!)
+	// The user was on main with no uncommitted changes when they ran the merge
+	statusBefore, err := mainRunner.GetStatusPorcelain(ctx)
+	require.NoError(t, err)
+	require.Empty(t, statusBefore, "Main workspace should be clean before worktree pull")
+
+	// Record the current HEAD before pull
+	headBefore, err := mainRunner.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	// 5. Create a temporary worktree at detached HEAD (simulating merge worktree)
+	worktreeDir, err := os.MkdirTemp("", "stackit-test-worktree-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(worktreeDir) })
+
+	_, err = mainRunner.RunGitCommandWithContext(ctx, "worktree", "add", "--detach", worktreeDir, "HEAD")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = mainRunner.RunGitCommandWithContext(ctx, "worktree", "remove", "--force", worktreeDir)
+	})
+
+	// Create runner for worktree
+	worktreeRunner := git.NewRunnerWithPath(worktreeDir, nil)
+	err = worktreeRunner.InitDefaultRepo()
+	require.NoError(t, err)
+
+	// Verify worktree is on detached HEAD
+	worktreeBranch, err := worktreeRunner.RunGitCommandWithContext(ctx, "rev-parse", "--abbrev-ref", "HEAD")
+	require.NoError(t, err)
+	require.Equal(t, "HEAD", worktreeBranch, "Worktree should be on detached HEAD")
+
+	// 6. Pull trunk in the worktree - THIS IS WHERE THE BUG HAPPENS
+	result, err := worktreeRunner.PullBranch(ctx, "origin", "main")
+	require.NoError(t, err)
+	require.Equal(t, git.PullDone, result, "PullBranch should succeed")
+
+	// Record HEAD after pull
+	headAfter, err := mainRunner.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	require.NoError(t, err)
+	require.NotEqual(t, headBefore, headAfter, "HEAD should have changed after pull (update-ref worked)")
+
+	// 7. Check main workspace status - THIS IS WHERE THE BUG MANIFESTS
+	// BUG: The index/working tree are still at the OLD commit, but HEAD points to NEW commit
+	// Git interprets this as: staged changes that UNDO the new content (inverse of the PR)
+	statusAfter, err := mainRunner.GetStatusPorcelain(ctx)
+	require.NoError(t, err)
+
+	t.Logf("Status before worktree pull: %q", statusBefore)
+	t.Logf("Status after worktree pull: %q", statusAfter)
+	t.Logf("HEAD before: %s, HEAD after: %s", headBefore[:7], headAfter[:7])
+
+	// The main workspace should remain clean after the worktree pull.
+	// Either:
+	// a) The index/working tree are updated to match the new HEAD, OR
+	// b) The update-ref should not affect the main workspace at all
+	//
+	// BUG behavior: statusAfter contains "M  shared_test.txt" (staged modification)
+	// that represents the INVERSE of the PR (old content vs new HEAD)
+	require.Empty(t, statusAfter,
+		"Main workspace should be clean after worktree pull, but got inverse changes: %q", statusAfter)
+}
+
 func TestPullBranch_WorkingDirSyncWhenOnBranch(t *testing.T) {
 	// This test reproduces a bug where PullBranch leaves the working directory
 	// with uncommitted changes after pulling when we're already on the branch.
