@@ -67,6 +67,7 @@ type RenderOptions struct {
 	OmitCurrentBranch bool
 	NoStyleBranchName bool
 	HideStats         bool
+	HideSummary       bool // Hide the summary line (stats, PR info, CI status)
 	ShowSHAs          bool // Show commit SHAs next to branch names
 	SelectedBranch    string
 	Collapsed         map[string]bool
@@ -156,6 +157,7 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		omitCurrentBranch: opts.OmitCurrentBranch,
 		noStyleBranchName: opts.NoStyleBranchName,
 		hideStats:         opts.HideStats,
+		hideSummary:       opts.HideSummary,
 		showSHAs:          opts.ShowSHAs,
 		overallIndent:     &overallIndent,
 		selectedBranch:    opts.SelectedBranch,
@@ -199,6 +201,7 @@ type treeRenderArgs struct {
 	omitCurrentBranch bool
 	noStyleBranchName bool
 	hideStats         bool
+	hideSummary       bool
 	showSHAs          bool
 	skipBranchingLine bool
 	overallIndent     *int
@@ -266,6 +269,7 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 			omitCurrentBranch: args.omitCurrentBranch,
 			noStyleBranchName: args.noStyleBranchName,
 			hideStats:         args.hideStats,
+			hideSummary:       args.hideSummary,
 			showSHAs:          args.showSHAs,
 			overallIndent:     args.overallIndent,
 			selectedBranch:    args.selectedBranch,
@@ -335,6 +339,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 			branchName:        branchName,
 			indentLevel:       args.indentLevel,
 			parentScopes:      args.parentScopes,
+			hideSummary:       args.hideSummary,
 			showSHAs:          args.showSHAs,
 			skipBranchingLine: true,
 			overallIndent:     args.overallIndent,
@@ -654,12 +659,14 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		return result
 	}
 
-	// LINE 2: Summary line with PR# → Review → CI → Stats
-	branchPipe := styleObj.Render("│")
-	summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
+	// LINE 2: Summary line with PR# → Review → CI → Stats (skip if hideSummary)
+	if !args.hideSummary {
+		branchPipe := styleObj.Render("│")
+		summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
 
-	if summaryLine != "" {
-		result = append(result, style.SelectionPadding+prefix+branchPipe+"  "+summaryLine)
+		if summaryLine != "" {
+			result = append(result, style.SelectionPadding+prefix+branchPipe+"  "+summaryLine)
+		}
 	}
 
 	// Trailing spacer line

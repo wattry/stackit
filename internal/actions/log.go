@@ -19,11 +19,12 @@ import (
 const (
 	LogStyleNormal = "NORMAL"
 	LogStyleFull   = "FULL"
+	LogStyleShort  = "SHORT"
 )
 
 // LogOptions contains options for the log command
 type LogOptions struct {
-	Style         string // LogStyleNormal or LogStyleFull
+	Style         string // LogStyleNormal, LogStyleFull, or LogStyleShort
 	Reverse       bool
 	Steps         *int
 	BranchName    string
@@ -98,10 +99,11 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	renderer.SetAnnotations(annotations)
 
 	stackLines := renderer.RenderStack(opts.BranchName, tree.RenderOptions{
-		Short:    false, // We want the full tree characters with stats
-		Reverse:  opts.Reverse,
-		Steps:    opts.Steps,
-		ShowSHAs: opts.ShowSHAs,
+		Short:       false, // We want the full tree characters with stats
+		Reverse:     opts.Reverse,
+		Steps:       opts.Steps,
+		ShowSHAs:    opts.ShowSHAs,
+		HideSummary: opts.Style == LogStyleShort,
 	})
 
 	// Add summary footer
