@@ -3,60 +3,47 @@ package git
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
 func (r *runner) GetRepoInfo(ctx context.Context) (string, string, error) {
 	// Get remote URL
-	url, _ := r.RunGitCommandWithContext(ctx, "config", "--get", "remote.origin.url")
-	// url will be empty if there's an error (e.g. remote.origin.url not set)
+	remoteURL, _ := r.RunGitCommandWithContext(ctx, "config", "--get", "remote.origin.url")
+	// remoteURL will be empty if there's an error (e.g. remote.origin.url not set)
 	// This happens in many tests and is not a fatal error for most operations.
-	if url == "" {
+	if remoteURL == "" {
 		return "", "", nil
 	}
 
-	// Parse URL (handles both https and ssh formats)
-	url = strings.TrimSpace(url)
-	if url == "" {
+	remoteURL = strings.TrimSpace(remoteURL)
+	if remoteURL == "" {
 		return "", "", nil
 	}
-	url = strings.TrimSuffix(url, ".git")
-	parts := strings.Split(url, "/")
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("invalid remote URL")
-	}
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
 
-	repoName := parts[len(parts)-1]
-	var owner string
-	if strings.Contains(url, "@") {
-		// SSH format: either git@github.com:owner/repo or ssh://git@github.com/owner/repo
-		if trimmed, ok := strings.CutPrefix(url, "ssh://"); ok {
-			// URL format: ssh://git@hostname/owner/repo
-			_, hostAndPath, found := strings.Cut(trimmed, "@")
-			if !found {
-				return "", "", fmt.Errorf("invalid SSH remote URL: missing @")
-			}
-			pathParts := strings.Split(hostAndPath, "/")
-			if len(pathParts) < 3 {
-				return "", "", fmt.Errorf("invalid SSH remote URL: path must be hostname/owner/repo")
-			}
-			owner = pathParts[1]
-		} else {
-			// SCP-like format: git@github.com:owner/repo
-			sshParts := strings.Split(url, ":")
-			if len(sshParts) < 2 {
-				return "", "", fmt.Errorf("invalid SSH remote URL")
-			}
-			pathParts := strings.Split(sshParts[1], "/")
-			if len(pathParts) < 2 {
-				return "", "", fmt.Errorf("invalid SSH remote URL")
-			}
-			owner = pathParts[0]
+	// Try standard URL parsing first (handles ssh://, https://, git://, etc.)
+	parsed, err := url.Parse(remoteURL)
+	if err == nil && parsed.Scheme != "" {
+		parts := strings.Split(strings.TrimPrefix(parsed.Path, "/"), "/")
+		if len(parts) < 2 {
+			return "", "", fmt.Errorf("invalid remote URL: path must contain owner/repo")
 		}
-	} else {
-		// HTTPS format: https://github.com/owner/repo
-		owner = parts[len(parts)-2]
+		return parts[0], parts[len(parts)-1], nil
 	}
 
-	return owner, repoName, nil
+	// Fall back to SCP-like format: git@github.com:owner/repo
+	if strings.Contains(remoteURL, "@") {
+		if _, path, found := strings.Cut(remoteURL, ":"); found {
+			parts := strings.Split(path, "/")
+			if len(parts) < 2 {
+				return "", "", fmt.Errorf("invalid SCP-style remote URL: path must contain owner/repo")
+			}
+			return parts[0], parts[len(parts)-1], nil
+		}
+	}
+
+	// Local file paths (used in tests) or other formats - return empty
+	// This is not an error; the caller may use other means to get repo info
+	return "", "", nil
 }

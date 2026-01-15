@@ -100,4 +100,52 @@ func TestGetRepoInfo(t *testing.T) {
 		require.Empty(t, owner)
 		require.Empty(t, repo)
 	})
+
+	t.Run("parses HTTPS URL with authentication", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+
+		// HTTPS URL with embedded username (e.g., for token auth)
+		err := scene.Repo.RunGitCommand("config", "remote.origin.url", "https://user@github.com/myowner/myrepo.git")
+		require.NoError(t, err)
+
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
+		owner, repo, err := runner.GetRepoInfo(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, "myowner", owner)
+		require.Equal(t, "myrepo", repo)
+	})
+
+	t.Run("parses ssh:// URL with explicit port", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+
+		// SSH URL with explicit port number
+		err := scene.Repo.RunGitCommand("config", "remote.origin.url", "ssh://git@github.com:22/myowner/myrepo.git")
+		require.NoError(t, err)
+
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
+		owner, repo, err := runner.GetRepoInfo(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, "myowner", owner)
+		require.Equal(t, "myrepo", repo)
+	})
+
+	t.Run("parses git:// protocol URL", func(t *testing.T) {
+		scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+			return s.Repo.CreateChangeAndCommit("initial", "init")
+		})
+
+		// git:// protocol (read-only anonymous access)
+		err := scene.Repo.RunGitCommand("config", "remote.origin.url", "git://github.com/myowner/myrepo.git")
+		require.NoError(t, err)
+
+		runner := git.NewRunnerWithPath(scene.Dir, nil)
+		owner, repo, err := runner.GetRepoInfo(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, "myowner", owner)
+		require.Equal(t, "myrepo", repo)
+	})
 }
