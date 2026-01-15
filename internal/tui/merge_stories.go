@@ -21,12 +21,11 @@ func registerMergeStories() {
 	RegisterStory(Story{
 		Name:        "Merge Strategy Selector",
 		Category:    "Merge",
-		Description: "Selecting the merge strategy (bottom-up, top-down, or consolidate)",
+		Description: "Selecting the merge strategy (bottom-up or squash)",
 		CreateModel: func() tea.Model {
 			return NewSelectModel("Select merge strategy:", []SelectOption{
 				{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom (recommended)", Value: "bottom-up"},
-				{Label: "📦 Top-down — Squash all changes into one PR, merge once", Value: "top-down"},
-				{Label: "🔀 Consolidate — Create single PR with all stack commits for atomic merge", Value: "consolidate"},
+				{Label: "🔀 Squash — Create single PR with all stack commits for atomic merge", Value: "squash"},
 			}, 0)
 		},
 	})

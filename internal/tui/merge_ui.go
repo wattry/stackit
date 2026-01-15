@@ -420,7 +420,12 @@ func (m MergeTUIModel) View() string {
 
 	// Show ellipsis if we're hiding pending groups
 	if len(pendingGroupInfos) > maxPendingToShow {
-		b.WriteString(m.styles.dimStyle.Render(fmt.Sprintf("  ... %d more\n", len(pendingGroupInfos)-maxPendingToShow)))
+		remaining := len(pendingGroupInfos) - maxPendingToShow
+		if remaining == 1 {
+			b.WriteString(m.styles.dimStyle.Render("  ... 1 more step\n"))
+		} else {
+			b.WriteString(m.styles.dimStyle.Render(fmt.Sprintf("  ... %d more steps\n", remaining)))
+		}
 	}
 
 	if m.done {

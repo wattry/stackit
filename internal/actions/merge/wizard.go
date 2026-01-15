@@ -42,6 +42,11 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	if scope == "" && targetBranch == "" {
 		out.Debug("merge wizard: no scope or target branch pre-selected, prompting user")
 
+		// Check if "this branch" is a valid option (not on trunk and not in empty worktree)
+		currentBranch := eng.CurrentBranch()
+		canMergeThisBranch := currentBranch != nil && !currentBranch.IsTrunk()
+		out.Debug("merge wizard: canMergeThisBranch=%v (currentBranch=%v)", canMergeThisBranch, currentBranch != nil)
+
 		// Get available scopes and stacks for the prompt
 		availableScopes := GetAvailableScopes(eng)
 		availableStacks, err := DiscoverStacks(eng)
@@ -51,7 +56,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		}
 		out.Debug("merge wizard: found %d scopes, %d stacks", len(availableScopes), len(availableStacks))
 
-		mergeType, err := handler.PromptMergeType(availableScopes, availableStacks)
+		mergeType, err := handler.PromptMergeType(canMergeThisBranch, availableScopes, availableStacks)
 		if err != nil {
 			out.Debug("merge wizard: merge type prompt error: %v", err)
 			return err
@@ -136,8 +141,21 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		}
 	}
 
-	// Show the plan
-	handler.ShowPlan(plan, validation)
+	// Show validation issues before strategy selection
+	if len(validation.Errors) > 0 {
+		out.Print("Validation Errors:\n")
+		for _, e := range validation.Errors {
+			out.Print(fmt.Sprintf("  ✗ %s\n", e))
+		}
+		out.Newline()
+	}
+	if len(validation.Warnings) > 0 {
+		out.Print("Warnings:\n")
+		for _, w := range validation.Warnings {
+			out.Print(fmt.Sprintf("  ⚠ %s\n", w))
+		}
+		out.Newline()
+	}
 
 	// Check validation
 	if !validation.Valid && !opts.Force {
@@ -158,9 +176,9 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		wait = opts.Wait
 		out.Debug("merge wizard: using pre-selected strategy: %s, wait=%v", strategy, wait)
 	case len(plan.BranchesToMerge) == 1:
-		// Single PR: auto-select top-down
-		strategy = StrategyTopDown
-		out.Debug("merge wizard: auto-selected top-down strategy for single PR")
+		// Single PR: auto-select bottom-up
+		strategy = StrategyBottomUp
+		out.Debug("merge wizard: auto-selected bottom-up strategy for single PR")
 	default:
 		// Prompt for strategy
 		recommended := DetermineRecommendedStrategy(len(plan.BranchesToMerge))
@@ -189,6 +207,9 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		return err
 	}
 	out.Debug("merge wizard: final plan has %d branches, %d steps", len(plan.BranchesToMerge), len(plan.Steps))
+
+	// Show the final plan with the selected strategy
+	handler.ShowPlan(plan, validation)
 
 	// Re-validate with new strategy
 	if !validation.Valid && !opts.Force {
@@ -247,17 +268,14 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 }
 
 // DetermineRecommendedStrategy returns the recommended strategy based on stack size.
-// - 1 branch: top-down (squash into one PR)
-// - 2 branches: bottom-up (merge one at a time)
-// - 3+ branches: consolidate (atomic merge)
+// - 1-2 branches: bottom-up (merge one at a time)
+// - 3+ branches: squash (atomic merge)
 func DetermineRecommendedStrategy(branchCount int) Strategy {
 	switch {
-	case branchCount <= 1:
-		return StrategyTopDown
-	case branchCount == 2:
+	case branchCount <= 2:
 		return StrategyBottomUp
 	default:
-		return StrategyConsolidate
+		return StrategySquash
 	}
 }
 

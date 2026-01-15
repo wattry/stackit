@@ -89,7 +89,7 @@ func (h *SimpleMergeEventHandler) IsInteractive() bool {
 }
 
 // PromptMergeType implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptMergeType(_ []string, _ []mergeAction.MultiStackInfo) (mergeAction.MergeType, error) {
+func (h *SimpleMergeEventHandler) PromptMergeType(_ bool, _ []string, _ []mergeAction.MultiStackInfo) (mergeAction.MergeType, error) {
 	return "", fmt.Errorf("interactive mode required for merge type selection")
 }
 
@@ -235,12 +235,17 @@ func (h *InteractiveMergeEventHandler) IsInteractive() bool {
 }
 
 // PromptMergeType implements InteractiveHandler.
-func (h *InteractiveMergeEventHandler) PromptMergeType(availableScopes []string, availableStacks []mergeAction.MultiStackInfo) (mergeAction.MergeType, error) {
+func (h *InteractiveMergeEventHandler) PromptMergeType(canMergeThisBranch bool, availableScopes []string, availableStacks []mergeAction.MultiStackInfo) (mergeAction.MergeType, error) {
 	h.runner.Pause()
 	defer h.runner.Resume()
 
-	options := []tui.SelectOption{
-		{Label: "🌿 This branch — Merge the current branch and its stack", Value: "this"},
+	var options []tui.SelectOption
+
+	// Only show "This branch" if we're on a non-trunk branch
+	if canMergeThisBranch {
+		options = append(options, tui.SelectOption{
+			Label: "🌿 This branch — Merge the current branch and its stack", Value: "this",
+		})
 	}
 	if len(availableScopes) > 0 {
 		options = append(options, tui.SelectOption{
@@ -251,6 +256,11 @@ func (h *InteractiveMergeEventHandler) PromptMergeType(availableScopes []string,
 		options = append(options, tui.SelectOption{
 			Label: "📚 Select stack(s) — Merge one or more stacks (multi-select)", Value: "stack",
 		})
+	}
+
+	// If no options available, return an error
+	if len(options) == 0 {
+		return "", fmt.Errorf("no merge options available: no stacks or scopes found")
 	}
 
 	selected, err := tui.PromptSelect("What would you like to merge?", options, 0)
@@ -355,18 +365,16 @@ func (h *InteractiveMergeEventHandler) PromptStrategy(plan *mergeAction.Plan, re
 	var defaultIndex int
 
 	// Build options based on recommended strategy
-	if recommended == mergeAction.StrategyConsolidate {
+	if recommended == mergeAction.StrategySquash {
 		strategyOptions = []tui.SelectOption{
-			{Label: "🔀 Consolidate — Create single PR with all stack commits for atomic merge (recommended)", Value: "consolidate"},
+			{Label: "🔀 Squash — Create single PR with all stack commits for atomic merge (recommended)", Value: "squash"},
 			{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom", Value: "bottom-up"},
-			{Label: "📦 Top-down — Squash all changes into one PR, merge once", Value: "top-down"},
 		}
 		defaultIndex = 0
 	} else {
 		strategyOptions = []tui.SelectOption{
 			{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom (recommended)", Value: "bottom-up"},
-			{Label: "📦 Top-down — Squash all changes into one PR, merge once", Value: "top-down"},
-			{Label: "🔀 Consolidate — Create single PR with all stack commits for atomic merge", Value: "consolidate"},
+			{Label: "🔀 Squash — Create single PR with all stack commits for atomic merge", Value: "squash"},
 		}
 		defaultIndex = 0
 	}
@@ -388,12 +396,10 @@ func (h *InteractiveMergeEventHandler) PromptStrategy(plan *mergeAction.Plan, re
 	switch selectedStrategy {
 	case "bottom-up":
 		strategy = mergeAction.StrategyBottomUp
-	case "top-down":
-		strategy = mergeAction.StrategyTopDown
-	case "consolidate":
-		strategy = mergeAction.StrategyConsolidate
-		// Prompt for wait if consolidating
-		wait, err = tui.PromptConfirm("Wait for CI and automatically merge the consolidated PR?", false)
+	case "squash":
+		strategy = mergeAction.StrategySquash
+		// Prompt for wait if squashing
+		wait, err = tui.PromptConfirm("Wait for CI and automatically merge the squash PR?", false)
 		if err != nil {
 			return mergeAction.StrategyChoice{}, fmt.Errorf("wait selection canceled: %w", err)
 		}
@@ -474,27 +480,91 @@ type Group struct {
 
 // CalculateGroups calculates groups for the TUI
 func CalculateGroups(plan *mergeAction.Plan) []Group {
-	// Pre-allocate groups: at minimum we'll have branches to merge + upstack + remaining
-	groups := make([]Group, 0, len(plan.BranchesToMerge)+len(plan.UpstackBranches)+len(plan.Steps))
+	// Pre-allocate a reasonable capacity for groups
+	groups := make([]Group, 0, len(plan.BranchesToMerge)+len(plan.UpstackBranches)+4)
 	assigned := make(map[int]bool)
 
-	// 0. If consolidation, create a special group for it first
-	if plan.Strategy == mergeAction.StrategyConsolidate {
-		var consolidationIndices []int
-		for i, step := range plan.Steps {
-			if step.StepType == mergeAction.StepConsolidate {
-				consolidationIndices = append(consolidationIndices, i)
-				assigned[i] = true
-			}
-		}
-		if len(consolidationIndices) > 0 {
-			groups = append(groups, Group{
-				Label:       "Consolidate branches into single PR and wait for merge",
-				StepIndices: consolidationIndices,
-			})
-		}
+	if plan.Strategy == mergeAction.StrategySquash {
+		// For squash strategy: group by step type, not by individual branch
+		groups = appendSquashGroups(groups, plan, assigned)
+	} else {
+		// For bottom-up strategy: group by individual PR
+		groups = appendBottomUpGroups(groups, plan, assigned)
 	}
 
+	// Remaining steps (like PullTrunk) - applies to both strategies
+	for i := range len(plan.Steps) {
+		if assigned[i] {
+			continue
+		}
+
+		label := plan.Steps[i].Description
+		if plan.Steps[i].StepType == mergeAction.StepPullTrunk {
+			label = "Sync trunk"
+		}
+
+		groups = append(groups, Group{
+			Label:       label,
+			StepIndices: []int{i},
+		})
+		assigned[i] = true
+	}
+
+	return groups
+}
+
+// appendSquashGroups appends groups for squash strategy
+func appendSquashGroups(groups []Group, plan *mergeAction.Plan, assigned map[int]bool) []Group {
+	// 1. Consolidation step
+	var consolidationIndices []int
+	for i, step := range plan.Steps {
+		if step.StepType == mergeAction.StepConsolidate {
+			consolidationIndices = append(consolidationIndices, i)
+			assigned[i] = true
+		}
+	}
+	if len(consolidationIndices) > 0 {
+		groups = append(groups, Group{
+			Label:       "Consolidate branches into single PR and wait for merge",
+			StepIndices: consolidationIndices,
+		})
+	}
+
+	// 2. All delete steps grouped together as "Cleanup merged branches"
+	var deleteIndices []int
+	for i, step := range plan.Steps {
+		if step.StepType == mergeAction.StepDeleteBranch && !assigned[i] {
+			deleteIndices = append(deleteIndices, i)
+			assigned[i] = true
+		}
+	}
+	if len(deleteIndices) > 0 {
+		groups = append(groups, Group{
+			Label:       "Cleanup merged branches",
+			StepIndices: deleteIndices,
+		})
+	}
+
+	// 3. All restack steps grouped together
+	var restackIndices []int
+	for i, step := range plan.Steps {
+		if step.StepType == mergeAction.StepRestack && !assigned[i] {
+			restackIndices = append(restackIndices, i)
+			assigned[i] = true
+		}
+	}
+	if len(restackIndices) > 0 {
+		groups = append(groups, Group{
+			Label:       "Restack upstack branches",
+			StepIndices: restackIndices,
+		})
+	}
+
+	return groups
+}
+
+// appendBottomUpGroups appends groups for bottom-up strategy
+func appendBottomUpGroups(groups []Group, plan *mergeAction.Plan, assigned map[int]bool) []Group {
 	// 1. Create groups for each branch being merged
 	for _, branchInfo := range plan.BranchesToMerge {
 		var indices []int
@@ -533,24 +603,6 @@ func CalculateGroups(plan *mergeAction.Plan) []Group {
 				StepIndices: indices,
 			})
 		}
-	}
-
-	// 3. Remaining steps (like PullTrunk)
-	for i := range len(plan.Steps) {
-		if assigned[i] {
-			continue
-		}
-
-		label := plan.Steps[i].Description
-		if plan.Steps[i].StepType == mergeAction.StepPullTrunk {
-			label = "Sync trunk"
-		}
-
-		groups = append(groups, Group{
-			Label:       label,
-			StepIndices: []int{i},
-		})
-		assigned[i] = true
 	}
 
 	return groups

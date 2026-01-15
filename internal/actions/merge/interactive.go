@@ -51,8 +51,9 @@ type InteractiveHandler interface {
 
 	// PromptMergeType asks user what to merge (this/scope/stacks).
 	// Called at the start of the wizard when no merge target is pre-selected.
+	// canMergeThisBranch indicates if "This branch" is a valid option (false on trunk or empty worktree).
 	// Returns ErrCanceled if user cancels.
-	PromptMergeType(availableScopes []string, availableStacks []MultiStackInfo) (MergeType, error)
+	PromptMergeType(canMergeThisBranch bool, availableScopes []string, availableStacks []MultiStackInfo) (MergeType, error)
 
 	// PromptScope asks user to select a scope from available options.
 	// Called when user selects MergeTypeScope.
