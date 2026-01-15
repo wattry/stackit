@@ -18,9 +18,27 @@ func NewStackTreeRendererWithFilter(eng engine.BranchReader, filter func(string)
 
 // NewStackTreeRendererWithStrategy creates a tree renderer with a specific sorting strategy and optional filter
 func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool) *tree.StackTreeRenderer {
+	return newStackTreeRendererInternal(eng, strategy, filter, nil)
+}
+
+// NewStackTreeRendererWithEmptyWorktrees creates a tree renderer that shows empty worktree anchors
+func NewStackTreeRendererWithEmptyWorktrees(eng engine.BranchReader, emptyWorktrees map[string]bool) *tree.StackTreeRenderer {
+	return newStackTreeRendererInternal(eng, engine.SortStrategySmart, nil, emptyWorktrees)
+}
+
+// NewStackTreeRendererWithOptions creates a tree renderer with all options
+func NewStackTreeRendererWithOptions(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool, emptyWorktrees map[string]bool) *tree.StackTreeRenderer {
+	return newStackTreeRendererInternal(eng, strategy, filter, emptyWorktrees)
+}
+
+// newStackTreeRendererInternal is the internal implementation that handles all renderer options
+func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool, emptyWorktrees map[string]bool) *tree.StackTreeRenderer {
 	branchFilter := func(b engine.Branch) bool {
-		// Always filter out worktree anchor branches from the tree display
 		if b.IsWorktreeAnchor() {
+			// Show empty worktree anchors if they're in the set
+			if emptyWorktrees != nil {
+				return emptyWorktrees[b.GetName()]
+			}
 			return false
 		}
 		// Apply user-provided filter if any
@@ -60,15 +78,64 @@ func NewStackTreeRendererWithStrategy(eng engine.BranchReader, strategy engine.S
 	)
 }
 
+// GetEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
+// for worktrees that have no child branches (empty worktrees).
+func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
+	emptyWorktrees := make(map[string]*engine.WorktreeInfo)
+
+	worktrees, err := eng.ListManagedWorktrees()
+	if err != nil {
+		return emptyWorktrees
+	}
+
+	for i := range worktrees {
+		wt := &worktrees[i]
+		anchor := eng.GetBranch(wt.AnchorBranch)
+		if !anchor.IsTracked() || !anchor.IsWorktreeAnchor() {
+			continue
+		}
+
+		// Check if anchor has any children
+		hasChildren := false
+		for _, depth := range eng.BranchesDepthFirst(anchor) {
+			if depth > 0 {
+				hasChildren = true
+				break
+			}
+		}
+
+		if !hasChildren {
+			emptyWorktrees[wt.AnchorBranch] = wt
+		}
+	}
+
+	return emptyWorktrees
+}
+
 // GetMinimalAnnotationWithWorktree returns minimal annotations plus worktree info.
 // This is used for fast initial rendering before full data is loaded.
 // Only includes cached/instant fields - no git or network calls.
 func GetMinimalAnnotationWithWorktree(eng engine.Engine, branch engine.Branch) tree.BranchAnnotation {
+	return GetMinimalAnnotationWithWorktreeAndEmpty(eng, branch, nil)
+}
+
+// GetMinimalAnnotationWithWorktreeAndEmpty returns minimal annotations plus worktree info,
+// with support for marking empty worktrees.
+func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.Branch, emptyWorktrees map[string]*engine.WorktreeInfo) tree.BranchAnnotation {
 	ann := tree.BranchAnnotation{
 		IsLocked:      branch.IsLocked(),
 		IsFrozen:      branch.IsFrozen(),
 		Scope:         eng.GetScope(branch).String(),
 		ExplicitScope: branch.GetExplicitScope().String(),
+	}
+
+	// Check if this is an empty worktree anchor
+	if emptyWorktrees != nil {
+		if wtInfo, ok := emptyWorktrees[branch.GetName()]; ok {
+			ann.IsEmptyWorktree = true
+			ann.WorktreePath = wtInfo.Path
+			return ann
+		}
 	}
 
 	// Add worktree info if this branch is a stack root with a managed worktree

@@ -92,16 +92,28 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		}
 	}
 
-	// Create renderer synchronously for instant display
+	// Detect empty worktrees
 	start := time.Now()
-	renderer := NewStackTreeRendererWithStrategy(eng, engine.SortStrategySmart, filter)
-	logDebug("NewStackTreeRendererWithStrategy completed in %v", time.Since(start))
+	emptyWorktrees := GetEmptyWorktrees(eng)
+	var emptyWorktreeNames map[string]bool
+	if len(emptyWorktrees) > 0 {
+		emptyWorktreeNames = make(map[string]bool)
+		for name := range emptyWorktrees {
+			emptyWorktreeNames[name] = true
+		}
+	}
+	logDebug("GetEmptyWorktrees completed in %v, found %d", time.Since(start), len(emptyWorktrees))
+
+	// Create renderer synchronously for instant display
+	start = time.Now()
+	renderer := NewStackTreeRendererWithOptions(eng, engine.SortStrategySmart, filter, emptyWorktreeNames)
+	logDebug("NewStackTreeRendererWithOptions completed in %v", time.Since(start))
 
 	// Build minimal annotations synchronously (includes worktree info, no git/network calls)
 	start = time.Now()
 	annotations := make(map[string]tree.BranchAnnotation)
 	for _, b := range eng.AllBranches() {
-		annotations[b.GetName()] = GetMinimalAnnotationWithWorktree(eng, b)
+		annotations[b.GetName()] = GetMinimalAnnotationWithWorktreeAndEmpty(eng, b, emptyWorktrees)
 	}
 	renderer.SetAnnotations(annotations)
 	logDebug("Minimal annotations with worktree completed in %v", time.Since(start))
@@ -262,6 +274,9 @@ func (m *LogModel) enrichData() tea.Cmd {
 		}
 		ciStatuses := ciRes.statuses
 
+		// Detect empty worktrees
+		emptyWorktrees := GetEmptyWorktrees(eng)
+
 		// Collect full annotations
 		start := time.Now()
 		annotations := make(map[string]tree.BranchAnnotation)
@@ -286,11 +301,18 @@ func (m *LogModel) enrichData() tea.Cmd {
 					}
 				}
 			}
-			// Check if this branch is a stack root with a managed worktree
-			stackRoot := eng.GetStackRootForBranch(b)
-			if stackRoot == b.GetName() {
-				if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
-					ann.WorktreePath = wtInfo.Path
+
+			// Check if this is an empty worktree anchor
+			if wtInfo, ok := emptyWorktrees[b.GetName()]; ok {
+				ann.IsEmptyWorktree = true
+				ann.WorktreePath = wtInfo.Path
+			} else {
+				// Check if this branch is a stack root with a managed worktree
+				stackRoot := eng.GetStackRootForBranch(b)
+				if stackRoot == b.GetName() {
+					if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+						ann.WorktreePath = wtInfo.Path
+					}
 				}
 			}
 			annotations[b.GetName()] = ann

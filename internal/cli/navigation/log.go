@@ -28,6 +28,7 @@ func NewLogCmd() *cobra.Command {
 
 	// Add subcommands
 	cmd.AddCommand(newLogFullCmd())
+	cmd.AddCommand(newLogShortCmd())
 
 	return cmd
 }
@@ -40,6 +41,20 @@ func newLogFullCmd() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return executeLog(cmd, f, actions.LogStyleFull)
+		},
+	}
+	addLogFlags(cmd, f)
+	return cmd
+}
+
+func newLogShortCmd() *cobra.Command {
+	f := &logFlags{}
+	cmd := &cobra.Command{
+		Use:          "short",
+		Short:        "Log branches showing only the branch tree (no stats or PR info)",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return executeLog(cmd, f, actions.LogStyleShort)
 		},
 	}
 	addLogFlags(cmd, f)
