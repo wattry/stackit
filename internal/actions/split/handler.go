@@ -5,10 +5,15 @@ type Step string
 
 // Split step constants
 const (
-	StepValidating Step = "validating"
-	StepSelecting  Step = "selecting"
-	StepApplying   Step = "applying"
-	StepRestacking Step = "restacking"
+	StepValidating        Step = "validating"
+	StepSelecting         Step = "selecting"
+	StepApplying          Step = "applying"
+	StepRestacking        Step = "restacking"
+	StepChoosingType      Step = "choosing_type"
+	StepChoosingDirection Step = "choosing_direction"
+	StepStagingHunks      Step = "staging_hunks"
+	StepCommitMessage     Step = "commit_message"
+	StepBranchName        Step = "branch_name"
 )
 
 // StepStatus represents the status of a step
