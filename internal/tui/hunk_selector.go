@@ -134,18 +134,22 @@ func NewHunkSelectorModel(hunks []git.Hunk) *HunkSelectorModel {
 	items := make([]HunkItem, len(hunks))
 	fileMap := make(map[string][]int)
 	fileOrder := make([]string, 0)
+	fileBinary := make(map[string]bool)
 
 	for i, h := range hunks {
 		items[i] = HunkItem{
 			Hunk:       h,
 			Selected:   false,
 			Expanded:   false,
-			Splittable: git.CanSplitHunk(h),
+			Splittable: !h.Binary && git.CanSplitHunk(h),
 		}
 		if _, exists := fileMap[h.File]; !exists {
 			fileOrder = append(fileOrder, h.File)
 		}
 		fileMap[h.File] = append(fileMap[h.File], i)
+		if h.Binary {
+			fileBinary[h.File] = true
+		}
 	}
 
 	fileGroups := make([]FileGroup, len(fileOrder))
@@ -153,7 +157,7 @@ func NewHunkSelectorModel(hunks []git.Hunk) *HunkSelectorModel {
 		fileGroups[i] = FileGroup{
 			File:   file,
 			Hunks:  fileMap[file],
-			Binary: false,
+			Binary: fileBinary[file],
 		}
 	}
 
@@ -195,6 +199,19 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Submit):
+			// Require at least one selection before allowing submit
+			hasSelection := false
+			for _, item := range m.items {
+				if item.Selected {
+					hasSelection = true
+					break
+				}
+			}
+			if !hasSelection {
+				// Don't allow submit with zero selections - user should select at least one hunk
+				// or press cancel/escape to abort
+				return m, nil
+			}
 			m.done = true
 			return m, tea.Quit
 
@@ -291,14 +308,25 @@ func (m *HunkSelectorModel) View() string {
 // renderHeader creates the header line with selection info
 func (m *HunkSelectorModel) renderHeader() string {
 	selected := 0
+	totalAdded := 0
+	totalRemoved := 0
 	for _, item := range m.items {
 		if item.Selected {
 			selected++
+			added, removed := git.CountHunkLines(item.Hunk)
+			totalAdded += added
+			totalRemoved += removed
 		}
 	}
 
 	fileCount := len(m.fileGroups)
-	return fmt.Sprintf("Select hunks to stage (%d of %d hunks, %d files)", selected, len(m.items), fileCount)
+	header := fmt.Sprintf("Select hunks to stage (%d of %d hunks, %d files)", selected, len(m.items), fileCount)
+	if selected > 0 {
+		header += fmt.Sprintf(" [+%d -%d lines]", totalAdded, totalRemoved)
+	} else {
+		header += " - select at least one to continue"
+	}
+	return header
 }
 
 // updateViewportContent renders all hunks into the viewport
@@ -318,11 +346,15 @@ func (m *HunkSelectorModel) updateViewportContent() {
 	removeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	contextStyle := style.DimStyle()
 	splittableStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	binaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("5")) // magenta for binary
 
-	itemIndex := 0
 	for _, fg := range m.fileGroups {
 		// File header
-		sb.WriteString(fileStyle.Render(fg.File))
+		fileHeader := fg.File
+		if fg.Binary {
+			fileHeader += " " + binaryStyle.Render("[binary]")
+		}
+		sb.WriteString(fileStyle.Render(fileHeader))
 		sb.WriteString("\n")
 
 		for _, hunkIdx := range fg.Hunks {
@@ -342,6 +374,16 @@ func (m *HunkSelectorModel) updateViewportContent() {
 				cursor = cursorStyle.Render("> ")
 			}
 
+			// Handle binary files differently
+			if item.Hunk.Binary {
+				headerText := binaryStyle.Render("Binary file change")
+				if isCursor {
+					headerText = cursorStyle.Render("Binary file change")
+				}
+				fmt.Fprintf(&sb, "%s%s %s\n", cursor, checkbox, headerText)
+				continue
+			}
+
 			// Hunk header line
 			header := git.GetHunkHeader(item.Hunk)
 			added, removed := git.CountHunkLines(item.Hunk)
@@ -355,7 +397,7 @@ func (m *HunkSelectorModel) updateViewportContent() {
 				headerText = cursorStyle.Render(headerText)
 			}
 
-			sb.WriteString(fmt.Sprintf("%s%s %s\n", cursor, checkbox, headerText))
+			fmt.Fprintf(&sb, "%s%s %s\n", cursor, checkbox, headerText)
 
 			// Show preview for current hunk or expanded hunks
 			if isCursor || item.Expanded {
@@ -394,8 +436,6 @@ func (m *HunkSelectorModel) updateViewportContent() {
 					sb.WriteString(fmt.Sprintf("      %s\n", contextStyle.Render(fmt.Sprintf("...%d more lines", remaining))))
 				}
 			}
-
-			itemIndex++
 		}
 		sb.WriteString("\n")
 	}
@@ -420,8 +460,25 @@ func (m *HunkSelectorModel) ensureCursorVisible() {
 				return
 			}
 			linePos++ // Hunk header line
-			if hunkIdx == m.cursor || m.items[hunkIdx].Expanded {
-				linePos += m.previewLines + 1 // Preview lines
+
+			// Calculate actual preview size for this hunk
+			item := m.items[hunkIdx]
+			if hunkIdx == m.cursor || item.Expanded {
+				// Binary files have no preview
+				if item.Hunk.Binary {
+					continue
+				}
+				_, totalLines, _ := git.GetHunkPreview(item.Hunk, m.previewLines)
+				if item.Expanded {
+					linePos += totalLines
+				} else {
+					// Collapsed preview shows at most previewLines, plus "...N more lines" line if truncated
+					previewSize := totalLines
+					if previewSize > m.previewLines {
+						previewSize = m.previewLines + 1 // +1 for the "...N more lines" line
+					}
+					linePos += previewSize
+				}
 			}
 		}
 		linePos++ // Blank line after file

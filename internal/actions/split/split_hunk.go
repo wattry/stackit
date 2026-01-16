@@ -579,10 +579,19 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		return fmt.Errorf("failed to stash staged changes: %w", err)
 	}
 
+	// Track stash state for cleanup - once stash is pushed, we need to pop it on any error
+	stashPopped := false
+	cleanupStash := func() {
+		if !stashPopped {
+			_ = eng.StashPop(gitCtx)
+			stashPopped = true
+		}
+	}
+
 	// Now only the "keep" changes remain unstaged
 	// Stage and commit them as the new current branch content
 	if err := eng.StageAll(gitCtx); err != nil {
-		_ = eng.StashPop(gitCtx) // Try to restore stash
+		cleanupStash()
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to stage remaining changes: %w", err)
 	}
@@ -591,33 +600,35 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		Message:  defaultCommitMessage,
 		NoVerify: true,
 	}); err != nil {
-		_ = eng.StashPop(gitCtx)
+		cleanupStash()
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to commit remaining changes: %w", err)
 	}
 
 	// Update the original branch ref to point to this new commit (the "keep" content)
 	if err := eng.UpdateBranchRef(gitCtx, branchToSplit.GetName(), "HEAD"); err != nil {
-		_ = eng.StashPop(gitCtx)
+		cleanupStash()
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to update branch reference: %w", err)
 	}
 
 	// Checkout the updated branch
 	if err := eng.CheckoutBranch(gitCtx, branchToSplit); err != nil {
-		_ = eng.StashPop(gitCtx)
+		cleanupStash()
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to checkout branch: %w", err)
 	}
 
 	// Create the child branch at the current position
 	if err := eng.CreateBranch(gitCtx, childBranchName, "HEAD"); err != nil {
-		_ = eng.StashPop(gitCtx)
+		cleanupStash()
 		return fmt.Errorf("failed to create child branch: %w", err)
 	}
 
 	// Checkout the child branch
 	childBranch := eng.GetBranch(childBranchName)
 	if err := eng.CheckoutBranch(gitCtx, childBranch); err != nil {
-		_ = eng.StashPop(gitCtx)
+		cleanupStash()
 		return fmt.Errorf("failed to checkout child branch: %w", err)
 	}
 
@@ -625,6 +636,7 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 	if err := eng.StashPop(gitCtx); err != nil {
 		return fmt.Errorf("failed to pop stash: %w", err)
 	}
+	stashPopped = true
 
 	// Stage and commit the extracted changes on child branch
 	if err := eng.StageAll(gitCtx); err != nil {

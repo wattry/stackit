@@ -3,6 +3,9 @@ package git
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 func (r *runner) StashPush(ctx context.Context, message string) (string, error) {
@@ -19,7 +22,13 @@ func (r *runner) StashPush(ctx context.Context, message string) (string, error) 
 
 // StashPushStaged stashes only the currently staged changes, leaving unstaged changes in the working tree.
 // This is useful for temporarily saving staged work while keeping other modifications.
+// Note: The --staged flag requires Git 2.35 or later.
 func (r *runner) StashPushStaged(ctx context.Context, message string) (string, error) {
+	// Check Git version first - --staged requires Git 2.35+
+	if !r.isGitVersionAtLeast(ctx, 2, 35) {
+		return "", fmt.Errorf("git stash --staged requires Git 2.35 or later; please upgrade your Git installation")
+	}
+
 	args := []string{"stash", "push", "--staged"}
 	if message != "" {
 		args = append(args, "-m", message)
@@ -29,6 +38,39 @@ func (r *runner) StashPushStaged(ctx context.Context, message string) (string, e
 		return "", fmt.Errorf("stash push --staged failed: %w", err)
 	}
 	return output, nil
+}
+
+// isGitVersionAtLeast checks if the installed Git version is at least major.minor.
+func (r *runner) isGitVersionAtLeast(ctx context.Context, major, minor int) bool {
+	output, err := r.RunGitCommandWithContext(ctx, "--version")
+	if err != nil {
+		return false // Assume old version on error
+	}
+
+	// Parse "git version X.Y.Z" format
+	// Examples: "git version 2.39.2", "git version 2.35.1.windows.2"
+	re := regexp.MustCompile(`git version (\d+)\.(\d+)`)
+	matches := re.FindStringSubmatch(strings.TrimSpace(output))
+	if len(matches) < 3 {
+		return false
+	}
+
+	gitMajor, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return false
+	}
+	gitMinor, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return false
+	}
+
+	if gitMajor > major {
+		return true
+	}
+	if gitMajor == major && gitMinor >= minor {
+		return true
+	}
+	return false
 }
 
 func (r *runner) StashPop(ctx context.Context) error {

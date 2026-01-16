@@ -1,7 +1,6 @@
 package split
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -77,74 +76,6 @@ func TestDirection(t *testing.T) {
 		t.Run(string(tt.direction), func(t *testing.T) {
 			if got := tt.direction.String(); got != tt.wantStr {
 				t.Errorf("Direction.String() = %q, want %q", got, tt.wantStr)
-			}
-		})
-	}
-}
-
-func TestBuildDirectionTreeViz(t *testing.T) {
-	tests := []struct {
-		name           string
-		currentBranch  string
-		parentBranch   string
-		childBranches  []string
-		wantContains   []string
-		wantNotContain []string
-	}{
-		{
-			name:          "no children",
-			currentBranch: "feature",
-			parentBranch:  "main",
-			childBranches: []string{},
-			wantContains: []string{
-				"main",
-				"feature",
-				"you are here",
-				"[BELOW]",
-				"[ABOVE]",
-			},
-		},
-		{
-			name:          "with children",
-			currentBranch: "feature",
-			parentBranch:  "main",
-			childBranches: []string{"child1", "child2"},
-			wantContains: []string{
-				"main",
-				"feature",
-				"child1",
-				"child2",
-				"[BELOW]",
-				"[ABOVE]",
-			},
-		},
-		{
-			name:          "single child",
-			currentBranch: "feature",
-			parentBranch:  "develop",
-			childBranches: []string{"bugfix"},
-			wantContains: []string{
-				"develop",
-				"feature",
-				"bugfix",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildDirectionTreeViz(tt.currentBranch, tt.parentBranch, tt.childBranches)
-
-			for _, want := range tt.wantContains {
-				if !strings.Contains(result, want) {
-					t.Errorf("buildDirectionTreeViz() missing %q in:\n%s", want, result)
-				}
-			}
-
-			for _, notWant := range tt.wantNotContain {
-				if strings.Contains(result, notWant) {
-					t.Errorf("buildDirectionTreeViz() unexpectedly contains %q in:\n%s", notWant, result)
-				}
 			}
 		})
 	}

@@ -42,11 +42,11 @@ func (k directionSelectKeyMap) FullHelp() [][]key.Binding {
 var defaultDirectionKeys = directionSelectKeyMap{
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "below"),
+		key.WithHelp("↑/k", "above"),
 	),
 	Down: key.NewBinding(
 		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "above"),
+		key.WithHelp("↓/j", "below"),
 	),
 	Submit: key.NewBinding(
 		key.WithKeys("enter"),
@@ -112,9 +112,9 @@ func (m *DirectionSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case key.Matches(keyMsg, m.keys.Up):
-			m.direction = DirectionBelow
-		case key.Matches(keyMsg, m.keys.Down):
 			m.direction = DirectionAbove
+		case key.Matches(keyMsg, m.keys.Down):
+			m.direction = DirectionBelow
 		case key.Matches(keyMsg, m.keys.Submit):
 			m.done = true
 			return m, tea.Quit

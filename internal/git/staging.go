@@ -111,10 +111,11 @@ func (r *runner) StageHunks(ctx context.Context, hunks []Hunk) error {
 	// We use --3way to handle conflicts better and --allow-empty for edge cases
 	_, err := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached", "--3way")
 	if err != nil {
-		// Try without --3way as a fallback (some git versions have issues)
-		_, err = r.runGitInternal(ctx, patch, nil, true, "apply", "--cached")
-		if err != nil {
-			return fmt.Errorf("failed to apply patch: %w", err)
+		// Try without --3way as a fallback (some git versions have issues with --3way)
+		_, fallbackErr := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached")
+		if fallbackErr != nil {
+			// Include both errors for debugging
+			return fmt.Errorf("failed to apply patch: %w (note: --3way also failed)", fallbackErr)
 		}
 	}
 

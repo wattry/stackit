@@ -15,6 +15,7 @@ type Hunk struct {
 	NewCount  int    // Number of lines in new file
 	Content   string // The actual diff content (including header)
 	IndexLine string // The index line from the diff (e.g., "index abc123..def456 100644") for --3way merging
+	Binary    bool   // True if this represents a binary file change
 }
 
 // ParseDiffOutput parses a diff output into structured hunks
@@ -65,6 +66,26 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 		// This is needed for --3way merge to work
 		if strings.HasPrefix(line, "index ") {
 			currentIndexLine = line
+			continue
+		}
+
+		// Check for binary file marker
+		// Format: "Binary files a/path and b/path differ"
+		if strings.HasPrefix(line, "Binary files ") && strings.HasSuffix(line, " differ") {
+			// Save previous hunk if exists
+			if currentHunk != nil {
+				currentHunk.Content = strings.Join(hunkLines, "\n")
+				hunks = append(hunks, *currentHunk)
+				currentHunk = nil
+				hunkLines = nil
+			}
+			// Create a binary file hunk
+			hunks = append(hunks, Hunk{
+				File:      currentFile,
+				Content:   line,
+				IndexLine: currentIndexLine,
+				Binary:    true,
+			})
 			continue
 		}
 

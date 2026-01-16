@@ -2,7 +2,6 @@ package split
 
 import (
 	"fmt"
-	"strings"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
@@ -165,39 +164,4 @@ func buildTypeChoices(hasMultipleCommits bool) []TypeChoice {
 			Available:   hasMultipleCommits,
 		},
 	}
-}
-
-// buildDirectionTreeViz creates a tree visualization showing where new branches
-// would be placed for "above" vs "below" directions.
-func buildDirectionTreeViz(currentBranch, parentBranch string, childBranches []string) string {
-	var sb strings.Builder
-
-	// Show parent (or trunk)
-	fmt.Fprintf(&sb, "  ◯ %s\n", parentBranch)
-	sb.WriteString("  │\n")
-
-	// Show [BELOW] indicator
-	sb.WriteString("  ├─ [BELOW] new branch would be inserted here\n")
-	sb.WriteString("  │\n")
-
-	// Show current branch
-	fmt.Fprintf(&sb, "  ◉ %s  ← you are here\n", currentBranch)
-
-	// Show children if any
-	if len(childBranches) > 0 {
-		sb.WriteString("  │\n")
-		sb.WriteString("  └─ [ABOVE] new branch would be inserted here\n")
-		for i, child := range childBranches {
-			if i < len(childBranches)-1 {
-				fmt.Fprintf(&sb, "      │\n      ├─ ◯ %s\n", child)
-			} else {
-				fmt.Fprintf(&sb, "      │\n      └─ ◯ %s\n", child)
-			}
-		}
-	} else {
-		sb.WriteString("  │\n")
-		sb.WriteString("  └─ [ABOVE] new branch would be inserted here\n")
-	}
-
-	return sb.String()
 }
