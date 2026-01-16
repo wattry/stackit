@@ -89,7 +89,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	if direction == "" {
 		handler.OnStep(StepChoosingDirection, StatusStarted, "Choose direction")
 
-		// Build tree visualization for direction prompt
+		// Build context for direction prompt
 		parentName := ""
 		if parent := currentBranch.GetParent(); parent != nil {
 			parentName = parent.GetName()
@@ -101,9 +101,14 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 		childNames := graph.Children(*currentBranch)
 
-		treeViz := buildDirectionTreeViz(currentBranch.GetName(), parentName, childNames)
+		dirCtx := DirectionContext{
+			Engine:        eng,
+			CurrentBranch: currentBranch.GetName(),
+			ParentBranch:  parentName,
+			Children:      childNames,
+		}
 
-		selectedDirection, err := handler.PromptDirection(treeViz)
+		selectedDirection, err := handler.PromptDirection(dirCtx)
 		if err != nil {
 			return err
 		}

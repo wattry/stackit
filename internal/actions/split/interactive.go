@@ -1,5 +1,15 @@
 package split
 
+import "stackit.dev/stackit/internal/engine"
+
+// DirectionContext provides context for the direction selection prompt
+type DirectionContext struct {
+	Engine        engine.BranchReader
+	CurrentBranch string
+	ParentBranch  string
+	Children      []string
+}
+
 // TypeChoice represents an available split type option
 type TypeChoice struct {
 	Style       Style
@@ -27,9 +37,8 @@ type InteractiveHandler interface {
 	PromptSplitType(availableTypes []TypeChoice) (Style, error)
 
 	// PromptDirection asks the user where to place the new branch.
-	// treeViz is a pre-rendered tree visualization showing current position.
 	// Returns the selected Direction or an error if canceled.
-	PromptDirection(treeViz string) (Direction, error)
+	PromptDirection(ctx DirectionContext) (Direction, error)
 
 	// ShowHunkSummary displays a summary of the remaining changes before staging.
 	// This is informational only, no user input required.

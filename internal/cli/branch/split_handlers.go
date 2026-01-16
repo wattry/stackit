@@ -121,32 +121,14 @@ func (h *TUISplitHandler) PromptSplitType(availableTypes []split.TypeChoice) (sp
 	return split.Style(selected), nil
 }
 
-// PromptDirection asks the user where to place the new branch
-func (h *TUISplitHandler) PromptDirection(treeViz string) (split.Direction, error) {
+// PromptDirection asks the user where to place the new branch using an interactive tree view
+func (h *TUISplitHandler) PromptDirection(ctx split.DirectionContext) (split.Direction, error) {
 	if !utils.IsInteractive() {
 		return "", errors.ErrCanceled
 	}
 
-	// Show the tree visualization
-	h.splog.Info("")
-	h.splog.Info("Current stack position:")
-	for _, line := range strings.Split(treeViz, "\n") {
-		h.splog.Info("%s", line)
-	}
-	h.splog.Info("")
-
-	options := []tui.SelectOption{
-		{
-			Label: "Below (downstack) - New branch between current and parent",
-			Value: string(split.DirectionBelow),
-		},
-		{
-			Label: "Above (upstack) - New branch as child of current",
-			Value: string(split.DirectionAbove),
-		},
-	}
-
-	selected, err := tui.PromptSelect("Where should the new branch be placed?", options, 0)
+	// Use the interactive direction selector with live tree preview
+	selected, err := tui.PromptDirectionSelect(ctx.Engine, ctx.CurrentBranch, ctx.ParentBranch, ctx.Children)
 	if err != nil {
 		return "", err
 	}
