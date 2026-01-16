@@ -20,6 +20,8 @@ func NewSplitCmd() *cobra.Command {
 		byFile            []string
 		byFileInteractive bool
 		asSibling         bool
+		above             bool
+		below             bool
 		name              string
 		message           string
 	)
@@ -35,17 +37,24 @@ split --by-commit slices up the commit history, allowing you to select split poi
 split --by-hunk interactively stages changes to create new single-commit branches.
 split --by-file <files> extracts specified files into a new parent branch.
 split -F (--by-file-interactive) shows an interactive file selector.
-split without options will prompt for a splitting strategy.
+split without options will launch an interactive wizard.
+
+Direction options for --by-hunk:
+  --below (default): New branch inserted between current and parent (downstack)
+  --above: New branch inserted as child of current (upstack)
 
 By default, --by-file creates a new PARENT branch, making the current branch
 a child of the split branch. Use --as-sibling to create an independent branch
 on the same parent instead (leaving the current branch unchanged).
 
 Examples:
-  stackit split --by-file path/to/file.go              # Extract to parent branch
+  stackit split                                        # Interactive wizard
+  stackit split --by-hunk                              # Skip type selection
+  stackit split --by-hunk --below                      # Skip type and direction
+  stackit split --by-hunk --above                      # Split upstack (child)
+  stackit split --by-file path/to/file.go             # Extract to parent branch
   stackit split --by-file path/to/file.go --as-sibling # Extract to sibling branch
-  stackit split --by-file path/to/file.go --as-sibling --name "feature-x"
-  stackit split --by-commit --as-sibling               # Split commits as siblings`,
+  stackit split --by-commit --as-sibling              # Split commits as siblings`,
 		SilenceUsage: true,
 		// Disable default help flag to allow -h for --by-hunk
 		DisableFlagParsing: false,
@@ -67,7 +76,18 @@ Examples:
 					}
 					style = split.StyleFile
 				}
-				// If style is empty, SplitAction will prompt
+
+				// Determine direction
+				var direction split.Direction
+				if above && below {
+					return fmt.Errorf("cannot specify both --above and --below")
+				}
+				if above {
+					direction = split.DirectionAbove
+				} else if below {
+					direction = split.DirectionBelow
+				}
+				// If direction is empty, wizard will prompt (for hunk mode)
 
 				// Validate flag combinations
 				// --name and --message require explicit --by-file (not auto-detected style)
@@ -76,6 +96,10 @@ Examples:
 				}
 				if message != "" && style != split.StyleFile {
 					return fmt.Errorf("--message can only be used with --by-file")
+				}
+				// --above/--below only make sense with --by-hunk
+				if (above || below) && style != "" && style != split.StyleHunk {
+					return fmt.Errorf("--above/--below can only be used with --by-hunk")
 				}
 
 				// Load config for branch pattern
@@ -88,14 +112,20 @@ Examples:
 					defer runner.Cleanup()
 				}
 
+				// Determine if we should use wizard mode
+				// Use wizard when: no style specified, or style is hunk with no direction
+				useWizard := style == "" || (style == split.StyleHunk && direction == "")
+
 				// Run split action
 				return split.Action(ctx, split.Options{
 					Style:         style,
+					Direction:     direction,
 					Pathspecs:     byFile,
 					BranchPattern: branchPattern,
 					AsSibling:     asSibling,
 					Name:          name,
 					Message:       message,
+					UseWizard:     useWizard,
 				}, handler)
 			})
 		},
@@ -114,6 +144,10 @@ Examples:
 	cmd.Flags().BoolVar(&asSibling, "as-sibling", false, "Create split branches as siblings instead of a chain")
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Name for the new split branch (default: auto-generated)")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "Commit message for extraction (only with --by-file)")
+
+	// Direction options (for hunk mode)
+	cmd.Flags().BoolVar(&above, "above", false, "Insert new branch above current (as child, upstack)")
+	cmd.Flags().BoolVar(&below, "below", false, "Insert new branch below current (as parent, downstack)")
 
 	// Add alternative long form names (these will be checked in RunE via cmd.Flags().Changed)
 	// Note: We can't bind the same variable twice, so we check for these flags manually

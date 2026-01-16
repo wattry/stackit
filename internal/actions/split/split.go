@@ -29,6 +29,7 @@ const (
 // Options contains options for the split command
 type Options struct {
 	Style         Style
+	Direction     Direction
 	Pathspecs     []string
 	BranchPattern config.BranchPattern
 	// AsSibling creates split branches as siblings on the same parent instead
@@ -43,6 +44,9 @@ type Options struct {
 	// Message specifies the commit message for the split operation.
 	// Only applies to StyleFile (other styles use existing commit messages).
 	Message string
+	// UseWizard enables the new wizard-based interactive flow.
+	// When true, the wizard will guide through type/direction selection.
+	UseWizard bool
 }
 
 // Result contains the result of a split operation
@@ -62,6 +66,17 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		handler = &NullHandler{}
 	}
 	defer handler.Cleanup()
+
+	// If wizard mode is requested and handler supports interactive prompts, use wizard flow
+	if opts.UseWizard {
+		if interactiveHandler, ok := handler.(InteractiveHandler); ok && interactiveHandler.IsInteractive() {
+			return RunWizard(ctx, interactiveHandler, WizardOptions{
+				Style:     opts.Style,
+				Direction: opts.Direction,
+			})
+		}
+		// Fall back to standard flow if handler doesn't support interactive
+	}
 
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
@@ -116,7 +131,12 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			var styleStr string
 			prompt := &survey.Select{
 				Message: fmt.Sprintf("How would you like to split %s?", currentBranch.GetName()),
-				Options: []string{"By commit - slice up the history of this branch", "By hunk - split into new single-commit branches", "Cancel"},
+				Options: []string{
+					"By commit - slice up the history of this branch",
+					"By hunk - split into new single-commit branches",
+					"By file - extract specific files into a new parent branch",
+					"Cancel",
+				},
 			}
 			if err := survey.AskOne(prompt, &styleStr); err != nil {
 				return fmt.Errorf("canceled")
@@ -129,6 +149,8 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 				style = StyleCommit
 			case strings.Contains(styleStr, "hunk"):
 				style = StyleHunk
+			case strings.Contains(styleStr, "file"):
+				style = StyleFile
 			}
 		} else {
 			// Only one commit, default to hunk
