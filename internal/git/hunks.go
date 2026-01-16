@@ -15,6 +15,7 @@ type Hunk struct {
 	NewCount  int    // Number of lines in new file
 	Content   string // The actual diff content (including header)
 	IndexLine string // The index line from the diff (e.g., "index abc123..def456 100644") for --3way merging
+	Binary    bool   // True if this represents a binary file change
 }
 
 // ParseDiffOutput parses a diff output into structured hunks
@@ -65,6 +66,26 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 		// This is needed for --3way merge to work
 		if strings.HasPrefix(line, "index ") {
 			currentIndexLine = line
+			continue
+		}
+
+		// Check for binary file marker
+		// Format: "Binary files a/path and b/path differ"
+		if strings.HasPrefix(line, "Binary files ") && strings.HasSuffix(line, " differ") {
+			// Save previous hunk if exists
+			if currentHunk != nil {
+				currentHunk.Content = strings.Join(hunkLines, "\n")
+				hunks = append(hunks, *currentHunk)
+				currentHunk = nil
+				hunkLines = nil
+			}
+			// Create a binary file hunk
+			hunks = append(hunks, Hunk{
+				File:      currentFile,
+				Content:   line,
+				IndexLine: currentIndexLine,
+				Binary:    true,
+			})
 			continue
 		}
 
@@ -123,4 +144,81 @@ func parseInt(s string) int {
 	var result int
 	_, _ = fmt.Sscanf(s, "%d", &result)
 	return result
+}
+
+// BuildPatchFromHunks constructs a unified diff patch from selected hunks.
+// The patch can be applied using git apply --cached to stage specific hunks.
+// Binary files are handled separately as they have a different diff format.
+func BuildPatchFromHunks(hunks []Hunk) string {
+	if len(hunks) == 0 {
+		return ""
+	}
+
+	// Separate binary and text hunks, group by file
+	fileHunks := make(map[string][]Hunk)
+	fileBinary := make(map[string]bool)
+	fileOrder := make([]string, 0)
+	for _, h := range hunks {
+		if _, exists := fileHunks[h.File]; !exists {
+			fileOrder = append(fileOrder, h.File)
+		}
+		fileHunks[h.File] = append(fileHunks[h.File], h)
+		if h.Binary {
+			fileBinary[h.File] = true
+		}
+	}
+
+	var sb strings.Builder
+
+	// Build patch for each file
+	for _, file := range fileOrder {
+		hunksForFile := fileHunks[file]
+
+		// Write diff header
+		sb.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", file, file))
+
+		// Add index line if available (needed for --3way)
+		if hunksForFile[0].IndexLine != "" {
+			sb.WriteString(hunksForFile[0].IndexLine + "\n")
+		}
+
+		// Binary files have a different format - no ---/+++ lines
+		if fileBinary[file] {
+			// Binary files just have the "Binary files ... differ" line
+			for _, h := range hunksForFile {
+				sb.WriteString(h.Content)
+				if !strings.HasSuffix(h.Content, "\n") {
+					sb.WriteString("\n")
+				}
+			}
+			continue
+		}
+
+		sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
+		sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+
+		// Write each hunk
+		for _, h := range hunksForFile {
+			sb.WriteString(h.Content)
+			// Ensure content ends with newline
+			if !strings.HasSuffix(h.Content, "\n") {
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+// CountHunkLines returns the number of added and removed lines in a hunk
+func CountHunkLines(hunk Hunk) (added, removed int) {
+	lines := strings.Split(hunk.Content, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added++
+		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			removed++
+		}
+	}
+	return added, removed
 }

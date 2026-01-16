@@ -137,7 +137,9 @@ type CommitOperations interface {
 	CommitWithOptions(ctx context.Context, opts git.CommitOptions) error
 	StageAll(ctx context.Context) error
 	StagePatch(ctx context.Context) error
+	StageHunks(ctx context.Context, hunks []git.Hunk) error
 	StashPush(ctx context.Context, message string) (string, error)
+	StashPushStaged(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
 }
 

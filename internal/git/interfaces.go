@@ -109,6 +109,8 @@ type StagingOperations interface {
 	HasUntrackedFiles(ctx context.Context) (bool, error)
 	GetUntrackedFiles(ctx context.Context) ([]string, error)
 	ParseStagedHunks(ctx context.Context) ([]Hunk, error)
+	StageHunks(ctx context.Context, hunks []Hunk) error
+	UnstageAll(ctx context.Context) error
 }
 
 // CommitWriter handles commit creation and modification.
@@ -149,6 +151,7 @@ type CherryPickOperations interface {
 // StashOperations handles stash operations.
 type StashOperations interface {
 	StashPush(ctx context.Context, message string) (string, error)
+	StashPushStaged(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
 	ListStash(ctx context.Context) (string, error)
 }
