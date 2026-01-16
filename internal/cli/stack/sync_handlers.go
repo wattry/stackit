@@ -136,6 +136,8 @@ func (h *SimpleSyncHandler) printPhaseHeader(phase syncAction.Phase) {
 	switch phase {
 	case syncAction.PhaseTrunk:
 		h.Output.Info("📥 Pulling from remote...")
+	case syncAction.PhaseBranches:
+		h.Output.Info("📥 Syncing stack branches...")
 	case syncAction.PhaseGitHub:
 		h.Output.Info("🔄 Fetching PR info from GitHub...")
 	case syncAction.PhaseClean:
@@ -149,6 +151,8 @@ func (h *SimpleSyncHandler) printEventLine(event syncAction.Event) {
 	switch event.Phase {
 	case syncAction.PhaseTrunk:
 		h.printTrunkEvent(event)
+	case syncAction.PhaseBranches:
+		h.printBranchSyncEvent(event)
 	case syncAction.PhaseGitHub:
 		h.printGitHubEvent(event)
 	case syncAction.PhaseClean:
@@ -166,6 +170,24 @@ func (h *SimpleSyncHandler) printTrunkEvent(event syncAction.Event) {
 				style.ColorDim(event.NewRevision))
 		} else {
 			h.Output.Info("  %s is up to date", style.ColorBranchName(event.Branch, false))
+		}
+	}
+}
+
+func (h *SimpleSyncHandler) printBranchSyncEvent(event syncAction.Event) {
+	switch event.Type {
+	case syncAction.EventCompleted:
+		if event.NewRevision != "" {
+			h.Output.Info("  %s fast-forwarded to %s",
+				style.ColorBranchName(event.Branch, false),
+				style.ColorDim(event.NewRevision))
+		} else {
+			h.Output.Info("  %s is up to date", style.ColorBranchName(event.Branch, false))
+		}
+	case syncAction.EventSkipped:
+		if event.Conflict {
+			h.Output.Warn("  ⚠️ %s diverged from remote (skipping)",
+				style.ColorBranchName(event.Branch, false))
 		}
 	}
 }
@@ -400,6 +422,18 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 				return fmt.Sprintf("%s fast-forwarded to %s", event.Branch, event.NewRevision)
 			}
 			return fmt.Sprintf("%s is up to date", event.Branch)
+		}
+	case syncAction.PhaseBranches:
+		switch event.Type {
+		case syncAction.EventCompleted:
+			if event.NewRevision != "" {
+				return fmt.Sprintf("%s fast-forwarded to %s", event.Branch, event.NewRevision)
+			}
+			return fmt.Sprintf("%s is up to date", event.Branch)
+		case syncAction.EventSkipped:
+			if event.Conflict {
+				return fmt.Sprintf("⚠️ %s diverged from remote (skipping)", event.Branch)
+			}
 		}
 	case syncAction.PhaseGitHub:
 		if event.Type == syncAction.EventCompleted && event.Message != "" {

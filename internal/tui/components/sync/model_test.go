@@ -18,7 +18,7 @@ func TestNewModel(t *testing.T) {
 	assert.Equal(t, 10, model.TotalOps)
 	assert.Equal(t, 0, model.CompletedOps)
 	assert.False(t, model.Done)
-	assert.Equal(t, 4, len(model.Phases)) // trunk, github, clean, restack
+	assert.Equal(t, 5, len(model.Phases)) // trunk, branches, github, clean, restack
 
 	// All phases should be pending
 	for _, phase := range model.Phases {
