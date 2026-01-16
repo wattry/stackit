@@ -548,6 +548,11 @@ func (e *engineImpl) StashPush(ctx context.Context, message string) (string, err
 	return e.git.StashPush(ctx, message)
 }
 
+// StashPushStaged pushes only staged changes to the stash
+func (e *engineImpl) StashPushStaged(ctx context.Context, message string) (string, error) {
+	return e.git.StashPushStaged(ctx, message)
+}
+
 // StashPop pops the most recent stash
 func (e *engineImpl) StashPop(ctx context.Context) error {
 	return e.git.StashPop(ctx)

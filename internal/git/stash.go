@@ -17,6 +17,20 @@ func (r *runner) StashPush(ctx context.Context, message string) (string, error) 
 	return output, nil
 }
 
+// StashPushStaged stashes only the currently staged changes, leaving unstaged changes in the working tree.
+// This is useful for temporarily saving staged work while keeping other modifications.
+func (r *runner) StashPushStaged(ctx context.Context, message string) (string, error) {
+	args := []string{"stash", "push", "--staged"}
+	if message != "" {
+		args = append(args, "-m", message)
+	}
+	output, err := r.RunGitCommandWithContext(ctx, args...)
+	if err != nil {
+		return "", fmt.Errorf("stash push --staged failed: %w", err)
+	}
+	return output, nil
+}
+
 func (r *runner) StashPop(ctx context.Context) error {
 	_, err := r.RunGitCommandWithContext(ctx, "stash", "pop")
 	if err != nil {

@@ -149,6 +149,7 @@ type CherryPickOperations interface {
 // StashOperations handles stash operations.
 type StashOperations interface {
 	StashPush(ctx context.Context, message string) (string, error)
+	StashPushStaged(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
 	ListStash(ctx context.Context) (string, error)
 }

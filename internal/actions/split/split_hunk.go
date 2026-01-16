@@ -209,16 +209,14 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 //  4. Remove staged changes from current branch
 //  5. Existing children of current become children of new branch
 func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng splitByHunkEngine, splog output.Output, handler InteractiveHandler, direction Direction) error {
-	context := ctx.Context
-
-	// For now, only support DirectionBelow (the current/default behavior)
-	// DirectionAbove requires more complex logic that will be implemented later
 	if direction == DirectionAbove {
-		return fmt.Errorf("split above (upstack) is not yet implemented")
+		return splitByHunkAbove(ctx, branchToSplit, eng, splog, handler)
 	}
 
+	gitCtx := ctx.Context
+
 	// Detach and reset branch changes
-	if err := eng.DetachAndResetBranchChanges(context, branchToSplit.GetName()); err != nil {
+	if err := eng.DetachAndResetBranchChanges(gitCtx, branchToSplit.GetName()); err != nil {
 		return fmt.Errorf("failed to detach and reset: %w", err)
 	}
 
@@ -255,7 +253,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 
 	// Helper to restore branch and return appropriate error on cancel
 	cancelWithRestore := func() error {
-		_ = eng.ForceCheckoutBranch(context, branchToSplit)
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		if len(branchNames) == 0 {
 			return sterrors.ErrCanceled
 		}
@@ -264,7 +262,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 
 	// Loop while there are unstaged changes
 	for {
-		hasUnstaged, err := eng.HasUnstagedChanges(context)
+		hasUnstaged, err := eng.HasUnstagedChanges(gitCtx)
 		if err != nil {
 			return fmt.Errorf("failed to check unstaged changes: %w", err)
 		}
@@ -275,19 +273,19 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		// Show remaining changes via handler
 		handler.OnStep(StepStagingHunks, StatusStarted, fmt.Sprintf("Stage changes for branch %d", len(branchNames)+1))
 
-		unstagedDiff, err := eng.GetUnstagedDiff(context)
+		unstagedDiff, err := eng.GetUnstagedDiff(gitCtx)
 		if err != nil {
 			return fmt.Errorf("failed to get unstaged diff: %w", err)
 		}
 		handler.ShowHunkSummary(unstagedDiff)
 
 		// Stage patch interactively
-		if err := eng.StagePatch(context); err != nil {
+		if err := eng.StagePatch(gitCtx); err != nil {
 			return cancelWithRestore()
 		}
 
 		// Check if anything was staged
-		hasStaged, err := eng.HasStagedChanges(context)
+		hasStaged, err := eng.HasStagedChanges(gitCtx)
 		if err != nil {
 			return fmt.Errorf("failed to check staged changes: %w", err)
 		}
@@ -295,7 +293,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			// Nothing was staged - ask user if they want to continue or cancel via handler
 			continueAgain, err := handler.PromptContinueOrCancel()
 			if err != nil {
-				_ = eng.ForceCheckoutBranch(context, branchToSplit)
+				_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 				return err
 			}
 			if !continueAgain {
@@ -312,7 +310,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		defaultName := generateDefaultBranchName(branchToSplit.GetName(), branchNames)
 		branchName, err := handler.PromptBranchName(defaultName, branchNames, existingBranchNames, branchToSplit.GetName())
 		if err != nil {
-			_ = eng.ForceCheckoutBranch(context, branchToSplit)
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 			return err
 		}
 
@@ -323,7 +321,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 
 		editMessage, err := handler.PromptEditCommitMessage()
 		if err != nil {
-			_ = eng.ForceCheckoutBranch(context, branchToSplit)
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 			return err
 		}
 
@@ -331,7 +329,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		if editMessage {
 			commitMessage, err = handler.PromptCommitMessage(defaultCommitMessage)
 			if err != nil {
-				_ = eng.ForceCheckoutBranch(context, branchToSplit)
+				_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 				return err
 			}
 		}
@@ -339,11 +337,11 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
 
 		// Create commit (after all validation passed)
-		if err := eng.CommitWithOptions(context, git.CommitOptions{
+		if err := eng.CommitWithOptions(gitCtx, git.CommitOptions{
 			Message:  commitMessage,
 			NoVerify: true, // Split hunk commits are internal, hooks usually shouldn't run
 		}); err != nil {
-			_ = eng.ForceCheckoutBranch(context, branchToSplit)
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 			return fmt.Errorf("failed to create commit: %w", err)
 		}
 
@@ -354,7 +352,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 	}
 
 	// Update branchToSplit to point to the last commit we created
-	if err := eng.UpdateBranchRef(context, branchToSplit.GetName(), "HEAD"); err != nil {
+	if err := eng.UpdateBranchRef(gitCtx, branchToSplit.GetName(), "HEAD"); err != nil {
 		return fmt.Errorf("failed to update branch reference: %w", err)
 	}
 
@@ -374,7 +372,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 	upstackBranches := upstackGraph.Range(branchToSplit, upstackRng)
 
 	// Apply the split to commits
-	if err := eng.ApplySplitToCommits(context, engine.ApplySplitOptions{
+	if err := eng.ApplySplitToCommits(gitCtx, engine.ApplySplitOptions{
 		BranchToSplit: branchToSplit.GetName(),
 		BranchNames:   result.BranchNames,
 		BranchPoints:  result.BranchPoints,
@@ -418,4 +416,221 @@ func generateDefaultBranchName(originalName string, existingNames []string) stri
 
 	// Fallback (should never happen in practice)
 	return fmt.Sprintf("%s_split_%d", originalName, len(existingNames)+1)
+}
+
+// splitByHunkAbove splits a branch by creating a new child branch with extracted changes.
+//
+// Algorithm:
+//  1. Detach HEAD and soft reset to parent's tip (all changes unstaged)
+//  2. User stages hunks to EXTRACT (for new child branch)
+//  3. Stash only the staged changes (preserving unstaged "keep" changes)
+//  4. Commit unstaged changes → this becomes new current branch content
+//  5. Update current branch ref
+//  6. Create child branch from current
+//  7. Pop stash and commit → child branch content
+//  8. Re-parent existing children to the new child
+func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitByHunkEngine, splog output.Output, handler InteractiveHandler) error {
+	gitCtx := ctx.Context
+
+	// Get existing children before we modify anything
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	existingChildren := graph.Children(branchToSplit)
+
+	// Detach and reset branch changes (all changes become unstaged)
+	if err := eng.DetachAndResetBranchChanges(gitCtx, branchToSplit.GetName()); err != nil {
+		return fmt.Errorf("failed to detach and reset: %w", err)
+	}
+
+	// Get default commit message
+	commitMessages, err := branchToSplit.GetAllCommits(engine.CommitFormatMessage)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to get commit messages: %w", err)
+	}
+	defaultCommitMessage := strings.Join(commitMessages, "\n\n")
+
+	// Build list of existing branch names for validation
+	existingBranchNames := make(map[string]bool)
+	for _, b := range eng.AllBranches() {
+		existingBranchNames[b.GetName()] = true
+	}
+
+	// Show instructions
+	splog.Info("Splitting %s - extracting changes to a new child branch.", style.ColorBranchName(branchToSplit.GetName(), true))
+	splog.Info("")
+	splog.Info("Stage the changes you want to EXTRACT to the new child branch.")
+	splog.Info("The remaining changes will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
+	splog.Info("")
+
+	// Show remaining changes via handler
+	handler.OnStep(StepStagingHunks, StatusStarted, "Stage changes to extract")
+
+	unstagedDiff, err := eng.GetUnstagedDiff(gitCtx)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to get unstaged diff: %w", err)
+	}
+	handler.ShowHunkSummary(unstagedDiff)
+
+	// Stage patch interactively (user selects what to EXTRACT)
+	if err := eng.StagePatch(gitCtx); err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return sterrors.ErrCanceled
+	}
+
+	// Check if anything was staged
+	hasStaged, err := eng.HasStagedChanges(gitCtx)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to check staged changes: %w", err)
+	}
+	if !hasStaged {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("no changes staged to extract")
+	}
+
+	// Check if there are unstaged changes (to keep on current)
+	hasUnstaged, err := eng.HasUnstagedChanges(gitCtx)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to check unstaged changes: %w", err)
+	}
+	if !hasUnstaged {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("all changes were staged - nothing would remain on %s", branchToSplit.GetName())
+	}
+
+	handler.OnStep(StepStagingHunks, StatusCompleted, "Changes staged for extraction")
+
+	// Prompt for child branch name
+	handler.OnStep(StepBranchName, StatusStarted, "Enter child branch name")
+
+	defaultName := generateDefaultBranchName(branchToSplit.GetName(), []string{})
+	childBranchName, err := handler.PromptBranchName(defaultName, []string{}, existingBranchNames, branchToSplit.GetName())
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return err
+	}
+
+	handler.OnStep(StepBranchName, StatusCompleted, childBranchName)
+
+	// Prompt for commit message for the child branch
+	handler.OnStep(StepCommitMessage, StatusStarted, "Enter commit message for extracted changes")
+
+	editMessage, err := handler.PromptEditCommitMessage()
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return err
+	}
+
+	childCommitMessage := defaultCommitMessage
+	if editMessage {
+		childCommitMessage, err = handler.PromptCommitMessage(defaultCommitMessage)
+		if err != nil {
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+			return err
+		}
+	}
+
+	handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
+
+	// Stash only the staged changes (what we want to extract to child)
+	_, err = eng.StashPushStaged(gitCtx, "stackit-split-above-extract")
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to stash staged changes: %w", err)
+	}
+
+	// Now only the "keep" changes remain unstaged
+	// Stage and commit them as the new current branch content
+	if err := eng.StageAll(gitCtx); err != nil {
+		_ = eng.StashPop(gitCtx) // Try to restore stash
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to stage remaining changes: %w", err)
+	}
+
+	if err := eng.CommitWithOptions(gitCtx, git.CommitOptions{
+		Message:  defaultCommitMessage,
+		NoVerify: true,
+	}); err != nil {
+		_ = eng.StashPop(gitCtx)
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to commit remaining changes: %w", err)
+	}
+
+	// Update the original branch ref to point to this new commit (the "keep" content)
+	if err := eng.UpdateBranchRef(gitCtx, branchToSplit.GetName(), "HEAD"); err != nil {
+		_ = eng.StashPop(gitCtx)
+		return fmt.Errorf("failed to update branch reference: %w", err)
+	}
+
+	// Checkout the updated branch
+	if err := eng.CheckoutBranch(gitCtx, branchToSplit); err != nil {
+		_ = eng.StashPop(gitCtx)
+		return fmt.Errorf("failed to checkout branch: %w", err)
+	}
+
+	// Create the child branch at the current position
+	if err := eng.CreateBranch(gitCtx, childBranchName, "HEAD"); err != nil {
+		_ = eng.StashPop(gitCtx)
+		return fmt.Errorf("failed to create child branch: %w", err)
+	}
+
+	// Checkout the child branch
+	childBranch := eng.GetBranch(childBranchName)
+	if err := eng.CheckoutBranch(gitCtx, childBranch); err != nil {
+		_ = eng.StashPop(gitCtx)
+		return fmt.Errorf("failed to checkout child branch: %w", err)
+	}
+
+	// Pop the stash to get the extract changes back
+	if err := eng.StashPop(gitCtx); err != nil {
+		return fmt.Errorf("failed to pop stash: %w", err)
+	}
+
+	// Stage and commit the extracted changes on child branch
+	if err := eng.StageAll(gitCtx); err != nil {
+		return fmt.Errorf("failed to stage extracted changes: %w", err)
+	}
+
+	if err := eng.CommitWithOptions(gitCtx, git.CommitOptions{
+		Message:  childCommitMessage,
+		NoVerify: true,
+	}); err != nil {
+		return fmt.Errorf("failed to commit extracted changes: %w", err)
+	}
+
+	// Track the child branch with parent = branchToSplit
+	if err := eng.TrackBranch(gitCtx, childBranchName, branchToSplit.GetName()); err != nil {
+		return fmt.Errorf("failed to track child branch: %w", err)
+	}
+
+	handler.OnBranchCreated(childBranchName)
+
+	// Re-parent existing children to the new child branch
+	for _, existingChildName := range existingChildren {
+		existingChild := eng.GetBranch(existingChildName)
+		if err := eng.SetParent(gitCtx, existingChild, childBranch); err != nil {
+			return fmt.Errorf("failed to reparent %s: %w", existingChildName, err)
+		}
+	}
+
+	// Restack the children that were reparented
+	if len(existingChildren) > 0 {
+		childBranches := make([]engine.Branch, 0, len(existingChildren))
+		for _, name := range existingChildren {
+			childBranches = append(childBranches, eng.GetBranch(name))
+		}
+		if err := actions.RestackBranches(ctx, childBranches); err != nil {
+			return fmt.Errorf("failed to restack children: %w", err)
+		}
+	}
+
+	handler.Complete(ActionResult{
+		OriginalBranch: branchToSplit.GetName(),
+		NewBranches:    []string{childBranchName},
+		Style:          StyleHunk,
+	})
+
+	return nil
 }

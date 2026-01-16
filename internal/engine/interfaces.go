@@ -138,6 +138,7 @@ type CommitOperations interface {
 	StageAll(ctx context.Context) error
 	StagePatch(ctx context.Context) error
 	StashPush(ctx context.Context, message string) (string, error)
+	StashPushStaged(ctx context.Context, message string) (string, error)
 	StashPop(ctx context.Context) error
 }
 

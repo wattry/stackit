@@ -236,6 +236,10 @@ func (d *demoGitRunner) StashPush(_ context.Context, _ string) (string, error) {
 	return "stashed", nil
 }
 
+func (d *demoGitRunner) StashPushStaged(_ context.Context, _ string) (string, error) {
+	return "stashed staged", nil
+}
+
 func (d *demoGitRunner) StashPop(_ context.Context) error {
 	return nil
 }

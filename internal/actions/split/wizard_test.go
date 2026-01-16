@@ -63,6 +63,25 @@ func TestBuildTypeChoices(t *testing.T) {
 	}
 }
 
+func TestDirection(t *testing.T) {
+	tests := []struct {
+		direction Direction
+		wantStr   string
+	}{
+		{DirectionBelow, "below"},
+		{DirectionAbove, "above"},
+		{Direction(""), ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.direction), func(t *testing.T) {
+			if got := tt.direction.String(); got != tt.wantStr {
+				t.Errorf("Direction.String() = %q, want %q", got, tt.wantStr)
+			}
+		})
+	}
+}
+
 func TestBuildDirectionTreeViz(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -135,17 +135,15 @@ func (h *TUISplitHandler) PromptDirection(treeViz string) (split.Direction, erro
 	}
 	h.splog.Info("")
 
-	// Only show "below" option for now since "above" is not implemented
 	options := []tui.SelectOption{
 		{
 			Label: "Below (downstack) - New branch between current and parent",
 			Value: string(split.DirectionBelow),
 		},
-		// TODO: Add "Above" option when DirectionAbove is implemented
-		// {
-		// 	Label: "Above (upstack) - New branch as child of current",
-		// 	Value: string(split.DirectionAbove),
-		// },
+		{
+			Label: "Above (upstack) - New branch as child of current",
+			Value: string(split.DirectionAbove),
+		},
 	}
 
 	selected, err := tui.PromptSelect("Where should the new branch be placed?", options, 0)
