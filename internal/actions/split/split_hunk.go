@@ -277,11 +277,29 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		if err != nil {
 			return fmt.Errorf("failed to get unstaged diff: %w", err)
 		}
-		handler.ShowHunkSummary(unstagedDiff)
 
-		// Stage patch interactively
-		if err := eng.StagePatch(gitCtx); err != nil {
+		// Parse the diff into hunks
+		hunks, err := git.ParseDiffOutput(unstagedDiff)
+		if err != nil {
+			return fmt.Errorf("failed to parse diff: %w", err)
+		}
+
+		if len(hunks) == 0 {
+			// No hunks to stage - break out of loop
+			break
+		}
+
+		// Use the TUI hunk selector
+		selectedHunks, err := handler.PromptSelectHunks(hunks)
+		if err != nil {
 			return cancelWithRestore()
+		}
+
+		// Stage the selected hunks
+		if len(selectedHunks) > 0 {
+			if err := eng.StageHunks(gitCtx, selectedHunks); err != nil {
+				return fmt.Errorf("failed to stage hunks: %w", err)
+			}
 		}
 
 		// Check if anything was staged
@@ -470,12 +488,32 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to get unstaged diff: %w", err)
 	}
-	handler.ShowHunkSummary(unstagedDiff)
 
-	// Stage patch interactively (user selects what to EXTRACT)
-	if err := eng.StagePatch(gitCtx); err != nil {
+	// Parse the diff into hunks
+	hunks, err := git.ParseDiffOutput(unstagedDiff)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to parse diff: %w", err)
+	}
+
+	if len(hunks) == 0 {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("no changes to extract")
+	}
+
+	// Use the TUI hunk selector (user selects what to EXTRACT)
+	selectedHunks, err := handler.PromptSelectHunks(hunks)
+	if err != nil {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return sterrors.ErrCanceled
+	}
+
+	// Stage the selected hunks
+	if len(selectedHunks) > 0 {
+		if err := eng.StageHunks(gitCtx, selectedHunks); err != nil {
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+			return fmt.Errorf("failed to stage hunks: %w", err)
+		}
 	}
 
 	// Check if anything was staged

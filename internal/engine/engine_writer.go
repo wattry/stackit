@@ -543,6 +543,11 @@ func (e *engineImpl) StagePatch(ctx context.Context) error {
 	return e.git.StagePatch(ctx)
 }
 
+// StageHunks stages specific hunks by applying them as patches
+func (e *engineImpl) StageHunks(ctx context.Context, hunks []git.Hunk) error {
+	return e.git.StageHunks(ctx, hunks)
+}
+
 // StashPush pushes current changes to the stash
 func (e *engineImpl) StashPush(ctx context.Context, message string) (string, error) {
 	return e.git.StashPush(ctx, message)

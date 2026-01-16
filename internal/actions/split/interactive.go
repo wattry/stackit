@@ -1,6 +1,9 @@
 package split
 
-import "stackit.dev/stackit/internal/engine"
+import (
+	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
+)
 
 // DirectionContext provides context for the direction selection prompt
 type DirectionContext struct {
@@ -64,4 +67,8 @@ type InteractiveHandler interface {
 	// PromptEditCommitMessage asks whether the user wants to edit the commit message.
 	// Returns true if user wants to edit.
 	PromptEditCommitMessage() (bool, error)
+
+	// PromptSelectHunks displays the hunk selector TUI and returns selected hunks.
+	// Returns the hunks that the user selected, or an error if canceled.
+	PromptSelectHunks(hunks []git.Hunk) ([]git.Hunk, error)
 }

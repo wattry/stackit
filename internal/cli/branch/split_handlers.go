@@ -8,6 +8,7 @@ import (
 
 	"stackit.dev/stackit/internal/actions/split"
 	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -220,4 +221,13 @@ func (h *TUISplitHandler) PromptEditCommitMessage() (bool, error) {
 	}
 
 	return tui.PromptConfirm("Edit commit message?", true)
+}
+
+// PromptSelectHunks displays the hunk selector TUI and returns selected hunks
+func (h *TUISplitHandler) PromptSelectHunks(hunks []git.Hunk) ([]git.Hunk, error) {
+	if !utils.IsInteractive() {
+		return nil, errors.ErrCanceled
+	}
+
+	return tui.PromptSelectHunks(hunks)
 }

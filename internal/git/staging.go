@@ -93,3 +93,39 @@ func (r *runner) ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
 
 	return ParseDiffOutput(diffOutput)
 }
+
+// StageHunks stages specific hunks by applying them as patches to the index.
+// This allows selective staging without using interactive git add -p.
+func (r *runner) StageHunks(ctx context.Context, hunks []Hunk) error {
+	if len(hunks) == 0 {
+		return nil
+	}
+
+	// Build a patch from the selected hunks
+	patch := BuildPatchFromHunks(hunks)
+	if patch == "" {
+		return nil
+	}
+
+	// Apply the patch to the index using git apply --cached
+	// We use --3way to handle conflicts better and --allow-empty for edge cases
+	_, err := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached", "--3way")
+	if err != nil {
+		// Try without --3way as a fallback (some git versions have issues)
+		_, err = r.runGitInternal(ctx, patch, nil, true, "apply", "--cached")
+		if err != nil {
+			return fmt.Errorf("failed to apply patch: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// UnstageAll removes all changes from the staging area.
+func (r *runner) UnstageAll(ctx context.Context) error {
+	_, err := r.RunGitCommandWithContext(ctx, "reset", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to unstage changes: %w", err)
+	}
+	return nil
+}

@@ -628,3 +628,11 @@ func (d *demoGitRunner) ListWorktreeMetas() (map[string]*git.WorktreeMeta, error
 func (d *demoGitRunner) SetLogger(_ git.DebugLogger) {
 	// No-op for demo runner
 }
+
+func (d *demoGitRunner) StageHunks(_ context.Context, _ []git.Hunk) error {
+	return nil
+}
+
+func (d *demoGitRunner) UnstageAll(_ context.Context) error {
+	return nil
+}

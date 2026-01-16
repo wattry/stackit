@@ -124,3 +124,63 @@ func parseInt(s string) int {
 	_, _ = fmt.Sscanf(s, "%d", &result)
 	return result
 }
+
+// BuildPatchFromHunks constructs a unified diff patch from selected hunks.
+// The patch can be applied using git apply --cached to stage specific hunks.
+func BuildPatchFromHunks(hunks []Hunk) string {
+	if len(hunks) == 0 {
+		return ""
+	}
+
+	// Group hunks by file
+	fileHunks := make(map[string][]Hunk)
+	fileOrder := make([]string, 0)
+	for _, h := range hunks {
+		if _, exists := fileHunks[h.File]; !exists {
+			fileOrder = append(fileOrder, h.File)
+		}
+		fileHunks[h.File] = append(fileHunks[h.File], h)
+	}
+
+	var sb strings.Builder
+
+	// Build patch for each file
+	for _, file := range fileOrder {
+		hunksForFile := fileHunks[file]
+
+		// Write diff header
+		sb.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", file, file))
+
+		// Add index line if available (needed for --3way)
+		if hunksForFile[0].IndexLine != "" {
+			sb.WriteString(hunksForFile[0].IndexLine + "\n")
+		}
+
+		sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
+		sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+
+		// Write each hunk
+		for _, h := range hunksForFile {
+			sb.WriteString(h.Content)
+			// Ensure content ends with newline
+			if !strings.HasSuffix(h.Content, "\n") {
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+// CountHunkLines returns the number of added and removed lines in a hunk
+func CountHunkLines(hunk Hunk) (added, removed int) {
+	lines := strings.Split(hunk.Content, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added++
+		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			removed++
+		}
+	}
+	return added, removed
+}

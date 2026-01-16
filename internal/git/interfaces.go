@@ -109,6 +109,8 @@ type StagingOperations interface {
 	HasUntrackedFiles(ctx context.Context) (bool, error)
 	GetUntrackedFiles(ctx context.Context) ([]string, error)
 	ParseStagedHunks(ctx context.Context) ([]Hunk, error)
+	StageHunks(ctx context.Context, hunks []Hunk) error
+	UnstageAll(ctx context.Context) error
 }
 
 // CommitWriter handles commit creation and modification.
