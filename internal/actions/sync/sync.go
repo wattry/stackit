@@ -161,6 +161,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return err
 	}
 
+	// Phase 2.5: Sync stack branches from remote
+	if err := syncStackBranches(ctx, dirtyAnchors, handler, summary); err != nil {
+		return err
+	}
+
 	// Phase 3: Clean branches (delete merged/closed)
 	cleanResult, err := cleanBranches(ctx, &opts, dirtyAnchors, handler, summary)
 	if err != nil {
@@ -248,10 +253,11 @@ type Phase string
 
 // Phases of the sync operation
 const (
-	PhaseTrunk   Phase = "trunk"
-	PhaseGitHub  Phase = "github"
-	PhaseClean   Phase = "clean"
-	PhaseRestack Phase = "restack"
+	PhaseTrunk    Phase = "trunk"
+	PhaseBranches Phase = "branches"
+	PhaseGitHub   Phase = "github"
+	PhaseClean    Phase = "clean"
+	PhaseRestack  Phase = "restack"
 )
 
 // EventType represents the type of sync event

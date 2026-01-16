@@ -18,10 +18,11 @@ type Phase string
 
 // Phase constants
 const (
-	PhaseTrunk   Phase = "trunk"
-	PhaseGitHub  Phase = "github"
-	PhaseClean   Phase = "clean"
-	PhaseRestack Phase = "restack"
+	PhaseTrunk    Phase = "trunk"
+	PhaseBranches Phase = "branches"
+	PhaseGitHub   Phase = "github"
+	PhaseClean    Phase = "clean"
+	PhaseRestack  Phase = "restack"
 )
 
 // PhaseItem represents progress for a single phase
@@ -83,6 +84,7 @@ func NewModel(totalOps int) *Model {
 	m := &Model{
 		Phases: []PhaseItem{
 			{Phase: PhaseTrunk, Status: core.StatusPending, Message: "📥 Pulling from remote..."},
+			{Phase: PhaseBranches, Status: core.StatusPending, Message: "📥 Syncing stack branches..."},
 			{Phase: PhaseGitHub, Status: core.StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
 			{Phase: PhaseClean, Status: core.StatusPending, Message: "🧹 Cleaning branches..."},
 			{Phase: PhaseRestack, Status: core.StatusPending, Message: "📚 Restacking branches..."},
