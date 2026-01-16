@@ -371,6 +371,12 @@ type runner struct {
 	repoMu   sync.Mutex
 	loggerMu sync.RWMutex
 	logger   DebugLogger
+
+	// Cached git version info
+	gitVersionOnce   sync.Once
+	gitVersionMajor  int
+	gitVersionMinor  int
+	gitVersionParsed bool
 }
 
 // SetLogger sets the debug logger for git command logging

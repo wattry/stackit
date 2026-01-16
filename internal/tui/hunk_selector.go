@@ -16,6 +16,9 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
+// defaultPreviewLines is the number of diff lines to show in the collapsed preview
+const defaultPreviewLines = 4
+
 // HunkItem represents a single hunk in the selector
 type HunkItem struct {
 	Hunk       git.Hunk
@@ -167,7 +170,7 @@ func NewHunkSelectorModel(hunks []git.Hunk) *HunkSelectorModel {
 		cursor:       0,
 		help:         help.New(),
 		keys:         defaultHunkSelectorKeys,
-		previewLines: 4,
+		previewLines: defaultPreviewLines,
 	}
 }
 
@@ -525,19 +528,24 @@ func (m *HunkSelectorModel) splitCurrentHunk() {
 func (m *HunkSelectorModel) rebuildFileGroups() {
 	fileMap := make(map[string][]int)
 	fileOrder := make([]string, 0)
+	fileBinary := make(map[string]bool)
 
 	for i, item := range m.items {
 		if _, exists := fileMap[item.Hunk.File]; !exists {
 			fileOrder = append(fileOrder, item.Hunk.File)
 		}
 		fileMap[item.Hunk.File] = append(fileMap[item.Hunk.File], i)
+		if item.Hunk.Binary {
+			fileBinary[item.Hunk.File] = true
+		}
 	}
 
 	m.fileGroups = make([]FileGroup, len(fileOrder))
 	for i, file := range fileOrder {
 		m.fileGroups[i] = FileGroup{
-			File:  file,
-			Hunks: fileMap[file],
+			File:   file,
+			Hunks:  fileMap[file],
+			Binary: fileBinary[file],
 		}
 	}
 }

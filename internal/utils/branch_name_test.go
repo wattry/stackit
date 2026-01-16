@@ -346,3 +346,148 @@ func TestProcessBranchNamePattern(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBranchName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		branchName  string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid simple name",
+			branchName:  "feature",
+			expectError: false,
+		},
+		{
+			name:        "valid with slashes",
+			branchName:  "feature/my-branch",
+			expectError: false,
+		},
+		{
+			name:        "valid with dots",
+			branchName:  "feature.v1.0",
+			expectError: false,
+		},
+		{
+			name:        "valid with underscores",
+			branchName:  "my_feature_branch",
+			expectError: false,
+		},
+		{
+			name:        "valid with hyphens",
+			branchName:  "my-feature-branch",
+			expectError: false,
+		},
+		{
+			name:        "empty name",
+			branchName:  "",
+			expectError: true,
+			errorMsg:    "cannot be empty",
+		},
+		{
+			name:        "contains space",
+			branchName:  "my feature",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "contains colon",
+			branchName:  "feat:branch",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "contains tilde",
+			branchName:  "branch~1",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "contains caret",
+			branchName:  "branch^2",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "contains asterisk",
+			branchName:  "branch*",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "contains question mark",
+			branchName:  "branch?",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "contains brackets",
+			branchName:  "branch[0]",
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name:        "consecutive dots",
+			branchName:  "branch..name",
+			expectError: true,
+			errorMsg:    "consecutive dots",
+		},
+		{
+			name:        "leading hyphen",
+			branchName:  "-branch",
+			expectError: true,
+			errorMsg:    "cannot start with a hyphen",
+		},
+		{
+			name:        "trailing dot",
+			branchName:  "branch.",
+			expectError: true,
+			errorMsg:    "cannot end with a dot or slash",
+		},
+		{
+			name:        "trailing slash",
+			branchName:  "branch/",
+			expectError: true,
+			errorMsg:    "cannot end with a dot or slash",
+		},
+		{
+			name:        "leading slash",
+			branchName:  "/branch",
+			expectError: true,
+			errorMsg:    "cannot start with a slash",
+		},
+		{
+			name:        "consecutive slashes",
+			branchName:  "branch//name",
+			expectError: true,
+			errorMsg:    "consecutive slashes",
+		},
+		{
+			name:        "too long",
+			branchName:  strings.Repeat("a", MaxBranchNameByteLength+1),
+			expectError: true,
+			errorMsg:    "exceeds maximum length",
+		},
+		{
+			name:        "max length is valid",
+			branchName:  strings.Repeat("a", MaxBranchNameByteLength),
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateBranchName(tt.branchName)
+			if tt.expectError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

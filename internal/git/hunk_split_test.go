@@ -358,3 +358,231 @@ func TestBuildPatchFromHunks(t *testing.T) {
 		t.Error("BuildPatchFromHunks([]) should return empty string")
 	}
 }
+
+func TestParseDiffOutput(t *testing.T) {
+	tests := []struct {
+		name          string
+		diff          string
+		expectedCount int
+		validateHunks func(t *testing.T, hunks []Hunk)
+	}{
+		{
+			name:          "empty diff",
+			diff:          "",
+			expectedCount: 0,
+		},
+		{
+			name: "single hunk",
+			diff: `diff --git a/file.go b/file.go
+index abc123..def456 100644
+--- a/file.go
++++ b/file.go
+@@ -1,3 +1,4 @@
+ context
++added
+ context`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != "file.go" {
+					t.Errorf("Expected file 'file.go', got '%s'", hunks[0].File)
+				}
+				if hunks[0].OldStart != 1 || hunks[0].NewStart != 1 {
+					t.Errorf("Unexpected line numbers: OldStart=%d, NewStart=%d", hunks[0].OldStart, hunks[0].NewStart)
+				}
+				if hunks[0].IndexLine != "index abc123..def456 100644" {
+					t.Errorf("Expected index line, got '%s'", hunks[0].IndexLine)
+				}
+			},
+		},
+		{
+			name: "binary file",
+			diff: `diff --git a/image.png b/image.png
+index abc123..def456 100644
+Binary files a/image.png and b/image.png differ`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != "image.png" {
+					t.Errorf("Expected file 'image.png', got '%s'", hunks[0].File)
+				}
+				if !hunks[0].Binary {
+					t.Error("Expected Binary to be true")
+				}
+			},
+		},
+		{
+			name: "multiple files with multiple hunks",
+			diff: `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -1,2 +1,3 @@
+ line1
++added
+ line2
+@@ -10,2 +11,3 @@
+ line10
++added2
+ line11
+diff --git a/file2.go b/file2.go
+--- a/file2.go
++++ b/file2.go
+@@ -5,1 +5,2 @@
+ context
++new line`,
+			expectedCount: 3,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != "file1.go" {
+					t.Errorf("First hunk should be file1.go, got '%s'", hunks[0].File)
+				}
+				if hunks[1].File != "file1.go" {
+					t.Errorf("Second hunk should be file1.go, got '%s'", hunks[1].File)
+				}
+				if hunks[2].File != "file2.go" {
+					t.Errorf("Third hunk should be file2.go, got '%s'", hunks[2].File)
+				}
+			},
+		},
+		{
+			name: "mixed binary and text files",
+			diff: `diff --git a/image.png b/image.png
+Binary files a/image.png and b/image.png differ
+diff --git a/code.go b/code.go
+--- a/code.go
++++ b/code.go
+@@ -1,1 +1,2 @@
+ line1
++added`,
+			expectedCount: 2,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if !hunks[0].Binary {
+					t.Error("First hunk should be binary")
+				}
+				if hunks[1].Binary {
+					t.Error("Second hunk should not be binary")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hunks, err := ParseDiffOutput(tt.diff)
+			if err != nil {
+				t.Fatalf("ParseDiffOutput() error = %v", err)
+			}
+			if len(hunks) != tt.expectedCount {
+				t.Errorf("ParseDiffOutput() returned %d hunks, expected %d", len(hunks), tt.expectedCount)
+			}
+			if tt.validateHunks != nil {
+				tt.validateHunks(t, hunks)
+			}
+		})
+	}
+}
+
+func TestBuildPatchFromHunks_Binary(t *testing.T) {
+	// Test that binary files produce correct patch format
+	hunks := []Hunk{
+		{
+			File:      "image.png",
+			IndexLine: "index abc123..def456 100644",
+			Content:   "Binary files a/image.png and b/image.png differ",
+			Binary:    true,
+		},
+	}
+
+	patch := BuildPatchFromHunks(hunks)
+
+	// Binary patches should have diff header but no ---/+++ lines
+	if !strings.Contains(patch, "diff --git a/image.png b/image.png") {
+		t.Error("Patch should contain diff header")
+	}
+	if !strings.Contains(patch, "index abc123..def456") {
+		t.Error("Patch should contain index line")
+	}
+	if strings.Contains(patch, "--- a/image.png") {
+		t.Error("Binary patch should not contain --- line")
+	}
+	if strings.Contains(patch, "+++ b/image.png") {
+		t.Error("Binary patch should not contain +++ line")
+	}
+	if !strings.Contains(patch, "Binary files") {
+		t.Error("Patch should contain binary marker")
+	}
+}
+
+func TestBuildPatchFromHunks_MixedBinaryAndText(t *testing.T) {
+	hunks := []Hunk{
+		{
+			File:      "image.png",
+			IndexLine: "index abc..def 100644",
+			Content:   "Binary files a/image.png and b/image.png differ",
+			Binary:    true,
+		},
+		{
+			File:      "code.go",
+			IndexLine: "index 123..456 100644",
+			Content:   "@@ -1,1 +1,2 @@\n line1\n+added",
+			Binary:    false,
+		},
+	}
+
+	patch := BuildPatchFromHunks(hunks)
+
+	// Binary file should not have ---/+++ lines
+	if strings.Contains(patch, "--- a/image.png") {
+		t.Error("Binary file should not have --- line")
+	}
+
+	// Text file should have ---/+++ lines
+	if !strings.Contains(patch, "--- a/code.go") {
+		t.Error("Text file should have --- line")
+	}
+	if !strings.Contains(patch, "+++ b/code.go") {
+		t.Error("Text file should have +++ line")
+	}
+}
+
+func TestSplitHunk_TrailingEmptyLines(t *testing.T) {
+	// Test that hunks with trailing empty lines are handled correctly
+	content := `@@ -1,5 +1,5 @@ func example()
+-removed
+ context1
++added
+ context2
+`
+	hunk := Hunk{
+		File:     "test.go",
+		OldStart: 1,
+		NewStart: 1,
+		Content:  content,
+	}
+
+	result, err := SplitHunk(hunk)
+	if err != nil {
+		t.Fatalf("SplitHunk() error = %v", err)
+	}
+
+	// Should still be able to split despite trailing empty line
+	if len(result) != 2 {
+		t.Errorf("SplitHunk() returned %d hunks, expected 2", len(result))
+	}
+}
+
+func TestCanSplitHunk_NoNewlineAtEnd(t *testing.T) {
+	// Test hunk that ends with "\ No newline at end of file"
+	content := `@@ -1,3 +1,3 @@ func example()
+-old
++new
+ context
+\ No newline at end of file`
+	hunk := Hunk{
+		File:    "test.go",
+		Content: content,
+	}
+
+	// This hunk only has one change block, so it shouldn't be splittable
+	if CanSplitHunk(hunk) {
+		t.Error("Hunk with single change block should not be splittable")
+	}
+}

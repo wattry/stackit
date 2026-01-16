@@ -148,19 +148,24 @@ func parseInt(s string) int {
 
 // BuildPatchFromHunks constructs a unified diff patch from selected hunks.
 // The patch can be applied using git apply --cached to stage specific hunks.
+// Binary files are handled separately as they have a different diff format.
 func BuildPatchFromHunks(hunks []Hunk) string {
 	if len(hunks) == 0 {
 		return ""
 	}
 
-	// Group hunks by file
+	// Separate binary and text hunks, group by file
 	fileHunks := make(map[string][]Hunk)
+	fileBinary := make(map[string]bool)
 	fileOrder := make([]string, 0)
 	for _, h := range hunks {
 		if _, exists := fileHunks[h.File]; !exists {
 			fileOrder = append(fileOrder, h.File)
 		}
 		fileHunks[h.File] = append(fileHunks[h.File], h)
+		if h.Binary {
+			fileBinary[h.File] = true
+		}
 	}
 
 	var sb strings.Builder
@@ -175,6 +180,18 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 		// Add index line if available (needed for --3way)
 		if hunksForFile[0].IndexLine != "" {
 			sb.WriteString(hunksForFile[0].IndexLine + "\n")
+		}
+
+		// Binary files have a different format - no ---/+++ lines
+		if fileBinary[file] {
+			// Binary files just have the "Binary files ... differ" line
+			for _, h := range hunksForFile {
+				sb.WriteString(h.Content)
+				if !strings.HasSuffix(h.Content, "\n") {
+					sb.WriteString("\n")
+				}
+			}
+			continue
 		}
 
 		sb.WriteString(fmt.Sprintf("--- a/%s\n", file))

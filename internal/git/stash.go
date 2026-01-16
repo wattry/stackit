@@ -41,10 +41,30 @@ func (r *runner) StashPushStaged(ctx context.Context, message string) (string, e
 }
 
 // isGitVersionAtLeast checks if the installed Git version is at least major.minor.
+// The version is cached after the first check to avoid repeated git --version calls.
 func (r *runner) isGitVersionAtLeast(ctx context.Context, major, minor int) bool {
+	r.gitVersionOnce.Do(func() {
+		r.parseGitVersion(ctx)
+	})
+
+	if !r.gitVersionParsed {
+		return false // Assume old version if parsing failed
+	}
+
+	if r.gitVersionMajor > major {
+		return true
+	}
+	if r.gitVersionMajor == major && r.gitVersionMinor >= minor {
+		return true
+	}
+	return false
+}
+
+// parseGitVersion parses and caches the Git version.
+func (r *runner) parseGitVersion(ctx context.Context) {
 	output, err := r.RunGitCommandWithContext(ctx, "--version")
 	if err != nil {
-		return false // Assume old version on error
+		return // Leave gitVersionParsed as false
 	}
 
 	// Parse "git version X.Y.Z" format
@@ -52,25 +72,21 @@ func (r *runner) isGitVersionAtLeast(ctx context.Context, major, minor int) bool
 	re := regexp.MustCompile(`git version (\d+)\.(\d+)`)
 	matches := re.FindStringSubmatch(strings.TrimSpace(output))
 	if len(matches) < 3 {
-		return false
+		return
 	}
 
 	gitMajor, err := strconv.Atoi(matches[1])
 	if err != nil {
-		return false
+		return
 	}
 	gitMinor, err := strconv.Atoi(matches[2])
 	if err != nil {
-		return false
+		return
 	}
 
-	if gitMajor > major {
-		return true
-	}
-	if gitMajor == major && gitMinor >= minor {
-		return true
-	}
-	return false
+	r.gitVersionMajor = gitMajor
+	r.gitVersionMinor = gitMinor
+	r.gitVersionParsed = true
 }
 
 func (r *runner) StashPop(ctx context.Context) error {

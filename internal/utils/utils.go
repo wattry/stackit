@@ -55,6 +55,61 @@ func SanitizeBranchName(name string) string {
 	return name
 }
 
+// ValidateBranchName checks if a branch name is valid according to Git rules.
+// Returns an error describing the issue if invalid, nil if valid.
+func ValidateBranchName(name string) error {
+	if name == "" {
+		return &BranchNameError{Name: name, Reason: "branch name cannot be empty"}
+	}
+
+	// Check for invalid characters
+	if BranchNameReplaceRegex.MatchString(name) {
+		return &BranchNameError{Name: name, Reason: "contains invalid characters (only letters, numbers, -, _, /, . are allowed)"}
+	}
+
+	// Check for consecutive dots (Git disallows "..")
+	if strings.Contains(name, "..") {
+		return &BranchNameError{Name: name, Reason: "cannot contain consecutive dots (..)"}
+	}
+
+	// Check for leading hyphen
+	if strings.HasPrefix(name, "-") {
+		return &BranchNameError{Name: name, Reason: "cannot start with a hyphen"}
+	}
+
+	// Check for trailing dot or slash
+	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, "/") {
+		return &BranchNameError{Name: name, Reason: "cannot end with a dot or slash"}
+	}
+
+	// Check for leading slash
+	if strings.HasPrefix(name, "/") {
+		return &BranchNameError{Name: name, Reason: "cannot start with a slash"}
+	}
+
+	// Check for consecutive slashes
+	if strings.Contains(name, "//") {
+		return &BranchNameError{Name: name, Reason: "cannot contain consecutive slashes"}
+	}
+
+	// Check length
+	if len(name) > MaxBranchNameByteLength {
+		return &BranchNameError{Name: name, Reason: "exceeds maximum length of 234 characters"}
+	}
+
+	return nil
+}
+
+// BranchNameError represents an invalid branch name error
+type BranchNameError struct {
+	Name   string
+	Reason string
+}
+
+func (e *BranchNameError) Error() string {
+	return "invalid branch name \"" + e.Name + "\": " + e.Reason
+}
+
 // GenerateBranchNameFromMessage generates a branch name from a commit message
 func GenerateBranchNameFromMessage(message string) string {
 	if message == "" {

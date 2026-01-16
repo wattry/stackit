@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 
@@ -251,12 +252,10 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		existingBranchNames[b.GetName()] = true
 	}
 
-	// Helper to restore branch and return appropriate error on cancel
+	// cancelWithRestore restores the original branch and returns ErrCanceled.
+	// This ensures the working directory is left in a clean state on user cancel.
 	cancelWithRestore := func() error {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
-		if len(branchNames) == 0 {
-			return sterrors.ErrCanceled
-		}
 		return sterrors.ErrCanceled
 	}
 
@@ -573,7 +572,9 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 	handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
 
 	// Stash only the staged changes (what we want to extract to child)
-	_, err = eng.StashPushStaged(gitCtx, "stackit-split-above-extract")
+	// Use a unique stash name with timestamp to prevent collision with previous operations
+	stashName := fmt.Sprintf("stackit-split-above-extract-%d", time.Now().UnixNano())
+	_, err = eng.StashPushStaged(gitCtx, stashName)
 	if err != nil {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to stash staged changes: %w", err)
@@ -634,20 +635,27 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 
 	// Pop the stash to get the extract changes back
 	if err := eng.StashPop(gitCtx); err != nil {
-		return fmt.Errorf("failed to pop stash: %w", err)
+		// Stash pop failed - this leaves the repo in a partially completed state.
+		// The original branch has been updated and the child branch exists but has no commit.
+		// Provide guidance on how to recover.
+		return fmt.Errorf("failed to pop stash: %w. Recovery: run 'git stash pop' to restore changes, then 'git add -A && git commit' on branch %s", err, childBranchName)
 	}
 	stashPopped = true
 
 	// Stage and commit the extracted changes on child branch
 	if err := eng.StageAll(gitCtx); err != nil {
-		return fmt.Errorf("failed to stage extracted changes: %w", err)
+		// Changes are in working directory but not staged.
+		// User can recover by staging and committing manually.
+		return fmt.Errorf("failed to stage extracted changes: %w. Recovery: run 'git add -A && git commit' to complete", err)
 	}
 
 	if err := eng.CommitWithOptions(gitCtx, git.CommitOptions{
 		Message:  childCommitMessage,
 		NoVerify: true,
 	}); err != nil {
-		return fmt.Errorf("failed to commit extracted changes: %w", err)
+		// Changes are staged but commit failed.
+		// User can recover by committing manually.
+		return fmt.Errorf("failed to commit extracted changes: %w. Recovery: run 'git commit' to complete", err)
 	}
 
 	// Track the child branch with parent = branchToSplit

@@ -182,6 +182,11 @@ func (h *TUISplitHandler) PromptBranchName(defaultName string, sessionNames []st
 		return "", fmt.Errorf("branch name cannot be empty")
 	}
 
+	// Validate: check for invalid characters and Git branch name rules
+	if err := utils.ValidateBranchName(branchName); err != nil {
+		return "", err
+	}
+
 	// Validate: don't allow names already picked in this split session
 	if slices.Contains(sessionNames, branchName) {
 		return "", fmt.Errorf("branch name %q is already used by another branch in this split", branchName)
