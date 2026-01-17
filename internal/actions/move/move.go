@@ -17,6 +17,7 @@ type Options struct {
 	Source      string // Branch to move (defaults to current branch)
 	Onto        string // Branch to move onto
 	SkipConfirm bool   // Skip confirmation prompt (--yes flag)
+	DryRun      bool   // If true, only shows what would happen without making changes
 }
 
 // Action performs the move operation
@@ -133,6 +134,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Build rebase specs for validation (needed for both preview conflict detection and actual move)
 	rebaseSpecs := BuildRebaseSpecs(eng, out, source, onto, oldParent, oldParentRev, descendants)
+
+	// Dry-run mode: validate and print what would happen without making changes
+	if opts.DryRun {
+		return dryRun(ctx, source, oldParentName, onto, sourceBranch, descendants, rebaseSpecs)
+	}
 
 	// Prompt for confirmation in interactive mode (unless --yes flag is set)
 	if handler.IsInteractive() && !opts.SkipConfirm {
@@ -271,6 +277,72 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		Renamed:      renamed,
 		NewName:      newName,
 	})
+	return nil
+}
+
+// dryRun validates and prints what the move would do without making changes.
+func dryRun(ctx *app.Context, source, oldParentName, onto string, sourceBranch engine.Branch, descendants []engine.Branch, rebaseSpecs []engine.RebaseSpec) error {
+	eng := ctx.Engine
+	out := ctx.Output
+	gctx := ctx.Context
+
+	// Run validation
+	validation, validationErr := eng.ValidateRebases(gctx, rebaseSpecs)
+
+	// Get commits that will be moved
+	commits, _ := eng.GetAllCommits(sourceBranch, engine.CommitFormatSubject)
+
+	// Get descendant names (excluding source itself)
+	var descendantNames []string
+	for _, d := range descendants {
+		if d.GetName() != source {
+			descendantNames = append(descendantNames, d.GetName())
+		}
+	}
+
+	// Print dry-run header
+	out.Info("Dry-run: showing what would happen without making changes\n")
+
+	// Print move summary
+	out.Info("Move: %s", style.ColorBranchName(source, true))
+	out.Info("  From: %s", style.ColorBranchName(oldParentName, false))
+	out.Info("  To:   %s", style.ColorBranchName(onto, false))
+
+	// Print commits that would be moved
+	if len(commits) > 0 {
+		out.Info("\nCommits to move (%d):", len(commits))
+		for _, c := range commits {
+			out.Info("  • %s", c)
+		}
+	} else {
+		out.Info("\nNo commits to move (branch has no commits)")
+	}
+
+	// Print descendants that would be restacked
+	if len(descendantNames) > 0 {
+		out.Info("\nDescendant branches to restack (%d):", len(descendantNames))
+		for _, name := range descendantNames {
+			out.Info("  • %s", style.ColorBranchName(name, false))
+		}
+	}
+
+	// Print validation result
+	out.Info("")
+	if validationErr != nil {
+		out.Info("Validation: %s", style.ColorRed("failed"))
+		out.Info("  Error: %s", validationErr.Error())
+		return fmt.Errorf("validation failed: %w", validationErr)
+	}
+
+	if !validation.Success {
+		out.Info("Validation: %s", style.ColorRed("conflicts detected"))
+		out.Info("  Branch: %s", style.ColorBranchName(validation.FailedBranch, false))
+		out.Info("  Error: %s", validation.ErrorMessage)
+		return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
+	}
+
+	out.Info("Validation: %s", style.ColorGreen("passed"))
+	out.Info("\nRun without --dry-run to execute the move.")
 	return nil
 }
 

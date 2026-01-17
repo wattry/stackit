@@ -71,6 +71,98 @@ Restacked branch3 on branch1.
 `), testhelpers.NormalizeOutput(output))
 	})
 
+	t.Run("dry-run shows what would happen without making changes", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "init")
+			// Create branch1 -> branch2
+			if err := s.Repo.CreateChange("branch1 change", "branch1", false); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "create", "branch1", "-m", "branch1 change")
+			if err := s.Repo.CreateChange("branch2 change", "branch2", false); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "create", "branch2", "-m", "branch2 change")
+			return nil
+		})
+
+		// Run dry-run move
+		output := runCliCommandSuccess(t, binaryPath, scene.Dir, "move", "--source", "branch2", "--onto", "main", "--dry-run")
+		require.Contains(t, output, "Dry-run:")
+		require.Contains(t, output, "Move: branch2")
+		require.Contains(t, output, "From: branch1")
+		require.Contains(t, output, "To:   main")
+		require.Contains(t, output, "Commits to move")
+		require.Contains(t, output, "Validation:")
+		require.Contains(t, output, "Run without --dry-run to execute")
+
+		// Verify branch was NOT actually moved (still has branch1 as parent)
+		logOutput := runCliCommandSuccess(t, binaryPath, scene.Dir, "log")
+		require.Contains(t, logOutput, "branch2")
+		require.Contains(t, logOutput, "branch1")
+	})
+
+	t.Run("dry-run requires --onto flag", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "init")
+			if err := s.Repo.CreateChange("branch1 change", "branch1", false); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "create", "branch1", "-m", "branch1 change")
+			return nil
+		})
+
+		cmd := exec.Command(binaryPath, "move", "--dry-run")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+		require.Error(t, err)
+		require.Contains(t, string(output), "--onto flag is required when using --dry-run")
+	})
+
+	t.Run("dry-run shows conflicts", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			// Create a scenario that will have conflicts
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "init")
+
+			// Create branch1 with a change to a file
+			if err := s.Repo.CreateChange("branch1 content", "conflict.txt", false); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "create", "branch1", "-m", "branch1 change")
+
+			// Go back to main and create branch2 with conflicting change
+			if err := s.Repo.CheckoutBranch("main"); err != nil {
+				return err
+			}
+			if err := s.Repo.CreateChange("branch2 content", "conflict.txt", false); err != nil {
+				return err
+			}
+			runCliCommand(binaryPath, s.Dir, "create", "branch2", "-m", "branch2 change")
+			return nil
+		})
+
+		// Try to move branch2 onto branch1 (will conflict)
+		cmd := exec.Command(binaryPath, "move", "--source", "branch2", "--onto", "branch1", "--dry-run")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+		require.Error(t, err)
+		outputStr := string(output)
+		require.Contains(t, outputStr, "Dry-run:")
+		require.Contains(t, outputStr, "conflicts detected")
+	})
+
 	t.Run("invalid moves", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
