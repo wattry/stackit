@@ -1,0 +1,557 @@
+// Package flatten provides functionality for flattening stacked branches closer to trunk.
+package flatten
+
+import (
+	"fmt"
+
+	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/tui/style"
+)
+
+// Options contains options for the flatten command
+type Options struct {
+	BranchName  string // Branch to start flattening from (defaults to current branch)
+	SkipConfirm bool   // Skip confirmation prompt (--yes flag)
+}
+
+// Action performs the flatten operation.
+// Flatten analyzes the stack and moves branches as close to trunk as possible
+// while respecting dependencies (branches that would conflict stay in place).
+func Action(ctx *app.Context, opts Options, handler Handler) error {
+	eng := ctx.Engine
+	out := ctx.Output
+	gctx := ctx.Context
+
+	// Use null handler if none provided
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
+	// Resolve branch name
+	branchName := opts.BranchName
+	if branchName == "" {
+		currentBranch := eng.CurrentBranch()
+		if currentBranch == nil {
+			return fmt.Errorf("not on a branch and no branch specified")
+		}
+		branchName = currentBranch.GetName()
+	}
+
+	// Validate branch exists and is tracked
+	branch := eng.GetBranch(branchName)
+	if !branch.IsTracked() && !branch.IsTrunk() {
+		return fmt.Errorf("branch %q is not tracked by Stackit", branchName)
+	}
+
+	// Build stack graph to get all related branches
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	branches := graph.Range(branch, engine.StackRange{
+		RecursiveParents:  true,
+		RecursiveChildren: true,
+		IncludeCurrent:    true,
+	})
+
+	if len(branches) == 0 {
+		out.Info("No branches to flatten.")
+		return nil
+	}
+
+	// Sort topologically (parents before children)
+	sortedBranches := eng.SortBranchesTopologically(branches)
+
+	// Filter out trunk - we only flatten feature branches
+	trunk := eng.Trunk()
+	var featureBranches []engine.Branch
+	for _, b := range sortedBranches {
+		if !b.IsTrunk() && b.GetName() != trunk.GetName() {
+			featureBranches = append(featureBranches, b)
+		}
+	}
+
+	if len(featureBranches) == 0 {
+		out.Info("No feature branches to flatten.")
+		return nil
+	}
+
+	handler.Start(len(featureBranches))
+	handler.OnStep(StepAnalyzing, StatusStarted, "Analyzing stack structure...")
+
+	// Take snapshot before any modifications
+	snapshotOpts := actions.NewSnapshot("flatten",
+		actions.WithArg(branchName),
+	)
+	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
+		out.Debug("Failed to take snapshot: %v", err)
+	}
+
+	// Build the initial flatten plan by testing which branches can move closer to trunk
+	plan, err := buildFlattenPlan(ctx, eng, featureBranches, trunk, func(current, total int, branchName string) {
+		handler.OnValidationProgress(current, total, branchName)
+	})
+	if err != nil {
+		handler.OnStep(StepAnalyzing, StatusFailed, err.Error())
+		return fmt.Errorf("failed to build flatten plan: %w", err)
+	}
+
+	handler.OnStep(StepAnalyzing, StatusCompleted, fmt.Sprintf("Found %d potential branches to move", len(plan.Moves)))
+
+	// If nothing to move, we're done
+	if len(plan.Moves) == 0 {
+		out.Info("All branches are already as close to trunk as possible.")
+		handler.Complete(Result{
+			MovedCount:     0,
+			UnchangedCount: len(featureBranches),
+		})
+		return nil
+	}
+
+	// Validate all branches that will be restacked (moved branches + their descendants)
+	handler.OnStep(StepValidating, StatusStarted, "Validating moves and descendants...")
+
+	// Collect all branches that will be affected by each move (including descendants)
+	allBranchesToValidate := collectAllBranchesToRestack(eng, graph, plan.Moves)
+
+	// Sort branches topologically (parents before children) for correct validation order
+	branchObjects := make([]engine.Branch, 0, len(allBranchesToValidate))
+	for _, name := range allBranchesToValidate {
+		branchObjects = append(branchObjects, eng.GetBranch(name))
+	}
+	sortedForValidation := eng.SortBranchesTopologically(branchObjects)
+	sortedNames := make([]string, len(sortedForValidation))
+	for i, b := range sortedForValidation {
+		sortedNames[i] = b.GetName()
+	}
+
+	// Build rebase specs for all branches in topological order
+	allRebaseSpecs := buildRebaseSpecsForAll(eng, plan, sortedNames)
+
+	// Report progress for validation
+	handler.OnValidationProgress(0, len(allRebaseSpecs), "validating...")
+
+	// Validate ALL specs together in a single call - this is crucial!
+	// ValidateRebases tracks rebased SHAs, so chained rebases work correctly.
+	// Parents are rebased first, and their new SHAs are used for child rebases.
+	conflicts := make(map[string]string) // branch -> error message
+	validation, err := eng.ValidateRebases(gctx, allRebaseSpecs)
+	if err != nil {
+		handler.OnStep(StepValidating, StatusFailed, err.Error())
+		return fmt.Errorf("failed to validate rebases: %w", err)
+	}
+
+	handler.OnValidationProgress(len(allRebaseSpecs), len(allRebaseSpecs), "done")
+
+	if !validation.Success {
+		conflicts[validation.FailedBranch] = validation.ErrorMessage
+	}
+
+	// Filter moves to exclude those that would cause conflicts (directly or via descendants)
+	filteredPlan, excludedBranches := filterPlanExcludingConflicts(plan, conflicts, graph, eng)
+
+	switch {
+	case len(conflicts) > 0 && len(filteredPlan.Moves) > 0:
+		handler.OnStep(StepValidating, StatusCompleted,
+			fmt.Sprintf("Validated: %d moves safe, %d excluded due to conflicts",
+				len(filteredPlan.Moves), len(excludedBranches)))
+	case len(conflicts) > 0:
+		handler.OnStep(StepValidating, StatusCompleted, "All moves would cause conflicts")
+	default:
+		handler.OnStep(StepValidating, StatusCompleted, "All moves validated successfully")
+	}
+
+	// Build preview
+	preview := Preview{
+		Moves:            filteredPlan.Moves,
+		UnchangedCount:   filteredPlan.UnchangedCount,
+		ExcludedBranches: excludedBranches,
+	}
+
+	// Prompt for confirmation (if interactive and not skipping)
+	if handler.IsInteractive() && !opts.SkipConfirm {
+		confirmed, promptErr := handler.PromptConfirmFlatten(preview)
+		if promptErr != nil {
+			return fmt.Errorf("failed to prompt for confirmation: %w", promptErr)
+		}
+		if !confirmed {
+			out.Info("Flatten canceled.")
+			return nil
+		}
+	}
+
+	// If no moves are safe, exit
+	if len(filteredPlan.Moves) == 0 {
+		out.Info("No branches can be safely flattened.")
+		handler.Complete(Result{
+			MovedCount:     0,
+			UnchangedCount: filteredPlan.UnchangedCount,
+		})
+		return nil
+	}
+
+	// Execute the flatten
+	handler.OnStep(StepFlattening, StatusStarted, "Moving branches...")
+
+	// Build a map of branch -> oldUpstream from the rebase specs
+	// This is needed because SetParent may calculate a different value using merge-base,
+	// but we need to preserve the correct divergence point for proper rebasing
+	oldUpstreamMap := make(map[string]string)
+	for _, spec := range filteredPlan.RebaseSpecs {
+		oldUpstreamMap[spec.Branch] = spec.OldUpstream
+	}
+
+	// Update parent pointers for all planned moves
+	for _, move := range filteredPlan.Moves {
+		moveBranch := eng.GetBranch(move.Branch)
+		newParentBranch := eng.GetBranch(move.NewParent)
+
+		if err := eng.SetParent(gctx, moveBranch, newParentBranch); err != nil {
+			handler.OnStep(StepFlattening, StatusFailed, err.Error())
+			return fmt.Errorf("failed to set parent for %s to %s: %w", move.Branch, move.NewParent, err)
+		}
+
+		// Update parent revision with the correct oldUpstream we calculated earlier.
+		// SetParent uses merge-base which may be incorrect when flattening branches
+		// that have diverged from their original parent.
+		if oldUpstream, ok := oldUpstreamMap[move.Branch]; ok {
+			if err := eng.UpdateParentRevision(move.Branch, oldUpstream); err != nil {
+				out.Debug("Failed to update parent revision for %s: %v", move.Branch, err)
+			}
+		}
+
+		handler.OnBranchMoved(move.Branch, move.OldParent, move.NewParent)
+		out.Info("  %s: %s -> %s",
+			style.ColorBranchName(move.Branch, false),
+			style.ColorDim(move.OldParent),
+			style.ColorBranchName(move.NewParent, false))
+	}
+
+	handler.OnStep(StepFlattening, StatusCompleted, "Parent pointers updated")
+
+	// Restack all affected branches
+	handler.OnStep(StepRestacking, StatusStarted, "Restacking branches...")
+
+	// Rebuild graph after parent changes
+	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
+	// Collect all branches that need restacking (moved branches and their descendants)
+	branchesToRestack := make([]engine.Branch, 0)
+	for _, move := range filteredPlan.Moves {
+		moveBranch := eng.GetBranch(move.Branch)
+		descendants := graph.Range(moveBranch, engine.StackRange{
+			RecursiveChildren: true,
+			IncludeCurrent:    true,
+			RecursiveParents:  false,
+		})
+		branchesToRestack = append(branchesToRestack, descendants...)
+	}
+
+	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
+		handler.OnStep(StepRestacking, StatusFailed, err.Error())
+		return fmt.Errorf("failed to restack branches: %w", err)
+	}
+
+	handler.OnStep(StepRestacking, StatusCompleted, "Branches restacked")
+
+	out.Info("\nFlatten complete: %d branches moved, %d unchanged.", len(filteredPlan.Moves), filteredPlan.UnchangedCount)
+
+	handler.Complete(Result{
+		MovedCount:     len(filteredPlan.Moves),
+		UnchangedCount: filteredPlan.UnchangedCount,
+	})
+
+	return nil
+}
+
+// collectAllBranchesToRestack collects all branches that will be affected by the moves,
+// including the moved branches and all their descendants.
+func collectAllBranchesToRestack(eng engine.Engine, graph *engine.StackGraph, moves []PlannedMove) []string {
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, move := range moves {
+		moveBranch := eng.GetBranch(move.Branch)
+		descendants := graph.Range(moveBranch, engine.StackRange{
+			RecursiveChildren: true,
+			IncludeCurrent:    true,
+			RecursiveParents:  false,
+		})
+
+		for _, b := range descendants {
+			name := b.GetName()
+			if !seen[name] {
+				seen[name] = true
+				result = append(result, name)
+			}
+		}
+	}
+
+	return result
+}
+
+// buildRebaseSpecsForAll builds rebase specs for all branches that will be affected,
+// accounting for cascading parent changes when ancestors are moved.
+func buildRebaseSpecsForAll(eng engine.Engine, plan *flattenPlan, branchNames []string) []engine.RebaseSpec {
+	// Build a map of existing rebase specs from the plan
+	existingSpecs := make(map[string]engine.RebaseSpec)
+	for _, spec := range plan.RebaseSpecs {
+		existingSpecs[spec.Branch] = spec
+	}
+
+	specs := make([]engine.RebaseSpec, 0, len(branchNames))
+
+	for _, branchName := range branchNames {
+		// If we already have a spec from the plan, use it
+		if spec, ok := existingSpecs[branchName]; ok {
+			specs = append(specs, spec)
+			continue
+		}
+
+		// This is a descendant branch - build its spec based on its parent's new position
+		branch := eng.GetBranch(branchName)
+		parent := branch.GetParent()
+		if parent == nil {
+			continue
+		}
+
+		parentName := parent.GetName()
+
+		// Get the old upstream (divergence point)
+		parentBranch := eng.GetBranch(parentName)
+		oldUpstream, err := getOldUpstream(eng, branchName, parentBranch)
+		if err != nil {
+			continue
+		}
+
+		// The new parent revision is the tip of the parent branch
+		// (which will be its rebased position after the flatten)
+		newParentRev, err := parentBranch.GetRevision()
+		if err != nil {
+			continue
+		}
+
+		specs = append(specs, engine.RebaseSpec{
+			Branch:      branchName,
+			NewParent:   newParentRev,
+			OldUpstream: oldUpstream,
+		})
+	}
+
+	return specs
+}
+
+// filterPlanExcludingConflicts filters out moves where the moved branch or any of its
+// descendants have code dependencies. Returns the filtered plan and a list of branches kept in place.
+func filterPlanExcludingConflicts(plan *flattenPlan, conflicts map[string]string, graph *engine.StackGraph, eng engine.Engine) (*flattenPlan, []ExcludedBranch) {
+	if len(conflicts) == 0 {
+		return plan, nil
+	}
+
+	// Build a set of moves to exclude (branches whose moves would cause conflicts)
+	movesToExclude := make(map[string]string) // branch -> reason
+
+	// For each move, check if the branch or any of its descendants would conflict
+	for _, move := range plan.Moves {
+		moveBranch := eng.GetBranch(move.Branch)
+		descendants := graph.Range(moveBranch, engine.StackRange{
+			RecursiveChildren: true,
+			IncludeCurrent:    true,
+			RecursiveParents:  false,
+		})
+
+		for _, desc := range descendants {
+			descName := desc.GetName()
+			if errMsg, hasConflict := conflicts[descName]; hasConflict {
+				if descName == move.Branch {
+					movesToExclude[move.Branch] = "needs resolution: " + errMsg
+				} else {
+					movesToExclude[move.Branch] = fmt.Sprintf("%s depends on this branch", descName)
+				}
+				break
+			}
+		}
+	}
+
+	// Build filtered plan
+	filtered := &flattenPlan{
+		Moves:          make([]PlannedMove, 0),
+		RebaseSpecs:    make([]engine.RebaseSpec, 0),
+		UnchangedCount: plan.UnchangedCount,
+	}
+
+	var excluded []ExcludedBranch
+
+	// Create a map of branch -> rebase spec for quick lookup
+	specMap := make(map[string]engine.RebaseSpec)
+	for _, spec := range plan.RebaseSpecs {
+		specMap[spec.Branch] = spec
+	}
+
+	for _, move := range plan.Moves {
+		if reason, shouldExclude := movesToExclude[move.Branch]; shouldExclude {
+			excluded = append(excluded, ExcludedBranch{
+				Branch: move.Branch,
+				Reason: reason,
+			})
+			filtered.UnchangedCount++
+		} else {
+			filtered.Moves = append(filtered.Moves, move)
+			if spec, ok := specMap[move.Branch]; ok {
+				filtered.RebaseSpecs = append(filtered.RebaseSpecs, spec)
+			}
+		}
+	}
+
+	return filtered, excluded
+}
+
+// flattenPlan contains the calculated flatten operations
+type flattenPlan struct {
+	Moves          []PlannedMove       // Branches that will be moved
+	UnchangedCount int                 // Number of branches that won't change
+	RebaseSpecs    []engine.RebaseSpec // Specs for validating all moves
+}
+
+// AnalysisProgressFunc is called to report progress during flatten plan analysis.
+type AnalysisProgressFunc func(current, total int, branchName string)
+
+// buildFlattenPlan calculates which branches can be moved closer to trunk.
+// For each branch (in topological order), it tests if the branch can rebase
+// onto trunk or any intermediate branch that's closer to trunk.
+func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Branch, trunk engine.Branch, onProgress AnalysisProgressFunc) (*flattenPlan, error) {
+	plan := &flattenPlan{
+		Moves:       make([]PlannedMove, 0),
+		RebaseSpecs: make([]engine.RebaseSpec, 0),
+	}
+
+	// Track the current revision of each potential parent (including trunk)
+	// This is needed to build accurate rebase specs
+	parentRevisions := make(map[string]string)
+	trunkRev, err := trunk.GetRevision()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trunk revision: %w", err)
+	}
+	parentRevisions[trunk.GetName()] = trunkRev
+
+	// potentialParents tracks branches that can serve as parents for subsequent branches
+	// Starts with trunk, and grows as we process branches
+	potentialParents := []string{trunk.GetName()}
+
+	for i, b := range branches {
+		bName := b.GetName()
+
+		// Report progress
+		if onProgress != nil {
+			onProgress(i+1, len(branches), bName)
+		}
+
+		// Get current parent info
+		origParent := b.GetParent()
+		origParentName := trunk.GetName()
+		origParentBranch := trunk
+		if origParent != nil {
+			origParentName = origParent.GetName()
+			origParentBranch = *origParent
+		}
+
+		// Get the branch's base (divergence point from parent)
+		oldUpstream, err := getOldUpstream(eng, bName, origParentBranch)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get base for %s: %w", bName, err)
+		}
+
+		// Try to find the best (closest to trunk) parent this branch can move to
+		newParent := findBestParent(ctx, eng, bName, oldUpstream, potentialParents, parentRevisions)
+
+		// Track this branch's revision for subsequent branches
+		bRev, err := b.GetRevision()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get revision for %s: %w", bName, err)
+		}
+		parentRevisions[bName] = bRev
+
+		// Add this branch as a potential parent for subsequent branches
+		potentialParents = append(potentialParents, bName)
+
+		// If we found a better parent, add to the plan
+		if newParent != "" && newParent != origParentName {
+			plan.Moves = append(plan.Moves, PlannedMove{
+				Branch:    bName,
+				OldParent: origParentName,
+				NewParent: newParent,
+			})
+
+			// Add rebase spec for this move
+			newParentRev := parentRevisions[newParent]
+			plan.RebaseSpecs = append(plan.RebaseSpecs, engine.RebaseSpec{
+				Branch:      bName,
+				NewParent:   newParentRev,
+				OldUpstream: oldUpstream,
+			})
+		} else {
+			plan.UnchangedCount++
+		}
+	}
+
+	return plan, nil
+}
+
+// getOldUpstream returns the divergence point of the branch from its parent.
+// This is used as the OldUpstream for rebase operations.
+func getOldUpstream(eng engine.Engine, branchName string, parent engine.Branch) (string, error) {
+	// First, try to get from metadata
+	meta, err := eng.Git().ReadMetadata(branchName)
+	if err == nil && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
+		return *meta.ParentBranchRevision, nil
+	}
+
+	// Fall back to parent's current revision (not merge-base, which can include
+	// commits from parent branches if the parent was rebased after this branch was created)
+	return eng.GetRevision(parent)
+}
+
+// findBestParent finds the closest-to-trunk parent that the branch can cleanly rebase onto.
+// Returns empty string if the branch should stay with its current parent.
+func findBestParent(ctx *app.Context, eng engine.Engine, branchName, oldUpstream string, potentialParents []string, parentRevisions map[string]string) string {
+	// Try each potential parent starting from trunk (index 0)
+	// and working up through branches that have been processed
+	for _, candidateParent := range potentialParents {
+		candidateRev, ok := parentRevisions[candidateParent]
+		if !ok {
+			continue
+		}
+
+		// Quick check: if the candidate is already at the same revision as oldUpstream,
+		// this branch is already optimally placed relative to this candidate
+		if candidateRev == oldUpstream {
+			return candidateParent
+		}
+
+		// Test if the branch can rebase onto this candidate
+		if canRebaseOnto(ctx, eng, branchName, candidateRev, oldUpstream) {
+			return candidateParent
+		}
+	}
+
+	// No better parent found
+	return ""
+}
+
+// canRebaseOnto tests if a branch can cleanly rebase onto a target.
+// Uses ValidateRebases with a single spec to test in a temporary worktree.
+func canRebaseOnto(ctx *app.Context, eng engine.Engine, branchName, targetRev, oldUpstream string) bool {
+	specs := []engine.RebaseSpec{{
+		Branch:      branchName,
+		NewParent:   targetRev,
+		OldUpstream: oldUpstream,
+	}}
+
+	validation, err := eng.ValidateRebases(ctx.Context, specs)
+	if err != nil {
+		ctx.Logger.Debug("Validation error for %s onto %s: %v", branchName, targetRev, err)
+		return false
+	}
+
+	return validation.Success
+}
