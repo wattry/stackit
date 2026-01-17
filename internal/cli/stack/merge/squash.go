@@ -3,6 +3,7 @@ package merge
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -116,7 +117,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 
 	// Validate
 	if !validation.Valid && !opts.force {
-		return fmt.Errorf("validation failed (use --force to override)")
+		return formatSquashValidationError(validation.Errors, validation.Warnings)
 	}
 
 	// Dry run - just show the plan
@@ -272,4 +273,29 @@ func getPRNodeID(ctx *app.Context, prNumber int) (string, error) {
 		return "", fmt.Errorf("PR #%d does not have a Node ID", prNumber)
 	}
 	return prInfo.NodeID, nil
+}
+
+// formatSquashValidationError creates a detailed error message including validation errors and warnings.
+func formatSquashValidationError(errors, warnings []string) error {
+	var parts []string
+
+	if len(errors) > 0 {
+		parts = append(parts, "validation failed:")
+		for _, e := range errors {
+			parts = append(parts, fmt.Sprintf("  ✗ %s", e))
+		}
+	}
+
+	if len(warnings) > 0 {
+		if len(errors) == 0 {
+			parts = append(parts, "merge blocked due to warnings:")
+		}
+		for _, w := range warnings {
+			parts = append(parts, fmt.Sprintf("  ⚠ %s", w))
+		}
+	}
+
+	parts = append(parts, "(use --force to override)")
+
+	return fmt.Errorf("%s", strings.Join(parts, "\n"))
 }

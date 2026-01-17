@@ -3,6 +3,7 @@ package merge
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/app"
@@ -159,11 +160,11 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 
 	// Check validation
 	if !validation.Valid && !opts.Force {
-		return fmt.Errorf("validation failed (use --force to override)")
+		return formatValidationError(validation.Errors, validation.Warnings)
 	}
 
 	if len(validation.Warnings) > 0 && !opts.Force {
-		return fmt.Errorf("merge blocked due to warnings (use --force to override)")
+		return formatValidationError(nil, validation.Warnings)
 	}
 
 	// Determine strategy
@@ -214,7 +215,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	// Re-validate with new strategy
 	if !validation.Valid && !opts.Force {
 		out.Debug("merge wizard: validation failed")
-		return fmt.Errorf("validation failed with selected strategy")
+		return formatValidationError(validation.Errors, validation.Warnings)
 	}
 
 	// If dry-run, stop here
@@ -432,4 +433,29 @@ func phaseFromStep(step *PlanStep) Phase {
 	default:
 		return PhaseMerge
 	}
+}
+
+// formatValidationError creates a detailed error message including validation errors and warnings.
+func formatValidationError(errors, warnings []string) error {
+	var parts []string
+
+	if len(errors) > 0 {
+		parts = append(parts, "validation failed:")
+		for _, e := range errors {
+			parts = append(parts, fmt.Sprintf("  ✗ %s", e))
+		}
+	}
+
+	if len(warnings) > 0 {
+		if len(errors) == 0 {
+			parts = append(parts, "merge blocked due to warnings:")
+		}
+		for _, w := range warnings {
+			parts = append(parts, fmt.Sprintf("  ⚠ %s", w))
+		}
+	}
+
+	parts = append(parts, "(use --force to override)")
+
+	return fmt.Errorf("%s", strings.Join(parts, "\n"))
 }
