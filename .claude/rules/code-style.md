@@ -10,6 +10,8 @@
 
 - Prefer early returns over deep nesting
 - Use meaningful variable names; single-letter names only for loop indices
+- Remove unused function parameters entirely; don't use `_` to ignore them
+- Avoid redundant CLI flags that duplicate positional arguments
 
 ## Error Handling
 
@@ -27,3 +29,6 @@
 
 - Use table-driven tests for multiple cases
 - Keep test setup minimal and focused
+- Don't add code after assertions that terminate the test (e.g., `if err != nil` after `require.NoError`)
+- New CLI commands need integration tests in `internal/integration/`, not just unit tests
+- Integration tests should use `NewTestShellInProcess(t)` for faster execution
