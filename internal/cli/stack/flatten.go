@@ -1,8 +1,6 @@
 package stack
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/flatten"
@@ -10,36 +8,57 @@ import (
 	"stackit.dev/stackit/internal/cli/common"
 )
 
+// NewFlattenCmd creates the flatten command
 func NewFlattenCmd() *cobra.Command {
-	var branch string
+	var (
+		branch string
+		yes    bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "flatten [branch]",
-		Short: "Flatten the stack by re-parenting branches closer to trunk where possible",
-		Long:  "Flatten the stack by re-parenting branches closer to trunk where possible. It starts from the bottom of the stack and tries to rebase each branch onto the trunk or any intermediate branch, keeping the dependencies intact.",
-		Args:  cobra.MaximumNArgs(1),
+		Short: "Flatten the stack by moving branches closer to trunk where possible",
+		Long: `Flatten the stack by re-parenting branches as close to trunk as possible.
+
+The command analyzes each branch in the stack and tests whether it can be
+rebased directly onto trunk (or an intermediate branch closer to trunk).
+Branches that depend on changes from their parent will stay in place.
+
+This is useful after landing PRs from the middle of a stack, or when you
+have independent changes that were developed as a chain but don't actually
+depend on each other.
+
+Examples:
+  stackit flatten           # Flatten stack from current branch
+  stackit flatten feature   # Flatten stack from the 'feature' branch
+  stackit flatten --yes     # Skip confirmation prompt`,
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
+				// Determine target branch
 				targetBranch := branch
 				if len(args) > 0 {
 					targetBranch = args[0]
 				}
 
-				if targetBranch == "" {
-					currentBranch := ctx.Engine.CurrentBranch()
-					if currentBranch == nil {
-						return fmt.Errorf("not on a branch and --branch not specified")
-					}
-					targetBranch = currentBranch.GetName()
+				// Create runner and handler
+				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger, ctx.Interactive)
+				if runner != nil {
+					defer runner.Cleanup()
 				}
 
-				return flatten.FlattenAction(ctx, targetBranch)
+				// Run flatten action
+				return flatten.Action(ctx, flatten.Options{
+					BranchName:  targetBranch,
+					SkipConfirm: yes,
+				}, handler)
 			})
 		},
 	}
 
-	cmd.Flags().StringVar(&branch, "branch", "", "Which branch to run this command from. Defaults to the current branch.")
+	cmd.Flags().StringVar(&branch, "branch", "", "Which branch to flatten from. Defaults to the current branch.")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
 
 	return cmd
 }

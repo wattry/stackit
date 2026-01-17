@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"stackit.dev/stackit/internal/actions/flatten"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
@@ -28,15 +29,15 @@ func TestFlattenAction(t *testing.T) {
 				"C": "B",
 			})
 
-		err := flatten.FlattenAction(s.Context, "C")
+		err := flatten.Action(s.Context, flatten.Options{BranchName: "C"}, nil)
 		require.NoError(t, err)
 
 		s.Rebuild()
-		
+
 		branchA := s.Engine.GetBranch("A")
 		branchB := s.Engine.GetBranch("B")
 		branchC := s.Engine.GetBranch("C")
-		
+
 		require.Equal(t, "main", branchA.GetParent().GetName())
 		require.Equal(t, "main", branchB.GetParent().GetName())
 		require.Equal(t, "main", branchC.GetParent().GetName())
@@ -60,11 +61,11 @@ func TestFlattenAction(t *testing.T) {
 
 		s.Rebuild()
 
-		err := flatten.FlattenAction(s.Context, "B")
+		err := flatten.Action(s.Context, flatten.Options{BranchName: "B"}, nil)
 		require.NoError(t, err)
 
 		s.Rebuild()
-		
+
 		branchA := s.Engine.GetBranch("A")
 		branchB := s.Engine.GetBranch("B")
 
@@ -89,7 +90,7 @@ func TestFlattenAction(t *testing.T) {
 		writeFile(t, s, "A_test.txt", "modified by B")
 		s.RunGit("add", ".")
 		s.RunGit("commit", "-m", "B depends on A")
-		
+
 		// C is on top of B, but only touches C_test.txt (from WithStack)
 		// So C should be able to skip B and A and go to main?
 		// Wait, C starts at B. B depends on A.
@@ -103,17 +104,16 @@ func TestFlattenAction(t *testing.T) {
 
 		s.Rebuild()
 
-		err := flatten.FlattenAction(s.Context, "C")
+		err := flatten.Action(s.Context, flatten.Options{BranchName: "C"}, nil)
 		require.NoError(t, err)
 		if err != nil {
 			t.Logf("Output: %s", s.Output.String())
 			out, _ := s.Scene.Repo.RunGitCommandAndGetOutput("log", "--graph", "--oneline", "--all")
 			t.Logf("Git Log:\n%s", out)
 		}
-		require.NoError(t, err)
 
 		s.Rebuild()
-		
+
 		branchA := s.Engine.GetBranch("A")
 		branchB := s.Engine.GetBranch("B")
 		branchC := s.Engine.GetBranch("C")
@@ -121,5 +121,61 @@ func TestFlattenAction(t *testing.T) {
 		require.Equal(t, "main", branchA.GetParent().GetName())
 		require.Equal(t, "A", branchB.GetParent().GetName())
 		require.Equal(t, "main", branchC.GetParent().GetName())
+	})
+
+	t.Run("handles already flat stack", func(t *testing.T) {
+		// main -> A, main -> B (already flat)
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"A": "main",
+				"B": "main",
+			})
+
+		err := flatten.Action(s.Context, flatten.Options{BranchName: "A"}, nil)
+		require.NoError(t, err)
+
+		s.Rebuild()
+
+		branchA := s.Engine.GetBranch("A")
+		branchB := s.Engine.GetBranch("B")
+
+		// Both should still be on main
+		require.Equal(t, "main", branchA.GetParent().GetName())
+		require.Equal(t, "main", branchB.GetParent().GetName())
+	})
+
+	t.Run("uses current branch when none specified", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"A": "main",
+				"B": "A",
+			})
+
+		s.Checkout("B")
+		s.Rebuild()
+
+		// Empty branch name should use current branch
+		err := flatten.Action(s.Context, flatten.Options{}, nil)
+		require.NoError(t, err)
+
+		s.Rebuild()
+
+		branchA := s.Engine.GetBranch("A")
+		branchB := s.Engine.GetBranch("B")
+
+		require.Equal(t, "main", branchA.GetParent().GetName())
+		require.Equal(t, "main", branchB.GetParent().GetName())
+	})
+
+	t.Run("returns error for untracked branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create an untracked branch
+		s.RunGit("checkout", "-b", "untracked-branch")
+		s.Rebuild()
+
+		err := flatten.Action(s.Context, flatten.Options{BranchName: "untracked-branch"}, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not tracked")
 	})
 }
