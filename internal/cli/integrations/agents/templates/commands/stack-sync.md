@@ -1,6 +1,6 @@
 ---
 description: Sync with trunk, cleanup merged branches, and restack
-allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion
+allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
 
 # Stack Sync
@@ -27,3 +27,26 @@ Sync stack with remote: pull trunk, cleanup merged branches, restack.
 ## Do NOT
 - Skip the dry-run preview
 - Proceed without confirmation if all branches will be deleted
+
+## Follow-up
+
+After successful sync, check if branches remain and use `AskUserQuestion`:
+
+**If branches remain with changes:**
+- Header: "Next step"
+- Question: "Stack synced. What would you like to do next?"
+- Options:
+  - label: "Submit updates (Recommended)"
+    description: "Push rebased branches to update PRs"
+  - label: "View stack"
+    description: "Show current stack state"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+**If all branches were merged/deleted:**
+- End with summary: "All branches have been merged and cleaned up. Your stack is empty."
+
+Based on response:
+- **"Submit updates"**: Invoke `/stack-submit` skill using the `Skill` tool
+- **"View stack"**: Run `command stackit log --no-interactive`
+- **"Done for now"**: End with summary of synced state

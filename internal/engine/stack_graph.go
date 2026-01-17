@@ -190,6 +190,21 @@ func (g *StackGraph) Parent(branch Branch) string {
 	return ""
 }
 
+// IsDescendant returns true if potentialDescendant is a descendant of branch.
+// This is useful for cycle detection when moving branches.
+func (g *StackGraph) IsDescendant(branch Branch, potentialDescendant string) bool {
+	descendants := g.Range(branch, StackRange{
+		RecursiveChildren: true,
+		IncludeCurrent:    false,
+	})
+	for _, d := range descendants {
+		if d.GetName() == potentialDescendant {
+			return true
+		}
+	}
+	return false
+}
+
 // Range returns branches matching the provided StackRange, ordered the same as the legacy
 // GetRelativeStack implementation: ancestors (oldest to nearest), current, then descendants.
 // Descendants are traversed depth-first using the graph's pre-sorted children.

@@ -1,6 +1,6 @@
 ---
 description: Submit branches as PRs with auto-generated descriptions
-allowed-tools: Bash(stackit:*), Bash(git:*), Read
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion, Skill
 argument-hint: [--stack | --draft]
 ---
 
@@ -59,3 +59,21 @@ Report the created/updated PR URLs to the user.
 ## Do NOT
 - Submit if parent branch was deleted (run sync first)
 - Create PRs with placeholder content ("TODO", "TBD", empty sections)
+
+## Follow-up
+
+After successful submit, use `AskUserQuestion`:
+- Header: "Next step"
+- Question: "PRs submitted successfully. What would you like to do next?"
+- Options:
+  - label: "Sync with trunk (Recommended)"
+    description: "Pull latest changes from trunk and update stack"
+  - label: "Check PR status"
+    description: "View full stack status with PR links"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+Based on response:
+- **"Sync with trunk"**: Invoke `/stack-sync` skill using the `Skill` tool
+- **"Check PR status"**: Run `command stackit log full --no-interactive`
+- **"Done for now"**: End with summary including PR URLs from the submit output

@@ -62,6 +62,9 @@ type BranchInfo interface {
 	BatchGetRevisions(branchNames []string) (map[string]string, []error)
 	GetCurrentRevision(ctx context.Context) (string, error)
 	GetReflog(ctx context.Context, count int, format string) (string, error)
+	// GetDivergencePoint returns the divergence point of a branch from its parent.
+	// Returns the ParentBranchRevision from metadata if valid, otherwise the parent's current revision.
+	GetDivergencePoint(branchName string) (string, error)
 }
 
 // GitDiffer handles diff and merge operations
@@ -107,6 +110,11 @@ type BranchTracking interface {
 	TrackBranch(ctx context.Context, branchName string, parentBranchName string) error
 	UntrackBranch(branchName string) error
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
+	// SetParentPreservingDivergence updates a branch's parent while preserving
+	// the divergence point if it remains a valid ancestor. Use this when moving
+	// a branch to a new parent but the commits belonging to the branch haven't changed.
+	// If oldDivergencePoint is empty, behaves identically to SetParent.
+	SetParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
 	SetBranchType(branch Branch, branchType git.BranchType) error

@@ -1,6 +1,6 @@
 ---
 description: Absorb working changes into correct commits with intelligent fix sourcing
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion, Skill
 ---
 
 # Stack Absorb
@@ -157,3 +157,21 @@ If max attempts (2) are reached for a branch, use `AskUserQuestion`:
   - "Undo absorb" - Run `command stackit undo` to rollback
   - "Stop here" - Keep state, I'll fix manually
   - "Skip this branch" - Continue fixing other branches
+
+## Follow-up
+
+After successful absorb (all branches pass), use `AskUserQuestion`:
+- Header: "Next step"
+- Question: "Changes absorbed successfully. What would you like to do next?"
+- Options:
+  - label: "Restack to propagate (Recommended)"
+    description: "Rebase all branches to ensure consistency"
+  - label: "Submit changes"
+    description: "Push absorbed changes to update PRs"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+Based on response:
+- **"Restack to propagate"**: Invoke `/stack-restack` skill using the `Skill` tool
+- **"Submit changes"**: Invoke `/stack-submit` skill using the `Skill` tool
+- **"Done for now"**: End with summary of what was absorbed

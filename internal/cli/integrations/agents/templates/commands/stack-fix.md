@@ -1,6 +1,6 @@
 ---
 description: Diagnose and fix common stack issues
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion, Skill
 ---
 
 # Stack Fix
@@ -210,3 +210,21 @@ If max attempts (2) are reached for an issue, use `AskUserQuestion`:
   - "Try again" - One more attempt
   - "Undo changes" - Rollback to before fix attempts
   - "Stop here" - Keep current state, I'll fix manually
+
+## Follow-up
+
+After all issues are fixed and verification passes, use `AskUserQuestion`:
+- Header: "Next step"
+- Question: "All issues fixed and verified. What would you like to do next?"
+- Options:
+  - label: "Submit updates (Recommended)"
+    description: "Push fixed branches to update PRs"
+  - label: "Restack branches"
+    description: "Rebase all branches to ensure consistency"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+Based on response:
+- **"Submit updates"**: Invoke `/stack-submit` skill using the `Skill` tool
+- **"Restack branches"**: Invoke `/stack-restack` skill using the `Skill` tool
+- **"Done for now"**: End with summary of what was fixed

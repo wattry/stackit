@@ -315,18 +315,15 @@ func buildRebaseSpecsForAll(eng engine.Engine, plan *flattenPlan, branchNames []
 			continue
 		}
 
-		parentName := parent.GetName()
-
 		// Get the old upstream (divergence point)
-		parentBranch := eng.GetBranch(parentName)
-		oldUpstream, err := getOldUpstream(eng, branchName, parentBranch)
+		oldUpstream, err := eng.GetDivergencePoint(branchName)
 		if err != nil {
 			continue
 		}
 
 		// The new parent revision is the tip of the parent branch
 		// (which will be its rebased position after the flatten)
-		newParentRev, err := parentBranch.GetRevision()
+		newParentRev, err := parent.GetRevision()
 		if err != nil {
 			continue
 		}
@@ -449,14 +446,12 @@ func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Bra
 		// Get current parent info
 		origParent := b.GetParent()
 		origParentName := trunk.GetName()
-		origParentBranch := trunk
 		if origParent != nil {
 			origParentName = origParent.GetName()
-			origParentBranch = *origParent
 		}
 
 		// Get the branch's base (divergence point from parent)
-		oldUpstream, err := getOldUpstream(eng, bName, origParentBranch)
+		oldUpstream, err := eng.GetDivergencePoint(bName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get base for %s: %w", bName, err)
 		}
@@ -495,20 +490,6 @@ func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Bra
 	}
 
 	return plan, nil
-}
-
-// getOldUpstream returns the divergence point of the branch from its parent.
-// This is used as the OldUpstream for rebase operations.
-func getOldUpstream(eng engine.Engine, branchName string, parent engine.Branch) (string, error) {
-	// First, try to get from metadata
-	meta, err := eng.Git().ReadMetadata(branchName)
-	if err == nil && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
-		return *meta.ParentBranchRevision, nil
-	}
-
-	// Fall back to parent's current revision (not merge-base, which can include
-	// commits from parent branches if the parent was rebased after this branch was created)
-	return eng.GetRevision(parent)
 }
 
 // findBestParent finds the closest-to-trunk parent that the branch can cleanly rebase onto.

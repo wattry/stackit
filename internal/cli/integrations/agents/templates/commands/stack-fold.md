@@ -1,6 +1,6 @@
 ---
 description: Intelligently fold granular branches into their parents
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion, Skill
 ---
 
 # Stack Fold
@@ -41,3 +41,21 @@ Fold (squash) granular branches into their parent branches.
 - Fold locked or frozen branches
 - Fold across different scopes
 - Fold branches that have children (fold children first)
+
+## Follow-up
+
+After successful fold, use `AskUserQuestion`:
+- Header: "Next step"
+- Question: "Branches folded successfully. What would you like to do next?"
+- Options:
+  - label: "Restack branches (Recommended)"
+    description: "Rebase all branches to ensure consistency after fold"
+  - label: "Submit changes"
+    description: "Push folded changes to update PRs"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+Based on response:
+- **"Restack branches"**: Invoke `/stack-restack` skill using the `Skill` tool
+- **"Submit changes"**: Invoke `/stack-submit` skill using the `Skill` tool
+- **"Done for now"**: End with summary of what was folded

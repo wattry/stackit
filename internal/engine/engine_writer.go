@@ -324,6 +324,26 @@ func (e *engineImpl) SetParent(ctx context.Context, branch Branch, parentBranch 
 	return e.setParentInternal(ctx, branch.GetName(), parentBranch.GetName())
 }
 
+// SetParentPreservingDivergence updates a branch's parent while preserving
+// the divergence point if it remains a valid ancestor. This is useful when
+// moving a branch to a new parent without changing which commits belong to it.
+func (e *engineImpl) SetParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error {
+	if err := e.SetParent(ctx, branch, newParent); err != nil {
+		return err
+	}
+
+	// If we have an old divergence point and it's still a valid ancestor,
+	// restore it to preserve which commits belong to this branch
+	if oldDivergencePoint != "" {
+		isAncestor, err := e.git.IsAncestor(oldDivergencePoint, branch.GetName())
+		if err == nil && isAncestor {
+			return e.UpdateParentRevision(branch.GetName(), oldDivergencePoint)
+		}
+	}
+
+	return nil
+}
+
 // UpdateParentRevision updates the parent revision in metadata
 func (e *engineImpl) UpdateParentRevision(branchName string, parentRev string) error {
 	e.mu.Lock()
