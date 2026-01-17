@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
+	stackitgithub "stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -18,26 +19,21 @@ const (
 )
 
 // TestSyncDiamondStackParentPreservation tests that when syncing a diamond-shaped stack,
-// branch parents are not incorrectly changed based on stale GitHub PR base information.
+// local parent relationships are preserved and pushed to GitHub (local is authoritative).
 //
-// BUG SCENARIO:
+// PREVIOUS BUG SCENARIO (now fixed):
 //  1. Create diamond: main -> branch-a -> [branch-b, branch-c]
 //  2. Submit PRs (creates PRs with correct bases)
 //  3. Modify branch-a
 //  4. Submit again - BUT the PR base update for branch-c fails silently
-//     (can happen due to "no commits between base and head" check in updatePullRequestQuiet)
-//  5. Sync runs SyncPrInfo which fetches PR info from GitHub
-//  6. GitHub's PR info for branch-c has stale base "main" (should be "branch-a")
-//  7. SyncParentsFromGitHubBase trusts GitHub and reparents branch-c to main
-//  8. BUG: branch-c is now incorrectly parented to main, breaking the stack!
-//
-// This test verifies that the bug exists (test fails when bug is present).
-// Once fixed, this test should pass, ensuring correct behavior.
+//  5. GitHub's PR info for branch-c has stale base "main" (should be "branch-a")
+//  6. Old behavior: SyncParentsFromGitHubBase trusted GitHub and reparented branch-c to main
+//  7. New behavior: PushParentsToGitHub pushes local parent to GitHub (local is authoritative)
 func TestSyncDiamondStackParentPreservation(t *testing.T) {
 	// Set dummy GITHUB_TOKEN to avoid calling 'gh auth token' and triggering credentials prompts
 	t.Setenv("GITHUB_TOKEN", "dummy")
 
-	t.Run("BUG: sync incorrectly reparents branch when GitHub has stale base info", func(t *testing.T) {
+	t.Run("sync preserves local parent and pushes to GitHub when GitHub has stale base", func(t *testing.T) {
 		// Setup scenario with diamond structure
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
@@ -53,7 +49,6 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		// branch-a has its own commit.
 		// branch-b has its own commit.
 		// branch-c is EMPTY relative to branch-a (at the same commit).
-		// This is the common case where 'submit' skips the PR base update.
 		s.CreateBranch("branch-a").
 			CommitChange("file-a", "branch-a initial commit").
 			TrackBranch("branch-a", "main")
@@ -80,7 +75,6 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		mockConfig.Repo = testRepo
 
 		// Simulate stale PRs where branch-c has wrong base (main instead of branch-a)
-		// This can happen if the PR base update failed silently during submit
 		prNumber1 := 1
 		prNumber2 := 2
 		prNumber3 := 3
@@ -101,7 +95,6 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 			HTMLURL: github.String("https://github.com/owner/repo/pull/2"),
 		}
 		// STALE: branch-c shows main as base instead of branch-a
-		// This simulates a failed base update on GitHub
 		mockConfig.PRs["branch-c"] = &github.PullRequest{
 			Number:  &prNumber3,
 			Title:   github.String("Branch C PR"),
@@ -116,52 +109,44 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		mockClient := testhelpers.NewMockGitHubClientInterface(client, owner, repo, mockConfig)
 		s.Context.GitHubClient = mockClient
 
-		// Store PR info in local metadata simulating what SyncPrInfo would write
-		// from GitHub. The key insight is: if SyncPrInfo fetches stale info from GitHub,
-		// it writes that stale base into local metadata. Then SyncParentsFromGitHubBase
-		// reads it and reparents the local branch.
-		//
-		// SIMULATE STALE SYNC: Store PR info with the WRONG base for branch-c
-		// This mimics what happens when GitHub has stale base info
-		storeLocalPRInfo(t, s.Engine, "branch-a", 1, "main")
-		storeLocalPRInfo(t, s.Engine, "branch-b", 2, "branch-a")
-		storeLocalPRInfo(t, s.Engine, "branch-c", 3, "main") // STALE: Should be branch-a, but GitHub says main!
-
 		// Checkout to branch-c before sync
 		s.Checkout("branch-c")
 
-		// Now call SyncParentsFromGitHubBase directly to test if it incorrectly reparents
-		// based on the stale PR info we stored
-		syncResult, err := ParentsFromGitHubBase(s.Context, nil)
+		// Call PushParentsToGitHub - this should push local parent (branch-a) to GitHub
+		// and NOT modify local parent based on GitHub's stale base
+		githubResult := &GitHubSyncResult{
+			BranchNames: []string{"branch-a", "branch-b", "branch-c"},
+			RepoOwner:   testOwner,
+			RepoName:    testRepo,
+			PRInfos: map[string]*stackitgithub.PullRequestInfo{
+				"branch-a": {Number: prNumber1, Base: "main", State: "open"},
+				"branch-b": {Number: prNumber2, Base: "branch-a", State: "open"},
+				"branch-c": {Number: prNumber3, Base: "main", State: "open"}, // STALE
+			},
+		}
+
+		syncResult, err := PushParentsToGitHub(s.Context, githubResult, nil)
 		require.NoError(t, err)
 
-		// Rebuild engine to pick up any changes
+		// Verify that branch-c's PR base was updated on GitHub
+		t.Logf("Branches with PR base updated on GitHub: %v", syncResult.BranchesUpdated)
+		require.Contains(t, syncResult.BranchesUpdated, "branch-c", "branch-c should have its PR base updated on GitHub")
+
+		// Rebuild engine
 		err = s.Engine.Rebuild("main")
 		require.NoError(t, err)
 
-		// Check what SyncParentsFromGitHubBase did
-		t.Logf("Branches reparented by SyncParentsFromGitHubBase: %v", syncResult.BranchesReparented)
-
-		// Get the current parent of branch-c
+		// CRITICAL: Local parent should be PRESERVED (not changed by sync)
 		branchC := s.Engine.GetBranch("branch-c")
 		parentC := branchC.GetParent()
+		require.NotNil(t, parentC)
+		require.Equal(t, "branch-a", parentC.GetName(), "branch-c local parent should remain branch-a")
 
-		// CRITICAL: The bug would cause branch-c to be reparented to main!
-		// If this assertion fails, the bug exists.
-		if parentC != nil {
-			t.Logf("After SyncParentsFromGitHubBase, branch-c parent is: %s", parentC.GetName())
-			if parentC.GetName() == "main" {
-				t.Errorf("BUG CONFIRMED: branch-c was incorrectly reparented to 'main' instead of keeping 'branch-a'")
-			}
-		} else {
-			t.Errorf("branch-c has no parent after sync!")
-		}
-
-		// Verify the expected structure (branch-c should keep branch-a as parent)
+		// Verify the expected structure is preserved
 		s.ExpectStackStructure(map[string]string{
 			"branch-a": "main",
 			"branch-b": "branch-a",
-			"branch-c": "branch-a", // This MUST remain branch-a, not main!
+			"branch-c": "branch-a", // Local parent preserved!
 		})
 	})
 
@@ -279,10 +264,11 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		})
 	})
 
-	t.Run("SyncParentsFromGitHubBase prefers local parent when GitHub base is an ancestor", func(t *testing.T) {
-		// This test verifies that we PRESERVE the local stack structure even if
-		// GitHub's PR base is different, as long as GitHub's base is just a
-		// more distant ancestor (like main) of our current specific parent.
+	t.Run("sync pushes local parent to GitHub when GitHub base differs", func(t *testing.T) {
+		// This test verifies that local parent is authoritative:
+		// - Local parent is branch-a
+		// - GitHub PR base is main (stale/different)
+		// - Sync should push local parent to GitHub, not change local
 
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
@@ -316,12 +302,12 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 			State:   github.String("open"),
 			HTMLURL: github.String("https://github.com/owner/repo/pull/1"),
 		}
-		// GitHub says branch-b base is main (simulating stale or generic info on GitHub)
+		// GitHub says branch-b base is main (stale)
 		mockConfig.PRs["branch-b"] = &github.PullRequest{
 			Number:  &prNumber2,
 			Title:   github.String("Branch B PR"),
 			Head:    &github.PullRequestBranch{Ref: github.String("branch-b")},
-			Base:    &github.PullRequestBranch{Ref: github.String("main")}, // Generic base on GitHub
+			Base:    &github.PullRequestBranch{Ref: github.String("main")}, // Stale base on GitHub
 			State:   github.String("open"),
 			HTMLURL: github.String("https://github.com/owner/repo/pull/2"),
 		}
@@ -330,22 +316,15 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		mockClient := testhelpers.NewMockGitHubClientInterface(client, owner, repo, mockConfig)
 		s.Context.GitHubClient = mockClient
 
-		// Store local PR info with generic base from GitHub
-		storeLocalPRInfo(t, s.Engine, "branch-a", 1, "main")
-		storeLocalPRInfo(t, s.Engine, "branch-b", 2, "main") // Local cache says main (from sync)
-
 		s.Checkout("branch-b")
 
-		// Before sync, set local structure to be specific
-		err = s.Engine.SetParent(context.Background(), s.Engine.GetBranch("branch-b"), s.Engine.GetBranch("branch-a"))
-		require.NoError(t, err)
-
+		// Verify initial structure (local parent is branch-a)
 		s.ExpectStackStructure(map[string]string{
 			"branch-a": "main",
 			"branch-b": "branch-a",
 		})
 
-		// Sync - should PRESERVE branch-a as parent because main is its ancestor
+		// Sync - should PRESERVE branch-a as local parent and push to GitHub
 		err = Action(s.Context, Options{
 			All:     false,
 			Force:   false,
@@ -357,12 +336,11 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 		err = s.Engine.Rebuild("main")
 		require.NoError(t, err)
 
-		// VERIFICATION: branch-b should now be parented to main because it has its
-		// own commits, so the move to an ancestor on GitHub is treated as intentional.
+		// VERIFICATION: Local parent should be PRESERVED (branch-a, not changed to main)
 		branchB := s.Engine.GetBranch("branch-b")
 		parent := branchB.GetParent()
 		require.NotNil(t, parent)
-		require.Equal(t, "main", parent.GetName(), "branch-b should be reparented to main because it has its own commits")
+		require.Equal(t, "branch-a", parent.GetName(), "branch-b local parent should remain branch-a (local is authoritative)")
 	})
 }
 
