@@ -568,6 +568,42 @@ type PRMetadata struct {
 	URL    string
 }
 
+// ExpectNeedsPRBodyUpdate asserts a branch has (or doesn't have) the NeedsPRBodyUpdate flag set.
+func (s *TestShell) ExpectNeedsPRBodyUpdate(branch string, expected bool) *TestShell {
+	s.t.Helper()
+
+	// Read local metadata
+	refName := "refs/stackit/local-metadata/" + branch
+	cmd := exec.Command("git", "show-ref", "-s", refName)
+	cmd.Dir = s.scene.Dir
+	shaOutput, err := cmd.Output()
+
+	if err != nil {
+		// No local metadata exists - flag is not set
+		if expected {
+			s.t.Errorf("branch %s: expected NeedsPRBodyUpdate=true but no local metadata exists", branch)
+		}
+		return s
+	}
+
+	sha := strings.TrimSpace(string(shaOutput))
+	cmd = exec.Command("git", "cat-file", "-p", sha)
+	cmd.Dir = s.scene.Dir
+	blobOutput, err := cmd.Output()
+	require.NoError(s.t, err, "failed to read local metadata blob for %s", branch)
+
+	var meta struct {
+		NeedsPRBodyUpdate bool `json:"needsPRBodyUpdate"`
+	}
+	err = json.Unmarshal(blobOutput, &meta)
+	require.NoError(s.t, err, "failed to parse local metadata for %s", branch)
+
+	require.Equal(s.t, expected, meta.NeedsPRBodyUpdate,
+		"branch %s: expected NeedsPRBodyUpdate=%v, got %v", branch, expected, meta.NeedsPRBodyUpdate)
+
+	return s
+}
+
 // SetPrMetadata sets full PR metadata for a branch.
 func (s *TestShell) SetPrMetadata(branch string, pr PRMetadata) *TestShell {
 	s.t.Helper()

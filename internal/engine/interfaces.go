@@ -120,6 +120,13 @@ type BranchTracking interface {
 	SetBranchType(branch Branch, branchType git.BranchType) error
 	SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error)
 	SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error)
+
+	// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
+	MarkNeedsPRBodyUpdate(branchName string) error
+	// ClearNeedsPRBodyUpdate clears the PR body update flag for a branch
+	ClearNeedsPRBodyUpdate(branchName string) error
+	// GetBranchesNeedingPRBodyUpdate returns all branches that need PR body updates
+	GetBranchesNeedingPRBodyUpdate() []string
 }
 
 // BranchMutations handles branch lifecycle operations

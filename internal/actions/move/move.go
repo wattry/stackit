@@ -251,6 +251,17 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return fmt.Errorf("failed to restack branches: %w", err)
 	}
 
+	// Mark affected branches as needing PR body update during next sync
+	affectedBranches := []string{source}
+	if oldParentName != eng.Trunk().GetName() {
+		affectedBranches = append(affectedBranches, oldParentName)
+	}
+	for _, branchName := range affectedBranches {
+		if err := eng.MarkNeedsPRBodyUpdate(branchName); err != nil {
+			out.Debug("Failed to mark %s for PR body update: %v", branchName, err)
+		}
+	}
+
 	newName := ""
 	if renamed {
 		newName = source

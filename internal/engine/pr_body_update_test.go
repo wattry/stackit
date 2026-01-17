@@ -1,0 +1,129 @@
+package engine_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"stackit.dev/stackit/testhelpers"
+	"stackit.dev/stackit/testhelpers/scenario"
+)
+
+func TestPRBodyUpdateTracking(t *testing.T) {
+	t.Run("marks branch as needing PR body update", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature").
+			Commit("f1").
+			TrackBranch("feature", "main")
+
+		eng := s.Engine
+
+		// Initially no branches need update
+		needsUpdate := eng.GetBranchesNeedingPRBodyUpdate()
+		require.Empty(t, needsUpdate)
+
+		// Mark branch as needing update
+		err := eng.MarkNeedsPRBodyUpdate("feature")
+		require.NoError(t, err)
+
+		// Now it should be in the list
+		needsUpdate = eng.GetBranchesNeedingPRBodyUpdate()
+		require.Contains(t, needsUpdate, "feature")
+	})
+
+	t.Run("clears PR body update flag", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature").
+			Commit("f1").
+			TrackBranch("feature", "main")
+
+		eng := s.Engine
+
+		// Mark and then clear
+		err := eng.MarkNeedsPRBodyUpdate("feature")
+		require.NoError(t, err)
+
+		err = eng.ClearNeedsPRBodyUpdate("feature")
+		require.NoError(t, err)
+
+		// Should no longer need update
+		needsUpdate := eng.GetBranchesNeedingPRBodyUpdate()
+		require.NotContains(t, needsUpdate, "feature")
+	})
+
+	t.Run("clear is idempotent for non-marked branches", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature").
+			Commit("f1").
+			TrackBranch("feature", "main")
+
+		eng := s.Engine
+
+		// Clear without marking should not error
+		err := eng.ClearNeedsPRBodyUpdate("feature")
+		require.NoError(t, err)
+	})
+
+	t.Run("persists across engine rebuild", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature").
+			Commit("f1").
+			TrackBranch("feature", "main")
+
+		eng := s.Engine
+
+		// Mark branch
+		err := eng.MarkNeedsPRBodyUpdate("feature")
+		require.NoError(t, err)
+
+		// Rebuild engine to simulate fresh state
+		err = eng.Rebuild("main")
+		require.NoError(t, err)
+
+		// Should still need update
+		needsUpdate := eng.GetBranchesNeedingPRBodyUpdate()
+		require.Contains(t, needsUpdate, "feature")
+	})
+
+	t.Run("tracks multiple branches independently", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main").
+			Checkout("main").
+			CreateBranch("feature-b").
+			Commit("b1").
+			TrackBranch("feature-b", "main")
+
+		eng := s.Engine
+
+		// Mark only feature-a
+		err := eng.MarkNeedsPRBodyUpdate("feature-a")
+		require.NoError(t, err)
+
+		needsUpdate := eng.GetBranchesNeedingPRBodyUpdate()
+		require.Contains(t, needsUpdate, "feature-a")
+		require.NotContains(t, needsUpdate, "feature-b")
+
+		// Mark feature-b too
+		err = eng.MarkNeedsPRBodyUpdate("feature-b")
+		require.NoError(t, err)
+
+		needsUpdate = eng.GetBranchesNeedingPRBodyUpdate()
+		require.Contains(t, needsUpdate, "feature-a")
+		require.Contains(t, needsUpdate, "feature-b")
+
+		// Clear only feature-a
+		err = eng.ClearNeedsPRBodyUpdate("feature-a")
+		require.NoError(t, err)
+
+		needsUpdate = eng.GetBranchesNeedingPRBodyUpdate()
+		require.NotContains(t, needsUpdate, "feature-a")
+		require.Contains(t, needsUpdate, "feature-b")
+	})
+}
