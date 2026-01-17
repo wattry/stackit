@@ -1,0 +1,8 @@
+  ◉ feature-login [AUTH]
+  │
+  ◯ feature-auth-base [AUTH]
+  │
+  │  ◯ feature-api [API]
+  │  │
+  ├──┘
+  ◯ main

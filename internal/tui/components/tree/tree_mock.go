@@ -1,30 +1,36 @@
 package tree
 
 // MockTreeData provides test data for tree rendering.
-// It is exported to be used in both tests and the TUI storyboard.
+// It implements the TreeData interface and is exported to be used
+// in both tests and the TUI storyboard.
 type MockTreeData struct {
-	CurrentBranch string
-	Trunk         string
-	Children      map[string][]string
-	Parents       map[string]string
-	Fixed         map[string]bool
+	// CurrentVal is the current branch name
+	CurrentVal string
+	// TrunkVal is the trunk branch name
+	TrunkVal string
+	// ChildrenMap maps branch name to child branch names
+	ChildrenMap map[string][]string
+	// ParentsMap maps branch name to parent branch name
+	ParentsMap map[string]string
+	// FixedMap maps branch name to whether it's fixed (up-to-date)
+	FixedMap map[string]bool
 }
 
 // NewMockTreeData creates a new MockTreeData with sample data.
 func NewMockTreeData() *MockTreeData {
 	return &MockTreeData{
-		CurrentBranch: "feature-2",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-2",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":      {"feature-1"},
 			"feature-1": {"feature-2"},
 			"feature-2": {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-1": "main",
 			"feature-2": "feature-1",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":      true,
 			"feature-1": true,
 			"feature-2": true,
@@ -32,22 +38,54 @@ func NewMockTreeData() *MockTreeData {
 	}
 }
 
+// TreeData interface implementation
+
+// CurrentBranch implements TreeData.CurrentBranch
+func (m *MockTreeData) CurrentBranch() string {
+	return m.CurrentVal
+}
+
+// Trunk implements TreeData.Trunk
+func (m *MockTreeData) Trunk() string {
+	return m.TrunkVal
+}
+
+// Children implements TreeData.Children
+func (m *MockTreeData) Children(branchName string) []string {
+	return m.ChildrenMap[branchName]
+}
+
+// Parent implements TreeData.Parent
+func (m *MockTreeData) Parent(branchName string) string {
+	return m.ParentsMap[branchName]
+}
+
+// IsTrunk implements TreeData.IsTrunk
+func (m *MockTreeData) IsTrunk(branchName string) bool {
+	return branchName == m.TrunkVal
+}
+
+// IsFixed implements TreeData.IsFixed
+func (m *MockTreeData) IsFixed(branchName string) bool {
+	return m.FixedMap[branchName]
+}
+
+// Deprecated method aliases for backwards compatibility with existing tests
+
 // GetChildren returns the children of a branch.
+// Deprecated: Use Children instead.
 func (m *MockTreeData) GetChildren(branchName string) []string {
-	return m.Children[branchName]
+	return m.Children(branchName)
 }
 
 // GetParent returns the parent of a branch.
+// Deprecated: Use Parent instead.
 func (m *MockTreeData) GetParent(branchName string) string {
-	return m.Parents[branchName]
-}
-
-// IsTrunk returns whether a branch is the trunk.
-func (m *MockTreeData) IsTrunk(branchName string) bool {
-	return branchName == m.Trunk
+	return m.Parent(branchName)
 }
 
 // IsBranchFixed returns whether a branch is fixed.
+// Deprecated: Use IsFixed instead.
 func (m *MockTreeData) IsBranchFixed(branchName string) bool {
-	return m.Fixed[branchName]
+	return m.IsFixed(branchName)
 }

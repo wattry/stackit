@@ -3,15 +3,11 @@ package split
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/AlecAivazis/survey/v2"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // Style specifies the split mode
@@ -47,6 +43,9 @@ type Options struct {
 	// UseWizard enables the new wizard-based interactive flow.
 	// When true, the wizard will guide through type/direction selection.
 	UseWizard bool
+	// HunkSelector specifies which hunk selection method to use ("tui" or "git").
+	// Only applies to StyleHunk. When "git", uses git add -p instead of the TUI selector.
+	HunkSelector string
 }
 
 // Result contains the result of a split operation
@@ -71,8 +70,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if opts.UseWizard {
 		if interactiveHandler, ok := handler.(InteractiveHandler); ok && interactiveHandler.IsInteractive() {
 			return RunWizard(ctx, interactiveHandler, WizardOptions{
-				Style:     opts.Style,
-				Direction: opts.Direction,
+				Style:        opts.Style,
+				Direction:    opts.Direction,
+				HunkSelector: opts.HunkSelector,
 			})
 		}
 		// Fall back to standard flow if handler doesn't support interactive
@@ -124,34 +124,19 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 
 		if len(commits) > 1 {
-			if !utils.IsInteractive() {
-				return fmt.Errorf("split style must be specified in non-interactive mode")
-			}
-			// Prompt for style
-			var styleStr string
-			prompt := &survey.Select{
-				Message: fmt.Sprintf("How would you like to split %s?", currentBranch.GetName()),
-				Options: []string{
-					"By commit - slice up the history of this branch",
-					"By hunk - split into new single-commit branches",
-					"By file - extract specific files into a new parent branch",
-					"Cancel",
-				},
-			}
-			if err := survey.AskOne(prompt, &styleStr); err != nil {
-				return fmt.Errorf("canceled")
+			// Need interactive prompt to choose split type
+			interactiveHandler, isInteractive := handler.(InteractiveHandler)
+			if !isInteractive || !interactiveHandler.IsInteractive() {
+				return fmt.Errorf("split style must be specified in non-interactive mode (use --by-commit, --by-hunk, or --by-file)")
 			}
 
-			switch {
-			case strings.Contains(styleStr, "Cancel"):
-				return fmt.Errorf("canceled")
-			case strings.Contains(styleStr, "commit"):
-				style = StyleCommit
-			case strings.Contains(styleStr, "hunk"):
-				style = StyleHunk
-			case strings.Contains(styleStr, "file"):
-				style = StyleFile
+			// Build type choices based on commit count
+			availableTypes := buildTypeChoices(true)
+			selectedStyle, err := interactiveHandler.PromptSplitType(availableTypes)
+			if err != nil {
+				return err
 			}
+			style = selectedStyle
 		} else {
 			// Only one commit, default to hunk
 			style = StyleHunk
@@ -180,7 +165,18 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	case StyleCommit:
 		result, err = splitByCommit(ctx, currentBranch.GetName(), eng, out, opts.BranchPattern)
 	case StyleHunk:
-		result, err = splitByHunk(context, *currentBranch, eng, out)
+		// Hunk split requires an interactive handler
+		interactiveHandler, isInteractive := handler.(InteractiveHandler)
+		if !isInteractive || !interactiveHandler.IsInteractive() {
+			return fmt.Errorf("hunk split requires interactive mode")
+		}
+		// Use provided direction or default to below
+		direction := opts.Direction
+		if direction == "" {
+			direction = DirectionBelow
+		}
+		useGitAddP := opts.HunkSelector == "git"
+		return splitByHunkWithHandler(ctx, *currentBranch, eng, out, interactiveHandler, direction, useGitAddP)
 	case StyleFile:
 		pathspecs := opts.Pathspecs
 		// If no pathspecs provided, prompt interactively
@@ -246,6 +242,8 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		BranchPoints:  result.BranchPoints,
 		AsSibling:     opts.AsSibling,
 	}); err != nil {
+		// Restore to original branch to avoid leaving user in detached HEAD
+		_ = eng.ForceCheckoutBranch(context, *currentBranch)
 		return fmt.Errorf("failed to apply split: %w", err)
 	}
 

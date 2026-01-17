@@ -108,6 +108,8 @@ func newConfigGetCmd() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), basePath)
 			case "worktree.autoClean":
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.WorktreeAutoClean())
+			case "split.hunkSelector":
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.SplitHunkSelector())
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
@@ -191,6 +193,14 @@ func newConfigSetCmd() *cobra.Command {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
 				splog.Info("Set worktree.autoClean to: %v", enabled)
+			case "split.hunkSelector":
+				if err := cfg.SetSplitHunkSelector(value); err != nil {
+					return fmt.Errorf("failed to set split.hunkSelector: %w", err)
+				}
+				if err := cfg.Save(); err != nil {
+					return fmt.Errorf("failed to save config: %w", err)
+				}
+				splog.Info("Set split.hunkSelector to: %s", value)
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}

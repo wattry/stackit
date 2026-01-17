@@ -1,6 +1,6 @@
 ---
 description: Apply actionable PR review comments and mark them resolved
-allowed-tools: Bash(gh:*), Bash(stackit:*), Bash(git:*), Read, Edit, Grep, Glob, Task
+allowed-tools: Bash(gh:*), Bash(stackit:*), Bash(git:*), Read, Edit, Grep, Glob, Task, AskUserQuestion
 argument-hint: [--dry-run]
 ---
 
@@ -125,6 +125,14 @@ For each unresolved thread, examine the code from the cached file content.
 
 **Be conservative:** When in doubt, skip the comment rather than make an incorrect change.
 
+**When truly uncertain about actionability**, use `AskUserQuestion`:
+- Header: "Review comment"
+- Question: "I'm unsure how to handle this comment: '<short excerpt>'. What should I do?"
+- Options:
+  - "Apply it" - Treat as actionable, apply the change
+  - "Skip it" - Mark as not actionable
+  - "Show context" - Read surrounding code first
+
 ### Step 7: Apply Changes (or Dry Run)
 
 **If `--dry-run` is specified:**
@@ -132,6 +140,14 @@ For each unresolved thread, examine the code from the cached file content.
 - Do NOT modify any files
 - Do NOT resolve any threads
 - Stop here
+
+**If many actionable comments (5+)**, use `AskUserQuestion`:
+- Header: "Apply changes"
+- Question: "Ready to apply N changes from review comments?"
+- Options:
+  - "Apply all" - Proceed with all changes
+  - "Show summary" - List changes before applying
+  - "Dry run first" - Preview changes without modifying files
 
 **Otherwise, for each actionable comment:**
 

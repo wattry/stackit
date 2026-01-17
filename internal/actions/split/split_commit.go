@@ -3,12 +3,11 @@ package split
 import (
 	"fmt"
 
-	"github.com/AlecAivazis/survey/v2"
-
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -160,27 +159,32 @@ func selectSplitPoint(readableCommits []string, branchToSplit string) (int, erro
 		}
 	}
 
-	var selected string
-	prompt := &survey.Select{
-		Message: fmt.Sprintf("Select where to split %s (commits above the line stay):", style.ColorBranchName(branchToSplit, true)),
-		Options: choices,
-	}
-	if err := survey.AskOne(prompt, &selected); err != nil {
-		return 0, fmt.Errorf("canceled")
-	}
-
-	// Find the selected split point
+	// Build options for tui.PromptSelect
+	var options []tui.SelectOption
 	for i, choice := range choices {
-		if choice == selected {
-			if splitPoint, ok := splitLineIndices[i]; ok {
-				return splitPoint, nil
-			}
-			// User selected a commit line, not a split line - treat as invalid
-			return 0, fmt.Errorf("please select a split line, not a commit")
+		if splitPoint, ok := splitLineIndices[i]; ok {
+			// This is a split line - selectable
+			options = append(options, tui.SelectOption{
+				Label: choice,
+				Value: fmt.Sprintf("%d", splitPoint),
+			})
 		}
+		// Skip commit lines - they're not selectable options
 	}
 
-	return 0, fmt.Errorf("invalid selection")
+	title := fmt.Sprintf("Select where to split %s (commits above the line stay):", style.ColorBranchName(branchToSplit, true))
+	selected, err := tui.PromptSelect(title, options, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	// Parse the split point from the selected value
+	var splitPoint int
+	if _, err := fmt.Sscanf(selected, "%d", &splitPoint); err != nil {
+		return 0, fmt.Errorf("invalid selection")
+	}
+
+	return splitPoint, nil
 }
 
 // groupRemainingCommits iteratively groups commits into branches.
@@ -300,27 +304,31 @@ func selectGroupSize(readableCommits []string) (int, error) {
 		}
 	}
 
-	var selected string
-	prompt := &survey.Select{
-		Message: "Select commits for the next new branch:",
-		Options: choices,
-	}
-	if err := survey.AskOne(prompt, &selected); err != nil {
-		return 0, fmt.Errorf("canceled")
-	}
-
-	// Find the selected size
+	// Build options for tui.PromptSelect
+	var options []tui.SelectOption
 	for i, choice := range choices {
-		if choice == selected {
-			if size, ok := sizeByIndex[i]; ok {
-				return size, nil
-			}
-			// User selected a commit line - invalid
-			return 0, fmt.Errorf("please select a split line, not a commit")
+		if size, ok := sizeByIndex[i]; ok {
+			// This is a split line - selectable
+			options = append(options, tui.SelectOption{
+				Label: choice,
+				Value: fmt.Sprintf("%d", size),
+			})
 		}
+		// Skip commit lines - they're not selectable options
 	}
 
-	return 0, fmt.Errorf("invalid selection")
+	selected, err := tui.PromptSelect("Select commits for the next new branch:", options, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	// Parse the group size from the selected value
+	var size int
+	if _, err := fmt.Sscanf(selected, "%d", &size); err != nil {
+		return 0, fmt.Errorf("invalid selection")
+	}
+
+	return size, nil
 }
 
 // deriveBranchName generates a branch name from a commit subject using the branch pattern.

@@ -1,6 +1,6 @@
 ---
 description: Absorb working changes into correct commits with intelligent fix sourcing
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion
 ---
 
 # Stack Absorb
@@ -41,7 +41,12 @@ Save this information - you'll need it to find fixes.
 **Determine the project's build command:**
 1. Check README.md or CONTRIBUTING.md for build/test instructions
 2. Look for common build files (Makefile, package.json scripts, etc.)
-3. If not found, ask the user what command to use
+3. If not found, use `AskUserQuestion`:
+   - Header: "Build command"
+   - Question: "What command verifies the build?"
+   - Options:
+     - "Skip verification" - Don't verify after absorb
+     - "Let me specify" - I'll provide the command
 
 ```bash
 command stackit bottom --no-interactive
@@ -141,4 +146,14 @@ All branches pass!
 - Skip the JSON analysis (it tells you where to find fixes)
 - Apply fixes to multiple branches manually (fix at source, restack propagates)
 - Leave broken builds
-- Loop indefinitely on fixes (max 2 attempts per branch, then suggest undo)
+- Loop indefinitely on fixes (max 2 attempts per branch)
+
+## Max Attempts Recovery
+
+If max attempts (2) are reached for a branch, use `AskUserQuestion`:
+- Header: "Fix attempts"
+- Question: "Unable to fix after 2 attempts on this branch. How should I proceed?"
+- Options:
+  - "Undo absorb" - Run `command stackit undo` to rollback
+  - "Stop here" - Keep state, I'll fix manually
+  - "Skip this branch" - Continue fixing other branches

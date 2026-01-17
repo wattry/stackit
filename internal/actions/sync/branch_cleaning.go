@@ -73,11 +73,33 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 	// Phase 2: Get user confirmation for deletions (interactive mode only)
 	var branchesToDelete map[string]bool
 	if handler.IsInteractive() && len(plan.BranchesToDelete) > 0 {
-		confirmed, err := handler.PromptBranchDeletions(plan.BranchesToDelete)
-		if err != nil {
-			return nil, err
+		// Auto-confirm utility branches (e.g., consolidated merge branches)
+		// These don't need user confirmation since their PRs are already closed/merged
+		branchesToDelete = make(map[string]bool)
+		branchesToPrompt := make(map[string]string)
+
+		for name, reason := range plan.BranchesToDelete {
+			if plan.UtilityBranches[name] {
+				// Utility branch - auto-confirm without prompting
+				branchesToDelete[name] = true
+				ctx.Output.Info("Auto-deleting utility branch %s (%s)",
+					style.ColorBranchName(name, false), reason)
+			} else {
+				// Regular branch - add to prompt list
+				branchesToPrompt[name] = reason
+			}
 		}
-		branchesToDelete = confirmed
+
+		// Prompt user for non-utility branches only
+		if len(branchesToPrompt) > 0 {
+			confirmed, err := handler.PromptBranchDeletions(branchesToPrompt)
+			if err != nil {
+				return nil, err
+			}
+			for name, shouldDelete := range confirmed {
+				branchesToDelete[name] = shouldDelete
+			}
+		}
 	}
 
 	// Phase 3: Execute deletions

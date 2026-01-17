@@ -8,6 +8,7 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -123,8 +124,21 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		oldParentName = oldParent.GetName()
 	}
 
+	// Capture old divergence point to preserve it after reparenting
+	// This ensures we only move the commits that belong to this branch.
+	var oldParentRev string
+	if meta, err := eng.Git().ReadMetadata(source); err == nil && meta.ParentBranchRevision != nil {
+		oldParentRev = *meta.ParentBranchRevision
+	}
+
+	// Build rebase specs for validation (needed for both preview conflict detection and actual move)
+	rebaseSpecs := BuildRebaseSpecs(eng, out, source, onto, oldParent, oldParentRev, descendants)
+
 	// Prompt for confirmation in interactive mode (unless --yes flag is set)
 	if handler.IsInteractive() && !opts.SkipConfirm {
+		// Validate rebases BEFORE showing preview so user can see conflict info
+		validation, validationErr := eng.ValidateRebases(gctx, rebaseSpecs)
+
 		// Get commits that will be moved
 		commits, _ := eng.GetAllCommits(sourceBranch, engine.CommitFormatSubject)
 
@@ -144,6 +158,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			Descendants:  descendantNames,
 		}
 
+		// Add conflict info to preview if validation succeeded (even if there are conflicts)
+		if validationErr == nil && !validation.Success {
+			preview.HasConflicts = true
+			preview.ConflictBranch = validation.FailedBranch
+			preview.ConflictError = validation.ErrorMessage
+		}
+
 		confirmed, err := handler.PromptConfirmMove(preview)
 		if err != nil {
 			return fmt.Errorf("failed to prompt for confirmation: %w", err)
@@ -152,6 +173,29 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			out.Info("Move canceled.")
 			return nil
 		}
+
+		// If validation itself failed (not conflicts, but actual error), return error now
+		if validationErr != nil {
+			return fmt.Errorf("failed to validate rebases: %w", validationErr)
+		}
+
+		// If there are conflicts, return error after user has seen the preview
+		if preview.HasConflicts {
+			return fmt.Errorf("move would cause conflicts: %s on branch %s", preview.ConflictError, preview.ConflictBranch)
+		}
+	} else {
+		// Non-interactive mode: validate and fail immediately if there are conflicts
+		handler.OnStep(StepValidating, StatusStarted, "Validating rebases...")
+		validation, err := eng.ValidateRebases(gctx, rebaseSpecs)
+		if err != nil {
+			handler.OnStep(StepValidating, StatusFailed, err.Error())
+			return fmt.Errorf("failed to validate rebases: %w", err)
+		}
+		if !validation.Success {
+			handler.OnStep(StepValidating, StatusFailed, validation.ErrorMessage)
+			return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
+		}
+		handler.OnStep(StepValidating, StatusCompleted, "Validation passed")
 	}
 
 	// Check for scope change and potential rename
@@ -176,21 +220,71 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 	}
 
-	// Capture old divergence point to preserve it after reparenting
-	// This ensures we only move the commits that belong to this branch.
-	var oldParentRev string
-	if meta, err := eng.Git().ReadMetadata(source); err == nil && meta.ParentBranchRevision != nil {
-		oldParentRev = *meta.ParentBranchRevision
+	// Start handler with branch info (oldParentName computed earlier for preview)
+	handler.Start(source, oldParentName, onto)
+
+	// Update parent in engine
+	if err := eng.SetParent(gctx, sourceBranch, ontoBranch); err != nil {
+		return fmt.Errorf("failed to set parent: %w", err)
 	}
 
-	// Build rebase specs for validation
-	// We need to validate that all rebases will succeed before modifying any state
+	// Rebuild graph after parent change for downstream traversals
+	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
+	// Restore old divergence point if it's still a valid ancestor
+	if oldParentRev != "" {
+		isAncestor, ancestorErr := eng.Git().IsAncestor(oldParentRev, source)
+		if ancestorErr != nil {
+			out.Debug("Failed to check if %s is ancestor of %s: %v", oldParentRev, source, ancestorErr)
+		} else if isAncestor {
+			if updateErr := eng.UpdateParentRevision(source, oldParentRev); updateErr != nil {
+				out.Debug("Failed to update parent revision for %s: %v", source, updateErr)
+			}
+		}
+	}
+
+	out.Info("Moved %s from %s to %s.",
+		style.ColorBranchName(source, true),
+		style.ColorBranchName(oldParentName, false),
+		style.ColorBranchName(onto, false))
+
+	// Get all branches that need restacking: source and all its descendants
+	branchesToRestack := graph.Range(sourceBranch, engine.StackRange{
+		RecursiveChildren: true,
+		IncludeCurrent:    true,
+		RecursiveParents:  false,
+	})
+
+	// Restack source and all its descendants
+	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
+		return fmt.Errorf("failed to restack branches: %w", err)
+	}
+
+	newName := ""
+	if renamed {
+		newName = source
+	}
+	handler.Complete(Result{
+		SourceBranch: source,
+		OldParent:    oldParentName,
+		NewParent:    onto,
+		Renamed:      renamed,
+		NewName:      newName,
+	})
+	return nil
+}
+
+// BuildRebaseSpecs builds the rebase specifications for validating/executing the move.
+// Exported so it can be used by the selection validation callback.
+func BuildRebaseSpecs(eng engine.Engine, out output.Output, source, onto string, oldParent *engine.Branch, oldParentRev string, descendants []engine.Branch) []engine.RebaseSpec {
 	rebaseSpecs := make([]engine.RebaseSpec, 0, len(descendants))
+
+	ontoBranch := eng.GetBranch(onto)
 
 	// Get the target parent's revision for the source branch rebase
 	ontoRev, err := eng.GetRevision(ontoBranch)
 	if err != nil {
-		return fmt.Errorf("failed to get revision for %s: %w", onto, err)
+		out.Debug("Failed to get revision for %s: %v", onto, err)
 	}
 
 	// Source branch: rebase onto new parent
@@ -249,69 +343,5 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		})
 	}
 
-	// Validate rebases in a temporary worktree before modifying any state
-	handler.OnStep(StepValidating, StatusStarted, "Validating rebases...")
-	validation, err := eng.ValidateRebases(gctx, rebaseSpecs)
-	if err != nil {
-		handler.OnStep(StepValidating, StatusFailed, err.Error())
-		return fmt.Errorf("failed to validate rebases: %w", err)
-	}
-	if !validation.Success {
-		handler.OnStep(StepValidating, StatusFailed, validation.ErrorMessage)
-		return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
-	}
-	handler.OnStep(StepValidating, StatusCompleted, "Validation passed")
-
-	// Start handler with branch info (oldParentName computed earlier for preview)
-	handler.Start(source, oldParentName, onto)
-
-	// Update parent in engine
-	if err := eng.SetParent(gctx, sourceBranch, ontoBranch); err != nil {
-		return fmt.Errorf("failed to set parent: %w", err)
-	}
-
-	// Rebuild graph after parent change for downstream traversals
-	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-
-	// Restore old divergence point if it's still a valid ancestor
-	if oldParentRev != "" {
-		isAncestor, ancestorErr := eng.Git().IsAncestor(oldParentRev, source)
-		if ancestorErr != nil {
-			out.Debug("Failed to check if %s is ancestor of %s: %v", oldParentRev, source, ancestorErr)
-		} else if isAncestor {
-			if updateErr := eng.UpdateParentRevision(source, oldParentRev); updateErr != nil {
-				out.Debug("Failed to update parent revision for %s: %v", source, updateErr)
-			}
-		}
-	}
-
-	out.Info("Moved %s from %s to %s.",
-		style.ColorBranchName(source, true),
-		style.ColorBranchName(oldParentName, false),
-		style.ColorBranchName(onto, false))
-
-	// Get all branches that need restacking: source and all its descendants
-	branchesToRestack := graph.Range(sourceBranch, engine.StackRange{
-		RecursiveChildren: true,
-		IncludeCurrent:    true,
-		RecursiveParents:  false,
-	})
-
-	// Restack source and all its descendants
-	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
-		return fmt.Errorf("failed to restack branches: %w", err)
-	}
-
-	newName := ""
-	if renamed {
-		newName = source
-	}
-	handler.Complete(Result{
-		SourceBranch: source,
-		OldParent:    oldParentName,
-		NewParent:    onto,
-		Renamed:      renamed,
-		NewName:      newName,
-	})
-	return nil
+	return rebaseSpecs
 }

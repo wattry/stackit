@@ -1,6 +1,6 @@
 ---
 description: Diagnose and fix common stack issues
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion
 ---
 
 # Stack Fix
@@ -31,7 +31,13 @@ Check the context and look for these indicators:
 - Run `command stackit sync --no-interactive`
 
 **Uncommitted changes** (git status shows modified/untracked files):
-- Ask user to commit or stash before proceeding
+- Use `AskUserQuestion`:
+  - Header: "Uncommitted"
+  - Question: "You have uncommitted changes. How should I proceed?"
+  - Options:
+    - "Stash them" - Stash and continue, restore after
+    - "I'll commit them" - Wait for user to commit
+    - "Discard them" - Reset working tree (destructive)
 
 **Not on tracked branch** (current branch not shown in stackit log with ◉):
 - Guide user to checkout a tracked branch first
@@ -95,7 +101,12 @@ If uncommitted changes exist, ask user to commit or stash first.
 **Find the project's build/test command:**
 1. Check README.md or CONTRIBUTING.md for build/test instructions
 2. Look for common build files (Makefile, package.json scripts, etc.)
-3. If not found, ask the user: "What command should I use to verify the code?"
+3. If not found, use `AskUserQuestion`:
+   - Header: "Check command"
+   - Question: "What command should I use to verify the code builds correctly?"
+   - Options:
+     - "Skip checks" - Don't verify (not recommended)
+     - "Let me specify" - I'll provide the command
 
 Optionally, verify the command works on current branch first:
 ```bash
@@ -189,3 +200,13 @@ The restack command automatically propagates your fix to all child branches.
 - Make destructive changes without user confirmation
 - Loop indefinitely on fixes (max 2 attempts per issue type)
 - Skip asking what check command to use if unclear
+
+## Max Attempts Recovery
+
+If max attempts (2) are reached for an issue, use `AskUserQuestion`:
+- Header: "Fix attempts"
+- Question: "I've tried fixing this issue twice. How should I proceed?"
+- Options:
+  - "Try again" - One more attempt
+  - "Undo changes" - Rollback to before fix attempts
+  - "Stop here" - Keep current state, I'll fix manually

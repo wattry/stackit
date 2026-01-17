@@ -16,52 +16,52 @@ func registerLargeTreeStories() {
 		CreateModel: func() tea.Model {
 			const trunk = "main"
 			mock := &tree.MockTreeData{
-				CurrentBranch: "feature-5-1-1",
-				Trunk:         trunk,
-				Children:      make(map[string][]string),
-				Parents:       make(map[string]string),
-				Fixed:         make(map[string]bool),
+				CurrentVal:  "feature-5-1-1",
+				TrunkVal:    trunk,
+				ChildrenMap: make(map[string][]string),
+				ParentsMap:  make(map[string]string),
+				FixedMap:    make(map[string]bool),
 			}
 
 			// Generate a deep and wide tree
 			// main -> feature-1, feature-2, feature-3
 			// feature-1 -> feature-1-1, feature-1-2
 			// ... and so on
-			mock.Children[trunk] = []string{"feature-1", "feature-2", "feature-3"}
-			mock.Parents["feature-1"] = trunk
-			mock.Parents["feature-2"] = trunk
-			mock.Parents["feature-3"] = trunk
-			mock.Fixed[trunk] = true
+			mock.ChildrenMap[trunk] = []string{"feature-1", "feature-2", "feature-3"}
+			mock.ParentsMap["feature-1"] = trunk
+			mock.ParentsMap["feature-2"] = trunk
+			mock.ParentsMap["feature-3"] = trunk
+			mock.FixedMap[trunk] = true
 
 			for i := 1; i <= 3; i++ {
 				parentName := fmt.Sprintf("feature-%d", i)
-				mock.Fixed[parentName] = true
+				mock.FixedMap[parentName] = true
 				var children []string
 				for j := 1; j <= 3; j++ {
 					childName := fmt.Sprintf("feature-%d-%d", i, j)
 					children = append(children, childName)
-					mock.Parents[childName] = parentName
-					mock.Fixed[childName] = true
+					mock.ParentsMap[childName] = parentName
+					mock.FixedMap[childName] = true
 
 					var grandChildren []string
 					for k := 1; k <= 3; k++ {
 						grandChildName := fmt.Sprintf("feature-%d-%d-%d", i, j, k)
 						grandChildren = append(grandChildren, grandChildName)
-						mock.Parents[grandChildName] = childName
-						mock.Fixed[grandChildName] = k%2 == 0 // Some need restack
+						mock.ParentsMap[grandChildName] = childName
+						mock.FixedMap[grandChildName] = k%2 == 0 // Some need restack
 					}
-					mock.Children[childName] = grandChildren
+					mock.ChildrenMap[childName] = grandChildren
 				}
-				mock.Children[parentName] = children
+				mock.ChildrenMap[parentName] = children
 			}
 
-			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+			renderer := tree.NewRenderer(mock)
 
 			// Add annotations to various branches
 			allBranches := []string{trunk}
 			var collect func(string)
 			collect = func(name string) {
-				children := mock.Children[name]
+				children := mock.ChildrenMap[name]
 				for _, child := range children {
 					allBranches = append(allBranches, child)
 					collect(child)
