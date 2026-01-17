@@ -1,6 +1,6 @@
 ---
 description: Intelligently fold granular branches into their parents
-allowed-tools: Bash(stackit:*), Bash(git:*), Read
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion
 ---
 
 # Stack Fold
@@ -22,12 +22,19 @@ Fold (squash) granular branches into their parent branches.
    - Must match parent's scope
 2. Propose a fold plan to user with reasoning
 3. Run `command stackit fold --dry-run --no-interactive` to preview
-4. Before each fold, verify:
+4. Use `AskUserQuestion` to confirm fold plan:
+   - Header: "Fold plan"
+   - Question: "Ready to fold these branches into their parents?"
+   - Options:
+     - "Execute" - Proceed with folding
+     - "Show details" - Show what will be squashed
+     - "Cancel" - Abort fold
+5. Before each fold, verify:
    - Branch has no children (fold leaf branches first)
    - Parent still not locked/frozen
-5. Execute: `command stackit checkout <branch> && command stackit fold --no-interactive`
-6. Run `command stackit restack --no-interactive` after folding
-7. Show final stack state
+6. Execute: `command stackit checkout <branch> && command stackit fold --no-interactive`
+7. Run `command stackit restack --no-interactive` after folding
+8. Show final stack state
 
 ## Do NOT
 - Fold into trunk unless user explicitly requests it

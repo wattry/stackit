@@ -19,8 +19,8 @@ func TestStackTreeRenderer_RenderStack_LinearStack(t *testing.T) {
 	mock := NewMockTreeData()
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -49,8 +49,8 @@ func TestStackTreeRenderer_RenderStack_WithAnnotations(t *testing.T) {
 	mock := NewMockTreeData()
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -76,18 +76,18 @@ func TestStackTreeRenderer_RenderStack_WithAnnotations(t *testing.T) {
 
 func TestStackTreeRenderer_RenderStack_BranchingStack(t *testing.T) {
 	mock := &MockTreeData{
-		CurrentBranch: "feature-1a",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-1a",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":       {"feature-1a", "feature-1b"},
 			"feature-1a": {},
 			"feature-1b": {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-1a": "main",
 			"feature-1b": "main",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":       true,
 			"feature-1a": true,
 			"feature-1b": true,
@@ -95,8 +95,8 @@ func TestStackTreeRenderer_RenderStack_BranchingStack(t *testing.T) {
 	}
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -123,8 +123,8 @@ func TestStackTreeRenderer_RenderStack_FullFormat(t *testing.T) {
 	mock := NewMockTreeData()
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -151,8 +151,8 @@ func TestStackTreeRenderer_RenderStack_Reversed(t *testing.T) {
 	mock := NewMockTreeData()
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -192,8 +192,8 @@ func TestStackTreeRenderer_RenderBranchList(t *testing.T) {
 	mock := NewMockTreeData()
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -219,24 +219,24 @@ func TestStackTreeRenderer_RenderBranchList(t *testing.T) {
 
 func TestStackTreeRenderer_NeedsRestack(t *testing.T) {
 	mock := &MockTreeData{
-		CurrentBranch: "feature-1",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-1",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":      {"feature-1"},
 			"feature-1": {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-1": "main",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":      true,
 			"feature-1": false, // Not fixed - needs restack
 		},
 	}
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -257,8 +257,8 @@ func TestBranchAnnotation_CheckStatus(t *testing.T) {
 	mock := NewMockTreeData()
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -288,20 +288,20 @@ func TestBranchAnnotation_CheckStatus(t *testing.T) {
 
 func TestStackTreeRenderer_ScopeColoring(t *testing.T) {
 	mock := &MockTreeData{
-		CurrentBranch: "feature-login",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-login",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":              {"feature-auth-base", "feature-api-v1"},
 			"feature-auth-base": {"feature-login"},
 			"feature-api-v1":    {},
 			"feature-login":     {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-auth-base": "main",
 			"feature-login":     "feature-auth-base",
 			"feature-api-v1":    "main",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":              true,
 			"feature-auth-base": true,
 			"feature-login":     true,
@@ -310,8 +310,8 @@ func TestStackTreeRenderer_ScopeColoring(t *testing.T) {
 	}
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -350,18 +350,18 @@ func TestStackTreeRenderer_ScopeColoring(t *testing.T) {
 
 func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 	mock := &MockTreeData{
-		CurrentBranch: "feature-login",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-login",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":              {"feature-auth-base"},
 			"feature-auth-base": {"feature-login"},
 			"feature-login":     {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-auth-base": "main",
 			"feature-login":     "feature-auth-base",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":              true,
 			"feature-auth-base": true,
 			"feature-login":     true,
@@ -369,8 +369,8 @@ func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 	}
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -430,18 +430,18 @@ func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 
 func TestStackTreeRenderer_BranchingScopeColoring(t *testing.T) {
 	mock := &MockTreeData{
-		CurrentBranch: "feature-1a",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-1a",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":       {"feature-1a", "feature-1b"},
 			"feature-1a": {},
 			"feature-1b": {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-1a": "main",
 			"feature-1b": "main",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":       true,
 			"feature-1a": true,
 			"feature-1b": true,
@@ -449,8 +449,8 @@ func TestStackTreeRenderer_BranchingScopeColoring(t *testing.T) {
 	}
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,
@@ -484,9 +484,9 @@ func TestStackTreeRenderer_ScopeColoringBoundaries(t *testing.T) {
 	//       ├─ scoped-branch (B) [SCOPE-X]
 	//       └─ unscoped-branch (C)
 	mock := &MockTreeData{
-		CurrentBranch: "scoped-branch",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "scoped-branch",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main": {"base"},
 			"base": {
 				"scoped-branch",
@@ -495,12 +495,12 @@ func TestStackTreeRenderer_ScopeColoringBoundaries(t *testing.T) {
 			"scoped-branch":   {},
 			"unscoped-branch": {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"base":            "main",
 			"scoped-branch":   "base",
 			"unscoped-branch": "base",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":            true,
 			"base":            true,
 			"scoped-branch":   true,
@@ -509,8 +509,8 @@ func TestStackTreeRenderer_ScopeColoringBoundaries(t *testing.T) {
 	}
 
 	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch,
-		mock.Trunk,
+		mock.CurrentBranch(),
+		mock.Trunk(),
 		mock.GetChildren,
 		mock.GetParent,
 		mock.IsTrunk,

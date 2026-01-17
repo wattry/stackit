@@ -42,24 +42,24 @@ func registerTreeStories() {
 		Description: "A simple 3-branch linear stack with PR states",
 		CreateModel: func() tea.Model {
 			mock := &tree.MockTreeData{
-				CurrentBranch: "feature-2",
-				Trunk:         "main",
-				Children: map[string][]string{
+				CurrentVal: "feature-2",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
 					"main":      {"feature-1"},
 					"feature-1": {"feature-2"},
 					"feature-2": {},
 				},
-				Parents: map[string]string{
+				ParentsMap: map[string]string{
 					"feature-1": "main",
 					"feature-2": "feature-1",
 				},
-				Fixed: map[string]bool{
+				FixedMap: map[string]bool{
 					"main":      true,
 					"feature-1": true,
 					"feature-2": true,
 				},
 			}
-			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+			renderer := tree.NewRenderer(mock)
 
 			pr1 := 101
 			renderer.SetAnnotation("feature-1", tree.BranchAnnotation{
@@ -94,22 +94,22 @@ func registerTreeStories() {
 		Description: "Shows different PR states: draft, merged, failing CI, changes requested",
 		CreateModel: func() tea.Model {
 			mock := &tree.MockTreeData{
-				CurrentBranch: "feature-active",
-				Trunk:         "main",
-				Children: map[string][]string{
+				CurrentVal: "feature-active",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
 					"main":            {"feature-merged", "feature-draft", "feature-active"},
 					"feature-merged":  {},
 					"feature-draft":   {},
 					"feature-active":  {"feature-failing"},
 					"feature-failing": {},
 				},
-				Parents: map[string]string{
+				ParentsMap: map[string]string{
 					"feature-merged":  "main",
 					"feature-draft":   "main",
 					"feature-active":  "main",
 					"feature-failing": "feature-active",
 				},
-				Fixed: map[string]bool{
+				FixedMap: map[string]bool{
 					"main":            true,
 					"feature-merged":  true,
 					"feature-draft":   true,
@@ -117,7 +117,7 @@ func registerTreeStories() {
 					"feature-failing": false, // needs restack
 				},
 			}
-			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+			renderer := tree.NewRenderer(mock)
 
 			// Merged PR - should be dimmed and collapsed
 			pr1 := 90
@@ -175,9 +175,9 @@ func registerTreeStories() {
 		Description: "A tree with multiple branches at the same level and different scopes",
 		CreateModel: func() tea.Model {
 			mock := &tree.MockTreeData{
-				CurrentBranch: "auth-fix",
-				Trunk:         "main",
-				Children: map[string][]string{
+				CurrentVal: "auth-fix",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
 					"main":      {"base-api", "base-auth"},
 					"base-api":  {"api-v2", "api-docs"},
 					"base-auth": {"auth-fix"},
@@ -185,14 +185,14 @@ func registerTreeStories() {
 					"api-docs":  {},
 					"auth-fix":  {},
 				},
-				Parents: map[string]string{
+				ParentsMap: map[string]string{
 					"base-api":  "main",
 					"base-auth": "main",
 					"api-v2":    "base-api",
 					"api-docs":  "base-api",
 					"auth-fix":  "base-auth",
 				},
-				Fixed: map[string]bool{
+				FixedMap: map[string]bool{
 					"main":      true,
 					"base-api":  true,
 					"base-auth": true,
@@ -201,7 +201,7 @@ func registerTreeStories() {
 					"auth-fix":  true,
 				},
 			}
-			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+			renderer := tree.NewRenderer(mock)
 
 			// Base branch without PR - shows just stats
 			renderer.SetAnnotation("base-api", tree.BranchAnnotation{
@@ -257,27 +257,27 @@ func registerTreeStories() {
 		Description: "A stack where no PRs have been submitted yet - shows stats only",
 		CreateModel: func() tea.Model {
 			mock := &tree.MockTreeData{
-				CurrentBranch: "feature-c",
-				Trunk:         "main",
-				Children: map[string][]string{
+				CurrentVal: "feature-c",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
 					"main":      {"feature-a"},
 					"feature-a": {"feature-b"},
 					"feature-b": {"feature-c"},
 					"feature-c": {},
 				},
-				Parents: map[string]string{
+				ParentsMap: map[string]string{
 					"feature-a": "main",
 					"feature-b": "feature-a",
 					"feature-c": "feature-b",
 				},
-				Fixed: map[string]bool{
+				FixedMap: map[string]bool{
 					"main":      true,
 					"feature-a": true,
 					"feature-b": true,
 					"feature-c": true,
 				},
 			}
-			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+			renderer := tree.NewRenderer(mock)
 
 			// Single commit - should NOT show commit count
 			renderer.SetAnnotation("feature-a", tree.BranchAnnotation{
@@ -314,27 +314,27 @@ func registerTreeStories() {
 		Description: "The configuration view before submitting a stack, showing planned actions",
 		CreateModel: func() tea.Model {
 			mock := &tree.MockTreeData{
-				CurrentBranch: "feature-3",
-				Trunk:         "main",
-				Children: map[string][]string{
+				CurrentVal: "feature-3",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
 					"main":      {"feature-1"},
 					"feature-1": {"feature-2"},
 					"feature-2": {"feature-3"},
 					"feature-3": {},
 				},
-				Parents: map[string]string{
+				ParentsMap: map[string]string{
 					"feature-1": "main",
 					"feature-2": "feature-1",
 					"feature-3": "feature-2",
 				},
-				Fixed: map[string]bool{
+				FixedMap: map[string]bool{
 					"main":      true,
 					"feature-1": true,
 					"feature-2": true,
 					"feature-3": true,
 				},
 			}
-			renderer := tree.NewStackTreeRenderer(mock.CurrentBranch, mock.Trunk, mock.GetChildren, mock.GetParent, mock.IsTrunk, mock.IsBranchFixed)
+			renderer := tree.NewRenderer(mock)
 
 			pr1 := 101
 			renderer.SetAnnotation("feature-1", tree.BranchAnnotation{
@@ -375,20 +375,20 @@ func registerTreeStories() {
 
 func registerSubmitStories() {
 	mockData := &tree.MockTreeData{
-		CurrentBranch: "feature-3",
-		Trunk:         "main",
-		Children: map[string][]string{
+		CurrentVal: "feature-3",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
 			"main":      {"feature-1"},
 			"feature-1": {"feature-2"},
 			"feature-2": {"feature-3"},
 			"feature-3": {},
 		},
-		Parents: map[string]string{
+		ParentsMap: map[string]string{
 			"feature-1": "main",
 			"feature-2": "feature-1",
 			"feature-3": "feature-2",
 		},
-		Fixed: map[string]bool{
+		FixedMap: map[string]bool{
 			"main":      true,
 			"feature-1": true,
 			"feature-2": true,
@@ -397,7 +397,7 @@ func registerSubmitStories() {
 	}
 
 	createRenderer := func() *tree.StackTreeRenderer {
-		return tree.NewStackTreeRenderer(mockData.CurrentBranch, mockData.Trunk, mockData.GetChildren, mockData.GetParent, mockData.IsTrunk, mockData.IsBranchFixed)
+		return tree.NewRenderer(mockData)
 	}
 
 	RegisterStory(Story{
@@ -410,7 +410,7 @@ func registerSubmitStories() {
 			m.Renderer.SetAnnotation("feature-1", tree.BranchAnnotation{Scope: "CORE", ExplicitScope: "CORE"})
 			m.Renderer.SetAnnotation("feature-2", tree.BranchAnnotation{Scope: "API", ExplicitScope: "API"})
 			m.Renderer.SetAnnotation("feature-3", tree.BranchAnnotation{Scope: "UI", ExplicitScope: "UI"})
-			m.RootBranch = mockData.Trunk
+			m.RootBranch = mockData.TrunkVal
 			return &submitSimulationModel{
 				submitModel: m,
 				startTime:   time.Now(),
@@ -432,7 +432,7 @@ func registerSubmitStories() {
 			m.Renderer.SetAnnotation("feature-1", tree.BranchAnnotation{Scope: "CORE", ExplicitScope: "CORE"})
 			m.Renderer.SetAnnotation("feature-2", tree.BranchAnnotation{Scope: "API", ExplicitScope: "API"})
 			m.Renderer.SetAnnotation("feature-3", tree.BranchAnnotation{Scope: "UI", ExplicitScope: "UI"})
-			m.RootBranch = mockData.Trunk
+			m.RootBranch = mockData.TrunkVal
 			m.GlobalMessage = "Submitting 3 branches..."
 			m.Done = true
 			return m

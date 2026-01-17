@@ -79,6 +79,24 @@ type RenderOptions struct {
 	NonSelectable     map[string]bool // Branches that are visible but not selectable
 }
 
+// Data provides the tree structure data for rendering.
+// This interface abstracts the source of tree data, making the renderer
+// more testable and decoupled from specific implementations.
+type Data interface {
+	// CurrentBranch returns the name of the currently checked out branch
+	CurrentBranch() string
+	// Trunk returns the name of the trunk/main branch
+	Trunk() string
+	// Children returns the child branches of the given branch
+	Children(branchName string) []string
+	// Parent returns the parent branch of the given branch
+	Parent(branchName string) string
+	// IsTrunk returns whether the given branch is a trunk branch
+	IsTrunk(branchName string) bool
+	// IsFixed returns whether the branch is up-to-date with its parent
+	IsFixed(branchName string) bool
+}
+
 // StackTreeRenderer renders branch trees with annotations
 type StackTreeRenderer struct {
 	currentBranch string
@@ -90,7 +108,22 @@ type StackTreeRenderer struct {
 	Annotations   map[string]BranchAnnotation
 }
 
-// NewStackTreeRenderer creates a new tree renderer
+// NewRenderer creates a new tree renderer from a Data source.
+// This is the preferred constructor as it uses a clean interface.
+func NewRenderer(data Data) *StackTreeRenderer {
+	return &StackTreeRenderer{
+		currentBranch: data.CurrentBranch(),
+		trunk:         data.Trunk(),
+		getChildren:   data.Children,
+		getParent:     data.Parent,
+		isTrunk:       data.IsTrunk,
+		isBranchFixed: data.IsFixed,
+		Annotations:   make(map[string]BranchAnnotation),
+	}
+}
+
+// NewStackTreeRenderer creates a new tree renderer with explicit callback functions.
+// Consider using NewRenderer with a TreeData implementation instead.
 func NewStackTreeRenderer(
 	currentBranch string,
 	trunk string,
