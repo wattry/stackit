@@ -63,20 +63,21 @@ type BranchAnnotation struct {
 
 // RenderOptions configures rendering behavior
 type RenderOptions struct {
-	Reverse           bool
-	Short             bool
-	SingleLine        bool
-	Steps             *int
-	OmitCurrentBranch bool
-	NoStyleBranchName bool
-	HideStats         bool
-	HideSummary       bool // Hide the summary line (stats, PR info, CI status)
-	ShowSHAs          bool // Show commit SHAs next to branch names
-	SelectedBranch    string
-	Collapsed         map[string]bool
-	SearchQuery       string          // Search query for filtering
-	SearchMatches     map[string]bool // Branch name -> whether it matches search
-	NonSelectable     map[string]bool // Branches that are visible but not selectable
+	Reverse             bool
+	Short               bool
+	SingleLine          bool
+	Steps               *int
+	OmitCurrentBranch   bool
+	NoStyleBranchName   bool
+	HideStats           bool
+	HideSummary         bool // Hide the summary line (stats, PR info, CI status)
+	ShowSHAs            bool // Show commit SHAs next to branch names
+	SelectedBranch      string
+	Collapsed           map[string]bool
+	SearchQuery         string          // Search query for filtering
+	SearchMatches       map[string]bool // Branch name -> whether it matches search
+	NonSelectable       map[string]bool // Branches that are visible but not selectable
+	SkipSelectionPrefix bool            // If true, don't add SelectionPadding/cursor to lines
 }
 
 // Data provides the tree structure data for rendering.
@@ -186,26 +187,27 @@ func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) [
 func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOptions) []RenderedBranch {
 	overallIndent := 0
 	args := treeRenderArgs{
-		short:             opts.Short,
-		singleLine:        opts.SingleLine,
-		reverse:           opts.Reverse,
-		branchName:        branchName,
-		indentLevel:       0,
-		parentScopes:      []string{},
-		steps:             opts.Steps,
-		omitCurrentBranch: opts.OmitCurrentBranch,
-		noStyleBranchName: opts.NoStyleBranchName,
-		hideStats:         opts.HideStats,
-		hideSummary:       opts.HideSummary,
-		showSHAs:          opts.ShowSHAs,
-		overallIndent:     &overallIndent,
-		selectedBranch:    opts.SelectedBranch,
-		collapsed:         opts.Collapsed,
-		currentBranch:     r.currentBranch,
-		searchQuery:       opts.SearchQuery,
-		searchMatches:     opts.SearchMatches,
-		nonSelectable:     opts.NonSelectable,
-		visited:           make(map[string]bool),
+		short:               opts.Short,
+		singleLine:          opts.SingleLine,
+		reverse:             opts.Reverse,
+		branchName:          branchName,
+		indentLevel:         0,
+		parentScopes:        []string{},
+		steps:               opts.Steps,
+		omitCurrentBranch:   opts.OmitCurrentBranch,
+		noStyleBranchName:   opts.NoStyleBranchName,
+		hideStats:           opts.HideStats,
+		hideSummary:         opts.HideSummary,
+		showSHAs:            opts.ShowSHAs,
+		skipSelectionPrefix: opts.SkipSelectionPrefix,
+		overallIndent:       &overallIndent,
+		selectedBranch:      opts.SelectedBranch,
+		collapsed:           opts.Collapsed,
+		currentBranch:       r.currentBranch,
+		searchQuery:         opts.SearchQuery,
+		searchMatches:       opts.SearchMatches,
+		nonSelectable:       opts.NonSelectable,
+		visited:             make(map[string]bool),
 	}
 
 	outputDeep := [][]RenderedBranch{
@@ -231,27 +233,28 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 }
 
 type treeRenderArgs struct {
-	short             bool
-	singleLine        bool
-	reverse           bool
-	branchName        string
-	indentLevel       int
-	parentScopes      []string
-	steps             *int
-	omitCurrentBranch bool
-	noStyleBranchName bool
-	hideStats         bool
-	hideSummary       bool
-	showSHAs          bool
-	skipBranchingLine bool
-	overallIndent     *int
-	selectedBranch    string
-	collapsed         map[string]bool
-	currentBranch     string
-	searchQuery       string
-	searchMatches     map[string]bool
-	nonSelectable     map[string]bool
-	visited           map[string]bool
+	short               bool
+	singleLine          bool
+	reverse             bool
+	branchName          string
+	indentLevel         int
+	parentScopes        []string
+	steps               *int
+	omitCurrentBranch   bool
+	noStyleBranchName   bool
+	hideStats           bool
+	hideSummary         bool
+	showSHAs            bool
+	skipBranchingLine   bool
+	skipSelectionPrefix bool
+	overallIndent       *int
+	selectedBranch      string
+	collapsed           map[string]bool
+	currentBranch       string
+	searchQuery         string
+	searchMatches       map[string]bool
+	nonSelectable       map[string]bool
+	visited             map[string]bool
 }
 
 func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []RenderedBranch {
@@ -300,26 +303,27 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 		}
 
 		childBranches := r.getUpstackInclusiveRendered(treeRenderArgs{
-			short:             args.short,
-			singleLine:        args.singleLine,
-			reverse:           args.reverse,
-			branchName:        child,
-			indentLevel:       childIndent,
-			parentScopes:      childParentScopes,
-			steps:             childSteps,
-			omitCurrentBranch: args.omitCurrentBranch,
-			noStyleBranchName: args.noStyleBranchName,
-			hideStats:         args.hideStats,
-			hideSummary:       args.hideSummary,
-			showSHAs:          args.showSHAs,
-			overallIndent:     args.overallIndent,
-			selectedBranch:    args.selectedBranch,
-			collapsed:         args.collapsed,
-			currentBranch:     args.currentBranch,
-			searchQuery:       args.searchQuery,
-			searchMatches:     args.searchMatches,
-			nonSelectable:     args.nonSelectable,
-			visited:           args.visited,
+			short:               args.short,
+			singleLine:          args.singleLine,
+			reverse:             args.reverse,
+			branchName:          child,
+			indentLevel:         childIndent,
+			parentScopes:        childParentScopes,
+			steps:               childSteps,
+			omitCurrentBranch:   args.omitCurrentBranch,
+			noStyleBranchName:   args.noStyleBranchName,
+			hideStats:           args.hideStats,
+			hideSummary:         args.hideSummary,
+			showSHAs:            args.showSHAs,
+			skipSelectionPrefix: args.skipSelectionPrefix,
+			overallIndent:       args.overallIndent,
+			selectedBranch:      args.selectedBranch,
+			collapsed:           args.collapsed,
+			currentBranch:       args.currentBranch,
+			searchQuery:         args.searchQuery,
+			searchMatches:       args.searchMatches,
+			nonSelectable:       args.nonSelectable,
+			visited:             args.visited,
 		})
 		result = append(result, childBranches...)
 	}
@@ -375,22 +379,23 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 	var result []RenderedBranch
 	for _, branchName := range fullStack {
 		branchData := r.getBranchRendered(treeRenderArgs{
-			short:             args.short,
-			singleLine:        args.singleLine,
-			reverse:           args.reverse,
-			branchName:        branchName,
-			indentLevel:       args.indentLevel,
-			parentScopes:      args.parentScopes,
-			hideSummary:       args.hideSummary,
-			showSHAs:          args.showSHAs,
-			skipBranchingLine: true,
-			overallIndent:     args.overallIndent,
-			selectedBranch:    args.selectedBranch,
-			collapsed:         args.collapsed,
-			currentBranch:     args.currentBranch,
-			searchQuery:       args.searchQuery,
-			searchMatches:     args.searchMatches,
-			nonSelectable:     args.nonSelectable,
+			short:               args.short,
+			singleLine:          args.singleLine,
+			reverse:             args.reverse,
+			branchName:          branchName,
+			indentLevel:         args.indentLevel,
+			parentScopes:        args.parentScopes,
+			hideSummary:         args.hideSummary,
+			showSHAs:            args.showSHAs,
+			skipBranchingLine:   true,
+			skipSelectionPrefix: args.skipSelectionPrefix,
+			overallIndent:       args.overallIndent,
+			selectedBranch:      args.selectedBranch,
+			collapsed:           args.collapsed,
+			currentBranch:       args.currentBranch,
+			searchQuery:         args.searchQuery,
+			searchMatches:       args.searchMatches,
+			nonSelectable:       args.nonSelectable,
 		})
 		result = append(result, branchData...)
 	}
@@ -454,10 +459,13 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 		isNonSelectable := args.nonSelectable != nil && args.nonSelectable[args.branchName]
 
 		// Selection cursor prefix (non-selectable branches never show cursor)
-		isSelected := args.branchName == args.selectedBranch
-		cursorPrefix := style.SelectionPadding
-		if isSelected && !isNonSelectable {
-			cursorPrefix = style.SelectionCursorStyle().Render(style.SelectionCursor)
+		cursorPrefix := ""
+		if !args.skipSelectionPrefix {
+			isSelected := args.branchName == args.selectedBranch
+			cursorPrefix = style.SelectionPadding
+			if isSelected && !isNonSelectable {
+				cursorPrefix = style.SelectionCursorStyle().Render(style.SelectionCursor)
+			}
 		}
 
 		line := strings.Repeat("│ ", args.indentLevel)
@@ -518,7 +526,7 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 
 	// Branching line
 	if !args.skipBranchingLine && numChildren >= 2 {
-		result = append(result, r.getBranchingLine(numChildren, args.reverse, args.indentLevel, args.parentScopes, args.branchName))
+		result = append(result, r.getBranchingLine(numChildren, args.reverse, args.indentLevel, args.parentScopes, args.branchName, args.skipSelectionPrefix))
 	}
 
 	// Branch info lines
@@ -534,7 +542,7 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 	return result
 }
 
-func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, indentLevel int, parentScopes []string, branchName string) string {
+func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, indentLevel int, parentScopes []string, branchName string, skipSelectionPrefix bool) string {
 	if numChildren < 2 {
 		return ""
 	}
@@ -585,7 +593,11 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, inde
 	}
 	branchingChars += last
 
-	line := style.SelectionPadding + prefix + styleObj.Render(branchingChars)
+	selectionPrefix := ""
+	if !skipSelectionPrefix {
+		selectionPrefix = style.SelectionPadding
+	}
+	line := selectionPrefix + prefix + styleObj.Render(branchingChars)
 
 	return line
 }
@@ -671,9 +683,14 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	// Selection cursor prefix
 	// Non-selectable branches never show cursor (even if they happen to be "selected")
-	cursorPrefix := style.SelectionPadding // Default: spaces for alignment
-	if isSelected && !isNonSelectable {
-		cursorPrefix = style.SelectionCursorStyle().Render(style.SelectionCursor)
+	cursorPrefix := ""
+	selectionPadding := ""
+	if !args.skipSelectionPrefix {
+		cursorPrefix = style.SelectionPadding // Default: spaces for alignment
+		selectionPadding = style.SelectionPadding
+		if isSelected && !isNonSelectable {
+			cursorPrefix = style.SelectionCursorStyle().Render(style.SelectionCursor)
+		}
 	}
 
 	// TRUNK: minimal single line
@@ -700,7 +717,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		}
 		return []string{
 			dimLine,
-			style.SelectionPadding + prefix + parentStyle.Render("│"),
+			selectionPadding + prefix + parentStyle.Render("│"),
 		}
 	}
 
@@ -772,12 +789,12 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		summaryLine := r.formatSummaryLine(annotation, isTrunk, args.hideStats)
 
 		if summaryLine != "" {
-			result = append(result, style.SelectionPadding+prefix+branchPipe+"  "+summaryLine)
+			result = append(result, selectionPadding+prefix+branchPipe+"  "+summaryLine)
 		}
 	}
 
 	// Trailing spacer line
-	result = append(result, style.SelectionPadding+prefix+parentStyle.Render("│"))
+	result = append(result, selectionPadding+prefix+parentStyle.Render("│"))
 
 	return result
 }

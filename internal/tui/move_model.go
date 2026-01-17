@@ -62,10 +62,11 @@ type MoveValidation struct {
 
 // branchItem represents a selectable branch in the list
 type branchItem struct {
-	name       string
-	display    string // Rendered display with tree characters
-	isSource   bool   // Is this the branch being moved?
-	selectable bool   // Can this branch be selected as a target?
+	name          string
+	display       string // Rendered display with tree characters (may be multi-line)
+	cursorLineIdx int    // Which line within display should have the cursor
+	isSource      bool   // Is this the branch being moved?
+	selectable    bool   // Can this branch be selected as a target?
 }
 
 // MoveModel is the bubbletea model for the interactive move flow
@@ -159,41 +160,31 @@ func NewMoveModel(eng engine.Engine, config MoveModelConfig) *MoveModel {
 	renderer.SetAnnotations(annotations)
 
 	// Render the tree (trunk at bottom to match st log)
+	// Use SkipSelectionPrefix so we can add our own cursor indicators in viewSelecting
 	opts := tree.RenderOptions{
-		Reverse:       false,
-		SingleLine:    true,
-		NonSelectable: nonSelectable,
+		Reverse:             false,
+		SingleLine:          true,
+		NonSelectable:       nonSelectable,
+		SkipSelectionPrefix: true,
 	}
 	rendered := renderer.RenderStackDetailed(trunk, opts)
 
-	// Convert to branch items, filtering out connector-only lines
+	// Convert to branch items
 	branches := make([]branchItem, 0, len(rendered))
 	for _, rb := range rendered {
-		// Skip entries that aren't actual branches (connector lines have empty names)
-		if rb.Name == "" {
-			continue
-		}
-
 		isSource := rb.Name == config.SourceBranch
 		selectable := !nonSelectable[rb.Name] && !isSource
 
-		// Use the rendered line directly
-		display := ""
-		if len(rb.Lines) > 0 {
-			display = rb.Lines[0]
-		}
-
-		// Add padding to trunk to align with child branches
-		// (trunk has 2 fewer leading spaces in tree output)
-		if rb.Name == trunk {
-			display = "  " + display
-		}
+		// Join all lines for this branch (includes connector lines like ├──┴──┘)
+		// The cursor will be placed on the line at CursorLineIndex
+		display := strings.Join(rb.Lines, "\n")
 
 		branches = append(branches, branchItem{
-			name:       rb.Name,
-			display:    display,
-			isSource:   isSource,
-			selectable: selectable,
+			name:          rb.Name,
+			display:       display,
+			cursorLineIdx: rb.CursorLineIndex,
+			isSource:      isSource,
+			selectable:    selectable,
 		})
 	}
 
@@ -465,21 +456,24 @@ func (m *MoveModel) viewSelecting() string {
 
 	for i := m.scrollOffset; i < visibleEnd; i++ {
 		branch := m.branches[i]
+		displayLines := strings.Split(branch.display, "\n")
 
-		// Cursor indicator
-		if i == m.cursor {
-			sb.WriteString(style.SelectionCursorStyle().Render(style.SelectionCursor))
-		} else {
-			sb.WriteString(style.SelectionPadding)
-		}
+		for lineIdx, line := range displayLines {
+			// Cursor indicator - only on the cursorLineIdx for the selected branch
+			if i == m.cursor && lineIdx == branch.cursorLineIdx {
+				sb.WriteString(style.SelectionCursorStyle().Render(style.SelectionCursor))
+			} else {
+				sb.WriteString(style.SelectionPadding)
+			}
 
-		// Branch display
-		if branch.selectable {
-			sb.WriteString(branch.display)
-		} else {
-			sb.WriteString(style.ColorDim(branch.display))
+			// Branch display
+			if branch.selectable {
+				sb.WriteString(line)
+			} else {
+				sb.WriteString(style.ColorDim(line))
+			}
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
 	}
 
 	// Show scroll indicator if needed
