@@ -62,13 +62,12 @@ func FlattenAction(ctx *app.Context, branchName string) error {
 	// 4. Algorithm: Bottom-Up
 	// potentialParents starts with Trunk.
 	// We use this list to check where a branch can land.
-
-potentialParents := []string{trunk.GetName()}
+	potentialParents := []string{trunk.GetName()}
 	
 	// Track current SHAs of all branches (including Trunk) to handle moves.
 	parentSHAs := make(map[string]string)
 	
-trunkSHA, err := trunk.GetRevision()
+	trunkSHA, err := trunk.GetRevision()
 	if err != nil {
 		return fmt.Errorf("failed to get trunk revision: %w", err)
 	}
@@ -77,22 +76,25 @@ trunkSHA, err := trunk.GetRevision()
 	for _, b := range featureBranches {
 		bName := b.GetName()
 		
-		// Get current parent SHA (the commit this branch is currently based on)
-		// We use "rev-parse b^" because "b" points to the tip, and assuming linear history (stackit model),
-		// b^ is the parent commit.
-		// Note: We use the *current* state of b in the filesystem.
-		currentSHA, err := eng.Git().GetRevision(bName)
-		if err != nil {
-			return fmt.Errorf("failed to get revision for %s: %w", bName, err)
+		// Identify original parent
+		origParent := b.GetParent()
+		var origParentName string
+		if origParent == nil {
+			origParentName = trunk.GetName()
+		} else {
+			origParentName = origParent.GetName()
 		}
-		oldParentSHA, err := eng.Git().GetParentCommitSHA(currentSHA)
+
+		// Find base SHA of the branch relative to its original parent
+		// We use MergeBase to find the divergence point, ensuring we rebase the entire branch content
+		baseSHA, err := eng.Git().GetMergeBase(bName, origParentName)
 		if err != nil {
-			return fmt.Errorf("failed to get parent sha for %s: %w", bName, err)
+			return fmt.Errorf("failed to get merge base for %s and %s: %w", bName, origParentName, err)
 		}
 
 		moved := false
 		var finalParent string
-		
+
 		for _, pName := range potentialParents {
 			targetSHA, ok := parentSHAs[pName]
 			if !ok {
@@ -100,16 +102,22 @@ trunkSHA, err := trunk.GetRevision()
 			}
 
 			// Optimization: if we are already on this parent (SHA match)
-			if targetSHA == oldParentSHA {
+			if targetSHA == baseSHA {
 				moved = true
 				finalParent = pName
+				
+				// Update metadata to reflect new parent
+				parentBranch := eng.GetBranch(finalParent)
+				if err := eng.SetParent(ctx.Context, b, parentBranch); err != nil {
+					return fmt.Errorf("failed to update parent for %s to %s: %w", bName, finalParent, err)
+				}
 				break
 			}
 
 			// Try to rebase
-			// rebase --onto targetSHA oldParentSHA bName
+			// rebase --onto targetSHA baseSHA bName
 			// If successful, b moves to targetSHA.
-			res, err := eng.Rebase(ctx.Context, bName, targetSHA, oldParentSHA)
+			res, err := eng.Rebase(ctx.Context, bName, targetSHA, baseSHA)
 			if err != nil {
 				// Rebase failed (likely conflict or other git error).
 				// We assume Rebase aborts on failure.
@@ -121,22 +129,22 @@ trunkSHA, err := trunk.GetRevision()
 			if res == engine.RestackDone || res == engine.RestackUnneeded {
 				moved = true
 				finalParent = pName
+				
+				// Update metadata to reflect new parent
+				parentBranch := eng.GetBranch(finalParent)
+				if err := eng.SetParent(ctx.Context, b, parentBranch); err != nil {
+					return fmt.Errorf("failed to update parent for %s to %s: %w", bName, finalParent, err)
+				}
 				break
-			} 
-			// If RestackConflict, continue.
+			} else {
+				// Abort the speculative rebase so we can try the next parent
+				if err := eng.Git().RebaseAbort(ctx.Context); err != nil {
+					ctx.Logger.Debug("Failed to abort rebase", "error", err)
+				}
+			}
 		}
 
 		if !moved {
-			// Could not flatten. Must stay on original parent (which might have moved).
-			// Find original logical parent name.
-			origParent := b.GetParent()
-			var origParentName string
-			if origParent == nil {
-				origParentName = trunk.GetName()
-			} else {
-				origParentName = origParent.GetName()
-			}
-			
 			finalParent = origParentName
 			
 			// Check if original parent has moved
@@ -148,15 +156,15 @@ trunkSHA, err := trunk.GetRevision()
 				return fmt.Errorf("original parent %s not tracked", origParentName)
 			}
 			
-			if currentOrigParentSHA != oldParentSHA {
+			if currentOrigParentSHA != baseSHA {
 				// Parent moved, we must rebase to follow
-				res, err := eng.Rebase(ctx.Context, bName, currentOrigParentSHA, oldParentSHA)
+				res, err := eng.Rebase(ctx.Context, bName, currentOrigParentSHA, baseSHA)
 				if err != nil {
 					return fmt.Errorf("failed to update %s onto moved parent %s: %w", bName, origParentName, err)
 				}
 				if res == engine.RestackConflict {
 					// Real conflict in stack structure
-				out.Error("Conflict updating %s onto parent %s.", bName, origParentName)
+					out.Error("Conflict updating %s onto parent %s.", bName, origParentName)
 					return fmt.Errorf("conflict flattening %s", bName)
 				}
 			}
