@@ -1,6 +1,6 @@
 ---
 description: Verify stack health by running checks on all branches
-allowed-tools: Bash(stackit:*), Bash(git:*)
+allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion
 argument-hint: [check-command]
 ---
 
@@ -23,7 +23,12 @@ $ARGUMENTS
 If provided in arguments, use that. Otherwise:
 1. Check README.md or CONTRIBUTING.md for build/test instructions
 2. Look for common build files (Makefile, package.json scripts, etc.)
-3. If not found, ask the user: "What command should I use to verify the code?"
+3. If not found, use `AskUserQuestion`:
+   - Header: "Check command"
+   - Question: "What command should I use to verify the code?"
+   - Options:
+     - "Skip verification" - Don't run checks
+     - "Let me specify" - I'll provide the command
 
 ### 2. Run verification
 
@@ -44,7 +49,12 @@ command stackit foreach --upstack "<check-command>" 2>&1
 command stackit foreach --upstack --no-fail-fast "<check-command>" 2>&1
 ```
 
-Use quick mode unless the user wants to see ALL failures.
+If uncertain which mode to use, prompt with `AskUserQuestion`:
+- Header: "Verify mode"
+- Question: "How should I run verification?"
+- Options:
+  - "Quick (Recommended)" - Stop at first failure
+  - "Full diagnostic" - Check all branches, report all failures
 
 ### 3. Parse foreach output
 

@@ -1,6 +1,6 @@
 ---
 description: Create a new stacked branch with intelligent naming
-allowed-tools: Bash(stackit:*), Bash(git:*), Read
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion
 argument-hint: [-m "message"] [branch-name]
 ---
 
@@ -71,7 +71,23 @@ Using the diff from Step 2 and the recent commits style from Context, generate a
 - Match the style of recent commits
 
 For simple/obvious changes (single-purpose diffs, documentation, bug fixes), generate directly.
-For complex changes (large diffs, multiple concerns), ask the user for guidance.
+
+**For large, diverse changes** (many files across different directories, multiple unrelated features/concerns, or significant refactoring spanning multiple systems), use `AskUserQuestion`:
+- Header: "Large changes"
+- Question: "These changes span multiple areas and may benefit from being split into separate stacked branches. How would you like to proceed?"
+- Options:
+  - "Use /stack-plan" - Analyze and split into multiple focused branches (Recommended)
+  - "Single commit" - Combine all changes into one commit
+  - "Let me describe" - I'll provide the commit message
+
+If user selects "Use /stack-plan", inform them: "Run `/stack-plan` to analyze your changes and create a well-organized stack." Then stop - do not create a branch.
+
+For moderately complex changes (large diff but single concern), use `AskUserQuestion`:
+- Header: "Commit scope"
+- Question: "This is a large diff. How should I structure the commit?"
+- Options:
+  - "Single commit" - Combine all changes with a summary message
+  - "Let me describe" - I'll provide the commit message
 
 ### Step 4: Create the Branch
 

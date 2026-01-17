@@ -500,6 +500,162 @@ func PromptSelect(title string, options []SelectOption, defaultIndex int) (strin
 	return "", fmt.Errorf("unexpected model type or selection")
 }
 
+// multiSelectKeyMap defines keybindings for multi-select prompt
+type multiSelectKeyMap struct {
+	Up     key.Binding
+	Down   key.Binding
+	Toggle key.Binding
+	All    key.Binding
+	None   key.Binding
+	Submit key.Binding
+	Cancel key.Binding
+}
+
+func (k multiSelectKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Toggle, k.All, k.None, k.Submit, k.Cancel}
+}
+
+func (k multiSelectKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{k.Up, k.Down, k.Toggle, k.All, k.None, k.Submit, k.Cancel}}
+}
+
+var defaultMultiSelectKeys = multiSelectKeyMap{
+	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Toggle: key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle")),
+	All:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all")),
+	None:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "none")),
+	Submit: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
+	Cancel: key.NewBinding(key.WithKeys("ctrl+c", "esc", "q"), key.WithHelp("esc", "cancel")),
+}
+
+// multiSelectModel is a multi-select prompt model
+type multiSelectModel struct {
+	title    string
+	options  []string
+	selected map[int]bool
+	cursor   int
+	done     bool
+	err      error
+	help     help.Model
+	keys     multiSelectKeyMap
+}
+
+func (m multiSelectModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if msg, ok := msg.(tea.KeyMsg); ok {
+		switch {
+		case key.Matches(msg, m.keys.Up):
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case key.Matches(msg, m.keys.Down):
+			if m.cursor < len(m.options)-1 {
+				m.cursor++
+			}
+		case key.Matches(msg, m.keys.Toggle):
+			m.selected[m.cursor] = !m.selected[m.cursor]
+		case key.Matches(msg, m.keys.All):
+			for i := range m.options {
+				m.selected[i] = true
+			}
+		case key.Matches(msg, m.keys.None):
+			m.selected = make(map[int]bool)
+		case key.Matches(msg, m.keys.Submit):
+			m.done = true
+			return m, tea.Quit
+		case key.Matches(msg, m.keys.Cancel):
+			m.err = errors.ErrCanceled
+			m.done = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m multiSelectModel) View() string {
+	if m.done {
+		return ""
+	}
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	cursorStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+
+	var s strings.Builder
+	s.WriteString(titleStyle.Render(m.title) + "\n\n")
+
+	for i, opt := range m.options {
+		checkbox := "[ ]"
+		if m.selected[i] {
+			checkbox = selectedStyle.Render("[x]")
+		}
+
+		line := fmt.Sprintf("%s %s", checkbox, opt)
+		if m.cursor == i {
+			s.WriteString(cursorStyle.Render("> "+line) + "\n")
+		} else {
+			s.WriteString("  " + line + "\n")
+		}
+	}
+
+	// Show selection count
+	count := 0
+	for _, v := range m.selected {
+		if v {
+			count++
+		}
+	}
+	s.WriteString(fmt.Sprintf("\n%d of %d selected\n", count, len(m.options)))
+	s.WriteString("\n" + m.help.View(m.keys))
+
+	return lipgloss.NewStyle().Margin(1, 2).Render(s.String())
+}
+
+// PromptMultiSelect prompts the user to select multiple items from a list
+func PromptMultiSelect(title string, options []string) ([]string, error) {
+	if err := CheckInteractiveAllowed(); err != nil {
+		return nil, err
+	}
+
+	if len(options) == 0 {
+		return nil, fmt.Errorf("no options provided")
+	}
+
+	m := multiSelectModel{
+		title:    title,
+		options:  options,
+		selected: make(map[int]bool),
+		cursor:   0,
+		help:     help.New(),
+		keys:     defaultMultiSelectKeys,
+	}
+
+	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	model, err := p.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	if finalModel, ok := model.(multiSelectModel); ok {
+		if finalModel.err != nil {
+			return nil, finalModel.err
+		}
+		var result []string
+		for i, opt := range options {
+			if finalModel.selected[i] {
+				result = append(result, opt)
+			}
+		}
+		return result, nil
+	}
+
+	return nil, fmt.Errorf("unexpected model type")
+}
+
 // BranchChoice represents a branch option in a selection prompt
 type BranchChoice struct {
 	Display string // What to show (may include tree visualization)

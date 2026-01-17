@@ -102,9 +102,10 @@ Examples:
 					return fmt.Errorf("--above/--below can only be used with --by-hunk")
 				}
 
-				// Load config for branch pattern
+				// Load config for branch pattern and hunk selector
 				cfg, _ := config.LoadConfig(ctx.RepoRoot)
 				branchPattern := cfg.GetBranchPattern()
+				hunkSelector := cfg.SplitHunkSelector()
 
 				// Create runner and handler
 				runner, handler := NewSplitUI(ctx.Output, ctx.Logger)
@@ -126,6 +127,7 @@ Examples:
 					Name:          name,
 					Message:       message,
 					UseWizard:     useWizard,
+					HunkSelector:  hunkSelector,
 				}, handler)
 			})
 		},

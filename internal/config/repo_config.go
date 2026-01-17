@@ -298,6 +298,27 @@ func (c *Config) SetCombineCITimeout(seconds int) {
 	c.data.CombineCITimeout = &seconds
 }
 
+// SplitHunkSelector returns the hunk selector mode for split --by-hunk.
+// Valid values are "tui" (default) and "git" (uses git add -p).
+func (c *Config) SplitHunkSelector() string {
+	if c.data.SplitHunkSelector != nil {
+		return *c.data.SplitHunkSelector
+	}
+	return "tui"
+}
+
+// SetSplitHunkSelector sets the hunk selector mode for split --by-hunk.
+// Valid values are "tui" and "git".
+func (c *Config) SetSplitHunkSelector(selector string) error {
+	switch selector {
+	case "tui", "git":
+		c.data.SplitHunkSelector = &selector
+		return nil
+	default:
+		return fmt.Errorf("invalid hunk selector: %s (must be 'tui' or 'git')", selector)
+	}
+}
+
 // RepoConfig represents the repository configuration
 type RepoConfig struct {
 	Trunk                      *string  `json:"trunk,omitempty"`
@@ -313,6 +334,7 @@ type RepoConfig struct {
 	CombineCITimeout           *int     `json:"combine.ciTimeout,omitempty"` // Deprecated: use CITimeout
 	CICommand                  *string  `json:"ci.command,omitempty"`        // Unified CI command for all validation
 	CITimeout                  *int     `json:"ci.timeout,omitempty"`        // Unified CI timeout in seconds
+	SplitHunkSelector          *string  `json:"split.hunkSelector,omitempty"`
 }
 
 // GetBranchPattern returns the branch name pattern as a BranchPattern type

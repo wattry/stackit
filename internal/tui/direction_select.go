@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -65,6 +66,7 @@ type DirectionSelectModel struct {
 	children      []string
 	direction     Direction
 	done          bool
+	ready         bool
 	err           error
 	help          help.Model
 	keys          directionSelectKeyMap
@@ -109,16 +111,20 @@ func (m *DirectionSelectModel) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m *DirectionSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.ready = true
+		return m, nil
+	case tea.KeyMsg:
 		switch {
-		case key.Matches(keyMsg, m.keys.Up):
+		case key.Matches(msg, m.keys.Up):
 			m.direction = DirectionAbove
-		case key.Matches(keyMsg, m.keys.Down):
+		case key.Matches(msg, m.keys.Down):
 			m.direction = DirectionBelow
-		case key.Matches(keyMsg, m.keys.Submit):
+		case key.Matches(msg, m.keys.Submit):
 			m.done = true
 			return m, tea.Quit
-		case key.Matches(keyMsg, m.keys.Cancel):
+		case key.Matches(msg, m.keys.Cancel):
 			m.err = errors.ErrCanceled
 			m.done = true
 			return m, tea.Quit
@@ -131,6 +137,10 @@ func (m *DirectionSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *DirectionSelectModel) View() string {
 	if m.done {
 		return ""
+	}
+
+	if !m.ready {
+		return "Loading..."
 	}
 
 	var sb strings.Builder
@@ -263,7 +273,7 @@ func PromptDirectionSelect(eng engine.BranchReader, currentBranch, parentBranch 
 
 	m := NewDirectionSelectModel(eng, currentBranch, parentBranch, children)
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	model, err := p.Run()
 	if err != nil {
 		return "", err

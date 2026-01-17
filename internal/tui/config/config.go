@@ -36,6 +36,7 @@ func TUIAction(repoRoot string) error {
 			worktreeBasePath = "(not set)"
 		}
 		worktreeAutoClean := cfg.WorktreeAutoClean()
+		splitHunkSelector := cfg.SplitHunkSelector()
 
 		// Build options with current values displayed
 		options := []tui.SelectOption{
@@ -58,6 +59,10 @@ func TUIAction(repoRoot string) error {
 			{
 				Label: fmt.Sprintf("worktree.autoClean: %v", worktreeAutoClean),
 				Value: "worktree.autoClean",
+			},
+			{
+				Label: fmt.Sprintf("split.hunkSelector: %s", splitHunkSelector),
+				Value: "split.hunkSelector",
 			},
 			{
 				Label: "Exit",
@@ -173,6 +178,31 @@ func TUIAction(repoRoot string) error {
 					continue
 				}
 				out.Info("Set worktree.autoClean to: %v", newValue)
+			}
+
+		case "split.hunkSelector":
+			selectorOptions := []tui.SelectOption{
+				{Label: "tui (Custom BubbleTea hunk selector)", Value: "tui"},
+				{Label: "git (Use git add -p)", Value: "git"},
+			}
+			newValue, err := tui.PromptSelect("Select hunk selector for split --by-hunk:", selectorOptions, 0)
+			if err != nil {
+				if errors.Is(err, tui.ErrInteractiveDisabled) || strings.Contains(err.Error(), "canceled") {
+					continue
+				}
+				return err
+			}
+			currentSelector := cfg.SplitHunkSelector()
+			if newValue != currentSelector {
+				if err := cfg.SetSplitHunkSelector(newValue); err != nil {
+					out.Info("Failed to set split.hunkSelector: %v", err)
+					continue
+				}
+				if err := cfg.Save(); err != nil {
+					out.Info("Failed to save config: %v", err)
+					continue
+				}
+				out.Info("Set split.hunkSelector to: %s", newValue)
 			}
 		}
 	}

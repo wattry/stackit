@@ -6,10 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
-
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -199,13 +198,9 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 	splog.Info("")
 
 	// Prompt for file selection
-	var selectedFiles []string
-	prompt := &survey.MultiSelect{
-		Message: "Select files to extract:",
-		Options: changedFiles,
-	}
-	if err := survey.AskOne(prompt, &selectedFiles); err != nil {
-		return nil, fmt.Errorf("canceled")
+	selectedFiles, err := tui.PromptMultiSelect("Select files to extract:", changedFiles)
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate that not all files were selected (only in default mode where files are removed)

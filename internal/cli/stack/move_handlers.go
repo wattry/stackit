@@ -102,35 +102,27 @@ func (h *InteractiveMoveHandler) PromptRename(_, oldScope, newScope string) (boo
 // PromptConfirmMove displays a preview of the move and asks for confirmation
 func (h *InteractiveMoveHandler) PromptConfirmMove(preview move.Preview) (bool, error) {
 	h.Output.Newline()
-	h.Output.Info("Move Preview:")
-	h.Output.Info("  Branch: %s", style.ColorBranchName(preview.SourceBranch, true))
-	h.Output.Info("  From:   %s", style.ColorBranchName(preview.OldParent, false))
-	h.Output.Info("  To:     %s", style.ColorBranchName(preview.NewParent, false))
 
-	if len(preview.Commits) > 0 {
-		h.Output.Newline()
-		h.Output.Info("Commits to be moved (%d):", len(preview.Commits))
-		for _, commit := range preview.Commits {
-			h.Output.Info("  • %s", commit)
-		}
+	// Render visual tree preview
+	previewData := tui.MovePreviewData{
+		SourceBranch:   preview.SourceBranch,
+		OldParent:      preview.OldParent,
+		NewParent:      preview.NewParent,
+		Commits:        preview.Commits,
+		Descendants:    preview.Descendants,
+		HasConflicts:   preview.HasConflicts,
+		ConflictBranch: preview.ConflictBranch,
+		ConflictError:  preview.ConflictError,
 	}
-
-	if len(preview.Descendants) > 0 {
-		h.Output.Newline()
-		h.Output.Info("Descendants to be restacked (%d):", len(preview.Descendants))
-		for _, desc := range preview.Descendants {
-			h.Output.Info("  • %s", style.ColorBranchName(desc, false))
-		}
-	}
+	h.Output.Print(tui.RenderMovePreviewSimple(previewData))
 
 	h.Output.Newline()
-	h.Output.Info("This will rebase %s's commits onto %s.",
-		style.ColorBranchName(preview.SourceBranch, true),
-		style.ColorBranchName(preview.NewParent, false))
-	if len(preview.Descendants) > 0 {
-		h.Output.Info("All descendant branches will be automatically restacked.")
+
+	// If there are conflicts, warn user more prominently
+	if preview.HasConflicts {
+		h.Output.Info("The move cannot proceed due to conflicts.")
+		return tui.PromptConfirm("View the conflict details above and cancel?", false)
 	}
-	h.Output.Newline()
 
 	return tui.PromptConfirm("Proceed with move?", true)
 }

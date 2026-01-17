@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/AlecAivazis/survey/v2"
-
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -22,13 +21,17 @@ func promptBranchName(existingNames []string, originalBranchName string, branchN
 		}
 	}
 
-	var branchName string
-	prompt := &survey.Input{
-		Message: fmt.Sprintf("Choose a name for branch %d", branchNum),
-		Default: defaultName,
+	branchName, err := tui.PromptTextInput(
+		fmt.Sprintf("Choose a name for branch %d:", branchNum),
+		defaultName,
+	)
+	if err != nil {
+		return "", err
 	}
-	if err := survey.AskOne(prompt, &branchName); err != nil {
-		return "", fmt.Errorf("canceled")
+
+	// If empty, use the default
+	if branchName == "" {
+		branchName = defaultName
 	}
 
 	// Validate name - don't allow names already picked in this split session
@@ -54,7 +57,7 @@ func promptBranchName(existingNames []string, originalBranchName string, branchN
 
 func makeRange(n int) []int {
 	result := make([]int, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		result[i] = i
 	}
 	return result
