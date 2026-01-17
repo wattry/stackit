@@ -112,9 +112,11 @@ func (r *Runner) Start() {
 		defer func() {
 			if p := recover(); p != nil {
 				stack := string(debug.Stack())
+				// Log to dedicated panic file for easy debugging
+				output.LogPanic(p, stack)
 				r.logger.Error("TUI panic: %v\n%s", p, stack)
 				// Print to stderr so user sees something
-				fmt.Fprintf(os.Stderr, "\nstackit TUI crashed: %v\n", p)
+				fmt.Fprintf(os.Stderr, "\nstackit TUI crashed: %v\nDetails logged to: %s\n", p, output.GetPanicLogPath())
 				r.Cleanup()
 			}
 		}()
@@ -322,6 +324,8 @@ func SafeCmd(name string, logger output.Logger, cmd tea.Cmd) tea.Cmd {
 			if p := recover(); p != nil {
 				stack := string(debug.Stack())
 				err := fmt.Errorf("%v", p)
+				// Log to dedicated panic file for easy debugging
+				output.LogPanic(p, stack)
 				if logger != nil {
 					logger.Error("%s panicked: %v\n%s", name, p, stack)
 				}
@@ -342,6 +346,8 @@ func SafeCmdFunc(name string, logger output.Logger, fn func() tea.Msg) tea.Cmd {
 			if p := recover(); p != nil {
 				stack := string(debug.Stack())
 				err := fmt.Errorf("%v", p)
+				// Log to dedicated panic file for easy debugging
+				output.LogPanic(p, stack)
 				if logger != nil {
 					logger.Error("%s panicked: %v\n%s", name, p, stack)
 				}

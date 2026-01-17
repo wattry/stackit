@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -134,6 +135,35 @@ func NewFileLoggerOrNull(logFilePath string) Logger {
 		return NewNullLogger()
 	}
 	return logger
+}
+
+// LogPanic writes panic information to a dedicated panic log file.
+// This is separate from regular logging to ensure panics are always
+// preserved and easily findable, even when the terminal is in a bad state.
+// The function is designed to be safe to call in recovery handlers.
+func LogPanic(panicValue any, stack string) {
+	logPath := GetPanicLogPath()
+
+	// Ensure log directory exists
+	logDir := filepath.Dir(logPath)
+	if err := os.MkdirAll(logDir, 0750); err != nil {
+		// Can't create directory, nothing we can do
+		return
+	}
+
+	// Open file in append mode, create if doesn't exist
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		// Can't open file, nothing we can do
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	// Write timestamp, panic value, and stack trace
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	entry := fmt.Sprintf("\n=== PANIC at %s ===\nValue: %v\n\nStack trace:\n%s\n", timestamp, panicValue, stack)
+
+	_, _ = f.WriteString(entry)
 }
 
 // createLumberjackLogger creates a lumberjack logger with configuration from environment variables.
