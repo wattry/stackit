@@ -67,10 +67,8 @@ type LogModel struct {
 	inSearchMode  bool
 	searchMatches map[string]bool // Branch name -> whether it matches search
 
-	// Cached rendering for fast navigation
-	cachedLines         []string // All rendered lines (without selection applied)
-	branchCursorOffsets []int    // Line index where each branch's cursor should appear
-	prevSelectedIndex   int      // Previous selection for delta updates
+	// Cached rendering
+	cachedLines []string // All rendered lines (with selection applied)
 
 	// Options
 	style             string
@@ -437,7 +435,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.selectedIndex = newIndex
 				m.selectedBranch = m.branches[m.selectedIndex].Name
-				m.updateSelection() // Fast path: just update cursor position
+				m.renderTree() // Re-render with new selection (includes cursor and highlight)
 				m.ensureVisible()
 				// Schedule validation with debounce
 				if cmd := m.scheduleValidation(m.selectedBranch); cmd != nil {
@@ -461,7 +459,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.selectedIndex = newIndex
 				m.selectedBranch = m.branches[m.selectedIndex].Name
-				m.updateSelection() // Fast path: just update cursor position
+				m.renderTree() // Re-render with new selection (includes cursor and highlight)
 				m.ensureVisible()
 				// Schedule validation with debounce
 				if cmd := m.scheduleValidation(m.selectedBranch); cmd != nil {
@@ -562,10 +560,10 @@ func (m *LogModel) renderTree() {
 	}
 
 	trunk := m.engine.Trunk().GetName()
-	// Render WITHOUT selection - we apply selection separately for fast navigation
+	// Render with selection - the tree component handles cursor prefix and branch name styling
 	opts := tree.RenderOptions{
 		Reverse:        m.reverse,
-		SelectedBranch: "", // No selection during base render
+		SelectedBranch: m.selectedBranch,
 		Collapsed:      m.collapsed,
 		SingleLine:     m.mode == LogModeSelect,
 		SearchQuery:    m.searchQuery,
@@ -574,56 +572,13 @@ func (m *LogModel) renderTree() {
 	}
 	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
 
-	// Cache lines and compute cursor offsets for each branch
+	// Flatten lines for viewport
 	m.cachedLines = nil
-	m.branchCursorOffsets = make([]int, len(m.branches))
-	lineIndex := 0
-	for i, b := range m.branches {
-		m.branchCursorOffsets[i] = lineIndex + b.CursorLineIndex
+	for _, b := range m.branches {
 		m.cachedLines = append(m.cachedLines, b.Lines...)
-		lineIndex += len(b.Lines)
 	}
 
-	// Apply selection and update viewport
-	m.prevSelectedIndex = -1 // Force full update
-	m.updateSelection()
-}
-
-// updateSelection applies the selection cursor to cached lines and updates viewport.
-// This is much faster than renderTree() for navigation since it skips tree traversal.
-func (m *LogModel) updateSelection() {
-	if len(m.cachedLines) == 0 || !m.ready {
-		return
-	}
-
-	cursor := style.SelectionCursorStyle().Render(style.SelectionCursor)
-	padding := style.SelectionPadding
-
-	// Remove cursor from previous selection
-	if m.prevSelectedIndex >= 0 && m.prevSelectedIndex < len(m.branchCursorOffsets) {
-		prevLineIdx := m.branchCursorOffsets[m.prevSelectedIndex]
-		if prevLineIdx < len(m.cachedLines) {
-			line := m.cachedLines[prevLineIdx]
-			if strings.HasPrefix(line, cursor) {
-				m.cachedLines[prevLineIdx] = padding + line[len(cursor):]
-			}
-		}
-	}
-
-	// Apply cursor to new selection (skip if non-selectable)
-	if m.selectedIndex >= 0 && m.selectedIndex < len(m.branchCursorOffsets) {
-		if !m.nonSelectable[m.branches[m.selectedIndex].Name] {
-			newLineIdx := m.branchCursorOffsets[m.selectedIndex]
-			if newLineIdx < len(m.cachedLines) {
-				line := m.cachedLines[newLineIdx]
-				if strings.HasPrefix(line, padding) {
-					m.cachedLines[newLineIdx] = cursor + line[len(padding):]
-				}
-			}
-		}
-	}
-
-	m.prevSelectedIndex = m.selectedIndex
+	// Update viewport with rendered content (selection already applied by tree)
 	m.viewport.SetContent(strings.Join(m.cachedLines, "\n"))
 }
 

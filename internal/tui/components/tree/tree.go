@@ -698,7 +698,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		branchName := args.branchName
 		coloredBranchName := style.BranchStyle(isCurrent, true, false).Render(branchName)
 		if isSelected {
-			coloredBranchName = style.Selection().Render(branchName)
+			coloredBranchName = style.Selection().Render(" " + branchName + " ")
 		} else if !matchesSearch && args.searchQuery != "" {
 			coloredBranchName = style.ColorDim(branchName)
 		}
@@ -729,7 +729,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	switch {
 	case isSelected && !isNonSelectable:
-		coloredBranchName = style.Selection().Render(branchName)
+		coloredBranchName = style.Selection().Render(" " + branchName + " ")
 	case isNonSelectable:
 		// Gray out non-selectable branches
 		coloredBranchName = style.ColorDim(branchName)
