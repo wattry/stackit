@@ -245,6 +245,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 		"stack-extract.md",
 		"stack-fix.md",
 		"stack-fold.md",
+		"stack-plan.md",
 		"stack-restack.md",
 		"stack-review.md",
 		"stack-status.md",
@@ -311,6 +312,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintln(out, "  /stack-extract - Extract commits/files to independent branch")
 	_, _ = fmt.Fprintln(out, "  /stack-fix     - Diagnose and fix stack issues")
 	_, _ = fmt.Fprintln(out, "  /stack-fold    - Fold granular branches into parents")
+	_, _ = fmt.Fprintln(out, "  /stack-plan    - Plan and create stack from uncommitted changes")
 	_, _ = fmt.Fprintln(out, "  /stack-restack - Rebase all branches in stack")
 	_, _ = fmt.Fprintln(out, "  /stack-review  - Apply PR review comments and mark resolved")
 	_, _ = fmt.Fprintln(out, "  /stack-status  - View stack state and health")

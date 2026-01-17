@@ -23,6 +23,9 @@ import (
 
 const (
 	logStyleFull = "FULL"
+
+	// validationDebounceTime is the delay before triggering validation after selection changes
+	validationDebounceTime = 300 * time.Millisecond
 )
 
 // LogMode defines how the log is used
@@ -64,12 +67,24 @@ type LogModel struct {
 	inSearchMode  bool
 	searchMatches map[string]bool // Branch name -> whether it matches search
 
+	// Cached rendering for fast navigation
+	cachedLines         []string // All rendered lines (without selection applied)
+	branchCursorOffsets []int    // Line index where each branch's cursor should appear
+	prevSelectedIndex   int      // Previous selection for delta updates
+
 	// Options
-	style         string
-	reverse       bool
-	showUntracked bool
-	exclude       map[string]bool
-	header        string // Custom header text for selection mode
+	style             string
+	reverse           bool
+	showUntracked     bool
+	exclude           map[string]bool
+	nonSelectable     map[string]bool // Branches visible but cursor skips them
+	header            string          // Custom header text for selection mode
+	validateSelection func(branchName string) *SelectionValidation
+
+	// Validation state
+	validationResult    *SelectionValidation // Current validation result
+	validationPending   bool                 // Whether validation is pending (debounce)
+	lastValidatedBranch string               // Branch that was last validated
 }
 
 // NewLogModel creates a new LogModel
@@ -115,6 +130,16 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 	for _, b := range eng.AllBranches() {
 		annotations[b.GetName()] = GetMinimalAnnotationWithWorktreeAndEmpty(eng, b, emptyWorktrees)
 	}
+	// Apply annotation overrides (e.g., custom labels for move operation)
+	if opts.AnnotationOverrides != nil {
+		for name, override := range opts.AnnotationOverrides {
+			ann := annotations[name]
+			if override.CustomLabel != "" {
+				ann.CustomLabel = override.CustomLabel
+			}
+			annotations[name] = ann
+		}
+	}
 	renderer.SetAnnotations(annotations)
 	logDebug("Minimal annotations with worktree completed in %v", time.Since(start))
 
@@ -137,22 +162,24 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 	logDebug("NewLogModel completed in %v", time.Since(initStart))
 
 	m := &LogModel{
-		context:        ctx,
-		engine:         eng,
-		githubClient:   ghClient,
-		logger:         opts.Logger,
-		renderer:       renderer,
-		selectedBranch: selectedBranch,
-		logKeys:        keys.DefaultLog,
-		selectKeys:     keys.DefaultSelect,
-		style:          opts.Style,
-		reverse:        opts.Reverse,
-		showUntracked:  opts.ShowUntracked,
-		exclude:        opts.Exclude,
-		header:         opts.Header,
-		collapsed:      make(map[string]bool),
-		searchMatches:  searchMatches,
-		mode:           LogModeView,
+		context:           ctx,
+		engine:            eng,
+		githubClient:      ghClient,
+		logger:            opts.Logger,
+		renderer:          renderer,
+		selectedBranch:    selectedBranch,
+		logKeys:           keys.DefaultLog,
+		selectKeys:        keys.DefaultSelect,
+		style:             opts.Style,
+		reverse:           opts.Reverse,
+		showUntracked:     opts.ShowUntracked,
+		exclude:           opts.Exclude,
+		nonSelectable:     opts.NonSelectable,
+		header:            opts.Header,
+		validateSelection: opts.ValidateSelection,
+		collapsed:         make(map[string]bool),
+		searchMatches:     searchMatches,
+		mode:              LogModeView,
 	}
 
 	return m
@@ -330,6 +357,17 @@ type enrichDataMsg struct {
 	annotations map[string]tree.BranchAnnotation
 }
 
+// validationTickMsg is sent after debounce delay to trigger validation
+type validationTickMsg struct {
+	branchName string // The branch to validate
+}
+
+// validationResultMsg is sent when validation completes
+type validationResultMsg struct {
+	branchName string               // The branch that was validated
+	result     *SelectionValidation // The validation result
+}
+
 // Update handles message updates for the bubbletea model
 func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -384,25 +422,51 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.renderTree()
 		case key.Matches(msg, m.logKeys.Up):
 			if len(m.branches) > 0 {
-				if m.selectedIndex > 0 {
-					m.selectedIndex--
-				} else {
-					m.selectedIndex = len(m.branches) - 1 // Wrap to last
+				newIndex := m.selectedIndex
+				// Try to find the next selectable branch going up
+				for attempts := 0; attempts < len(m.branches); attempts++ {
+					if newIndex > 0 {
+						newIndex--
+					} else {
+						newIndex = len(m.branches) - 1 // Wrap to last
+					}
+					// Stop if this branch is selectable
+					if !m.nonSelectable[m.branches[newIndex].Name] {
+						break
+					}
 				}
+				m.selectedIndex = newIndex
 				m.selectedBranch = m.branches[m.selectedIndex].Name
-				m.renderTree()
+				m.updateSelection() // Fast path: just update cursor position
 				m.ensureVisible()
+				// Schedule validation with debounce
+				if cmd := m.scheduleValidation(m.selectedBranch); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 		case key.Matches(msg, m.logKeys.Down):
 			if len(m.branches) > 0 {
-				if m.selectedIndex < len(m.branches)-1 {
-					m.selectedIndex++
-				} else {
-					m.selectedIndex = 0 // Wrap to first
+				newIndex := m.selectedIndex
+				// Try to find the next selectable branch going down
+				for attempts := 0; attempts < len(m.branches); attempts++ {
+					if newIndex < len(m.branches)-1 {
+						newIndex++
+					} else {
+						newIndex = 0 // Wrap to first
+					}
+					// Stop if this branch is selectable
+					if !m.nonSelectable[m.branches[newIndex].Name] {
+						break
+					}
 				}
+				m.selectedIndex = newIndex
 				m.selectedBranch = m.branches[m.selectedIndex].Name
-				m.renderTree()
+				m.updateSelection() // Fast path: just update cursor position
 				m.ensureVisible()
+				// Schedule validation with debounce
+				if cmd := m.scheduleValidation(m.selectedBranch); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 		case key.Matches(msg, m.selectKeys.Select):
 			if m.mode == LogModeSelect {
@@ -441,6 +505,10 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			// Trigger initial validation for the starting selection
+			if cmd := m.scheduleValidation(m.selectedBranch); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 
 	case enrichDataMsg:
@@ -456,6 +524,23 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A background command panicked - log it and continue gracefully
 		// The error was already logged by SafeCmdFunc, but we note it here too
 		m.log("Recovered from panic in %s: %v", msg.Source, msg.Err)
+
+	case validationTickMsg:
+		// Debounce timer fired - run validation if this branch is still selected
+		if msg.branchName == m.selectedBranch && m.validateSelection != nil {
+			cmds = append(cmds, m.runValidation(msg.branchName))
+		} else {
+			// Selection changed during debounce, clear pending state
+			m.validationPending = false
+		}
+
+	case validationResultMsg:
+		// Validation completed - update state if the branch is still selected
+		m.validationPending = false
+		if msg.branchName == m.selectedBranch {
+			m.validationResult = msg.result
+			m.lastValidatedBranch = msg.branchName
+		}
 	}
 
 	if m.ready {
@@ -477,22 +562,69 @@ func (m *LogModel) renderTree() {
 	}
 
 	trunk := m.engine.Trunk().GetName()
+	// Render WITHOUT selection - we apply selection separately for fast navigation
 	opts := tree.RenderOptions{
 		Reverse:        m.reverse,
-		SelectedBranch: m.selectedBranch,
+		SelectedBranch: "", // No selection during base render
 		Collapsed:      m.collapsed,
 		SingleLine:     m.mode == LogModeSelect,
 		SearchQuery:    m.searchQuery,
 		SearchMatches:  m.searchMatches,
+		NonSelectable:  m.nonSelectable,
 	}
 	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
 
-	var allLines []string
-	for _, b := range m.branches {
-		allLines = append(allLines, b.Lines...)
+	// Cache lines and compute cursor offsets for each branch
+	m.cachedLines = nil
+	m.branchCursorOffsets = make([]int, len(m.branches))
+	lineIndex := 0
+	for i, b := range m.branches {
+		m.branchCursorOffsets[i] = lineIndex + b.CursorLineIndex
+		m.cachedLines = append(m.cachedLines, b.Lines...)
+		lineIndex += len(b.Lines)
 	}
 
-	m.viewport.SetContent(strings.Join(allLines, "\n"))
+	// Apply selection and update viewport
+	m.prevSelectedIndex = -1 // Force full update
+	m.updateSelection()
+}
+
+// updateSelection applies the selection cursor to cached lines and updates viewport.
+// This is much faster than renderTree() for navigation since it skips tree traversal.
+func (m *LogModel) updateSelection() {
+	if len(m.cachedLines) == 0 || !m.ready {
+		return
+	}
+
+	cursor := style.SelectionCursorStyle().Render(style.SelectionCursor)
+	padding := style.SelectionPadding
+
+	// Remove cursor from previous selection
+	if m.prevSelectedIndex >= 0 && m.prevSelectedIndex < len(m.branchCursorOffsets) {
+		prevLineIdx := m.branchCursorOffsets[m.prevSelectedIndex]
+		if prevLineIdx < len(m.cachedLines) {
+			line := m.cachedLines[prevLineIdx]
+			if strings.HasPrefix(line, cursor) {
+				m.cachedLines[prevLineIdx] = padding + line[len(cursor):]
+			}
+		}
+	}
+
+	// Apply cursor to new selection (skip if non-selectable)
+	if m.selectedIndex >= 0 && m.selectedIndex < len(m.branchCursorOffsets) {
+		if !m.nonSelectable[m.branches[m.selectedIndex].Name] {
+			newLineIdx := m.branchCursorOffsets[m.selectedIndex]
+			if newLineIdx < len(m.cachedLines) {
+				line := m.cachedLines[newLineIdx]
+				if strings.HasPrefix(line, padding) {
+					m.cachedLines[newLineIdx] = cursor + line[len(padding):]
+				}
+			}
+		}
+	}
+
+	m.prevSelectedIndex = m.selectedIndex
+	m.viewport.SetContent(strings.Join(m.cachedLines, "\n"))
 }
 
 func (m *LogModel) ensureVisible() {
@@ -552,6 +684,45 @@ func (m *LogModel) moveToFirstMatch() {
 	}
 }
 
+// scheduleValidation returns a command that triggers validation after debounce delay
+func (m *LogModel) scheduleValidation(branchName string) tea.Cmd {
+	if m.validateSelection == nil {
+		return nil
+	}
+
+	// Mark validation as pending
+	m.validationPending = true
+
+	// Return a tick command that will fire after debounce delay
+	return tea.Tick(validationDebounceTime, func(_ time.Time) tea.Msg {
+		return validationTickMsg{branchName: branchName}
+	})
+}
+
+// runValidation runs the validation callback in a goroutine and returns a command
+func (m *LogModel) runValidation(branchName string) tea.Cmd {
+	if m.validateSelection == nil {
+		return nil
+	}
+
+	validateFn := m.validateSelection
+	logger := m.logger
+
+	return func() tea.Msg {
+		defer func() {
+			if p := recover(); p != nil && logger != nil {
+				logger.Error("Validation panicked: %v", p)
+			}
+		}()
+
+		result := validateFn(branchName)
+		return validationResultMsg{
+			branchName: branchName,
+			result:     result,
+		}
+	}
+}
+
 // View renders the bubbletea model
 func (m *LogModel) View() string {
 	if m.renderer == nil {
@@ -589,6 +760,7 @@ func (m *LogModel) View() string {
 			SingleLine:     m.mode == LogModeSelect,
 			SearchQuery:    m.searchQuery,
 			SearchMatches:  m.searchMatches,
+			NonSelectable:  m.nonSelectable,
 		}
 		branches := m.renderer.RenderStackDetailed(trunk, opts)
 		var lines []string
@@ -598,11 +770,34 @@ func (m *LogModel) View() string {
 		content = strings.Join(lines, "\n")
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		"",
-		content,
-	)
+	// Build the output
+	parts := []string{header, "", content}
+
+	// Add validation status footer if validation is enabled
+	if m.validateSelection != nil && m.mode == LogModeSelect {
+		footer := m.renderValidationFooter()
+		if footer != "" {
+			parts = append(parts, "", footer)
+		}
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// renderValidationFooter renders the validation status footer
+func (m *LogModel) renderValidationFooter() string {
+	if m.validationPending {
+		return style.ColorDim(" ⏳ Checking for conflicts...")
+	}
+
+	if m.validationResult != nil && m.lastValidatedBranch == m.selectedBranch {
+		if m.validationResult.Valid {
+			return " " + style.ColorGreen("✓") + " " + style.ColorGreen(m.validationResult.Message)
+		}
+		return " " + style.ColorRed("✗") + " " + style.ColorRed(m.validationResult.Message)
+	}
+
+	return ""
 }
 
 // PromptLogSelect runs the interactive log in selection mode and returns the selected branch name
@@ -626,13 +821,25 @@ func PromptLogSelect(ctx context.Context, eng engine.Engine, ghClient github.Cli
 	return res.selectedBranch, nil
 }
 
+// SelectionValidation contains the result of validating a selection
+type SelectionValidation struct {
+	Valid   bool   // Whether the selection is valid (no conflicts)
+	Message string // Status message to display (e.g., "Move will complete without conflicts")
+}
+
 // LogOptions repeated here to avoid circular dependency if needed,
 // but we'll probably use actions.LogOptions
 type LogOptions struct {
-	Style         string
-	Reverse       bool
-	ShowUntracked bool
-	Exclude       map[string]bool // Branches to exclude from selection
-	Logger        output.Logger   // Optional logger for IO timing diagnostics
-	Header        string          // Custom header text for selection mode (e.g., "Select new parent for branch X")
+	Style               string
+	Reverse             bool
+	ShowUntracked       bool
+	Exclude             map[string]bool                  // Branches to exclude from selection
+	NonSelectable       map[string]bool                  // Branches visible but not selectable (cursor skips them)
+	AnnotationOverrides map[string]tree.BranchAnnotation // Override annotations (e.g., add custom labels)
+	Logger              output.Logger                    // Optional logger for IO timing diagnostics
+	Header              string                           // Custom header text for selection mode (e.g., "Select new parent for branch X")
+
+	// ValidateSelection is called (with debounce) when selection changes to validate the current selection.
+	// If provided, the result is displayed in the UI footer.
+	ValidateSelection func(branchName string) *SelectionValidation
 }

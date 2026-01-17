@@ -1,6 +1,6 @@
 ---
 description: Create a new stacked branch with intelligent naming
-allowed-tools: Bash(stackit:*), Bash(git:*), Read
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion
 argument-hint: [-m "message"] [branch-name]
 ---
 
@@ -71,7 +71,13 @@ Using the diff from Step 2 and the recent commits style from Context, generate a
 - Match the style of recent commits
 
 For simple/obvious changes (single-purpose diffs, documentation, bug fixes), generate directly.
-For complex changes (large diffs, multiple concerns), ask the user for guidance.
+
+For complex changes (large diffs, multiple concerns), use `AskUserQuestion`:
+- Header: "Commit scope"
+- Question: "This diff contains multiple concerns. How should I structure the commit?"
+- Options:
+  - "Single commit" - Combine all changes with a summary message
+  - "Let me describe" - I'll provide the commit message
 
 ### Step 4: Create the Branch
 

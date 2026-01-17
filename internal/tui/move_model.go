@@ -1,0 +1,581 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/style"
+)
+
+const (
+	// maxVisibleBranches is the maximum number of branches shown at once
+	maxVisibleBranches = 12
+	// moveValidationDebounce is the delay before triggering validation
+	moveValidationDebounce = 300 * time.Millisecond
+)
+
+// moveState represents the current state of the move operation
+type moveState int
+
+const (
+	moveStateSelecting  moveState = iota // User is selecting the target parent
+	moveStateConfirming                  // User is confirming the move preview
+	moveStateCanceled                    // User canceled the operation
+	moveStateConfirmed                   // User confirmed, ready to execute
+)
+
+// MoveResult contains the result of the interactive move selection
+type MoveResult struct {
+	SelectedParent string // The branch selected as new parent
+	Canceled       bool   // Whether the user canceled
+}
+
+// MoveModelConfig contains configuration for the move model
+type MoveModelConfig struct {
+	SourceBranch string          // Branch being moved
+	Descendants  []engine.Branch // Descendants that will be restacked
+	OldParent    *engine.Branch  // Current parent branch
+	OldParentRev string          // Current parent revision for rebase specs
+	Validator    MoveValidator   // Validation function for conflict checking
+}
+
+// MoveValidator validates a potential move operation
+type MoveValidator func(ontoBranch string) (*MoveValidation, error)
+
+// MoveValidation contains the result of validating a move
+type MoveValidation struct {
+	Valid          bool     // Whether the move is valid (no conflicts)
+	Message        string   // Status message
+	Commits        []string // Commits that will be moved
+	HasConflicts   bool     // Whether conflicts were detected
+	ConflictBranch string   // Branch with conflicts
+	ConflictError  string   // Conflict error message
+}
+
+// branchItem represents a selectable branch in the list
+type branchItem struct {
+	name       string
+	display    string // Rendered display with tree characters
+	isSource   bool   // Is this the branch being moved?
+	selectable bool   // Can this branch be selected as a target?
+}
+
+// MoveModel is the bubbletea model for the interactive move flow
+type MoveModel struct {
+	// Core state
+	state        moveState
+	sourceBranch string
+	oldParent    string
+
+	// Branch list
+	branches     []branchItem
+	cursor       int
+	scrollOffset int
+
+	// Validation state
+	validation        *MoveValidation
+	validationPending bool
+	validationTag     int // For debouncing
+	validator         MoveValidator
+
+	// Keybindings
+	keys moveKeyMap
+}
+
+// moveKeyMap defines keys for the move selector
+type moveKeyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	Select  key.Binding
+	Cancel  key.Binding
+	Confirm key.Binding
+	Back    key.Binding
+}
+
+var defaultMoveKeys = moveKeyMap{
+	Up: key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "down"),
+	),
+	Select: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "select"),
+	),
+	Cancel: key.NewBinding(
+		key.WithKeys("esc", "q"),
+		key.WithHelp("esc/q", "cancel"),
+	),
+	Confirm: key.NewBinding(
+		key.WithKeys("y", "enter"),
+		key.WithHelp("y/enter", "confirm"),
+	),
+	Back: key.NewBinding(
+		key.WithKeys("b", "esc"),
+		key.WithHelp("b/esc", "back"),
+	),
+}
+
+// NewMoveModel creates a new MoveModel for interactive branch selection
+func NewMoveModel(eng engine.Engine, config MoveModelConfig) *MoveModel {
+	// Build non-selectable set from descendants
+	nonSelectable := make(map[string]bool)
+	for _, d := range config.Descendants {
+		nonSelectable[d.GetName()] = true
+	}
+
+	// Determine old parent name
+	oldParentName := eng.Trunk().GetName()
+	if config.OldParent != nil {
+		oldParentName = config.OldParent.GetName()
+	}
+
+	// Build the branch list using the tree renderer for proper formatting
+	trunk := eng.Trunk().GetName()
+
+	// Create tree renderer
+	renderer := NewStackTreeRenderer(eng)
+
+	// Add custom annotation for source branch
+	annotations := make(map[string]tree.BranchAnnotation)
+	for _, b := range eng.AllBranches() {
+		ann := tree.BranchAnnotation{}
+		if b.GetName() == config.SourceBranch {
+			ann.CustomLabel = " ← moving this"
+		}
+		annotations[b.GetName()] = ann
+	}
+	renderer.SetAnnotations(annotations)
+
+	// Render the tree (trunk at bottom to match st log)
+	opts := tree.RenderOptions{
+		Reverse:       false,
+		SingleLine:    true,
+		NonSelectable: nonSelectable,
+	}
+	rendered := renderer.RenderStackDetailed(trunk, opts)
+
+	// Convert to branch items, filtering out connector-only lines
+	branches := make([]branchItem, 0, len(rendered))
+	for _, rb := range rendered {
+		// Skip entries that aren't actual branches (connector lines have empty names)
+		if rb.Name == "" {
+			continue
+		}
+
+		isSource := rb.Name == config.SourceBranch
+		selectable := !nonSelectable[rb.Name] && !isSource
+
+		// Use the rendered line directly
+		display := ""
+		if len(rb.Lines) > 0 {
+			display = rb.Lines[0]
+		}
+
+		// Add padding to trunk to align with child branches
+		// (trunk has 2 fewer leading spaces in tree output)
+		if rb.Name == trunk {
+			display = "  " + display
+		}
+
+		branches = append(branches, branchItem{
+			name:       rb.Name,
+			display:    display,
+			isSource:   isSource,
+			selectable: selectable,
+		})
+	}
+
+	// Find the source branch and trunk positions
+	sourceIndex := 0
+	trunkIndex := len(branches) - 1 // trunk is usually last (at bottom of tree)
+	for i, b := range branches {
+		if b.isSource {
+			sourceIndex = i
+		}
+		if b.name == trunk {
+			trunkIndex = i
+		}
+	}
+
+	// Position cursor on trunk (main) as it's the most common move target
+	cursor := trunkIndex
+	// If trunk isn't selectable, find nearest selectable branch
+	if !branches[cursor].selectable {
+		for i := cursor - 1; i >= 0; i-- {
+			if branches[i].selectable {
+				cursor = i
+				break
+			}
+		}
+	}
+
+	// Calculate scroll offset to show both source and trunk if possible
+	// Start from the end to ensure trunk is visible
+	scrollOffset := 0
+	if len(branches) > maxVisibleBranches {
+		// Show the last maxVisibleBranches items (trunk at bottom)
+		scrollOffset = len(branches) - maxVisibleBranches
+		// But also try to show source branch
+		if sourceIndex < scrollOffset {
+			scrollOffset = sourceIndex
+		}
+	}
+
+	return &MoveModel{
+		state:        moveStateSelecting,
+		sourceBranch: config.SourceBranch,
+		oldParent:    oldParentName,
+		branches:     branches,
+		cursor:       cursor,
+		scrollOffset: scrollOffset,
+		validator:    config.Validator,
+		keys:         defaultMoveKeys,
+	}
+}
+
+// Init initializes the model
+func (m *MoveModel) Init() tea.Cmd {
+	// Trigger initial validation
+	return m.scheduleValidation()
+}
+
+// moveValidationTickMsg is sent after debounce delay
+type moveValidationTickMsg struct {
+	tag int
+}
+
+// moveValidationResultMsg is sent when validation completes
+type moveValidationResultMsg struct {
+	branchName string
+	validation *MoveValidation
+	err        error
+}
+
+// Update handles messages and updates state
+func (m *MoveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.state {
+	case moveStateSelecting:
+		return m.updateSelecting(msg)
+	case moveStateConfirming:
+		return m.updateConfirming(msg)
+	case moveStateCanceled, moveStateConfirmed:
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// updateSelecting handles messages in the selection state
+func (m *MoveModel) updateSelecting(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keys.Up):
+			m.moveCursor(-1)
+			return m, m.scheduleValidation()
+
+		case key.Matches(msg, m.keys.Down):
+			m.moveCursor(1)
+			return m, m.scheduleValidation()
+
+		case key.Matches(msg, m.keys.Select):
+			if m.cursor >= 0 && m.cursor < len(m.branches) && m.branches[m.cursor].selectable {
+				m.state = moveStateConfirming
+				m.validationPending = true
+				return m, m.runFullValidation()
+			}
+
+		case key.Matches(msg, m.keys.Cancel):
+			m.state = moveStateCanceled
+			return m, tea.Quit
+		}
+
+	case moveValidationTickMsg:
+		if msg.tag == m.validationTag {
+			return m, m.runValidation()
+		}
+
+	case moveValidationResultMsg:
+		m.validationPending = false
+		if msg.err != nil {
+			m.validation = &MoveValidation{
+				Valid:   false,
+				Message: fmt.Sprintf("Error: %v", msg.err),
+			}
+		} else {
+			m.validation = msg.validation
+		}
+	}
+
+	return m, nil
+}
+
+// updateConfirming handles messages in the confirmation state
+func (m *MoveModel) updateConfirming(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keys.Confirm):
+			if m.validation != nil && m.validation.Valid {
+				m.state = moveStateConfirmed
+				return m, tea.Quit
+			}
+		case key.Matches(msg, m.keys.Back):
+			m.state = moveStateSelecting
+			return m, nil
+		case key.Matches(msg, m.keys.Cancel):
+			m.state = moveStateCanceled
+			return m, tea.Quit
+		}
+
+	case moveValidationResultMsg:
+		m.validationPending = false
+		if msg.err != nil {
+			m.validation = &MoveValidation{
+				Valid:   false,
+				Message: fmt.Sprintf("Error: %v", msg.err),
+			}
+		} else {
+			m.validation = msg.validation
+		}
+	}
+
+	return m, nil
+}
+
+// moveCursor moves the cursor, skipping non-selectable branches
+func (m *MoveModel) moveCursor(delta int) {
+	if len(m.branches) == 0 {
+		return
+	}
+
+	newCursor := m.cursor
+	for attempts := 0; attempts < len(m.branches); attempts++ {
+		newCursor += delta
+		if newCursor < 0 {
+			newCursor = len(m.branches) - 1
+		} else if newCursor >= len(m.branches) {
+			newCursor = 0
+		}
+		if m.branches[newCursor].selectable {
+			m.cursor = newCursor
+			m.ensureVisible()
+			return
+		}
+	}
+}
+
+// ensureVisible adjusts scroll offset to keep cursor visible
+func (m *MoveModel) ensureVisible() {
+	if m.cursor < m.scrollOffset {
+		m.scrollOffset = m.cursor
+	} else if m.cursor >= m.scrollOffset+maxVisibleBranches {
+		m.scrollOffset = m.cursor - maxVisibleBranches + 1
+	}
+}
+
+// scheduleValidation returns a command that triggers validation after debounce
+func (m *MoveModel) scheduleValidation() tea.Cmd {
+	if m.validator == nil {
+		return nil
+	}
+	m.validationTag++
+	m.validationPending = true
+	tag := m.validationTag
+	return tea.Tick(moveValidationDebounce, func(_ time.Time) tea.Msg {
+		return moveValidationTickMsg{tag: tag}
+	})
+}
+
+// runValidation runs quick validation for the current selection
+func (m *MoveModel) runValidation() tea.Cmd {
+	if m.validator == nil || m.cursor < 0 || m.cursor >= len(m.branches) {
+		return nil
+	}
+
+	branchName := m.branches[m.cursor].name
+	validator := m.validator
+
+	return func() tea.Msg {
+		result, err := validator(branchName)
+		return moveValidationResultMsg{
+			branchName: branchName,
+			validation: result,
+			err:        err,
+		}
+	}
+}
+
+// runFullValidation runs validation for confirmation (same as runValidation but clearer intent)
+func (m *MoveModel) runFullValidation() tea.Cmd {
+	return m.runValidation()
+}
+
+// selectedBranch returns the currently selected branch name
+func (m *MoveModel) selectedBranch() string {
+	if m.cursor >= 0 && m.cursor < len(m.branches) {
+		return m.branches[m.cursor].name
+	}
+	return ""
+}
+
+// View renders the current state
+func (m *MoveModel) View() string {
+	switch m.state {
+	case moveStateSelecting:
+		return m.viewSelecting()
+	case moveStateConfirming:
+		return m.viewConfirming()
+	default:
+		return ""
+	}
+}
+
+// viewSelecting renders the branch selection view
+func (m *MoveModel) viewSelecting() string {
+	var sb strings.Builder
+
+	// Header
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	sb.WriteString(headerStyle.Render(fmt.Sprintf("Select new parent for '%s'", m.sourceBranch)))
+	sb.WriteString("\n\n")
+
+	// Branch list with scroll
+	visibleEnd := m.scrollOffset + maxVisibleBranches
+	if visibleEnd > len(m.branches) {
+		visibleEnd = len(m.branches)
+	}
+
+	// Show scroll indicator if needed
+	if m.scrollOffset > 0 {
+		sb.WriteString(style.ColorDim("  ↑ more branches above"))
+		sb.WriteString("\n")
+	}
+
+	for i := m.scrollOffset; i < visibleEnd; i++ {
+		branch := m.branches[i]
+
+		// Cursor indicator
+		if i == m.cursor {
+			sb.WriteString(style.SelectionCursorStyle().Render(style.SelectionCursor))
+		} else {
+			sb.WriteString(style.SelectionPadding)
+		}
+
+		// Branch display
+		if branch.selectable {
+			sb.WriteString(branch.display)
+		} else {
+			sb.WriteString(style.ColorDim(branch.display))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Show scroll indicator if needed
+	if visibleEnd < len(m.branches) {
+		sb.WriteString(style.ColorDim("  ↓ more branches below"))
+		sb.WriteString("\n")
+	}
+
+	// Validation status
+	sb.WriteString("\n")
+	sb.WriteString(m.renderValidationStatus())
+
+	// Help
+	sb.WriteString("\n")
+	sb.WriteString(style.ColorDim("↑/k up • ↓/j down • enter select • esc cancel"))
+	sb.WriteString("\n")
+
+	return lipgloss.NewStyle().Margin(1, 2).Render(sb.String())
+}
+
+// renderValidationStatus renders the validation footer
+func (m *MoveModel) renderValidationStatus() string {
+	if m.validationPending {
+		return style.ColorDim("⏳ Checking for conflicts...")
+	}
+
+	if m.validation != nil {
+		if m.validation.Valid {
+			return style.ColorGreen("✓") + " " + style.ColorGreen(m.validation.Message)
+		}
+		return style.ColorRed("✗") + " " + style.ColorRed(m.validation.Message)
+	}
+
+	return ""
+}
+
+// viewConfirming renders the confirmation view
+func (m *MoveModel) viewConfirming() string {
+	var sb strings.Builder
+
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	sb.WriteString(headerStyle.Render("Confirm Move"))
+	sb.WriteString("\n\n")
+
+	// Show what we're doing
+	sb.WriteString(fmt.Sprintf("Move %s onto %s\n",
+		style.ColorBranchName(m.sourceBranch, true),
+		style.ColorBranchName(m.selectedBranch(), false)))
+	sb.WriteString("\n")
+
+	// Validation status
+	if m.validationPending {
+		sb.WriteString(style.ColorDim("⏳ Validating move..."))
+		sb.WriteString("\n")
+	} else if m.validation != nil {
+		if m.validation.Valid {
+			sb.WriteString(style.ColorGreen("✓ Move will complete without conflicts"))
+			sb.WriteString("\n\n")
+			sb.WriteString(style.ColorDim("[y/enter] confirm • [b/esc] back • [q] cancel"))
+		} else {
+			sb.WriteString(style.ColorRed("✗ ") + style.ColorRed(m.validation.Message))
+			sb.WriteString("\n\n")
+			sb.WriteString(style.ColorDim("[b/esc] back • [q] cancel"))
+		}
+		sb.WriteString("\n")
+	}
+
+	return lipgloss.NewStyle().Margin(1, 2).Render(sb.String())
+}
+
+// Result returns the result of the move selection
+func (m *MoveModel) Result() MoveResult {
+	return MoveResult{
+		SelectedParent: m.selectedBranch(),
+		Canceled:       m.state == moveStateCanceled,
+	}
+}
+
+// PromptMoveSelect runs the interactive move selection and returns the selected parent
+func PromptMoveSelect(eng engine.Engine, config MoveModelConfig) (string, error) {
+	if err := CheckInteractiveAllowed(); err != nil {
+		return "", err
+	}
+
+	model := NewMoveModel(eng, config)
+	// No tea.WithAltScreen() - run inline
+	p := tea.NewProgram(model)
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+
+	result := finalModel.(*MoveModel).Result()
+	if result.Canceled {
+		return "", errors.ErrCanceled
+	}
+
+	return result.SelectedParent, nil
+}

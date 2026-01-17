@@ -90,29 +90,68 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 }
 
 // interactiveOntoSelection shows an interactive branch selector for choosing the "onto" branch
+// This uses a compact inline bubbletea model that combines selection and confirmation.
 func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, error) {
 	eng := ctx.Engine
 
-	// Get descendants of source to exclude them
+	// Get descendants of source (will be restacked after move)
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	descendants := graph.Range(eng.GetBranch(sourceBranch), engine.StackRange{
+	source := eng.GetBranch(sourceBranch)
+	descendants := graph.Range(source, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,
 	})
-	excludedBranches := make(map[string]bool)
-	for _, d := range descendants {
-		excludedBranches[d.GetName()] = true
+
+	// Get info needed for validation
+	oldParent := source.GetParent()
+	var oldParentRev string
+	if meta, err := eng.Git().ReadMetadata(sourceBranch); err == nil && meta.ParentBranchRevision != nil {
+		oldParentRev = *meta.ParentBranchRevision
 	}
 
-	// Show interactive selector with context about what we're doing
-	header := fmt.Sprintf("Select new parent for '%s'", sourceBranch)
-	selected, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
-		Style:   "FULL",
-		Exclude: excludedBranches,
-		Logger:  ctx.Logger,
-		Header:  header,
-	})
+	// Create validation function that checks for conflicts when moving to a branch
+	validator := func(ontoBranch string) (*tui.MoveValidation, error) {
+		// Build rebase specs for this potential move
+		rebaseSpecs := move.BuildRebaseSpecs(eng, ctx.Output, sourceBranch, ontoBranch, oldParent, oldParentRev, descendants)
+
+		// Validate the rebases
+		validation, err := eng.ValidateRebases(ctx.Context, rebaseSpecs)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get commits that will be moved
+		commits, _ := eng.GetAllCommits(source, engine.CommitFormatSubject)
+
+		if !validation.Success {
+			return &tui.MoveValidation{
+				Valid:          false,
+				Message:        fmt.Sprintf("Conflicts on %s: %s", validation.FailedBranch, validation.ErrorMessage),
+				Commits:        commits,
+				HasConflicts:   true,
+				ConflictBranch: validation.FailedBranch,
+				ConflictError:  validation.ErrorMessage,
+			}, nil
+		}
+
+		return &tui.MoveValidation{
+			Valid:   true,
+			Message: "Move will complete without conflicts",
+			Commits: commits,
+		}, nil
+	}
+
+	// Use the compact move model with selection + confirmation
+	config := tui.MoveModelConfig{
+		SourceBranch: sourceBranch,
+		Descendants:  descendants,
+		OldParent:    oldParent,
+		OldParentRev: oldParentRev,
+		Validator:    validator,
+	}
+
+	selected, err := tui.PromptMoveSelect(ctx.Engine, config)
 	if err != nil {
 		return "", err
 	}
