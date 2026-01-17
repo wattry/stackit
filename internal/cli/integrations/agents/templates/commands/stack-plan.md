@@ -18,6 +18,21 @@ Analyze uncommitted working tree changes, suggest a logical stacking structure, 
 ## Arguments
 $ARGUMENTS
 
+## Safety Model
+
+This workflow uses a **backup commit** strategy to ensure changes are never lost:
+
+1. **Before execution**: All changes are committed to a temporary backup branch
+2. **During execution**: Files are selectively checked out from the backup commit
+3. **On success**: Backup branch is deleted (changes now live in stack branches)
+4. **On failure**: Backup branch remains - user can recover ALL changes
+
+This is safer than stash because:
+- Changes are in git history, not volatile stash storage
+- Backup survives even if something corrupts the stash
+- `git checkout <backup> -- file` naturally isolates files per branch
+- Recovery is always `git checkout <backup-branch>` or `git cherry-pick <backup-commit>`
+
 ## Instructions
 
 ### Phase 1: Gather All Changes
@@ -25,9 +40,6 @@ $ARGUMENTS
 First, check the current state of the working tree:
 
 ```bash
-# Check for existing stashes (warn if present)
-git stash list
-
 # Check current staging state
 git diff --cached --stat
 
@@ -39,13 +51,6 @@ git diff
 
 # List untracked files
 git ls-files --others --exclude-standard
-```
-
-**If existing stashes found**: Warn the user:
-```
-Warning: You have existing stashes. Stack-plan will create additional stash
-entries during execution. Your existing stashes will not be affected, but
-recovery instructions will reference the most recent stash created by stack-plan.
 ```
 
 For untracked files, read their contents to understand what they contain.
@@ -210,19 +215,28 @@ Use `AskUserQuestion` to get approval:
   - "Modify" - Change groupings, order, or names
   - "Cancel" - Exit without creating branches
 
-**If user selects "Dry run"**, show the exact commands that would run for each branch:
+**If user selects "Dry run"**, show the exact commands that would run:
 ```
-Dry Run - Commands for Branch 1 of 3: <branch-name>
-===================================================
-git reset HEAD
-git add file1.go file2.go
-git stash push --include-untracked -m "stack-plan-<timestamp>: remaining changes for branches 2-3"
+Dry Run - Setup
+===============
+BACKUP_BRANCH="stack-plan-backup-<timestamp>"
+git checkout -b "$BACKUP_BRANCH"
+git add -A
+git commit -m "stack-plan: backup of all changes"
+BACKUP_COMMIT=<commit-sha>
+git checkout <original-branch>
+
+Dry Run - Branch 1 of 3: <branch-name>
+======================================
+git checkout "$BACKUP_COMMIT" -- file1.go file2.go
 echo "commit message" | command stackit create <branch-name> --no-interactive
 <check-command>
-git stash apply
-git stash drop
 
 [Continue for each branch...]
+
+Dry Run - Cleanup (on success)
+==============================
+git branch -D "$BACKUP_BRANCH"
 ```
 
 Then ask again whether to execute or cancel.
@@ -231,7 +245,30 @@ Then ask again whether to execute or cancel.
 
 ### Phase 6: Execute Stack Creation
 
-Before starting, display the recovery reference:
+#### Step 0: Create Backup Commit
+
+**This is the critical safety step.** Before touching any files, commit ALL changes to a backup branch:
+
+```bash
+# Record original branch for return
+ORIGINAL_BRANCH=$(git branch --show-current)
+
+# Create backup branch with timestamp
+BACKUP_BRANCH="stack-plan-backup-$(date +%s)"
+git checkout -b "$BACKUP_BRANCH"
+
+# Stage and commit ALL changes (including untracked)
+git add -A
+git commit -m "stack-plan: backup of all changes"
+
+# Record the backup commit SHA
+BACKUP_COMMIT=$(git rev-parse HEAD)
+
+# Return to original branch
+git checkout "$ORIGINAL_BRANCH"
+```
+
+Display the recovery reference:
 
 ```
 Starting Stack Creation
@@ -239,94 +276,62 @@ Starting Stack Creation
 Total branches to create: N
 Progress: [0/N]
 
-Recovery Reference:
-- STATE A: All changes uncommitted → Nothing to recover
-- STATE B: Some branches created, rest stashed → Run: git stash apply && git stash drop
-- STATE D: Build failed mid-execution → Stash auto-restored, see options
+Safety Backup Created
+---------------------
+Backup branch: <backup-branch-name>
+Backup commit: <commit-sha>
 
-If anything fails, your changes are recoverable. Proceeding...
+RECOVERY: If anything goes wrong, run:
+  git checkout <backup-branch-name>
+
+All your changes are safely committed. Proceeding...
 ```
 
 **For each branch**, follow these steps:
 
 #### Step 1: Report Current State
 
-For **branch 1** (first branch):
-```
-[1/N] Creating branch: <branch-name>
-=====================================
-Current state: STATE A (all changes uncommitted)
-Files for this branch: <file-list>
-Files remaining after this: <remaining-file-list>
-```
-
-For **branches 2 through N-1** (middle branches):
 ```
 [X/N] Creating branch: <branch-name>
 =====================================
-Current state: STATE B
-- Branches created: [branch-1, branch-2, ...]
-- Stash contains: <remaining-files> (for branches X+1 to N)
-- Files for this branch: <file-list>
-
-If something goes wrong:
-1. Run: git stash apply && git stash drop
-2. Your remaining changes will be restored to working tree
-3. Created branches are preserved
-```
-
-For **branch N** (last branch):
-```
-[N/N] Creating branch: <branch-name> (final)
-============================================
-Current state: STATE B
-- Branches created: [branch-1, ..., branch-N-1]
-- Files for this branch: <file-list>
-- No stash needed (this is the last branch)
+Backup commit: <commit-sha>
+Files for this branch: <file-list>
+Branches created so far: [branch-1, branch-2, ...] (or "none" for first)
 ```
 
 #### Step 2: Execute Branch Creation
 
-**For branches 1 through N-1** (not the last branch):
+**For each branch** (same process for all):
 ```bash
-# 1. Reset staging (clean slate)
-git reset HEAD
+# 1. Checkout ONLY the files for this branch from the backup commit
+#    This stages them automatically and excludes all other files
+git checkout "$BACKUP_COMMIT" -- <file1> <file2> ...
 
-# 2. Stage only files for this branch
-git add <file1> <file2> ...
+# 2. Verify files are staged (safety check)
+git diff --cached --stat
 
-# 3. Stash remaining changes with timestamp for identification
-git stash push --include-untracked -m "stack-plan-$(date +%s): remaining changes for branches X+1 to N"
-
-# 4. Create the stacked branch
+# 3. Create the stacked branch
 echo "<commit-message>" | command stackit create <branch-name> --no-interactive
+
+# 4. Verify the branch was created with commits (not empty)
+#    Check that we're on the new branch and it has the expected files
+git log -1 --stat
 
 # 5. Run build verification
 <check-command>
-
-# 6. Restore stashed changes (apply then drop for safety)
-git stash apply
-git stash drop
 ```
 
-**For branch N** (last branch - no stash needed):
-```bash
-# 1. Reset staging (clean slate)
-git reset HEAD
+**Why checkout from backup commit?**
+- Only the specified files appear in the working tree
+- Files are automatically staged
+- Other files from the backup are NOT present (natural isolation)
+- No stash management needed
 
-# 2. Stage the remaining files
-git add <file1> <file2> ...
+**CRITICAL: Verify branch creation succeeded** before continuing. Check that:
+- `stackit create` output shows "Created branch X with Y commits" (not "created a branch with no commit")
+- `git log -1` shows the expected commit message and files
 
-# 3. Create the stacked branch (no stash - these are the last files)
-echo "<commit-message>" | command stackit create <branch-name> --no-interactive
-
-# 4. Run build verification
-<check-command>
-```
-
-**Why stash?** Without stashing, files destined for later branches remain in the working tree. Tests could pass falsely by seeing code that won't be committed to this branch.
-
-**Why `git stash apply` + `git stash drop` instead of `git stash pop`?** `stash pop` can fail with conflicts and leave you in an ambiguous state. `stash apply` is safer - if it fails, the stash is still intact for manual recovery.
+If the branch was created empty, STOP and report the error immediately.
 
 #### Step 3: Handle Results
 
@@ -335,13 +340,7 @@ echo "<commit-message>" | command stackit create <branch-name> --no-interactive
 [X/N] ✓ Branch <branch-name> created and verified
 ```
 
-**On build failure**: STOP immediately. First restore stash (if not last branch):
-```bash
-git stash apply
-git stash drop
-```
-
-Then report:
+**On build failure**: STOP immediately and report:
 ```
 [X/N] ✗ Build Failed
 ====================
@@ -349,11 +348,15 @@ Branch: <branch-name>
 Error output:
 <error-details>
 
-Current state: STATE D
-- Branches created: [branch-1, ..., branch-X]
-- Remaining changes: Restored to working tree
+Recovery Options
+----------------
+Your backup branch is intact: <backup-branch-name>
 
-Your remaining changes are safe.
+To recover ALL original changes:
+  git checkout <backup-branch-name>
+
+To see what's in the backup:
+  git show <backup-commit> --stat
 ```
 
 Then use `AskUserQuestion`:
@@ -362,37 +365,43 @@ Then use `AskUserQuestion`:
 - Options:
   - "Continue" - I've fixed the issue, resume from next branch
   - "Undo last" - Rollback <branch-name> with `command stackit undo`
-  - "Rollback all" - Undo all created branches and restore original state
-  - "Stop here" - Keep created branches, remaining changes stay in working tree
+  - "Rollback all" - Undo all created branches and restore from backup
+  - "Stop here" - Keep created branches, I'll handle it manually
 
 **If user selects "Rollback all"**:
 ```bash
 # Undo each created branch in reverse order
-command stackit undo  # Undo branch X
-command stackit undo  # Undo branch X-1
+command stackit undo --yes  # Undo branch X
+command stackit undo --yes  # Undo branch X-1
 # ... repeat for all created branches
-```
-Then report: "All branches rolled back. Your original changes are in the working tree."
 
-**On stash apply failure** (conflicts):
+# Restore all changes from backup
+git checkout "$BACKUP_BRANCH" -- .
 ```
-Stash Recovery Failed
-=====================
-git stash apply failed, likely due to conflicts.
+Then report: "All branches rolled back. Your original changes are restored to the working tree. Backup branch `<backup-branch-name>` still exists for reference."
 
-Your stash is still intact. To recover manually:
-1. git stash list                    # Find the stack-plan stash
-2. git stash show stash@{0}          # Verify it's the right one
-3. git checkout --theirs .           # If you want to discard conflicts
-4. git stash apply stash@{0}         # Try again
-5. git stash drop stash@{0}          # Clean up after success
+**On branch creation failure** (e.g., empty branch created):
 ```
+[X/N] ✗ Branch Creation Failed
+==============================
+Branch <branch-name> was created but appears to be empty.
+
+This can happen if the files weren't properly staged.
+
+Recovery: git checkout <backup-branch-name>
+```
+
+STOP and do not continue. The backup branch preserves all changes.
 
 ### Phase 7: Report Completion
 
 After all branches are created successfully:
 
 ```bash
+# Delete the backup branch (no longer needed)
+git branch -D "$BACKUP_BRANCH"
+
+# Show the final stack
 command stackit log --no-interactive
 ```
 
@@ -407,6 +416,8 @@ Created N branches from Y files:
 2. ✓ branch-name-2 (Y files)
 3. ✓ branch-name-3 (Z files)
 
+Backup branch deleted (changes now live in stack).
+
 Stack structure:
 <stackit log output>
 
@@ -417,36 +428,36 @@ Next steps:
 
 ## Error Handling Reference
 
-| Phase | State | Scenario | Recovery |
-|-------|-------|----------|----------|
-| Gather | A | No changes detected | Inform user and exit |
-| Gather | A | Existing stashes present | Warn user, continue |
-| Analyze | A | Branch name already exists | Choose different name or ask user |
-| Analyze | A | File needs hunk-level split | Ask user to split manually or accept file placement |
-| Pre-validate | A | Build fails | User fixes with all changes intact, or skips validation |
-| Approval | A | User cancels | Exit - changes intact in working tree |
-| Approval | A | User requests dry run | Show commands, ask again |
-| Execution 1 | A | Stash fails | Check for conflicts, report, ask user |
-| Execution 1 | A | Create fails | No stash to restore, report error |
-| Execution 2+ | B | Stash fails | Previous branches intact, report, ask user |
-| Execution 2+ | B | Create fails | `git stash apply && git stash drop`, report |
-| Execution 2+ | B | Build fails | `git stash apply && git stash drop`, report STATE D, offer options |
-| Execution 2+ | B | Stash apply fails | Stash intact, provide manual recovery steps |
-| Execution N | B | Build fails on last branch | No stash to restore, report, offer undo options |
-| Complete | C | Success | All changes committed across stack |
+| Phase | Scenario | Backup State | Recovery |
+|-------|----------|--------------|----------|
+| Gather | No changes detected | N/A | Inform user and exit |
+| Analyze | Branch name exists | N/A | Choose different name or ask user |
+| Analyze | File needs hunk-level split | N/A | Ask user to split manually |
+| Pre-validate | Build fails | N/A | User fixes, changes in working tree |
+| Approval | User cancels | N/A | Exit - changes in working tree |
+| Backup creation | Commit fails | N/A | Report error, changes in working tree |
+| Execution | Checkout from backup fails | Backup exists | `git checkout <backup-branch>` |
+| Execution | Create produces empty branch | Backup exists | STOP, `git checkout <backup-branch>` |
+| Execution | Build fails | Backup exists | Offer options, `git checkout <backup-branch>` |
+| Execution | User selects "Rollback all" | Backup exists | Undo branches, `git checkout <backup> -- .` |
+| Complete | Success | Deleted | All changes in stack branches |
 
 **Key guarantees**:
-- Pre-validation failure: All changes remain in working tree (STATE A)
-- Mid-execution failure: Stash is always restored before stopping (STATE D)
-- Stash apply used instead of pop: On failure, stash remains intact for manual recovery
-- No scenario should leave changes inaccessible
+- **Backup commit created BEFORE any file manipulation** - changes are in git history
+- **Backup branch survives all failures** - only deleted on complete success
+- **Recovery is always possible** via `git checkout <backup-branch>`
+- **No stash usage** - avoids stash's confusing behavior with staged files
+- **Empty branch detection** - stops immediately if `stackit create` produces empty branch
 
 ## Do NOT
 - Create branches without user approval of the plan
 - Continue past a build failure
+- Continue if a branch is created empty (verify each branch has commits)
 - Put the same file in multiple branches
 - Use `git commit` directly - always use `command stackit create`
 - Make up branch names without showing the user first
 - Skip build verification (unless user explicitly says to)
-- Use `git stash pop` - always use `git stash apply` + `git stash drop`
+- Delete the backup branch until ALL branches are successfully created and verified
+- Use `git stash` for isolating changes - use the backup commit approach instead
 - Propose branch names that already exist
+- Run `stackit undo` without first checking that the backup branch still exists

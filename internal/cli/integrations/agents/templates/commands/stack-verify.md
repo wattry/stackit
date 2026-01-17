@@ -1,6 +1,6 @@
 ---
 description: Verify stack health by running checks on all branches
-allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion
+allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 argument-hint: [check-command]
 ---
 
@@ -118,3 +118,35 @@ First failure: branch-name-3
 - Skip identifying the first-failure branch
 - Modify any files or make commits
 - Use git checkout directly
+
+## Follow-up
+
+After verification completes, use `AskUserQuestion` based on results:
+
+**If all branches pass:**
+- Header: "Next step"
+- Question: "All branches pass verification. What would you like to do next?"
+- Options:
+  - label: "Submit PRs (Recommended)"
+    description: "Push branches and create/update pull requests"
+  - label: "View stack"
+    description: "Show current stack state"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+**If failures found:**
+- Header: "Next step"
+- Question: "Verification found failures. What would you like to do next?"
+- Options:
+  - label: "Fix issues (Recommended)"
+    description: "Diagnose and fix the failing branches"
+  - label: "View details"
+    description: "Show more information about failures"
+  - label: "Done for now"
+    description: "I'll fix manually"
+
+Based on response:
+- **"Submit PRs"**: Invoke `/stack-submit` skill using the `Skill` tool
+- **"Fix issues"**: Invoke `/stack-fix` skill using the `Skill` tool
+- **"View stack"** / **"View details"**: Run `command stackit log --no-interactive`
+- **"Done for now"**: End with summary of verification results

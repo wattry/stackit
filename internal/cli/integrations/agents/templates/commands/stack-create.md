@@ -1,6 +1,6 @@
 ---
 description: Create a new stacked branch with intelligent naming
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion, Skill
 argument-hint: [-m "message"] [branch-name]
 ---
 
@@ -113,3 +113,21 @@ The command outputs the result including the new branch name. No additional comm
 - Use `git commit` after creating a branch - this bypasses stackit
 - Run `git status` or `git diff --stat` redundantly - trust the context
 - Run `stackit log` after create - the create output is sufficient
+
+## Follow-up
+
+After successful branch creation, use `AskUserQuestion`:
+- Header: "Next step"
+- Question: "Branch created successfully. What would you like to do next?"
+- Options:
+  - label: "Submit as PR (Recommended)"
+    description: "Push branch and create/update pull request"
+  - label: "Stack another change"
+    description: "Create another branch on top of this one"
+  - label: "Done for now"
+    description: "No follow-up action needed"
+
+Based on response:
+- **"Submit as PR"**: Invoke `/stack-submit` skill using the `Skill` tool
+- **"Stack another change"**: Tell user: "Make your changes, stage them with `git add -A`, then run `/stack-create`"
+- **"Done for now"**: End with summary: "Branch `<name>` created. Run `/stack-submit` when ready to create a PR."

@@ -256,3 +256,37 @@ func (e *engineImpl) BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, in
 		visit(startBranch.GetName(), 0)
 	}
 }
+
+// GetDivergencePoint returns the divergence point of a branch from its parent.
+// This is the commit at which the branch diverged from its parent, used as the
+// OldUpstream for rebase operations.
+//
+// Returns the ParentBranchRevision from metadata if available and non-empty,
+// otherwise falls back to the parent's current revision.
+func (e *engineImpl) GetDivergencePoint(branchName string) (string, error) {
+	// First, try to get from metadata
+	meta, err := e.git.ReadMetadata(branchName)
+	if err == nil && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
+		return *meta.ParentBranchRevision, nil
+	}
+
+	// Get the parent branch
+	e.mu.RLock()
+	state := e.branchState.GetByName(branchName)
+	e.mu.RUnlock()
+
+	if state == nil {
+		return "", fmt.Errorf("branch %s is not tracked", branchName)
+	}
+
+	parentName := state.Parent
+	if parentName == "" {
+		// No parent means parent is trunk
+		e.mu.RLock()
+		parentName = e.trunk
+		e.mu.RUnlock()
+	}
+
+	// Fall back to parent's current revision
+	return e.git.GetRevision(parentName)
+}
