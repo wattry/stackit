@@ -186,11 +186,13 @@ func (m *Model) View() string {
 				case StatusSyncing:
 					ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.spinner.View() + " syncing...")
 				case StatusDone:
+					ann.PRAction = "" // Clear action since we're showing the result
 					ann.CustomLabel = m.Styles.DoneStyle.Render("✓")
 					if item.URL != "" {
 						ann.CustomLabel += " " + m.Styles.URLStyle.Render("→ "+item.URL)
 					}
 				case StatusError:
+					ann.PRAction = "" // Clear action since we're showing the result
 					ann.CustomLabel = m.Styles.ErrorStyle.Render("✗")
 					if item.Error != nil {
 						ann.CustomLabel += " " + m.Styles.ErrorStyle.Render(item.Error.Error())
