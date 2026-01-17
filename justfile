@@ -173,21 +173,6 @@ install-shims: build
 	chmod +x ./stackit ./st
 	@echo "Dev shims installed to repo root"
 
-# Install binary to ~/.local/bin (with distinct version)
-install:
-	#!/bin/bash
-	mkdir -p ~/.local/bin
-	COMMIT=$(git rev-parse --short HEAD)
-	DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-	go build -ldflags "-X main.version=dev-installed -X main.commit=$COMMIT -X main.date=$DATE" -o ~/.local/bin/stackit ./cmd/stackit
-	ln -sf stackit ~/.local/bin/st
-	echo "Installed to ~/.local/bin"
-
-# Remove installed binary from ~/.local/bin
-uninstall:
-	rm -f ~/.local/bin/stackit ~/.local/bin/st
-	@echo "Removed from ~/.local/bin"
-
 # Run stackit command (builds first, then runs)
 # Usage: just run log
 # Usage: just run init

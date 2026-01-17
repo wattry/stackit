@@ -29,8 +29,11 @@ func run() int {
 	defer func() {
 		if p := recover(); p != nil {
 			stack := string(debug.Stack())
+			// Log to dedicated panic file for easy debugging
+			output.LogPanic(p, stack)
+			// Also log to regular log file
 			logger.Error("stackit crashed: %v\n%s", p, stack)
-			fmt.Fprintf(os.Stderr, "stackit crashed: %v\n", p)
+			fmt.Fprintf(os.Stderr, "stackit crashed: %v\nDetails logged to: %s\n", p, output.GetPanicLogPath())
 		}
 	}()
 
