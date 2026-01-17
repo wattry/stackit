@@ -17,6 +17,7 @@ import (
 func NewMoveCmd() *cobra.Command {
 	var (
 		all    bool
+		dryRun bool
 		onto   string
 		source string
 		yes    bool
@@ -54,6 +55,10 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 				// Handle interactive selection for onto if not provided
 				ontoBranch := onto
 				if ontoBranch == "" {
+					// Dry-run requires --onto to be specified
+					if dryRun {
+						return fmt.Errorf("--onto flag is required when using --dry-run")
+					}
 					var err error
 					ontoBranch, err = interactiveOntoSelection(ctx, sourceBranch)
 					if err != nil {
@@ -72,6 +77,7 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 					Source:      sourceBranch,
 					Onto:        ontoBranch,
 					SkipConfirm: yes,
+					DryRun:      dryRun,
 				}, handler)
 			})
 		},
@@ -79,6 +85,7 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 
 	// Add flags
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Show branches across all configured trunks in interactive selection.")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would happen without making changes.")
 	cmd.Flags().StringVarP(&onto, "onto", "o", "", "Branch to move the current branch onto.")
 	cmd.Flags().StringVar(&source, "source", "", "Branch to move (defaults to current branch).")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
