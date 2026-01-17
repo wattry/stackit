@@ -242,6 +242,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	commands := []string{
 		"stack-absorb.md",
 		"stack-create.md",
+		"stack-extract.md",
 		"stack-fix.md",
 		"stack-fold.md",
 		"stack-restack.md",
@@ -307,6 +308,7 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintln(out, "Available Claude Code commands:")
 	_, _ = fmt.Fprintln(out, "  /stack-absorb  - Intelligently absorb changes into commits")
 	_, _ = fmt.Fprintln(out, "  /stack-create  - Create branch with auto-naming")
+	_, _ = fmt.Fprintln(out, "  /stack-extract - Extract commits/files to independent branch")
 	_, _ = fmt.Fprintln(out, "  /stack-fix     - Diagnose and fix stack issues")
 	_, _ = fmt.Fprintln(out, "  /stack-fold    - Fold granular branches into parents")
 	_, _ = fmt.Fprintln(out, "  /stack-restack - Rebase all branches in stack")
