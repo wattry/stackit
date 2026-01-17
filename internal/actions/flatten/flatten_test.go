@@ -178,4 +178,56 @@ func TestFlattenAction(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not tracked")
 	})
+
+	t.Run("fallback to parent revision when metadata missing", func(t *testing.T) {
+		// This test verifies the fix for the bug where getOldUpstream() was using
+		// GetMergeBase as a fallback, which could include parent commits when
+		// flattening. The fix uses the parent's current revision instead.
+		//
+		// Setup: main -> A -> B
+		// Clear B's ParentBranchRevision metadata
+		// Flatten B to main
+		// Verify B only has its own commits (not A's commits)
+
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"A": "main",
+				"B": "A",
+			})
+
+		// Get the commit count for B before flattening (should be 1 commit from B)
+		bCommitsBefore, err := s.Scene.Repo.RunGitCommandAndGetOutput("rev-list", "--count", "A..B")
+		require.NoError(t, err)
+		require.Equal(t, "1", bCommitsBefore, "B should have 1 commit on top of A")
+
+		// Clear B's ParentBranchRevision metadata to trigger the fallback path
+		meta, err := s.Engine.Git().ReadMetadata("B")
+		require.NoError(t, err)
+		meta.ParentBranchRevision = nil
+		err = s.Engine.Git().WriteMetadata("B", meta)
+		require.NoError(t, err)
+
+		s.Rebuild()
+
+		// Verify metadata was cleared
+		meta, err = s.Engine.Git().ReadMetadata("B")
+		require.NoError(t, err)
+		require.Nil(t, meta.ParentBranchRevision)
+
+		// Run flatten
+		err = flatten.Action(s.Context, flatten.Options{BranchName: "B"}, nil)
+		require.NoError(t, err)
+
+		s.Rebuild()
+
+		// Verify B is now parented on main
+		branchB := s.Engine.GetBranch("B")
+		require.Equal(t, "main", branchB.GetParent().GetName())
+
+		// Critical assertion: B should still have exactly 1 commit on top of main
+		// If the bug were present (using merge-base), B would have A's commits too
+		bCommitsAfter, err := s.Scene.Repo.RunGitCommandAndGetOutput("rev-list", "--count", "main..B")
+		require.NoError(t, err)
+		require.Equal(t, "1", bCommitsAfter, "B should have only 1 commit on top of main (not include A's commits)")
+	})
 }

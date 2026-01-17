@@ -152,6 +152,14 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Execute the flatten
 	handler.OnStep(StepFlattening, StatusStarted, "Moving branches...")
 
+	// Build a map of branch -> oldUpstream from the rebase specs
+	// This is needed because SetParent may calculate a different value using merge-base,
+	// but we need to preserve the correct divergence point for proper rebasing
+	oldUpstreamMap := make(map[string]string)
+	for _, spec := range plan.RebaseSpecs {
+		oldUpstreamMap[spec.Branch] = spec.OldUpstream
+	}
+
 	// Update parent pointers for all planned moves
 	for _, move := range plan.Moves {
 		moveBranch := eng.GetBranch(move.Branch)
@@ -160,6 +168,15 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		if err := eng.SetParent(gctx, moveBranch, newParentBranch); err != nil {
 			handler.OnStep(StepFlattening, StatusFailed, err.Error())
 			return fmt.Errorf("failed to set parent for %s to %s: %w", move.Branch, move.NewParent, err)
+		}
+
+		// Update parent revision with the correct oldUpstream we calculated earlier.
+		// SetParent uses merge-base which may be incorrect when flattening branches
+		// that have diverged from their original parent.
+		if oldUpstream, ok := oldUpstreamMap[move.Branch]; ok {
+			if err := eng.UpdateParentRevision(move.Branch, oldUpstream); err != nil {
+				out.Debug("Failed to update parent revision for %s: %v", move.Branch, err)
+			}
 		}
 
 		handler.OnBranchMoved(move.Branch, move.OldParent, move.NewParent)
@@ -241,12 +258,14 @@ func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Bra
 		// Get current parent info
 		origParent := b.GetParent()
 		origParentName := trunk.GetName()
+		origParentBranch := trunk
 		if origParent != nil {
 			origParentName = origParent.GetName()
+			origParentBranch = *origParent
 		}
 
 		// Get the branch's base (divergence point from parent)
-		oldUpstream, err := getOldUpstream(eng, bName, origParentName)
+		oldUpstream, err := getOldUpstream(eng, bName, origParentBranch)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get base for %s: %w", bName, err)
 		}
@@ -289,15 +308,16 @@ func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Bra
 
 // getOldUpstream returns the divergence point of the branch from its parent.
 // This is used as the OldUpstream for rebase operations.
-func getOldUpstream(eng engine.Engine, branchName, parentName string) (string, error) {
+func getOldUpstream(eng engine.Engine, branchName string, parent engine.Branch) (string, error) {
 	// First, try to get from metadata
 	meta, err := eng.Git().ReadMetadata(branchName)
 	if err == nil && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
 		return *meta.ParentBranchRevision, nil
 	}
 
-	// Fall back to merge-base calculation
-	return eng.Git().GetMergeBase(branchName, parentName)
+	// Fall back to parent's current revision (not merge-base, which can include
+	// commits from parent branches if the parent was rebased after this branch was created)
+	return eng.GetRevision(parent)
 }
 
 // findBestParent finds the closest-to-trunk parent that the branch can cleanly rebase onto.
