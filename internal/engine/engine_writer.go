@@ -760,6 +760,48 @@ func (e *engineImpl) IsInManagedWorktree() (bool, *WorktreeInfo, error) {
 	return false, nil, nil
 }
 
+// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
+func (e *engineImpl) MarkNeedsPRBodyUpdate(branchName string) error {
+	localMeta, err := e.git.ReadLocalMetadata(branchName)
+	if err != nil {
+		localMeta = &git.LocalMeta{}
+	}
+	localMeta.NeedsPRBodyUpdate = true
+	return e.git.WriteLocalMetadata(branchName, localMeta)
+}
+
+// ClearNeedsPRBodyUpdate clears the PR body update flag for a branch
+func (e *engineImpl) ClearNeedsPRBodyUpdate(branchName string) error {
+	localMeta, err := e.git.ReadLocalMetadata(branchName)
+	if err != nil {
+		// Best effort - if we can't read metadata, nothing to clear
+		return nil //nolint:nilerr
+	}
+	if localMeta == nil || !localMeta.NeedsPRBodyUpdate {
+		return nil // Nothing to clear
+	}
+	localMeta.NeedsPRBodyUpdate = false
+	return e.git.WriteLocalMetadata(branchName, localMeta)
+}
+
+// GetBranchesNeedingPRBodyUpdate returns all branches that need PR body updates
+func (e *engineImpl) GetBranchesNeedingPRBodyUpdate() []string {
+	allBranches := e.AllBranches()
+	branchNames := make([]string, len(allBranches))
+	for i, b := range allBranches {
+		branchNames[i] = b.GetName()
+	}
+
+	localMetas := e.git.BatchReadLocalMetadata(branchNames)
+	var result []string
+	for name, meta := range localMetas {
+		if meta != nil && meta.NeedsPRBodyUpdate {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
 // setParentInternal updates parent without locking (caller must hold lock)
 func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, parentBranchName string) error {
 	if branchName == parentBranchName {

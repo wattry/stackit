@@ -71,7 +71,8 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 		ctx.Output.Debug("PR #%d for %s already up to date", prNumber, name)
 	}
 
-	// Successfully updated (or already up to date), update local engine state
+	// Successfully updated (or already up to date), clear the PR body update flag and update local engine state
+	_ = ctx.Engine.ClearNeedsPRBodyUpdate(name)
 	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLockReason(branch.GetLockReason()))
 }
 
