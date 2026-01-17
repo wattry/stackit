@@ -255,6 +255,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 ### Stack Operations
 | Command | Description |
 |:---|:---|
+| `stackit flatten` | Move branches closer to trunk where possible |
 | `stackit restack` | Rebase all branches in the stack to ensure proper ancestry |
 | `stackit get [branch|PR]` | Sync a stack or specific PR from remote |
 | `stackit foreach` | Run a shell command on each branch in the stack (default: upstack) |
@@ -311,6 +312,13 @@ If you receive feedback on a branch in the middle of your stack:
 
 ### Using `stackit absorb`
 `absorb` is like magic for stacked PRs. If you have small fixes for multiple branches in your stack, just stage them all and run `stackit absorb`. Stackit will figure out which changes belong to which branch and amend them automatically.
+
+### Flattening a Stack
+After landing PRs from the middle of a stack, or when you have independent changes that were developed as a chain but don't actually depend on each other, use `flatten` to move branches closer to trunk:
+```bash
+stackit flatten
+```
+This analyzes each branch and tests whether it can be rebased directly onto trunk (or closer to it). Branches that depend on changes from their parent will stay in place.
 
 ### Syncing with the Main Branch
 To keep your stack up-to-date with `main`:

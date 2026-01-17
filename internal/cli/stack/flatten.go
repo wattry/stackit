@@ -10,10 +10,7 @@ import (
 
 // NewFlattenCmd creates the flatten command
 func NewFlattenCmd() *cobra.Command {
-	var (
-		branch string
-		yes    bool
-	)
+	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "flatten [branch]",
@@ -36,14 +33,14 @@ Examples:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				// Determine target branch
-				targetBranch := branch
+				// Determine target branch from positional argument
+				var targetBranch string
 				if len(args) > 0 {
 					targetBranch = args[0]
 				}
 
 				// Create runner and handler
-				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger, ctx.Interactive)
+				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger)
 				if runner != nil {
 					defer runner.Cleanup()
 				}
@@ -57,7 +54,6 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&branch, "branch", "", "Which branch to flatten from. Defaults to the current branch.")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
 
 	return cmd

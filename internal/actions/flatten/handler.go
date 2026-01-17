@@ -29,13 +29,17 @@ type PlannedMove struct {
 	NewParent string // Target parent branch (closer to trunk)
 }
 
+// ExcludedBranch represents a branch that was kept in place due to code dependencies
+type ExcludedBranch struct {
+	Branch string // Branch name
+	Reason string // Why it was kept in place (e.g., "X depends on this branch")
+}
+
 // Preview contains information about the planned flatten for confirmation
 type Preview struct {
-	Moves          []PlannedMove // Branches that will be moved
-	UnchangedCount int           // Number of branches that won't change
-	HasConflicts   bool          // Whether the flatten will cause conflicts
-	ConflictBranch string        // Which branch would have conflicts (if any)
-	ConflictError  string        // Error message describing the conflict
+	Moves            []PlannedMove    // Branches that will be moved
+	UnchangedCount   int              // Number of branches that won't change
+	ExcludedBranches []ExcludedBranch // Branches kept in place due to dependencies
 }
 
 // Result contains the result of the flatten action
@@ -51,6 +55,9 @@ type Handler interface {
 
 	// OnStep is called for each step in the flatten process
 	OnStep(step Step, status StepStatus, message string)
+
+	// OnValidationProgress is called during branch validation to report progress
+	OnValidationProgress(current, total int, branchName string)
 
 	// OnBranchMoved is called when a branch is moved to a new parent
 	OnBranchMoved(branch, oldParent, newParent string)
@@ -78,6 +85,9 @@ func (h *NullHandler) Start(_ int) {}
 
 // OnStep implements Handler.
 func (h *NullHandler) OnStep(_ Step, _ StepStatus, _ string) {}
+
+// OnValidationProgress implements Handler.
+func (h *NullHandler) OnValidationProgress(_, _ int, _ string) {}
 
 // OnBranchMoved implements Handler.
 func (h *NullHandler) OnBranchMoved(_, _, _ string) {}
