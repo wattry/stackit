@@ -28,7 +28,7 @@ type Model struct {
 // ProgressUpdateMsg is sent to update the status of a specific branch execution
 type ProgressUpdateMsg struct {
 	BranchName string
-	Status     string
+	Status     core.Status
 	Output     string
 	Err        error
 }
@@ -140,9 +140,9 @@ func (m *Model) View() string {
 
 			// Update custom label for status
 			switch item.Status {
-			case StatusRunning:
+			case core.StatusActive:
 				ann.CustomLabel = m.Styles.SpinnerStyle.Render(m.spinner.View() + " running...")
-			case StatusDone:
+			case core.StatusDone:
 				ann.CustomLabel = m.Styles.DoneStyle.Render("✓")
 				if item.Output != "" {
 					// Show truncated output
@@ -152,7 +152,7 @@ func (m *Model) View() string {
 					}
 					ann.CustomLabel += " " + m.Styles.OutputStyle.Render(output)
 				}
-			case StatusError:
+			case core.StatusError:
 				ann.CustomLabel = m.Styles.ErrorStyle.Render("✗")
 				if item.Error != nil {
 					errMsg := item.Error.Error()
@@ -176,16 +176,16 @@ func (m *Model) View() string {
 			var status string
 
 			switch item.Status {
-			case StatusPending, "":
+			case core.StatusPending, "":
 				icon = m.Styles.DimStyle.Render("○")
 				status = m.Styles.DimStyle.Render("pending")
-			case StatusRunning:
+			case core.StatusActive:
 				icon = m.spinner.View()
 				status = m.Styles.SpinnerStyle.Render("running...")
-			case StatusDone:
+			case core.StatusDone:
 				icon = m.Styles.DoneStyle.Render("✓")
 				status = m.Styles.DoneStyle.Render("done")
-			case StatusError:
+			case core.StatusError:
 				icon = m.Styles.ErrorStyle.Render("✗")
 				status = m.Styles.ErrorStyle.Render("failed")
 			}
@@ -193,14 +193,14 @@ func (m *Model) View() string {
 			branchName := m.Styles.BranchStyle.Render(item.BranchName)
 			line := fmt.Sprintf("  %s %s %s", icon, branchName, status)
 
-			if item.Status == StatusDone && item.Output != "" {
+			if item.Status == core.StatusDone && item.Output != "" {
 				output := strings.TrimSpace(item.Output)
 				if len(output) > 50 {
 					output = output[:47] + "..."
 				}
 				line += " " + m.Styles.OutputStyle.Render(output)
 			}
-			if item.Status == StatusError && item.Error != nil {
+			if item.Status == core.StatusError && item.Error != nil {
 				errMsg := item.Error.Error()
 				if len(errMsg) > 50 {
 					errMsg = errMsg[:47] + "..."
@@ -219,9 +219,9 @@ func (m *Model) View() string {
 		completed := 0
 		failed := 0
 		for _, item := range m.Items {
-			if item.Status == StatusDone {
+			if item.Status == core.StatusDone {
 				completed++
-			} else if item.Status == StatusError {
+			} else if item.Status == core.StatusError {
 				failed++
 			}
 		}
