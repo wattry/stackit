@@ -4,180 +4,146 @@ import (
 	"testing"
 )
 
-func TestBranchingStackSquash(t *testing.T) {
+// TestBranchingStack tests operations on branching (diamond) stack structures
+// where a parent branch has multiple children.
+func TestBranchingStack(t *testing.T) {
 	t.Parallel()
-	sh := NewTestShellInProcess(t)
 
-	// Create a branching stack:
-	//        main
-	//          |
-	//       branch-a (2 commits)
-	//       /      \
-	//   branch-b  branch-c
-	//               |
-	//            branch-d
+	t.Run("squash parent restacks all children", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
 
-	sh.Log("Creating branching stack structure...")
-	sh.Write("a1", "content a1").Run("create branch-a -m 'feat: a1'")
-	sh.Write("a2", "content a2").Run("modify -c -m 'feat: a2'") // branch-a now has 2 commits
+		// Create a branching stack:
+		//        main
+		//          |
+		//       branch-a (2 commits)
+		//       /      \
+		//   branch-b  branch-c
+		//               |
+		//            branch-d
 
-	sh.Write("b1", "content b1").Run("create branch-b -m 'feat: b1'")
+		sh.Log("Creating branching stack structure...")
+		sh.Write("a1", "content a1").Run("create branch-a -m 'feat: a1'")
+		sh.Write("a2", "content a2").Run("modify -c -m 'feat: a2'") // branch-a now has 2 commits
 
-	sh.Checkout("branch-a")
-	sh.Write("c1", "content c1").Run("create branch-c -m 'feat: c1'")
+		sh.Write("b1", "content b1").Run("create branch-b -m 'feat: b1'")
 
-	sh.Write("d1", "content d1").Run("create branch-d -m 'feat: d1'")
+		sh.Checkout("branch-a")
+		sh.Write("c1", "content c1").Run("create branch-c -m 'feat: c1'")
 
-	// Verify initial state
-	sh.Log("Verifying initial state...")
-	sh.Checkout("branch-a").CommitCount("main", "branch-a", 2)
-	sh.Checkout("branch-b").CommitCount("branch-a", "branch-b", 1)
-	sh.Checkout("branch-c").CommitCount("branch-a", "branch-c", 1)
-	sh.Checkout("branch-d").CommitCount("branch-c", "branch-d", 1)
+		sh.Write("d1", "content d1").Run("create branch-d -m 'feat: d1'")
 
-	// Squash branch-a
-	sh.Log("Squashing branch-a...")
-	sh.Checkout("branch-a").Run("squash --no-edit")
-	sh.CommitCount("main", "branch-a", 1)
+		// Verify initial state
+		sh.Log("Verifying initial state...")
+		sh.Checkout("branch-a").CommitCount("main", "branch-a", 2)
+		sh.Checkout("branch-b").CommitCount("branch-a", "branch-b", 1)
+		sh.Checkout("branch-c").CommitCount("branch-a", "branch-c", 1)
+		sh.Checkout("branch-d").CommitCount("branch-c", "branch-d", 1)
 
-	// Verify all children were restacked and are still valid
-	sh.Log("Verifying all children were restacked...")
+		// Squash branch-a
+		sh.Log("Squashing branch-a...")
+		sh.Checkout("branch-a").Run("squash --no-edit")
+		sh.CommitCount("main", "branch-a", 1)
 
-	// Check branch-b
-	sh.Checkout("branch-b").Run("info").OutputContains("branch-b")
-	sh.Git("log -1 --format=%s").OutputContains("feat: b1")
+		// Verify all children were restacked and are still valid
+		sh.Log("Verifying all children were restacked...")
 
-	// Check branch-c
-	sh.Checkout("branch-c").Run("info").OutputContains("branch-c")
-	sh.Git("log -1 --format=%s").OutputContains("feat: c1")
+		// Check branch-b
+		sh.Checkout("branch-b").Run("info").OutputContains("branch-b")
+		sh.Git("log -1 --format=%s").OutputContains("feat: b1")
 
-	// Check branch-d
-	sh.Checkout("branch-d").Run("info").OutputContains("branch-d")
-	sh.Git("log -1 --format=%s").OutputContains("feat: d1")
+		// Check branch-c
+		sh.Checkout("branch-c").Run("info").OutputContains("branch-c")
+		sh.Git("log -1 --format=%s").OutputContains("feat: c1")
 
-	sh.Log("✓ Branching stack squash complete!")
-}
+		// Check branch-d
+		sh.Checkout("branch-d").Run("info").OutputContains("branch-d")
+		sh.Git("log -1 --format=%s").OutputContains("feat: d1")
 
-func TestBranchingStackMove(t *testing.T) {
-	t.Parallel()
-	sh := NewTestShellInProcess(t)
+		sh.Log("✓ Branching stack squash complete!")
+	})
 
-	// Structure:
-	// main
-	//   |-- scopes
-	//   |     |-- tests
-	//   |           |-- scope-on-create
-	//   |-- st-alias
+	t.Run("move into branching stack then squash", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
 
-	sh.Log("Creating initial stack structure...")
-	sh.Write("scopes", "scopes").Run("create scopes -m 'feat: scopes'")
-	sh.Write("tests", "tests").Run("create tests -m 'feat: tests'")
-	sh.Write("soc", "soc").Run("create scope-on-create -m 'feat: scope-on-create'")
+		// Structure:
+		// main
+		//   |-- scopes
+		//   |     |-- tests
+		//   |           |-- scope-on-create
+		//   |-- st-alias
 
-	sh.Checkout("main")
-	sh.Write("st-alias", "st-alias").Run("create st-alias -m 'feat: st-alias'")
+		sh.Log("Creating initial stack structure...")
+		sh.Write("scopes", "scopes").Run("create scopes -m 'feat: scopes'")
+		sh.Write("tests", "tests").Run("create tests -m 'feat: tests'")
+		sh.Write("soc", "soc").Run("create scope-on-create -m 'feat: scope-on-create'")
 
-	// Now move st-alias onto scopes
-	sh.Log("Moving st-alias onto scopes...")
-	sh.Run("move --onto scopes")
+		sh.Checkout("main")
+		sh.Write("st-alias", "st-alias").Run("create st-alias -m 'feat: st-alias'")
 
-	// Verify st-alias is now a child of scopes
-	sh.Run("info").OutputContains("scopes")
+		// Now move st-alias onto scopes
+		sh.Log("Moving st-alias onto scopes...")
+		sh.Run("move --onto scopes")
 
-	// Verify scopes now has two children: tests and st-alias
-	sh.Checkout("scopes").Run("info").OutputContains("tests").OutputContains("st-alias")
+		// Verify st-alias is now a child of scopes
+		sh.Run("info").OutputContains("scopes")
 
-	// Now squash scopes
-	sh.Log("Squashing scopes...")
-	sh.Run("squash --no-edit")
+		// Verify scopes now has two children: tests and st-alias
+		sh.Checkout("scopes").Run("info").OutputContains("tests").OutputContains("st-alias")
 
-	// Verify both children (tests and st-alias) were restacked
-	sh.Log("Verifying restack of both children...")
-	sh.Checkout("tests").Run("info").OutputContains("scopes")
-	sh.Checkout("st-alias").Run("info").OutputContains("scopes")
+		// Now squash scopes
+		sh.Log("Squashing scopes...")
+		sh.Run("squash --no-edit")
 
-	sh.Log("✓ Move into branching stack complete!")
-}
+		// Verify both children (tests and st-alias) were restacked
+		sh.Log("Verifying restack of both children...")
+		sh.Checkout("tests").Run("info").OutputContains("scopes")
+		sh.Checkout("st-alias").Run("info").OutputContains("scopes")
 
-func TestBranchingStackModify(t *testing.T) {
-	t.Parallel()
-	sh := NewTestShellInProcess(t)
+		sh.Log("✓ Move into branching stack complete!")
+	})
 
-	// Create a branching stack:
-	//        main
-	//          |
-	//       branch-a
-	//       /      \
-	//   branch-b  branch-c
-	//               |
-	//            branch-d
+	t.Run("modify parent restacks all children", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
 
-	sh.Log("Creating branching stack structure...")
-	sh.Write("a1", "content a1").Run("create branch-a -m 'feat: a1'")
+		// Create a branching stack:
+		//        main
+		//          |
+		//       branch-a
+		//       /      \
+		//   branch-b  branch-c
+		//               |
+		//            branch-d
 
-	sh.Write("b1", "content b1").Run("create branch-b -m 'feat: b1'")
+		sh.Log("Creating branching stack structure...")
+		sh.Write("a1", "content a1").Run("create branch-a -m 'feat: a1'")
 
-	sh.Checkout("branch-a")
-	sh.Write("c1", "content c1").Run("create branch-c -m 'feat: c1'")
+		sh.Write("b1", "content b1").Run("create branch-b -m 'feat: b1'")
 
-	sh.Write("d1", "content d1").Run("create branch-d -m 'feat: d1'")
+		sh.Checkout("branch-a")
+		sh.Write("c1", "content c1").Run("create branch-c -m 'feat: c1'")
 
-	// Modify branch-a
-	sh.Log("Modifying branch-a...")
-	sh.Checkout("branch-a")
-	sh.Write("a1_updated", "updated content a1").Run("modify -n")
+		sh.Write("d1", "content d1").Run("create branch-d -m 'feat: d1'")
 
-	// Verify all children were restacked and are still valid
-	sh.Log("Verifying all children were restacked...")
+		// Modify branch-a
+		sh.Log("Modifying branch-a...")
+		sh.Checkout("branch-a")
+		sh.Write("a1_updated", "updated content a1").Run("modify -n")
 
-	// Check branch-b
-	sh.Checkout("branch-b").Run("info").OutputContains("branch-b")
+		// Verify all children were restacked and are still valid
+		sh.Log("Verifying all children were restacked...")
 
-	// Check branch-c
-	sh.Checkout("branch-c").Run("info").OutputContains("branch-c")
+		// Check branch-b
+		sh.Checkout("branch-b").Run("info").OutputContains("branch-b")
 
-	// Check branch-d
-	sh.Checkout("branch-d").Run("info").OutputContains("branch-d")
+		// Check branch-c
+		sh.Checkout("branch-c").Run("info").OutputContains("branch-c")
 
-	sh.Log("✓ Branching stack modify complete!")
-}
-func TestMoveIntoBranchingStackComplex(t *testing.T) {
-	t.Parallel()
-	sh := NewTestShellInProcess(t)
+		// Check branch-d
+		sh.Checkout("branch-d").Run("info").OutputContains("branch-d")
 
-	// Structure:
-	// main
-	//   |-- scopes
-	//   |     |-- tests
-	//   |           |-- scope-on-create
-	//   |-- st-alias
-
-	sh.Log("Creating initial stack structure...")
-	sh.Write("scopes", "scopes").Run("create scopes -m 'feat: scopes'")
-	sh.Write("tests", "tests").Run("create tests -m 'feat: tests'")
-	sh.Write("soc", "soc").Run("create scope-on-create -m 'feat: scope-on-create'")
-
-	sh.Checkout("main")
-	sh.Write("st-alias", "st-alias").Run("create st-alias -m 'feat: st-alias'")
-
-	// Now move st-alias onto scopes
-	sh.Log("Moving st-alias onto scopes...")
-	sh.Run("move --onto scopes")
-
-	// Verify st-alias is now a child of scopes
-	sh.Run("info").OutputContains("scopes")
-
-	// Verify scopes now has two children: tests and st-alias
-	sh.Checkout("scopes").Run("info").OutputContains("tests").OutputContains("st-alias")
-
-	// Now squash scopes
-	sh.Log("Squashing scopes...")
-	sh.Run("squash --no-edit")
-
-	// Verify both children (tests and st-alias) were restacked
-	sh.Log("Verifying restack of both children...")
-	sh.Checkout("tests").Run("info").OutputContains("scopes")
-	sh.Checkout("st-alias").Run("info").OutputContains("scopes")
-
-	sh.Log("✓ Move into branching stack complete!")
+		sh.Log("✓ Branching stack modify complete!")
+	})
 }
