@@ -146,12 +146,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Process GitHub PR info results (sequential - depends on PR info)
-	branchesToRestack := []string{}
 	if githubSyncResult != nil {
-		if err := processGitHubSyncResult(ctx, githubSyncResult, &branchesToRestack, dirtyAnchors, handler); err != nil {
+		if err := processGitHubSyncResult(ctx, githubSyncResult, dirtyAnchors, handler); err != nil {
 			return err
 		}
 	}
+
+	branchesToRestack := []string{}
 
 	// Process remote metadata (sequential - depends on fetch)
 	if metadataFetchErr != nil {
@@ -305,11 +306,6 @@ type Summary struct {
 	UpToDate          bool     // Everything was already current
 	WorktreesCleaned  int      // Number of orphaned worktrees cleaned up
 	SkippedStacks     []string // Stacks skipped due to dirty worktrees
-}
-
-// ParentsResult contains the result of synchronizing parents from GitHub
-type ParentsResult struct {
-	BranchesReparented []string
 }
 
 // HasChanges returns true if any operations were performed

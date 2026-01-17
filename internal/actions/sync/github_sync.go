@@ -69,7 +69,7 @@ func syncGitHubPRInfo(ctx *app.Context) (*GitHubSyncResult, error) {
 // This must run after syncGitHubPRInfo completes
 //
 //nolint:unparam // error return is for future error handling
-func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branchesToRestack *[]string, dirtyAnchors map[string]bool, handler Handler) error {
+func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, dirtyAnchors map[string]bool, handler Handler) error {
 	eng := ctx.PR()
 	nav := ctx.Navigator()
 	out := ctx.Output
@@ -120,110 +120,90 @@ func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, branche
 		ctx.Logger.Info("update stack pr metadata completed durationMs=%d", time.Since(updateMetaStart).Milliseconds())
 	}
 
-	// Synchronize local parents with GitHub PR base branches
+	// Push local parent changes to GitHub PR bases
+	// Local metadata is authoritative - if local parent differs from GitHub PR base, update GitHub
 	parentsStart := time.Now()
-	syncResult, err := ParentsFromGitHubBase(ctx, dirtyAnchors)
-	ctx.Logger.Info("sync parents from github base completed durationMs=%d", time.Since(parentsStart).Milliseconds())
-	if err != nil {
-		out.Debug("Failed to sync parents from GitHub: %v", err)
-	} else if len(syncResult.BranchesReparented) > 0 {
-		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
-		// Add reparented branches to restack list (skip dirty stacks)
-		for _, branchName := range syncResult.BranchesReparented {
-			if isInDirtyStack(ctx, branchName, dirtyAnchors) {
-				continue
-			}
-			*branchesToRestack = append(*branchesToRestack, branchName)
-			// Also add descendants
-			branch := nav.GetBranch(branchName)
-			upstack := graph.Range(branch, engine.StackRange{
-				RecursiveChildren: true,
-			})
-			for _, b := range upstack {
-				*branchesToRestack = append(*branchesToRestack, b.GetName())
-			}
+	if ctx.GitHubClient != nil && result.RepoOwner != "" && result.RepoName != "" {
+		syncResult, err := PushParentsToGitHub(ctx, result, dirtyAnchors)
+		ctx.Logger.Info("sync parents to github completed durationMs=%d", time.Since(parentsStart).Milliseconds())
+		if err != nil {
+			out.Debug("Failed to sync parents to GitHub: %v", err)
+		} else if len(syncResult.BranchesUpdated) > 0 {
+			out.Info("Updated PR base for %d branches to match local stack", len(syncResult.BranchesUpdated))
 		}
 	}
 
 	return nil
 }
 
-// ParentsFromGitHubBase synchronizes local parents with GitHub PR base branches
-func ParentsFromGitHubBase(ctx *app.Context, dirtyAnchors map[string]bool) (*ParentsResult, error) {
-	eng := ctx.Engine // Using Engine here because it needs multiple interfaces (Status, Navigator, Differ, Tracking)
+// ParentsToGitHubResult contains the result of pushing local parents to GitHub
+type ParentsToGitHubResult struct {
+	BranchesUpdated []string // Branches whose PR base was updated on GitHub
+}
+
+// PushParentsToGitHub pushes local parent relationships to GitHub PR bases.
+// Local metadata is authoritative - if local parent differs from GitHub PR base, update GitHub.
+func PushParentsToGitHub(ctx *app.Context, result *GitHubSyncResult, dirtyAnchors map[string]bool) (*ParentsToGitHubResult, error) {
+	eng := ctx.Engine
 	out := ctx.Output
 	gctx := ctx.Context
+	githubClient := ctx.GitHubClient
 
 	allBranches := eng.AllBranches()
-	reparented := []string{}
-
-	// Map of all local branches for quick lookup
-	localBranches := make(map[string]bool)
-	for _, b := range allBranches {
-		localBranches[b.GetName()] = true
-	}
-	localBranches[eng.Trunk().GetName()] = true
+	updated := []string{}
 
 	for _, branch := range allBranches {
 		if branch.IsTrunk() {
 			continue
 		}
 
-		// Skip branches in dirty stacks - we don't want to reparent them
+		// Skip branches in dirty stacks
 		if isInDirtyStack(ctx, branch.GetName(), dirtyAnchors) {
 			continue
 		}
 
-		prInfo, err := branch.GetPrInfo()
-		if err != nil || prInfo == nil || prInfo.Base() == "" {
+		// Get the PR info we just fetched from GitHub
+		prInfo, ok := result.PRInfos[branch.GetName()]
+		if !ok || prInfo == nil || prInfo.Number == 0 {
+			// No PR for this branch
 			continue
 		}
 
+		githubBase := prInfo.Base
+
+		// Get local parent
 		currentParent := branch.GetParent()
-		currentParentName := ""
+		localParentName := ""
 		if currentParent == nil {
-			currentParentName = eng.Trunk().GetName()
+			localParentName = eng.Trunk().GetName()
 		} else {
-			currentParentName = currentParent.GetName()
+			localParentName = currentParent.GetName()
 		}
 
-		githubBase := prInfo.Base()
+		// If local parent differs from GitHub base, update GitHub to match local
+		if githubBase != localParentName {
+			out.Debug("PR for %s has base %s, but local parent is %s. Updating GitHub PR base...",
+				branch.GetName(), githubBase, localParentName)
 
-		// If GitHub base is different from local parent, and GitHub base is a valid local branch
-		if githubBase != currentParentName && localBranches[githubBase] {
-			// Before reparenting to match GitHub, check if the GitHub base is an
-			// ancestor of our current local parent.
-			if currentParentName != eng.Trunk().GetName() {
-				isAncestor, err := eng.IsAncestor(githubBase, currentParentName)
-				if err == nil && isAncestor {
-					// If GitHub base is an ancestor, it's a "downgrade" in specificity.
-					// We only skip reparenting if the branch is EMPTY relative to its current parent.
-					// This handles the "submit" bug in diamond structures.
-					isEmpty, err := eng.IsBranchEmpty(gctx, branch.GetName())
-					if err == nil && isEmpty {
-						out.Debug("GitHub PR for %s has base %s, which is an ancestor of local parent %s. "+
-							"Branch is empty relative to its parent, so keeping the more specific local parent.",
-							branch.GetName(), githubBase, currentParentName)
-						continue
-					}
-				}
+			updateOpts := github.UpdatePROptions{
+				Base: &localParentName,
 			}
 
-			out.Info("GitHub PR for %s has base %s, but local parent is %s. Updating local parent...",
-				style.ColorBranchName(branch.GetName(), false),
-				style.ColorBranchName(githubBase, false),
-				style.ColorBranchName(currentParentName, false))
-
-			if err := eng.SetParent(gctx, branch, eng.GetBranch(githubBase)); err != nil {
-				out.Debug("Failed to update parent for %s: %v", branch.GetName(), err)
+			if err := githubClient.UpdatePullRequest(gctx, result.RepoOwner, result.RepoName, prInfo.Number, updateOpts); err != nil {
+				out.Debug("Failed to update PR base for %s: %v", branch.GetName(), err)
 				continue
 			}
 
-			reparented = append(reparented, branch.GetName())
+			out.Info("Updated PR base for %s: %s → %s",
+				style.ColorBranchName(branch.GetName(), false),
+				style.ColorDim(githubBase),
+				style.ColorBranchName(localParentName, false))
+
+			updated = append(updated, branch.GetName())
 		}
 	}
 
-	return &ParentsResult{
-		BranchesReparented: reparented,
+	return &ParentsToGitHubResult{
+		BranchesUpdated: updated,
 	}, nil
 }

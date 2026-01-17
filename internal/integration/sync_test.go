@@ -19,7 +19,7 @@ import (
 const prStateMerged = "MERGED"
 
 func TestSync(t *testing.T) {
-	t.Run("detects and corrects parent from GitHub PR base", func(t *testing.T) {
+	t.Run("local parent is authoritative over GitHub PR base", func(t *testing.T) {
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a diamond-like structure:
@@ -40,6 +40,7 @@ func TestSync(t *testing.T) {
 		require.Equal(t, "feature-a", branchB.GetParent().GetName())
 
 		// 2. Simulate GitHub PR metadata for feature-b pointing to main instead of feature-a
+		// This simulates someone manually changing the PR base on GitHub
 		t.Log("Simulating changed PR base on GitHub...")
 		meta, err := eng.Git().ReadMetadata("feature-b")
 		require.NoError(t, err)
@@ -53,13 +54,16 @@ func TestSync(t *testing.T) {
 		err = eng.Git().WriteMetadata("feature-b", meta)
 		require.NoError(t, err)
 
-		// 3. Run sync (this should update the local parent to match GitHub)
+		// 3. Run sync
+		// Local parent is authoritative - GitHub PR base does NOT override local parent
 		err = sync.Action(sh.Context, sync.Options{}, nil)
 		require.NoError(t, err)
 
-		// 4. Verify local parent of feature-b is now main
+		// 4. Verify local parent of feature-b is STILL feature-a (not changed to match GitHub)
+		// Local metadata is authoritative; if a GitHub client were available,
+		// sync would push the local parent to GitHub (not pull from GitHub)
 		branchBAfter := eng.GetBranch("feature-b")
-		require.Equal(t, mainBranchName, branchBAfter.GetParent().GetName(), "Local parent should have been updated to match GitHub PR base")
+		require.Equal(t, "feature-a", branchBAfter.GetParent().GetName(), "Local parent should remain authoritative and not be changed by GitHub PR base")
 	})
 
 	t.Run("handles consolidation and deletion of merged branches", func(t *testing.T) {
