@@ -293,6 +293,11 @@ func TestContinueCommand(t *testing.T) {
 			_, err = os.Stat(continuationPath)
 			require.Error(t, err, "continuation state file should be deleted")
 			require.True(t, os.IsNotExist(err))
+
+			// Verify we're on the branch, not in detached HEAD
+			currentBranch, err := s.Scene.Repo.CurrentBranchName()
+			require.NoError(t, err)
+			require.Equal(t, "branch1", currentBranch, "should be on branch1 after continue, not detached HEAD")
 		} else {
 			// If it fails, log the output for debugging
 			t.Logf("Continue command output: %s", output)

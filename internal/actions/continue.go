@@ -92,7 +92,11 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 		return fmt.Errorf("rebase conflict is not yet resolved")
 	}
 
-	// Success - inform user
+	// Success - checkout the branch (rebase leaves us in detached HEAD)
+	if err := eng.Git().CheckoutBranch(ctx.Context, result.BranchName); err != nil {
+		return fmt.Errorf("failed to checkout branch %s: %w", result.BranchName, err)
+	}
+
 	out.Info("Resolved rebase conflict for %s.", style.ColorBranchName(result.BranchName, true))
 
 	// Continue with remaining branches to restack
