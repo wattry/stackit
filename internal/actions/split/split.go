@@ -47,6 +47,9 @@ type Options struct {
 	// UseWizard enables the new wizard-based interactive flow.
 	// When true, the wizard will guide through type/direction selection.
 	UseWizard bool
+	// HunkSelector specifies which hunk selection method to use ("tui" or "git").
+	// Only applies to StyleHunk. When "git", uses git add -p instead of the TUI selector.
+	HunkSelector string
 }
 
 // Result contains the result of a split operation
@@ -71,8 +74,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if opts.UseWizard {
 		if interactiveHandler, ok := handler.(InteractiveHandler); ok && interactiveHandler.IsInteractive() {
 			return RunWizard(ctx, interactiveHandler, WizardOptions{
-				Style:     opts.Style,
-				Direction: opts.Direction,
+				Style:        opts.Style,
+				Direction:    opts.Direction,
+				HunkSelector: opts.HunkSelector,
 			})
 		}
 		// Fall back to standard flow if handler doesn't support interactive

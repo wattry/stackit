@@ -209,9 +209,11 @@ func splitByHunk(ctx context.Context, branchToSplit engine.Branch, eng splitByHu
 //  3. Create child branch with staged changes
 //  4. Remove staged changes from current branch
 //  5. Existing children of current become children of new branch
-func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng splitByHunkEngine, splog output.Output, handler InteractiveHandler, direction Direction) error {
+//
+// When useGitAddP is true, uses git add -p instead of the TUI hunk selector.
+func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng splitByHunkEngine, splog output.Output, handler InteractiveHandler, direction Direction, useGitAddP bool) error {
 	if direction == DirectionAbove {
-		return splitByHunkAbove(ctx, branchToSplit, eng, splog, handler)
+		return splitByHunkAbove(ctx, branchToSplit, eng, splog, handler, useGitAddP)
 	}
 
 	gitCtx := ctx.Context
@@ -288,16 +290,24 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			break
 		}
 
-		// Use the TUI hunk selector
-		selectedHunks, err := handler.PromptSelectHunks(hunks)
-		if err != nil {
-			return cancelWithRestore()
-		}
+		// Stage hunks using either git add -p or the TUI selector
+		if useGitAddP {
+			// Use git's built-in interactive staging
+			if err := eng.StagePatch(gitCtx); err != nil {
+				return cancelWithRestore()
+			}
+		} else {
+			// Use the TUI hunk selector
+			selectedHunks, err := handler.PromptSelectHunks(hunks)
+			if err != nil {
+				return cancelWithRestore()
+			}
 
-		// Stage the selected hunks
-		if len(selectedHunks) > 0 {
-			if err := eng.StageHunks(gitCtx, selectedHunks); err != nil {
-				return fmt.Errorf("failed to stage hunks: %w", err)
+			// Stage the selected hunks
+			if len(selectedHunks) > 0 {
+				if err := eng.StageHunks(gitCtx, selectedHunks); err != nil {
+					return fmt.Errorf("failed to stage hunks: %w", err)
+				}
 			}
 		}
 
@@ -446,7 +456,9 @@ func generateDefaultBranchName(originalName string, existingNames []string) stri
 //  6. Create child branch from current
 //  7. Pop stash and commit → child branch content
 //  8. Re-parent existing children to the new child
-func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitByHunkEngine, splog output.Output, handler InteractiveHandler) error {
+//
+// When useGitAddP is true, uses git add -p instead of the TUI hunk selector.
+func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitByHunkEngine, splog output.Output, handler InteractiveHandler, useGitAddP bool) error {
 	gitCtx := ctx.Context
 
 	// Get existing children before we modify anything
@@ -500,18 +512,27 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		return fmt.Errorf("no changes to extract")
 	}
 
-	// Use the TUI hunk selector (user selects what to EXTRACT)
-	selectedHunks, err := handler.PromptSelectHunks(hunks)
-	if err != nil {
-		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
-		return sterrors.ErrCanceled
-	}
-
-	// Stage the selected hunks
-	if len(selectedHunks) > 0 {
-		if err := eng.StageHunks(gitCtx, selectedHunks); err != nil {
+	// Stage hunks using either git add -p or the TUI selector
+	if useGitAddP {
+		// Use git's built-in interactive staging
+		if err := eng.StagePatch(gitCtx); err != nil {
 			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
-			return fmt.Errorf("failed to stage hunks: %w", err)
+			return sterrors.ErrCanceled
+		}
+	} else {
+		// Use the TUI hunk selector (user selects what to EXTRACT)
+		selectedHunks, err := handler.PromptSelectHunks(hunks)
+		if err != nil {
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+			return sterrors.ErrCanceled
+		}
+
+		// Stage the selected hunks
+		if len(selectedHunks) > 0 {
+			if err := eng.StageHunks(gitCtx, selectedHunks); err != nil {
+				_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+				return fmt.Errorf("failed to stage hunks: %w", err)
+			}
 		}
 	}
 

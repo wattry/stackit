@@ -15,6 +15,8 @@ type WizardOptions struct {
 	Direction Direction
 	// BranchName is a pre-selected branch name (empty = prompt or auto-generate)
 	BranchName string
+	// HunkSelector specifies which hunk selection method to use ("tui" or "git")
+	HunkSelector string
 }
 
 // RunWizard executes the interactive split wizard.
@@ -132,7 +134,8 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	// Execute the appropriate split based on style
 	switch style {
 	case StyleHunk:
-		return splitByHunkWithHandler(ctx, *currentBranch, eng, out, handler, direction)
+		useGitAddP := opts.HunkSelector == "git"
+		return splitByHunkWithHandler(ctx, *currentBranch, eng, out, handler, direction, useGitAddP)
 	case StyleCommit, StyleFile:
 		// For now, these don't support the new wizard flow with direction
 		// Fall back to the existing implementation
