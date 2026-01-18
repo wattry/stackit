@@ -273,4 +273,76 @@ func TestValidateRebases(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, originalSHA, currentSHA, "branch ref should not be modified by validation")
 	})
+
+	t.Run("sets ValidationErrorConflict for merge conflicts", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a file on main first
+		s.Checkout("main").
+			CommitChange("conflicting-file.txt", "original version")
+
+		// Save this as the old base
+		oldBase, err := s.Engine.GetRevision(s.Engine.Trunk())
+		require.NoError(t, err)
+
+		// Create branch1 from main and modify the file
+		s.CreateBranch("branch1").
+			CommitChange("conflicting-file.txt", "branch1 version").
+			TrackBranch("branch1", "main")
+
+		// Now update main with a DIFFERENT conflicting change
+		s.Checkout("main").
+			CommitChange("conflicting-file.txt", "main conflicting version")
+
+		mainRev, err := s.Engine.GetRevision(s.Engine.Trunk())
+		require.NoError(t, err)
+
+		specs := []engine.RebaseSpec{
+			{
+				Branch:      "branch1",
+				NewParent:   mainRev,
+				OldUpstream: oldBase,
+			},
+		}
+
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		require.NoError(t, err)
+		require.False(t, result.Success)
+		require.Equal(t, "branch1", result.FailedBranch)
+		require.Equal(t, engine.ValidationErrorConflict, result.ErrorType, "should set ValidationErrorConflict for merge conflicts")
+		require.Contains(t, result.ErrorMessage, "conflict")
+	})
+
+	t.Run("sets ValidationErrorNone for successful validation", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Add a commit to main so rebase actually does something
+		s.Checkout("main").
+			Commit("main update").
+			Checkout("branch1")
+
+		// Get revisions
+		mainRev, err := s.Engine.GetRevision(s.Engine.Trunk())
+		require.NoError(t, err)
+		branch1OldBase, err := s.Engine.Git().GetMergeBase("main", "branch1")
+		require.NoError(t, err)
+
+		specs := []engine.RebaseSpec{
+			{
+				Branch:      "branch1",
+				NewParent:   mainRev,
+				OldUpstream: branch1OldBase,
+			},
+		}
+
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.Equal(t, engine.ValidationErrorNone, result.ErrorType, "should set ValidationErrorNone for successful validation")
+	})
 }

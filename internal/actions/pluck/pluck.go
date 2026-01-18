@@ -202,8 +202,14 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return fmt.Errorf("failed to validate rebases: %w", err)
 	}
 	if !validation.Success {
-		handler.OnStep(StepValidating, StatusFailed, validation.ErrorMessage)
-		return fmt.Errorf("pluck would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
+		errorMsg := validation.ErrorMessage
+		if len(validation.ConflictingFiles) > 0 {
+			ctx.Logger.Debug("conflict detected during pluck validation",
+				"branch", validation.FailedBranch,
+				"files", validation.ConflictingFiles)
+		}
+		handler.OnStep(StepValidating, StatusFailed, errorMsg)
+		return fmt.Errorf("pluck would cause conflicts: %s on branch %s", errorMsg, validation.FailedBranch)
 	}
 	handler.OnStep(StepValidating, StatusCompleted, "Validation passed")
 

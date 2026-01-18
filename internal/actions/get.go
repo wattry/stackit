@@ -384,7 +384,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 					conflicts = append(conflicts, branchName)
 					handler.OnRestackBranch(branchName, handlers.RestackConflict, "", prNumber, lockReason, frozen, isCurrent, parentName, reparented, oldParent, newParent)
 				}
-			}); err != nil {
+			}, true); err != nil {
 				handler.OnRestackComplete(restacked, skipped, conflicts)
 				return fmt.Errorf("restack failed: %w", err)
 			}

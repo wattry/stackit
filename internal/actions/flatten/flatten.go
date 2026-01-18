@@ -145,6 +145,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	if !validation.Success {
 		conflicts[validation.FailedBranch] = validation.ErrorMessage
+		if len(validation.ConflictingFiles) > 0 {
+			ctx.Logger.Debug("conflict detected during flatten validation",
+				"branch", validation.FailedBranch,
+				"files", validation.ConflictingFiles)
+		}
 	}
 
 	// Filter moves to exclude those that would cause conflicts (directly or via descendants)

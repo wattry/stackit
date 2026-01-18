@@ -159,18 +159,18 @@ func TestSyncAction(t *testing.T) {
 
 		s.Checkout("P")
 
+		handler := &NullHandler{}
 		err = Action(s.Context, Options{
 			All:     true,
 			Restack: true,
-		}, nil)
+		}, handler)
 
-		// Should error due to conflict in 1-Failure
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "conflict")
+		// Should NOT error - conflicts are detected via validation and skipped
+		require.NoError(t, err)
 
-		// 0-Success should still have been restacked successfully
+		// 0-Success should have been restacked successfully
 		s.ExpectBranchFixed("0-Success")
-		// 1-Failure should NOT be fixed
+		// 1-Failure should NOT be fixed (conflict detected via validation)
 		s.ExpectBranchNotFixed("1-Failure")
 	})
 }
