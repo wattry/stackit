@@ -595,6 +595,13 @@ func (e *engineImpl) RemoveWorktree(ctx context.Context, path string) error {
 
 // CreateTemporaryWorktree creates a temporary directory and adds a detached worktree
 func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (string, func(), error) {
+	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, false)
+}
+
+// CreateTemporaryWorktreeWithOptions creates a temporary directory and adds a detached worktree with options.
+// If shallow is true, uses --no-checkout to create a worktree without checking out files to the working tree.
+// This is faster for validation-only operations that don't need actual files.
+func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, shallow bool) (string, func(), error) {
 	tmpDir, err := os.MkdirTemp("", prefix)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
@@ -602,7 +609,7 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 
 	worktreePath := filepath.Join(tmpDir, "worktree")
 
-	if err := e.AddWorktree(ctx, worktreePath, branch, true); err != nil {
+	if err := e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, shallow); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", nil, fmt.Errorf("failed to add worktree: %w", err)
 	}

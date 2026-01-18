@@ -425,6 +425,10 @@ func (d *demoGitRunner) AddWorktree(_ context.Context, _, _ string, _ bool) erro
 	return nil
 }
 
+func (d *demoGitRunner) AddWorktreeWithOptions(_ context.Context, _, _ string, _, _ bool) error {
+	return nil
+}
+
 func (d *demoGitRunner) RemoveWorktree(_ context.Context, _ string) error {
 	return nil
 }

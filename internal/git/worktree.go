@@ -21,9 +21,17 @@ type WorktreeMeta struct {
 }
 
 func (r *runner) AddWorktree(ctx context.Context, path string, branch string, detach bool) error {
+	return r.AddWorktreeWithOptions(ctx, path, branch, detach, false)
+}
+
+// AddWorktreeWithOptions adds a worktree with additional options
+func (r *runner) AddWorktreeWithOptions(ctx context.Context, path string, branch string, detach bool, noCheckout bool) error {
 	args := []string{"worktree", "add"}
 	if detach {
 		args = append(args, "--detach")
+	}
+	if noCheckout {
+		args = append(args, "--no-checkout")
 	}
 	args = append(args, path)
 	if branch != "" {
