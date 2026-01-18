@@ -203,7 +203,8 @@ func (m *Model) View() string {
 		}
 
 		lines := m.Renderer.RenderStack(m.RootBranch, tree.RenderOptions{
-			HideStats: true,
+			HideStats:   true,
+			HideSummary: true,
 		})
 		b.WriteString(strings.Join(lines, "\n"))
 	} else {
