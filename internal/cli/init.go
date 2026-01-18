@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	initaction "stackit.dev/stackit/internal/actions/init"
+	"stackit.dev/stackit/internal/cli/integrations"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
@@ -19,6 +20,8 @@ import (
 type cliInitHandler struct {
 	noInteractive bool
 	writer        io.Writer
+	version       string
+	runner        git.Runner
 }
 
 func (h *cliInitHandler) SelectTrunk(_ context.Context, branchNames []string, inferredTrunk string) (string, error) {
@@ -77,11 +80,48 @@ func (h *cliInitHandler) OnSuccess(trunkName string, wasInitialized bool, isRese
 	splog.Newline()
 	splog.Info("Run '%s' to change these settings.", style.ColorCyan("stackit config"))
 
+	// Offer interactive integration installation
+	if !h.noInteractive && tui.IsTTY() {
+		h.offerIntegrations(splog)
+	} else {
+		// Non-interactive: just show hints
+		splog.Newline()
+		splog.Info("Pro-tip: enhance your workflow with integrations:")
+		splog.Info("  - GitHub:     %s", style.ColorGreen("stackit github install"))
+		splog.Info("  - Pre-commit: %s", style.ColorGreen("stackit precommit install"))
+		splog.Info("  - Agents:     %s", style.ColorGreen("stackit agents install"))
+	}
+}
+
+// offerIntegrations prompts the user to install integrations interactively
+func (h *cliInitHandler) offerIntegrations(splog output.Output) {
 	splog.Newline()
-	splog.Info("Pro-tip: enhance your workflow with integrations:")
-	splog.Info("  - GitHub:     %s", style.ColorGreen("stackit github install"))
-	splog.Info("  - Pre-commit: %s", style.ColorGreen("stackit precommit install"))
-	splog.Info("  - Agents:     %s", style.ColorGreen("stackit agents install"))
+	splog.Info("Would you like to install any integrations?")
+	splog.Newline()
+
+	// Offer GitHub integration
+	installGitHub, err := tui.PromptConfirm("Install GitHub Actions workflow? (CI checks for stacked PRs)", true)
+	if err == nil && installGitHub {
+		if err := integrations.InstallGitHub(h.runner, false, h.writer); err != nil {
+			splog.Warn("Failed to install GitHub integration: %v", err)
+		}
+	}
+
+	// Offer pre-commit hook
+	installPrecommit, err := tui.PromptConfirm("Install pre-commit hook? (Prevents commits on locked branches)", true)
+	if err == nil && installPrecommit {
+		if err := integrations.InstallPrecommit(h.runner, h.writer); err != nil {
+			splog.Warn("Failed to install pre-commit hook: %v", err)
+		}
+	}
+
+	// Offer agent integration
+	installAgents, err := tui.PromptConfirm("Install AI agent files? (Claude Code / Cursor integration)", false)
+	if err == nil && installAgents {
+		if err := integrations.InstallAgents(h.runner, false, false, h.version, h.writer); err != nil {
+			splog.Warn("Failed to install agent files: %v", err)
+		}
+	}
 }
 
 // EnsureInitialized initializes stackit if not already initialized.
@@ -110,7 +150,7 @@ func EnsureInitialized(ctx context.Context, writer io.Writer) (string, error) {
 }
 
 // newInitCmd creates the init command
-func newInitCmd() *cobra.Command {
+func newInitCmd(version string) *cobra.Command {
 	var (
 		trunk         string
 		reset         bool
@@ -133,7 +173,12 @@ func newInitCmd() *cobra.Command {
 				return fmt.Errorf("failed to get repo root: %w", err)
 			}
 
-			handler := &cliInitHandler{noInteractive: noInteractive, writer: cmd.OutOrStdout()}
+			handler := &cliInitHandler{
+				noInteractive: noInteractive,
+				writer:        cmd.OutOrStdout(),
+				version:       version,
+				runner:        runner,
+			}
 			opts := initaction.Options{
 				Trunk: trunk,
 				Reset: reset,
