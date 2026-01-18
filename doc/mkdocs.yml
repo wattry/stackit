@@ -1,0 +1,131 @@
+site_name: stackit
+site_url: https://getstackit.github.io/stackit
+site_description: >-
+  stackit is a command-line tool that makes working with stacked changes fast and intuitive.
+  It helps you manage and navigate a stack of branches that build on top of each other.
+copyright: '&copy; 2026 Stackit Contributors'
+
+repo_url: https://github.com/getstackit/stackit
+repo_name: getstackit/stackit
+edit_uri: edit/main/doc/src/
+
+docs_dir: src
+site_dir: _site
+
+extra:
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/getstackit/stackit
+
+validation:
+  omitted_files: warn
+  absolute_links: relative_to_docs
+  unrecognized_links: warn
+  anchors: warn
+strict: false  # Set to true once CLI reference is generated
+
+theme:
+  name: material
+  palette:
+    scheme: default
+
+  icon:
+    repo: fontawesome/brands/github-alt
+
+  features:
+    - content.action.edit
+    - content.code.copy
+    - content.tabs.link
+    - content.tooltips
+    - header.autohide
+    - navigation.expand
+    - navigation.indexes
+    - search.suggest
+    - toc.follow
+
+extra_css:
+  - css/custom.css
+
+nav:
+  - Home: index.md
+  - Get started: &get-started
+    - Overview: start/index.md
+    - Installation: start/install.md
+    - Create a stack: start/stack.md
+    - Submit PRs: start/submit.md
+  - User Guide: &user-guide
+    - Overview: guide/index.md
+    - Core Concepts: guide/concepts.md
+    - Common Workflows: guide/workflows.md
+    - Claude Integration: guide/claude-integration.md
+    - Troubleshooting: guide/troubleshooting.md
+  - CLI: &cli
+    - Overview: cli/index.md
+    - Command Reference: cli/reference.md
+    - Configuration: cli/config.md
+  - Community: &community
+    - Overview: community/index.md
+    - FAQ: community/faq.md
+    - Contributing: community/contributing.md
+
+plugins:
+  - markdown-exec
+  - redirects:
+      redirect_maps:
+        'faq.md': 'community/faq.md'
+  - search
+  - social:
+      enabled: !ENV [CI, false]
+  - llmstxt:
+      full_output: llms-full.txt
+      sections:
+        Home:
+          - index.md
+        Get started:
+          - start/index.md
+          - start/install.md
+          - start/stack.md
+          - start/submit.md
+        User Guide:
+          - guide/index.md
+          - guide/concepts.md
+          - guide/workflows.md
+          - guide/claude-integration.md
+          - guide/troubleshooting.md
+        CLI:
+          - cli/index.md
+          - cli/reference.md
+          - cli/config.md
+        Community:
+          - community/index.md
+          - community/faq.md
+          - community/contributing.md
+
+hooks:
+  - hooks/replace.py
+  - hooks/cliref.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.snippets:
+      base_path: [includes, ..]
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc: {permalink: true}
+
+watch:
+  - includes

@@ -1,0 +1,60 @@
+/* Custom styles for stackit documentation */
+
+:root {
+  --md-primary-fg-color: #4051b5;
+  --md-accent-fg-color: #526cfe;
+}
+
+/* Improve code block styling */
+.highlight pre {
+  border-radius: 0.2rem;
+}
+
+/* Better spacing for feature grid */
+.md-typeset .grid.cards > ul > li {
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  transition: border 0.25s, box-shadow 0.25s;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+/* Icon alignment for inline icons */
+.middle {
+  vertical-align: middle;
+}
+
+/* Better admonition styling */
+.md-typeset .admonition,
+.md-typeset details {
+  border-left: 0.2rem solid var(--md-accent-fg-color);
+}
+
+/* Command reference styling */
+.md-typeset code {
+  font-size: 0.85em;
+}
+
+/* Improve table styling */
+.md-typeset table:not([class]) {
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-default-fg-color--lightest);
+}
+
+/* Better spacing for lists */
+.md-typeset ul,
+.md-typeset ol {
+  margin-left: 0.5rem;
+}
+
+/* Improve mermaid diagram appearance in dark mode */
+.mermaid {
+  background-color: transparent;
+}

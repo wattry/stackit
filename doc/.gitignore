@@ -1,0 +1,35 @@
+# Build output
+_site/
+site/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# UV
+.venv/
+venv/
+ENV/
+env/
+
+# uv lock file (committed to ensure reproducible builds)
+# uv.lock
+
+# MkDocs
+.cache/
+
+# Generated files
+includes/cli-reference.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
