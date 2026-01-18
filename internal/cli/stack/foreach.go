@@ -29,10 +29,10 @@ The command is executed via /bin/sh -c.
 By default, it runs on the current branch and all its descendants (up-stack).
 
 Examples:
-  st foreach just lint
+  st foreach mise run lint
   st foreach --stack 'go test ./... && go build'
   st foreach --downstack go test ./...
-  st foreach --parallel just test`,
+  st foreach --parallel mise run test`,
 		Args:         cobra.MinimumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

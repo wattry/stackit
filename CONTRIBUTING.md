@@ -6,19 +6,30 @@ Thank you for your interest in contributing to Stackit! This document outlines t
 
 ### Prerequisites
 
-- **Go 1.25+**
 - **Git 2.25+**
 - **GitHub CLI (`gh`)** for PR operations
-- **[just](https://github.com/casey/just)** (optional, but recommended for running development commands)
+- **[mise](https://mise.jdx.dev/)** - Tool version manager and task runner
 
-### Quick Setup (macOS/Linux)
+### Quick Setup
 
-Install all development dependencies with Homebrew:
-```bash
-brew bundle
-```
+1. Install mise:
+   ```bash
+   # macOS/Linux
+   curl https://mise.run | sh
 
-This installs: just, golangci-lint, ripgrep, fd, ast-grep, jq, yq, and tokei.
+   # Or via Homebrew
+   brew install mise
+
+   # Add to your shell (bash/zsh)
+   echo 'eval "$(mise activate bash)"' >> ~/.bashrc   # or ~/.zshrc for zsh
+   ```
+
+2. Install all project tools and dependencies:
+   ```bash
+   mise install
+   ```
+
+This installs Go, gotestsum, goimports, golangci-lint, and all other dev tools with pinned versions.
 
 ### Setting Up Your Development Environment
 
@@ -28,22 +39,19 @@ This installs: just, golangci-lint, ripgrep, fd, ast-grep, jq, yq, and tokei.
    cd stackit
    ```
 
-2. Install dependencies:
+2. Install tools and dependencies:
    ```bash
-   just deps
-   # Or manually:
-   go mod download
+   mise install
    ```
 
 3. Build the project:
    ```bash
-   just build
+   mise run build
    ```
 
 4. Initialize stackit in the repository:
    ```bash
-   just init
-   # Or: ./stackit init
+   mise run init
    ```
 
 ## Development Workflow
@@ -85,12 +93,15 @@ Before submitting your changes, ensure all tests pass and the code is properly f
 
 ```bash
 # Run all checks (format, lint, test)
-just check
+mise run check
 
 # Or run individually:
-just fmt      # Format code
-just lint     # Run linter
-just test     # Run tests
+mise run fmt      # Format code
+mise run lint     # Run linter
+mise run test     # Run tests
+
+# View all available tasks:
+mise tasks
 ```
 
 All changes must pass tests and linting before being submitted.
@@ -139,7 +150,7 @@ chore: update dependencies
 
 1. Ensure your code passes all checks:
    ```bash
-   just check
+   mise run check
    ```
 
 2. Submit your stack to GitHub:
@@ -153,7 +164,7 @@ chore: update dependencies
 
 ## Code Style
 
-- Follow Go standard formatting (use `just fmt` or `goimports`)
+- Follow Go standard formatting (use `mise run fmt` or `goimports`)
 - Follow the existing code style in the repository
 - Write clear, self-documenting code
 - Add comments for complex logic

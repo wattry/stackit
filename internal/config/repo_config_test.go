@@ -254,7 +254,7 @@ func TestConfigCICommand(t *testing.T) {
 		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
 		config := &RepoConfig{
 			Trunk:     stringPtr("main"),
-			CICommand: stringPtr("just check"),
+			CICommand: stringPtr("mise run check"),
 		}
 		configJSON, err := json.MarshalIndent(config, "", "  ")
 		require.NoError(t, err)
@@ -263,7 +263,7 @@ func TestConfigCICommand(t *testing.T) {
 
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		require.Equal(t, "just check", cfg.CICommand())
+		require.Equal(t, "mise run check", cfg.CICommand())
 	})
 
 	t.Run("falls back to combine.ciCommand for backwards compatibility", func(t *testing.T) {
@@ -292,7 +292,7 @@ func TestConfigCICommand(t *testing.T) {
 		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
 		config := &RepoConfig{
 			Trunk:            stringPtr("main"),
-			CICommand:        stringPtr("just check"),
+			CICommand:        stringPtr("mise run check"),
 			CombineCICommand: stringPtr("npm test"),
 		}
 		configJSON, err := json.MarshalIndent(config, "", "  ")
@@ -302,7 +302,7 @@ func TestConfigCICommand(t *testing.T) {
 
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		require.Equal(t, "just check", cfg.CICommand())
+		require.Equal(t, "mise run check", cfg.CICommand())
 	})
 }
 
