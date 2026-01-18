@@ -113,6 +113,20 @@ Navigate to the worktree with:
 cd $(stackit worktree open my-feature)
 ```
 
+### Automating worktree setup
+
+Configure commands to run automatically after worktree creation by adding a `.stackit.yaml` file to your repository:
+
+```yaml
+# .stackit.yaml
+hooks:
+  post-worktree-create:
+    - npm install
+    - cp .env.example .env
+```
+
+These hooks run in the new worktree directory after it's created. See [Configuration](../cli/config.md#project-configuration-stackityaml) for more details.
+
 Worktrees are automatically cleaned up during $$stackit sync$$ when their stack is merged.
 
 ## Collaborating on stacks
