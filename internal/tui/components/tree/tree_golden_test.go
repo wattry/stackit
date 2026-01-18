@@ -328,6 +328,32 @@ func buildGoldenTests() []goldenTest {
 			},
 			opts: RenderOptions{Short: false, HideSummary: true},
 		},
+
+		// RenderMode tests (new enum-based API)
+		{
+			name: "mode_full",
+			mock: NewMockTreeData(),
+			opts: RenderOptions{Mode: RenderModeFull},
+		},
+		{
+			name: "mode_compact",
+			mock: NewMockTreeData(),
+			opts: RenderOptions{Mode: RenderModeCompact},
+		},
+		{
+			name: "mode_select",
+			mock: NewMockTreeData(),
+			opts: RenderOptions{Mode: RenderModeSelect},
+		},
+		{
+			name: "mode_compact_with_annotations",
+			mock: NewMockTreeData(),
+			annotations: map[string]BranchAnnotation{
+				"feature-1": {PRNumber: intPtr(123), CheckStatus: CheckStatusPassing},
+				"feature-2": {PRNumber: intPtr(456), CheckStatus: CheckStatusFailing},
+			},
+			opts: RenderOptions{Mode: RenderModeCompact},
+		},
 	}
 }
 

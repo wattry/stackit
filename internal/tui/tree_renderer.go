@@ -31,6 +31,55 @@ func NewStackTreeRendererWithOptions(eng engine.BranchReader, strategy engine.So
 	return newStackTreeRendererInternal(eng, strategy, filter, emptyWorktrees)
 }
 
+// graphData implements tree.Data using an engine.StackGraph.
+// This decouples the tree renderer from the engine package.
+type graphData struct {
+	graph *engine.StackGraph
+	eng   engine.BranchReader
+}
+
+// CurrentBranch returns the currently checked out branch.
+func (d *graphData) CurrentBranch() string {
+	return d.graph.Current
+}
+
+// Trunk returns the trunk/main branch name.
+func (d *graphData) Trunk() string {
+	return d.graph.Trunk
+}
+
+// Children returns the child branches of the given branch.
+func (d *graphData) Children(branchName string) []string {
+	node := d.graph.Nodes[branchName]
+	if node == nil {
+		return nil
+	}
+	return d.graph.Children(node.Branch)
+}
+
+// Parent returns the parent branch of the given branch.
+func (d *graphData) Parent(branchName string) string {
+	node := d.graph.Nodes[branchName]
+	if node == nil {
+		return ""
+	}
+	return d.graph.Parent(node.Branch)
+}
+
+// IsTrunk returns whether the given branch is the trunk branch.
+func (d *graphData) IsTrunk(branchName string) bool {
+	return branchName == d.graph.Trunk
+}
+
+// IsFixed returns whether the branch is up-to-date with its parent.
+func (d *graphData) IsFixed(branchName string) bool {
+	node := d.graph.Nodes[branchName]
+	if node == nil {
+		return false
+	}
+	return d.eng.IsUpToDate(node.Branch)
+}
+
 // newStackTreeRendererInternal is the internal implementation that handles all renderer options
 func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool, emptyWorktrees map[string]bool) *tree.StackTreeRenderer {
 	branchFilter := func(b engine.Branch) bool {
@@ -50,32 +99,13 @@ func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortS
 
 	graph := engine.BuildStackGraph(eng, strategy, branchFilter)
 
-	return tree.NewStackTreeRenderer(
-		graph.Current,
-		graph.Trunk,
-		func(branchName string) []string {
-			node := graph.Nodes[branchName]
-			if node == nil {
-				return nil
-			}
-			return graph.Children(node.Branch)
-		},
-		func(branchName string) string {
-			node := graph.Nodes[branchName]
-			if node == nil {
-				return ""
-			}
-			return graph.Parent(node.Branch)
-		},
-		func(branchName string) bool { return branchName == graph.Trunk },
-		func(branchName string) bool {
-			node := graph.Nodes[branchName]
-			if node == nil {
-				return false
-			}
-			return eng.IsUpToDate(node.Branch)
-		},
-	)
+	// Use the Data interface instead of callback functions
+	data := &graphData{
+		graph: graph,
+		eng:   eng,
+	}
+
+	return tree.NewRenderer(data)
 }
 
 // GetEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo

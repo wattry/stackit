@@ -472,28 +472,22 @@ func (m *submitSimulationModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Reset simulation
 			m.step = 0
 			m.submitModel = submit.NewModel(nil)
-			m.submitModel.Renderer = tree.NewStackTreeRenderer(
-				"feature-3", "main",
-				func(b string) []string {
-					children := map[string][]string{
-						"main":      {"feature-1"},
-						"feature-1": {"feature-2"},
-						"feature-2": {"feature-3"},
-						"feature-3": {},
-					}
-					return children[b]
+			m.submitModel.Renderer = tree.NewRenderer(&tree.StackTree{
+				Branches:       []string{"main", "feature-1", "feature-2", "feature-3"},
+				CurrentBranchV: "feature-3",
+				TrunkBranch:    "main",
+				ChildrenMap: map[string][]string{
+					"main":      {"feature-1"},
+					"feature-1": {"feature-2"},
+					"feature-2": {"feature-3"},
+					"feature-3": {},
 				},
-				func(b string) string {
-					parents := map[string]string{
-						"feature-1": "main",
-						"feature-2": "feature-1",
-						"feature-3": "feature-2",
-					}
-					return parents[b]
+				ParentMap: map[string]string{
+					"feature-1": "main",
+					"feature-2": "feature-1",
+					"feature-3": "feature-2",
 				},
-				func(b string) bool { return b == "main" },
-				func(_ string) bool { return true },
-			)
+			})
 			m.submitModel.Renderer.SetAnnotation("feature-1", tree.BranchAnnotation{Scope: "CORE", ExplicitScope: "CORE"})
 			m.submitModel.Renderer.SetAnnotation("feature-2", tree.BranchAnnotation{Scope: "API", ExplicitScope: "API"})
 			m.submitModel.Renderer.SetAnnotation("feature-3", tree.BranchAnnotation{Scope: "UI", ExplicitScope: "UI"})
