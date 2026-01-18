@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"stackit.dev/stackit/internal/actions/split"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
@@ -28,23 +28,22 @@ func NewSplitUI(out output.Output, _ output.Logger) (*tui.Runner, split.Handler)
 
 // SimpleSplitHandler provides streaming text output for split operations
 type SimpleSplitHandler struct {
-	splog       output.Output
-	mu          sync.Mutex
+	common.BaseHandler
 	branchName  string
 	newBranches []string
 }
 
 // NewSimpleSplitHandler creates a new SimpleSplitHandler
-func NewSimpleSplitHandler(splog output.Output) *SimpleSplitHandler {
+func NewSimpleSplitHandler(out output.Output) *SimpleSplitHandler {
 	return &SimpleSplitHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of split
 func (h *SimpleSplitHandler) Start(branchName string, _ split.Style) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.branchName = branchName
 	h.newBranches = nil
 }
@@ -56,26 +55,23 @@ func (h *SimpleSplitHandler) OnStep(_ split.Step, _ split.StepStatus, _ string) 
 
 // OnBranchCreated is called when a new branch is created during split
 func (h *SimpleSplitHandler) OnBranchCreated(branchName string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.newBranches = append(h.newBranches, branchName)
-	h.splog.Info("Created branch %s", style.ColorBranchName(branchName, false))
+	h.Output.Info("Created branch %s", style.ColorBranchName(branchName, false))
 }
 
 // Complete is called when split finishes
 func (h *SimpleSplitHandler) Complete(result split.ActionResult) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	if len(result.NewBranches) > 0 {
-		h.splog.Info("Split %s into %d branches",
+		h.Output.Info("Split %s into %d branches",
 			style.ColorBranchName(result.OriginalBranch, false),
 			len(result.NewBranches))
 	}
 }
-
-// Cleanup is a no-op for the simple handler
-func (h *SimpleSplitHandler) Cleanup() {}
 
 // TUISplitHandler provides interactive TUI prompts for split operations
 type TUISplitHandler struct {
@@ -139,11 +135,11 @@ func (h *TUISplitHandler) PromptDirection(ctx split.DirectionContext) (split.Dir
 
 // ShowHunkSummary displays a summary of the remaining changes
 func (h *TUISplitHandler) ShowHunkSummary(diff string) {
-	h.splog.Info("Remaining changes:")
+	h.Output.Info("Remaining changes:")
 	for _, line := range strings.Split(diff, "\n") {
-		h.splog.Info("  %s", line)
+		h.Output.Info("  %s", line)
 	}
-	h.splog.Info("")
+	h.Output.Info("")
 }
 
 // PromptCommitMessage asks the user to enter or edit a commit message
