@@ -50,139 +50,152 @@ type RestackProgressCallback func(branchName string, result engine.RestackResult
 
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
-	return RestackBranchesWithHandler(ctx, branches, nil)
+	return RestackBranchesWithHandler(ctx, branches, nil, true)
 }
 
 // RestackBranchesWithHandler restacks branches with optional progress callback
-func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, callback RestackProgressCallback) error {
-	batchResult, err := ctx.Engine.RestackBranches(ctx.Context, branches)
-	if err != nil {
-		if batchResult.ConflictBranch != "" {
-			currentBranch := ctx.Engine.CurrentBranch()
-			currentBranchName := ""
-			if currentBranch != nil {
-				currentBranchName = currentBranch.GetName()
-			}
-
-			// Report the conflict via callback if provided
-			if callback != nil {
-				callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false, batchResult.ConflictBranch == currentBranchName, false, "", "")
-			}
-
-			continuation := &config.ContinuationState{
-				BranchesToRestack:     batchResult.RemainingBranches,
-				RebasedBranchBase:     batchResult.RebasedBranchBase,
-				CurrentBranchOverride: batchResult.ConflictBranch,
-			}
-
-			if err := config.PersistContinuationState(ctx.RepoRoot, continuation); err != nil {
-				return fmt.Errorf("failed to persist continuation: %w", err)
-			}
-
-			if err := PrintConflictStatus(ctx, batchResult.ConflictBranch); err != nil {
-				return fmt.Errorf("failed to print conflict status: %w", err)
-			}
-		}
-		return fmt.Errorf("batch restack failed: %w", err)
+// If shouldEnterConflictWorkflow is true, stops at first conflict and enters conflict workflow
+// If false, validates all branches first, restacks non-conflicting ones, and reports conflicts via callback
+func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, callback RestackProgressCallback, shouldEnterConflictWorkflow bool) error {
+	if len(branches) == 0 {
+		return nil
 	}
 
-	// Handle conflicts even when no error was returned
-	if batchResult.ConflictBranch != "" {
+	// Build rebase specs for validation
+	specs, branchMap := buildRebaseSpecs(ctx, branches)
+	if len(specs) == 0 {
+		return nil
+	}
+
+	// Validate all rebases in a temporary worktree (clean, no side effects)
+	validation, err := ctx.Engine.ValidateRebases(ctx.Context, specs)
+	if err != nil {
+		return fmt.Errorf("failed to validate rebases: %w", err)
+	}
+
+	// Check if validation failed due to a system error (not a conflict)
+	if !validation.Success {
+		if validation.ErrorType == engine.ValidationErrorSystem {
+			return fmt.Errorf("validation failed for %s: %s", validation.FailedBranch, validation.ErrorMessage)
+		}
+		// Else: conflict - continue with conflict workflow
+	}
+
+	// Split branches into successful and conflicting
+	var successBranches []engine.Branch
+	var conflictBranches []string
+
+	if validation.Success {
+		// All branches succeeded - add them all to success list
+		for _, branch := range branches {
+			if _, exists := branchMap[branch.GetName()]; exists {
+				successBranches = append(successBranches, branch)
+			}
+		}
+	} else {
+		// Build a position map for fast lookups
+		positionMap := make(map[string]int)
+		for i, spec := range specs {
+			positionMap[spec.Branch] = i
+		}
+
+		// Find position of failed branch
+		failedPos, failedExists := positionMap[validation.FailedBranch]
+		if !failedExists {
+			// This shouldn't happen, but handle gracefully
+			ctx.Logger.Warn("failed branch not found in specs", "branch", validation.FailedBranch)
+			failedPos = len(specs) // Treat as if it failed at the end
+		}
+
+		// Classify branches based on their position relative to the conflict
+		for _, branch := range branches {
+			branchName := branch.GetName()
+			if _, exists := branchMap[branchName]; !exists {
+				continue // Skip branches without specs
+			}
+
+			pos, ok := positionMap[branchName]
+			if !ok {
+				// Branch not in specs (shouldn't happen)
+				continue
+			}
+
+			if pos < failedPos {
+				// Branch comes before conflict - will succeed
+				successBranches = append(successBranches, branch)
+			} else if pos == failedPos {
+				// This is the conflicted branch
+				conflictBranches = append(conflictBranches, branchName)
+			}
+			// Branches after conflict (pos > failedPos) are not processed
+		}
+	}
+
+	// For standalone mode, enter conflict workflow on first conflict
+	if shouldEnterConflictWorkflow && len(conflictBranches) > 0 {
+		firstConflict := conflictBranches[0]
+
+		// Restack successfully up to the conflict
+		if len(successBranches) > 0 {
+			if _, err := ctx.Engine.RestackBranches(ctx.Context, successBranches); err != nil {
+				return fmt.Errorf("failed to restack branches before conflict: %w", err)
+			}
+		}
+
+		// Enter conflict workflow for the first conflict
+		return EnterConflictWorkflow(ctx, firstConflict, branches)
+	}
+
+	// For sync mode (or standalone with no conflicts), restack all successful branches
+	if len(successBranches) > 0 {
+		batchResult, err := ctx.Engine.RestackBranches(ctx.Context, successBranches)
+		if err != nil {
+			return fmt.Errorf("batch restack failed: %w", err)
+		}
+
+		// Report results via callback or output
 		currentBranch := ctx.Engine.CurrentBranch()
 		currentBranchName := ""
 		if currentBranch != nil {
 			currentBranchName = currentBranch.GetName()
 		}
 
-		// Report the conflict via callback if provided
-		if callback != nil {
-			callback(batchResult.ConflictBranch, engine.RestackConflict, "", true, engine.LockReasonNone, false, batchResult.ConflictBranch == currentBranchName, false, "", "")
-		}
+		for _, branch := range successBranches {
+			branchName := branch.GetName()
+			result, exists := batchResult.Results[branchName]
+			if !exists {
+				continue
+			}
 
-		continuation := &config.ContinuationState{
-			BranchesToRestack:     batchResult.RemainingBranches,
-			RebasedBranchBase:     batchResult.RebasedBranchBase,
-			CurrentBranchOverride: batchResult.ConflictBranch,
-		}
-
-		if err := config.PersistContinuationState(ctx.RepoRoot, continuation); err != nil {
-			return fmt.Errorf("failed to persist continuation: %w", err)
-		}
-
-		if err := PrintConflictStatus(ctx, batchResult.ConflictBranch); err != nil {
-			return fmt.Errorf("failed to print conflict status: %w", err)
-		}
-
-		return fmt.Errorf("restack stopped due to conflict on %s", batchResult.ConflictBranch)
-	}
-
-	currentBranch := ctx.Engine.CurrentBranch()
-	currentBranchName := ""
-	if currentBranch != nil {
-		currentBranchName = currentBranch.GetName()
-	}
-
-	for _, branch := range branches {
-		branchName := branch.GetName()
-		result, exists := batchResult.Results[branchName]
-		if !exists {
-			continue // Skip branches not processed (e.g., trunk)
-		}
-
-		// Get new revision if available
-		newRev := ""
-		if result.Result == engine.RestackDone {
-			if rev, err := branch.GetRevision(); err == nil {
-				if len(rev) > 7 {
-					newRev = rev[:7]
-				} else {
-					newRev = rev
+			// Get new revision if available
+			newRev := ""
+			if result.Result == engine.RestackDone {
+				if rev, err := branch.GetRevision(); err == nil {
+					if len(rev) > 7 {
+						newRev = rev[:7]
+					} else {
+						newRev = rev
+					}
 				}
 			}
-		}
 
-		// Report via callback if provided
-		if callback != nil {
-			callback(branchName, result.Result, newRev, false, result.LockReason, result.Frozen, branchName == currentBranchName, result.Reparented, result.OldParent, result.NewParent)
-			continue // Skip splog output when using callback handler
-		}
-
-		// Log via splog only when no callback is provided (backward compatibility)
-		if result.Reparented {
-			isCurrent := branchName == currentBranchName
-			ctx.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
-				style.ColorBranchName(branchName, isCurrent),
-				style.ColorBranchName(result.OldParent, false),
-				style.ColorBranchName(result.NewParent, false))
-		}
-
-		switch result.Result {
-		case engine.RestackDone:
-			parent := branch.GetParent()
-			parentName := ""
-			if parent == nil {
-				parentName = ctx.Engine.Trunk().GetName()
-			} else {
-				parentName = parent.GetName()
+			// Report via callback if provided
+			if callback != nil {
+				callback(branchName, result.Result, newRev, false, result.LockReason, result.Frozen, branchName == currentBranchName, result.Reparented, result.OldParent, result.NewParent)
+				continue
 			}
-			isCurrent := branchName == currentBranchName
-			ctx.Output.Info("Restacked %s on %s.",
-				style.ColorBranchName(branchName, isCurrent),
-				style.ColorBranchName(parentName, false))
-		case engine.RestackConflict:
-			// This should not happen since conflicts are handled at the batch level
-			return fmt.Errorf("unexpected conflict in batch result for branch %s", branchName)
-		case engine.RestackUnneeded:
-			switch {
-			case !branch.CanModify():
-				if branch.IsLocked() {
-					ctx.Output.Info("Did not restack branch %s because it is locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
-				} else {
-					ctx.Output.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
-				}
-			case branch.IsTrunk():
-				ctx.Output.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
-			default:
+
+			// Log via splog only when no callback is provided
+			if result.Reparented {
+				isCurrent := branchName == currentBranchName
+				ctx.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
+					style.ColorBranchName(branchName, isCurrent),
+					style.ColorBranchName(result.OldParent, false),
+					style.ColorBranchName(result.NewParent, false))
+			}
+
+			switch result.Result {
+			case engine.RestackDone:
 				parent := branch.GetParent()
 				parentName := ""
 				if parent == nil {
@@ -191,14 +204,188 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 					parentName = parent.GetName()
 				}
 				isCurrent := branchName == currentBranchName
-				ctx.Output.Info("%s does not need to be restacked on %s.",
+				ctx.Output.Info("Restacked %s on %s.",
 					style.ColorBranchName(branchName, isCurrent),
 					style.ColorBranchName(parentName, false))
+			case engine.RestackUnneeded:
+				switch {
+				case !branch.CanModify():
+					if branch.IsLocked() {
+						ctx.Output.Info("Did not restack branch %s because it is locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
+					} else {
+						ctx.Output.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
+					}
+				case branch.IsTrunk():
+					ctx.Output.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
+				default:
+					parent := branch.GetParent()
+					parentName := ""
+					if parent == nil {
+						parentName = ctx.Engine.Trunk().GetName()
+					} else {
+						parentName = parent.GetName()
+					}
+					isCurrent := branchName == currentBranchName
+					ctx.Output.Info("%s does not need to be restacked on %s.",
+						style.ColorBranchName(branchName, isCurrent),
+						style.ColorBranchName(parentName, false))
+				}
+			}
+		}
+	}
+
+	// Report conflicts via callback for sync mode
+	if !shouldEnterConflictWorkflow && len(conflictBranches) > 0 {
+		currentBranch := ctx.Engine.CurrentBranch()
+		currentBranchName := ""
+		if currentBranch != nil {
+			currentBranchName = currentBranch.GetName()
+		}
+
+		for _, branchName := range conflictBranches {
+			if callback != nil {
+				callback(branchName, engine.RestackConflict, "", true, engine.LockReasonNone, false, branchName == currentBranchName, false, "", "")
 			}
 		}
 	}
 
 	return nil
+}
+
+// EnterConflictWorkflow performs the rebase to enter conflict state and persists continuation state.
+// This helper is shared between RestackBranchesWithHandler (standalone mode) and sync.RunSync (sync mode).
+func EnterConflictWorkflow(ctx *app.Context, firstConflict string, allBranches []engine.Branch) error {
+	// Perform rebase to enter conflict state
+	conflictBranch := ctx.Engine.GetBranch(firstConflict)
+	batchResult, err := ctx.Engine.RestackBranches(ctx.Context, []engine.Branch{conflictBranch})
+	if err != nil {
+		return fmt.Errorf("failed to enter conflict state for %s: %w", firstConflict, err)
+	}
+
+	// Verify we're actually in conflict state
+	if !ctx.Engine.Git().IsRebaseInProgress(ctx.Context) {
+		return fmt.Errorf("expected conflict on %s but rebase completed successfully", firstConflict)
+	}
+
+	// Note: We don't verify the current branch here because CurrentBranch() doesn't work
+	// correctly during an in-progress rebase. The IsRebaseInProgress check above is sufficient
+	// to verify we're in the expected state.
+
+	// Build remaining branches list
+	var remainingBranches []string
+	foundConflict := false
+	for _, branch := range allBranches {
+		if foundConflict {
+			remainingBranches = append(remainingBranches, branch.GetName())
+		} else if branch.GetName() == firstConflict {
+			foundConflict = true
+		}
+	}
+
+	// Get RebasedBranchBase from result
+	rebasedBranchBase := ""
+	if result, ok := batchResult.Results[firstConflict]; ok {
+		rebasedBranchBase = result.RebasedBranchBase
+	}
+
+	// Persist continuation state
+	continuation := &config.ContinuationState{
+		BranchesToRestack:     remainingBranches,
+		RebasedBranchBase:     rebasedBranchBase,
+		CurrentBranchOverride: firstConflict,
+	}
+
+	if err := config.PersistContinuationState(ctx.RepoRoot, continuation); err != nil {
+		return fmt.Errorf("failed to persist continuation: %w", err)
+	}
+
+	if err := PrintConflictStatus(ctx, firstConflict); err != nil {
+		return fmt.Errorf("failed to print conflict status: %w", err)
+	}
+
+	return fmt.Errorf("restack stopped due to conflict on %s", firstConflict)
+}
+
+// buildRebaseSpecs builds RebaseSpec list for validation
+func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.RebaseSpec, map[string]bool) {
+	specs := make([]engine.RebaseSpec, 0, len(branches))
+	branchMap := make(map[string]bool)
+
+	for _, branch := range branches {
+		branchName := branch.GetName()
+
+		// Check if parent exists or needs reparenting
+		parent := branch.GetParent()
+		var parentName string
+		if parent == nil {
+			trunk := ctx.Engine.Trunk()
+			parentName = trunk.GetName()
+		} else {
+			parentName = parent.GetName()
+			// Check if parent branch still exists by trying to get its revision
+			parentBranch := ctx.Engine.GetBranch(parentName)
+			if _, err := parentBranch.GetRevision(); err != nil {
+				// Parent doesn't exist, find nearest valid ancestor
+				ancestors, err := ctx.Engine.FindMostRecentTrackedAncestors(ctx.Context, branchName)
+				if err == nil && len(ancestors) > 0 {
+					parentName = ancestors[0]
+				} else {
+					// Fall back to trunk if no ancestors found
+					parentName = ctx.Engine.Trunk().GetName()
+				}
+			}
+		}
+
+		// Get old parent revision from metadata
+		meta, err := ctx.Engine.Git().ReadMetadata(branchName)
+		if err != nil {
+			continue // Skip if can't read metadata
+		}
+
+		var oldParentRev string
+		if meta.ParentBranchRevision != nil {
+			oldParentRev = *meta.ParentBranchRevision
+		}
+
+		// RESILIENCY: If oldParentRev is no longer an ancestor of branchName,
+		// or if it's empty, find the actual merge base. This handles cases where
+		// the parent was amended, rebased, or deleted.
+		if oldParentRev != "" {
+			isAncestor, err := ctx.Engine.Git().IsAncestor(oldParentRev, branchName)
+			if err != nil {
+				ctx.Logger.Warn("failed to check ancestry, will try merge-base",
+					"oldParent", oldParentRev, "branch", branchName, "error", err)
+				isAncestor = false
+			}
+			if !isAncestor {
+				if mergeBase, err := ctx.Engine.Git().GetMergeBase(branchName, parentName); err == nil {
+					oldParentRev = mergeBase
+				} else {
+					// Can't determine merge base - skip this branch
+					ctx.Logger.Warn("failed to determine merge base", "branch", branchName, "parent", parentName, "error", err)
+					continue
+				}
+			}
+		} else {
+			// No old parent revision in metadata, try to find merge base
+			if mergeBase, err := ctx.Engine.Git().GetMergeBase(branchName, parentName); err == nil {
+				oldParentRev = mergeBase
+			} else {
+				// Can't determine merge base - skip this branch
+				ctx.Logger.Warn("failed to determine merge base", "branch", branchName, "parent", parentName, "error", err)
+				continue
+			}
+		}
+
+		specs = append(specs, engine.RebaseSpec{
+			Branch:      branchName,
+			NewParent:   parentName,
+			OldUpstream: oldParentRev,
+		})
+		branchMap[branchName] = true
+	}
+
+	return specs, branchMap
 }
 
 // PluralSuffix returns the appropriate plural suffix for the given word if plural is true, otherwise empty string

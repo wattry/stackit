@@ -118,6 +118,11 @@ func (h *SimpleSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataI
 	return false, nil
 }
 
+// PromptResolveConflicts implements Handler. In non-interactive mode, skips conflicts.
+func (h *SimpleSyncHandler) PromptResolveConflicts(_ []string) (bool, error) {
+	return false, nil
+}
+
 // PromptBranchDeletions implements Handler. In non-interactive mode, auto-confirms all deletions.
 func (h *SimpleSyncHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
 	confirmed := make(map[string]bool)
@@ -657,6 +662,25 @@ func (h *InteractiveSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMeta
 	}
 
 	return tui.PromptConfirm("Push your local metadata to remote?", false)
+}
+
+// PromptResolveConflicts implements Handler. Pauses TUI, displays conflicts, prompts user.
+func (h *InteractiveSyncHandler) PromptResolveConflicts(conflictBranches []string) (bool, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	h.output.Newline()
+	h.output.Warn("⚠️  Found conflicts in %d %s during restack:",
+		len(conflictBranches),
+		map[bool]string{true: "branch", false: "branches"}[len(conflictBranches) == 1])
+	for _, name := range conflictBranches {
+		h.output.Warn("  • %s", style.ColorBranchName(name, false))
+	}
+	h.output.Newline()
+	h.output.Info("Branches that could be restacked cleanly have been restacked.")
+	h.output.Newline()
+
+	return tui.PromptConfirm("Resolve conflicts now?", false)
 }
 
 // PromptBranchDeletions implements Handler. Pauses TUI, displays planned deletions, prompts for each.

@@ -7,6 +7,18 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
+// ValidationErrorType distinguishes between conflict errors and system errors
+type ValidationErrorType int
+
+const (
+	// ValidationErrorNone indicates no error occurred
+	ValidationErrorNone ValidationErrorType = iota
+	// ValidationErrorConflict indicates a merge conflict occurred
+	ValidationErrorConflict
+	// ValidationErrorSystem indicates a system error (not a conflict)
+	ValidationErrorSystem
+)
+
 // RebaseSpec describes a planned rebase operation
 type RebaseSpec struct {
 	Branch      string // Branch to rebase
@@ -16,10 +28,11 @@ type RebaseSpec struct {
 
 // RebaseValidation is the result of dry-run validation
 type RebaseValidation struct {
-	Success      bool              // Whether all rebases would succeed
-	FailedBranch string            // Which branch caused the conflict (if any)
-	ErrorMessage string            // Error message describing the failure
-	NewSHAs      map[string]string // Branch -> resulting SHA after rebase (if successful)
+	Success      bool                // Whether all rebases would succeed
+	FailedBranch string              // Which branch caused the conflict (if any)
+	ErrorType    ValidationErrorType // Type of error (conflict vs system error)
+	ErrorMessage string              // Error message describing the failure
+	NewSHAs      map[string]string   // Branch -> resulting SHA after rebase (if successful)
 }
 
 // ValidateRebases tests if a sequence of rebases will succeed by performing them
@@ -80,8 +93,10 @@ func (e *engineImpl) ValidateRebases(ctx context.Context, specs []RebaseSpec) (*
 			result.FailedBranch = spec.Branch
 			if err != nil {
 				result.ErrorMessage = fmt.Sprintf("rebase failed: %v", err)
+				result.ErrorType = ValidationErrorSystem
 			} else {
 				result.ErrorMessage = fmt.Sprintf("conflict rebasing onto %s", spec.NewParent)
+				result.ErrorType = ValidationErrorConflict
 			}
 
 			// Abort the in-progress rebase if any

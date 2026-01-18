@@ -112,7 +112,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, dirtyAnchors 
 					Parent:     parentName,
 				})
 			}
-		}); err != nil {
+		}, false); err != nil {
 			return fmt.Errorf("failed to restack branches: %w", err)
 		}
 		ctx.Logger.Info("restack branches completed durationMs=%d branchCount=%d", time.Since(restackStart).Milliseconds(), len(sortedBranches))
