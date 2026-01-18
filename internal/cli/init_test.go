@@ -1,7 +1,6 @@
 package cli_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,8 +57,8 @@ Pro-tip: enhance your workflow with integrations:
 
 		// Verify config was created with correct trunk
 		cfg := readRepoConfig(t, s.Scene.Dir)
-		require.NotNil(t, cfg.Trunk)
-		require.Equal(t, "main", *cfg.Trunk)
+		require.True(t, cfg.IsInitialized())
+		require.Equal(t, "main", cfg.Trunk())
 	})
 
 	t.Run("errors on invalid trunk when explicitly provided", func(t *testing.T) {
@@ -146,8 +145,8 @@ Pro-tip: enhance your workflow with integrations:
 
 		// Verify config was created with inferred trunk (main)
 		cfg := readRepoConfig(t, s.Scene.Dir)
-		require.NotNil(t, cfg.Trunk)
-		require.Equal(t, "main", *cfg.Trunk)
+		require.True(t, cfg.IsInitialized())
+		require.Equal(t, "main", cfg.Trunk())
 	})
 
 	t.Run("fails when not in git repository", func(t *testing.T) {
@@ -164,17 +163,12 @@ Pro-tip: enhance your workflow with integrations:
 	})
 }
 
-// readRepoConfig reads and parses the repository config file
-func readRepoConfig(t *testing.T, repoDir string) *config.RepoConfig {
+// readRepoConfig loads the repository config using the new git-based config
+func readRepoConfig(t *testing.T, repoDir string) *config.GitConfig {
 	t.Helper()
 
-	configPath := filepath.Join(repoDir, ".git", ".stackit_config")
-	data, err := os.ReadFile(configPath)
-	require.NoError(t, err, "failed to read config file")
+	cfg, err := config.LoadConfig(repoDir)
+	require.NoError(t, err, "failed to load config")
 
-	var cfg config.RepoConfig
-	err = json.Unmarshal(data, &cfg)
-	require.NoError(t, err, "failed to parse config JSON")
-
-	return &cfg
+	return cfg
 }

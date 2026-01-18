@@ -66,8 +66,7 @@ func Action(ctx context.Context, repoRoot string, opts Options, handler Handler)
 
 	wasInitialized := cfg.IsInitialized()
 
-	cfg.SetTrunk(trunkName)
-	if err := cfg.Save(); err != nil {
+	if err := cfg.SetTrunk(trunkName); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 

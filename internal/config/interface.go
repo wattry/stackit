@@ -1,0 +1,48 @@
+package config
+
+// Configurer is the interface for stackit configuration.
+// The git-based GitConfig implements this interface.
+type Configurer interface {
+	// Initialization
+	IsInitialized() bool
+
+	// Trunk configuration
+	Trunk() string
+	AllTrunks() []string
+	IsTrunk(branch string) bool
+
+	// Branch naming
+	BranchNamePattern() string
+	GetBranchPattern() BranchPattern
+
+	// Submit settings
+	SubmitFooter() bool
+
+	// Undo settings
+	UndoStackDepth() int
+
+	// Worktree settings
+	WorktreeBasePath() string
+	WorktreeAutoClean() bool
+
+	// Merge settings
+	MergeMethod() string
+
+	// CI settings
+	CICommand() string
+	CITimeout() int
+
+	// Split settings
+	SplitHunkSelector() string
+
+	// Hook approvals
+	ApprovedPostWorktreeCreateHooks() []string
+	IsPostWorktreeCreateHookApproved(hook string) bool
+
+	// Deprecated methods (for backwards compatibility)
+	CombineCICommand() string
+	CombineCITimeout() int
+}
+
+// Ensure GitConfig implements the interface
+var _ Configurer = (*GitConfig)(nil)

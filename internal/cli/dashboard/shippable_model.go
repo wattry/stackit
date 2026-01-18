@@ -22,7 +22,7 @@ type ShippableOptions struct {
 type shippableModel struct {
 	ctx    *app.Context
 	engine engine.Engine
-	cfg    *config.Config
+	cfg    config.Configurer
 
 	// Dimensions
 	width  int
@@ -127,7 +127,7 @@ var keys = keyMap{
 }
 
 // newShippableModel creates a new shippable dashboard model.
-func newShippableModel(ctx *app.Context, cfg *config.Config, opts ShippableOptions) *shippableModel {
+func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOptions) *shippableModel {
 	analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHubClient)
 	combiner := shippable.NewCombiner(ctx.Engine, cfg, ctx.Output)
 

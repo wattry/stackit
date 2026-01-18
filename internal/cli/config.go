@@ -164,8 +164,7 @@ func newConfigSetCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("invalid value for submit.footer: %s (must be 'true' or 'false')", value)
 				}
-				cfg.SetSubmitFooter(enabled)
-				if err := cfg.Save(); err != nil {
+				if err := cfg.SetSubmitFooter(enabled); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
 				splog.Info("Set submit.footer to: %v", enabled)
@@ -173,13 +172,9 @@ func newConfigSetCmd() *cobra.Command {
 				if err := cfg.SetMergeMethod(value); err != nil {
 					return fmt.Errorf("failed to set merge.method: %w", err)
 				}
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
-				}
 				splog.Info("Set merge.method to: %s", value)
 			case "worktree.basePath":
-				cfg.SetWorktreeBasePath(value)
-				if err := cfg.Save(); err != nil {
+				if err := cfg.SetWorktreeBasePath(value); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
 				splog.Info("Set worktree.basePath to: %s", value)
@@ -188,17 +183,13 @@ func newConfigSetCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("invalid value for worktree.autoClean: %s (must be 'true' or 'false')", value)
 				}
-				cfg.SetWorktreeAutoClean(enabled)
-				if err := cfg.Save(); err != nil {
+				if err := cfg.SetWorktreeAutoClean(enabled); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
 				splog.Info("Set worktree.autoClean to: %v", enabled)
 			case "split.hunkSelector":
 				if err := cfg.SetSplitHunkSelector(value); err != nil {
 					return fmt.Errorf("failed to set split.hunkSelector: %w", err)
-				}
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
 				}
 				splog.Info("Set split.hunkSelector to: %s", value)
 			default:
