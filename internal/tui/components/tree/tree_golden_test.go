@@ -45,11 +45,6 @@ func buildGoldenTests() []goldenTest {
 			opts: RenderOptions{Mode: RenderModeFull},
 		},
 		{
-			name: "linear_reversed",
-			mock: NewMockTreeData(),
-			opts: RenderOptions{Mode: RenderModeCompact, Reverse: true},
-		},
-		{
 			name: "linear_single_line",
 			mock: NewMockTreeData(),
 			opts: RenderOptions{Mode: RenderModeSelect},
@@ -388,7 +383,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-2":    {CustomLabel: "← current"},
 				"[new branch]": {CustomLabel: "← new"},
 			},
-			opts: RenderOptions{Short: false, Reverse: false, HideSummary: true, SkipSelectionPrefix: true},
+			opts: RenderOptions{Mode: RenderModeFull, HideSummary: true, SkipSelectionPrefix: true},
 		},
 
 		// Split above: insert [new branch] as child of feature-2 (current)
@@ -420,7 +415,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-2":    {CustomLabel: "← current"},
 				"[new branch]": {CustomLabel: "← new"},
 			},
-			opts: RenderOptions{Short: false, Reverse: false, HideSummary: true, SkipSelectionPrefix: true},
+			opts: RenderOptions{Mode: RenderModeFull, HideSummary: true, SkipSelectionPrefix: true},
 		},
 
 		// Split above with re-parented children
@@ -456,7 +451,7 @@ func buildGoldenTests() []goldenTest {
 				"[new branch]": {CustomLabel: "← new"},
 				"child-1":      {CustomLabel: "(re-parented)"},
 			},
-			opts: RenderOptions{Short: false, Reverse: false, HideSummary: true, SkipSelectionPrefix: true},
+			opts: RenderOptions{Mode: RenderModeFull, HideSummary: true, SkipSelectionPrefix: true},
 		},
 	}
 }

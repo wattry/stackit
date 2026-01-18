@@ -347,9 +347,8 @@ func (m *DirectionSelectModel) renderStackTree() string {
 	}
 
 	opts := tree.RenderOptions{
-		Short:               false, // Full format with │ connectors
-		Reverse:             false, // Current at top, trunk at bottom
-		HideSummary:         true,  // Don't show stats/PR info
+		Mode:                tree.RenderModeFull, // Full format with │ connectors
+		HideSummary:         true,                // Don't show stats/PR info
 		SkipSelectionPrefix: true,
 	}
 

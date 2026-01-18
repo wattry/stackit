@@ -42,9 +42,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Options.Mode = RenderModeFull
 			}
 			return m, nil
-		case "r":
-			m.Options.Reverse = !m.Options.Reverse
-			return m, nil
 		case "q", "ctrl+c", "esc":
 			return m, tea.Quit
 		}
@@ -61,7 +58,7 @@ func (m Model) View() string {
 	content := strings.Join(lines, "\n")
 
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).MarginTop(1)
-	help := helpStyle.Render("s: toggle short | r: toggle reverse | q: back")
+	help := helpStyle.Render("s: toggle short | q: back")
 
 	return content + "\n" + help
 }

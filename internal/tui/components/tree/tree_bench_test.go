@@ -177,16 +177,6 @@ func BenchmarkRenderStack_WithAnnotations(b *testing.B) {
 	}
 }
 
-func BenchmarkRenderStack_Reversed(b *testing.B) {
-	mock := generateLargeTree(50)
-	renderer := NewRenderer(mock)
-
-	b.ResetTimer()
-	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeCompact, Reverse: true})
-	}
-}
-
 func BenchmarkRenderStackDetailed(b *testing.B) {
 	mock := generateLargeTree(50)
 	renderer := NewRenderer(mock)
