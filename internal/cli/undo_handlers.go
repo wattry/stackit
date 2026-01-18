@@ -1,9 +1,8 @@
 package cli
 
 import (
-	"sync"
-
 	"stackit.dev/stackit/internal/actions/undo"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
@@ -22,14 +21,13 @@ func NewUndoUI(out output.Output, _ output.Logger) (*tui.Runner, undo.Handler) {
 
 // SimpleUndoHandler provides streaming text output for undo operations
 type SimpleUndoHandler struct {
-	splog output.Output
-	mu    sync.Mutex
+	common.BaseHandler
 }
 
 // NewSimpleUndoHandler creates a new SimpleUndoHandler
-func NewSimpleUndoHandler(splog output.Output) *SimpleUndoHandler {
+func NewSimpleUndoHandler(out output.Output) *SimpleUndoHandler {
 	return &SimpleUndoHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
@@ -41,32 +39,26 @@ func (h *SimpleUndoHandler) OnSnapshotList(_ []engine.SnapshotInfo) {}
 
 // OnStep is called for each undo step
 func (h *SimpleUndoHandler) OnStep(description string, status undo.StepStatus) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	switch status {
 	case undo.StepStarted:
-		h.splog.Info("%s", description)
+		h.Output.Info("%s", description)
 	case undo.StepCompleted:
-		h.splog.Info("  ✓ %s", description)
+		h.Output.Info("  ✓ %s", description)
 	case undo.StepSkipped:
-		h.splog.Info("  - %s (skipped)", description)
+		h.Output.Info("  - %s (skipped)", description)
 	}
 }
 
 // Complete is called when undo finishes
 func (h *SimpleUndoHandler) Complete(_ bool, message string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
-	h.splog.Info("%s", message)
+	h.Output.Info("%s", message)
 }
-
-// Cleanup is a no-op for the simple handler
-func (h *SimpleUndoHandler) Cleanup() {}
-
-// IsInteractive returns false for the simple handler
-func (h *SimpleUndoHandler) IsInteractive() bool { return false }
 
 // SelectSnapshot is not supported in non-interactive mode
 func (h *SimpleUndoHandler) SelectSnapshot(_ []engine.SnapshotInfo) (string, error) {
@@ -80,14 +72,13 @@ func (h *SimpleUndoHandler) PromptConfirm(_ string, _ bool) (bool, error) {
 
 // InteractiveUndoHandler provides interactive TUI for undo operations
 type InteractiveUndoHandler struct {
-	splog output.Output
-	mu    sync.Mutex
+	common.BaseHandler
 }
 
 // NewInteractiveUndoHandler creates a new InteractiveUndoHandler
-func NewInteractiveUndoHandler(splog output.Output) *InteractiveUndoHandler {
+func NewInteractiveUndoHandler(out output.Output) *InteractiveUndoHandler {
 	return &InteractiveUndoHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
@@ -99,29 +90,26 @@ func (h *InteractiveUndoHandler) OnSnapshotList(_ []engine.SnapshotInfo) {}
 
 // OnStep is called for each undo step
 func (h *InteractiveUndoHandler) OnStep(description string, status undo.StepStatus) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	switch status {
 	case undo.StepStarted:
-		h.splog.Info("%s", description)
+		h.Output.Info("%s", description)
 	case undo.StepCompleted:
-		h.splog.Info("  ✓ %s", description)
+		h.Output.Info("  ✓ %s", description)
 	case undo.StepSkipped:
-		h.splog.Info("  - %s (skipped)", description)
+		h.Output.Info("  - %s (skipped)", description)
 	}
 }
 
 // Complete is called when undo finishes
 func (h *InteractiveUndoHandler) Complete(_ bool, message string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
-	h.splog.Info("%s", message)
+	h.Output.Info("%s", message)
 }
-
-// Cleanup is a no-op - we don't have a TUI runner
-func (h *InteractiveUndoHandler) Cleanup() {}
 
 // IsInteractive returns true for the interactive handler
 func (h *InteractiveUndoHandler) IsInteractive() bool { return true }

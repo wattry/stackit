@@ -213,7 +213,7 @@ func (h *SimpleSubmitHandler) OnEvent(e submit.Event) {
 		h.splog.Info("Stack to submit:")
 		for _, branch := range ev.Stack.Branches {
 			marker := "  "
-			if branch == ev.Stack.CurrentBranch {
+			if branch == ev.Stack.CurrentBranch() {
 				marker = "● "
 			}
 			scope := ev.ScopeMap[branch]
@@ -325,7 +325,7 @@ func (h *InteractiveSubmitHandler) findRootBranch() string {
 	}
 
 	// If we're on the trunk branch, show everything from trunk down
-	if h.stack.CurrentBranch == h.stack.TrunkBranch {
+	if h.stack.CurrentBranch() == h.stack.TrunkBranch {
 		return h.stack.TrunkBranch
 	}
 

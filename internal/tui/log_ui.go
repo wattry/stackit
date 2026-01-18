@@ -77,6 +77,8 @@ type LogModel struct {
 	exclude           map[string]bool
 	nonSelectable     map[string]bool // Branches visible but cursor skips them
 	header            string          // Custom header text for selection mode
+	skipEnrichment    bool            // Skip background GitHub/git enrichment
+	inline            bool            // Run inline without alt-screen
 	validateSelection func(branchName string) *SelectionValidation
 
 	// Validation state
@@ -174,6 +176,8 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		exclude:           opts.Exclude,
 		nonSelectable:     opts.NonSelectable,
 		header:            opts.Header,
+		skipEnrichment:    opts.SkipEnrichment,
+		inline:            opts.Inline,
 		validateSelection: opts.ValidateSelection,
 		collapsed:         make(map[string]bool),
 		searchMatches:     searchMatches,
@@ -192,8 +196,24 @@ func newLogSelectModel(ctx context.Context, eng engine.Engine, ghClient github.C
 
 // Init initializes the bubbletea model
 func (m *LogModel) Init() tea.Cmd {
+	// For inline mode, pre-render the tree immediately since we won't wait for WindowSizeMsg
+	if m.inline {
+		m.renderTree()
+		// Find initial selectedIndex
+		for i, b := range m.branches {
+			if b.Name == m.selectedBranch {
+				m.selectedIndex = i
+				break
+			}
+		}
+	}
+
 	// Renderer is already created with minimal data in NewLogModel.
-	// Only run enrichment in the background.
+	// Skip enrichment if requested (e.g., for checkout where GitHub data isn't needed).
+	if m.skipEnrichment {
+		return nil
+	}
+	// Run enrichment in the background.
 	return m.enrichData()
 }
 
@@ -550,36 +570,39 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// renderTree updates the viewport content with the current tree state.
-// This requires the viewport to be ready (initialized via WindowSizeMsg).
-// Note: View() has its own fallback rendering for the !ready case to ensure
-// immediate visual feedback before the viewport is initialized.
+// renderTree updates the cached branches and viewport content with the current tree state.
+// In inline mode or before the viewport is ready, View() uses the cached branches directly.
 func (m *LogModel) renderTree() {
-	if m.renderer == nil || !m.ready {
+	if m.renderer == nil {
 		return
 	}
 
 	trunk := m.engine.Trunk().GetName()
 	// Render with selection - the tree component handles cursor prefix and branch name styling
+	mode := tree.RenderModeFull
+	if m.mode == LogModeSelect {
+		mode = tree.RenderModeSelect
+	}
 	opts := tree.RenderOptions{
-		Reverse:        m.reverse,
+		Mode:           mode,
 		SelectedBranch: m.selectedBranch,
 		Collapsed:      m.collapsed,
-		SingleLine:     m.mode == LogModeSelect,
 		SearchQuery:    m.searchQuery,
 		SearchMatches:  m.searchMatches,
 		NonSelectable:  m.nonSelectable,
 	}
 	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
 
-	// Flatten lines for viewport
+	// Flatten lines for viewport/direct rendering
 	m.cachedLines = nil
 	for _, b := range m.branches {
 		m.cachedLines = append(m.cachedLines, b.Lines...)
 	}
 
-	// Update viewport with rendered content (selection already applied by tree)
-	m.viewport.SetContent(strings.Join(m.cachedLines, "\n"))
+	// Update viewport with rendered content (skip in inline mode - viewport not used)
+	if m.ready && !m.inline {
+		m.viewport.SetContent(strings.Join(m.cachedLines, "\n"))
+	}
 }
 
 func (m *LogModel) ensureVisible() {
@@ -606,9 +629,10 @@ func (m *LogModel) ensureVisible() {
 // updateSearchMatches updates the searchMatches map based on current searchQuery
 func (m *LogModel) updateSearchMatches() {
 	m.searchMatches = make(map[string]bool)
+	allBranches := m.engine.AllBranches() // Call once and reuse
+
 	if m.searchQuery == "" {
-		// All branches match when search is empty - populate from engine
-		allBranches := m.engine.AllBranches()
+		// All branches match when search is empty
 		for _, b := range allBranches {
 			m.searchMatches[b.GetName()] = true
 		}
@@ -616,7 +640,6 @@ func (m *LogModel) updateSearchMatches() {
 	}
 
 	query := strings.ToLower(m.searchQuery)
-	allBranches := m.engine.AllBranches()
 	for _, b := range allBranches {
 		branchName := strings.ToLower(b.GetName())
 		m.searchMatches[b.GetName()] = strings.Contains(branchName, query)
@@ -701,18 +724,25 @@ func (m *LogModel) View() string {
 
 	header := style.ColorDim(fmt.Sprintf(" %s | %d branches | %s", title, len(m.engine.AllBranches()), help))
 
-	// If viewport not ready yet, render tree directly without scrolling
+	// Render content - use viewport for full-screen mode, direct rendering for inline
 	var content string
-	if m.ready {
+	switch {
+	case m.ready && !m.inline:
 		content = m.viewport.View()
-	} else {
-		// Render tree directly for immediate display
+	case len(m.cachedLines) > 0:
+		// Use cached lines (already rendered by renderTree)
+		content = strings.Join(m.cachedLines, "\n")
+	default:
+		// Fallback: render tree directly for immediate display before first renderTree call
 		trunk := m.engine.Trunk().GetName()
+		mode := tree.RenderModeFull
+		if m.mode == LogModeSelect {
+			mode = tree.RenderModeSelect
+		}
 		opts := tree.RenderOptions{
-			Reverse:        m.reverse,
+			Mode:           mode,
 			SelectedBranch: m.selectedBranch,
 			Collapsed:      m.collapsed,
-			SingleLine:     m.mode == LogModeSelect,
 			SearchQuery:    m.searchQuery,
 			SearchMatches:  m.searchMatches,
 			NonSelectable:  m.nonSelectable,
@@ -762,7 +792,14 @@ func PromptLogSelect(ctx context.Context, eng engine.Engine, ghClient github.Cli
 	}
 
 	m := newLogSelectModel(ctx, eng, ghClient, opts)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	// Build program options
+	var programOpts []tea.ProgramOption
+	if !opts.Inline {
+		programOpts = append(programOpts, tea.WithAltScreen())
+	}
+
+	p := tea.NewProgram(m, programOpts...)
 	finalModel, err := p.Run()
 	if err != nil {
 		return "", err
@@ -793,6 +830,8 @@ type LogOptions struct {
 	AnnotationOverrides map[string]tree.BranchAnnotation // Override annotations (e.g., add custom labels)
 	Logger              output.Logger                    // Optional logger for IO timing diagnostics
 	Header              string                           // Custom header text for selection mode (e.g., "Select new parent for branch X")
+	SkipEnrichment      bool                             // Skip background GitHub/git enrichment for faster startup
+	Inline              bool                             // Run inline without alt-screen (doesn't take over terminal)
 
 	// ValidateSelection is called (with debounce) when selection changes to validate the current selection.
 	// If provided, the result is displayed in the UI footer.

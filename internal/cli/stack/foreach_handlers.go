@@ -61,7 +61,7 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 	switch ev := e.(type) {
 	case foreach.StackDisplayEvent:
 		// Store current branch for styling
-		h.currentBranch = ev.Stack.CurrentBranch
+		h.currentBranch = ev.Stack.CurrentBranch()
 		// Don't display stack in simple mode - we'll show progress per branch
 
 	case foreach.ExecutionStartEvent:
@@ -194,7 +194,7 @@ func (h *InteractiveForeachHandler) findRootBranch() string {
 	}
 
 	// If we're on the trunk branch, show everything from trunk down
-	if h.stack.CurrentBranch == h.stack.TrunkBranch {
+	if h.stack.CurrentBranch() == h.stack.TrunkBranch {
 		return h.stack.TrunkBranch
 	}
 
@@ -277,7 +277,7 @@ func (h *InteractiveForeachHandler) printSummary(results []foreach.BranchResult)
 	h.out.Newline()
 	h.out.Info("Summary:")
 	isCurrentFn := func(name string) bool {
-		return h.stack != nil && name == h.stack.CurrentBranch
+		return h.stack != nil && name == h.stack.CurrentBranch()
 	}
 	commonResults := convertToCommonResults(results, isCurrentFn)
 	successCount, failCount := common.FormatBranchSummary(h.out, commonResults)

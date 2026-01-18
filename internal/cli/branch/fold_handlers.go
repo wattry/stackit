@@ -1,9 +1,8 @@
 package branch
 
 import (
-	"sync"
-
 	"stackit.dev/stackit/internal/actions/fold"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -21,23 +20,22 @@ func NewFoldUI(out output.Output, _ output.Logger) (*tui.Runner, fold.Handler) {
 
 // SimpleFoldHandler provides streaming text output for fold operations
 type SimpleFoldHandler struct {
-	splog         output.Output
-	mu            sync.Mutex
+	common.BaseHandler
 	currentBranch string
 	parentBranch  string
 }
 
 // NewSimpleFoldHandler creates a new SimpleFoldHandler
-func NewSimpleFoldHandler(splog output.Output) *SimpleFoldHandler {
+func NewSimpleFoldHandler(out output.Output) *SimpleFoldHandler {
 	return &SimpleFoldHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of fold
 func (h *SimpleFoldHandler) Start(currentBranch, parentBranch string, _ bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.currentBranch = currentBranch
 	h.parentBranch = parentBranch
 }
@@ -49,13 +47,10 @@ func (h *SimpleFoldHandler) OnStep(_ fold.Step, _ fold.StepStatus, _ string) {
 
 // Complete is called when fold finishes
 func (h *SimpleFoldHandler) Complete(result fold.Result) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
-	h.splog.Info("Folded %s into %s",
+	h.Output.Info("Folded %s into %s",
 		style.ColorBranchName(result.FoldedBranch, false),
 		style.ColorBranchName(result.IntoBranch, true))
 }
-
-// Cleanup is a no-op for the simple handler
-func (h *SimpleFoldHandler) Cleanup() {}

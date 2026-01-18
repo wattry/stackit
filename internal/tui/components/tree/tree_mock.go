@@ -69,23 +69,3 @@ func (m *MockTreeData) IsTrunk(branchName string) bool {
 func (m *MockTreeData) IsFixed(branchName string) bool {
 	return m.FixedMap[branchName]
 }
-
-// Deprecated method aliases for backwards compatibility with existing tests
-
-// GetChildren returns the children of a branch.
-// Deprecated: Use Children instead.
-func (m *MockTreeData) GetChildren(branchName string) []string {
-	return m.Children(branchName)
-}
-
-// GetParent returns the parent of a branch.
-// Deprecated: Use Parent instead.
-func (m *MockTreeData) GetParent(branchName string) string {
-	return m.Parent(branchName)
-}
-
-// IsBranchFixed returns whether a branch is fixed.
-// Deprecated: Use IsFixed instead.
-func (m *MockTreeData) IsBranchFixed(branchName string) bool {
-	return m.IsFixed(branchName)
-}
