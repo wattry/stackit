@@ -1,0 +1,84 @@
+---
+icon: material/rocket-launch
+---
+
+# Get started
+
+Welcome to stackit! This guide will help you get up and running with stacked changes in just a few minutes.
+
+## What you'll learn
+
+- [Installing stackit](install.md) on your system
+- [Creating your first stack](stack.md) of branches
+- [Submitting PRs](submit.md) to GitHub
+
+## Before you begin
+
+Make sure you have:
+
+- **Git 2.25+** installed
+- **GitHub CLI (`gh`)** for PR operations
+- A GitHub repository to work with
+
+## Quick walkthrough
+
+### 1. Install stackit
+
+```bash
+brew install getstackit/tap/stackit
+```
+
+[Full installation guide →](install.md)
+
+### 2. Initialize in your repository
+
+```bash
+cd your-repository
+stackit init
+```
+
+This detects your trunk branch (usually `main`) and prepares the repo for stacking.
+
+### 3. Create your first branch
+
+```bash
+git add internal/api.go
+stackit create add-api -m "feat: add base api"
+```
+
+### 4. Stack another branch on top
+
+```bash
+git add internal/logic.go
+stackit create add-logic -m "feat: implement logic"
+```
+
+### 5. Visualize the stack
+
+```bash
+stackit log
+```
+
+```
+● add-logic ← you are here
+│
+◯ add-api
+│
+main
+```
+
+### 6. Submit your PRs
+
+```bash
+stackit submit
+```
+
+This pushes both branches and creates two PRs on GitHub, with `add-logic` correctly pointing its base to `add-api`.
+
+## Next steps
+
+Once you're comfortable with the basics, explore:
+
+- [Core concepts](../guide/concepts.md) - Understanding stacks, parents, and children
+- [Common workflows](../guide/workflows.md) - Real-world stacking patterns
+- [Claude integration](../guide/claude-integration.md) - AI-assisted stacking

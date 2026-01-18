@@ -1,0 +1,81 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'doc/**'
+      - '.github/workflows/doc.yml'
+  pull_request:
+    branches: ['*']
+    paths:
+      - 'doc/**'
+      - '.github/workflows/doc.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build stackit binary
+        run: |
+          go build -o stackit ./cmd/stackit
+          chmod +x stackit
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        working-directory: doc
+        run: uv sync
+
+      - name: Build docs
+        working-directory: doc
+        run: uv run mkdocs build --verbose
+
+      - name: Verify build
+        run: |
+          test -f doc/_site/index.html
+          test -f doc/_site/cli/reference/index.html
+          test -f doc/_site/guide/index.html
+          test -f doc/_site/start/index.html
+          echo "Build verification passed"
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: doc/_site/
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
