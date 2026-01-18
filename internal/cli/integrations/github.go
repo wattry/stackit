@@ -62,7 +62,19 @@ var githubWorkflows = []string{
 	"stackit.yml",
 }
 
+// githubInstallOptions configures the behavior of GitHub workflow installation.
+type githubInstallOptions struct {
+	// Force overwrites existing files if true
+	Force bool
+	// SkipIfExists silently skips if files already exist (used during init)
+	SkipIfExists bool
+}
+
 func runGithubInstall(runner git.Runner, force bool, out io.Writer) error {
+	return runGithubInstallWithOptions(runner, githubInstallOptions{Force: force}, out)
+}
+
+func runGithubInstallWithOptions(runner git.Runner, opts githubInstallOptions, out io.Writer) error {
 	repoRoot, err := runner.DiscoverRepoRoot()
 	if err != nil {
 		return fmt.Errorf("not a git repository: %w", err)
@@ -75,8 +87,17 @@ func runGithubInstall(runner git.Runner, force bool, out io.Writer) error {
 
 	for _, workflow := range githubWorkflows {
 		workflowPath := filepath.Join(workflowDir, workflow)
-		if _, err := os.Stat(workflowPath); err == nil && !force {
-			return fmt.Errorf("file already exists: %s. Use --force to overwrite", workflowPath)
+
+		// Check if file already exists
+		if _, err := os.Stat(workflowPath); err == nil {
+			if !opts.Force {
+				if opts.SkipIfExists {
+					_, _ = fmt.Fprintf(out, "GitHub Action workflow already exists: %s (skipped)\n", filepath.Join(".github", "workflows", workflow))
+					continue
+				}
+				return fmt.Errorf("file already exists: %s. Use --force to overwrite", workflowPath)
+			}
+			// Force is true, continue to overwrite
 		}
 
 		content, err := githubTemplates.ReadFile("github/templates/" + workflow)
