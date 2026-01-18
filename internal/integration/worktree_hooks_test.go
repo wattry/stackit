@@ -2,6 +2,7 @@ package integration
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,13 +28,13 @@ func writeProjectConfig(t *testing.T, dir string, content string) {
 	require.NoError(t, err)
 }
 
-// writeRepoConfig writes a .stackit_config file to .git/
-func writeRepoConfig(t *testing.T, dir string, content string) {
+// addApprovedHook adds a hook to the approved hooks list in git config
+func addApprovedHook(t *testing.T, dir string, hook string) {
 	t.Helper()
-	normalizedDir := normalizeDir(t, dir)
-	path := filepath.Join(normalizedDir, ".git", ".stackit_config")
-	err := os.WriteFile(path, []byte(content), 0600)
-	require.NoError(t, err)
+	cmd := exec.Command("git", "config", "--local", "--add", "stackit.hooks.approvedPostWorktreeCreate", hook)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "failed to add approved hook: %s", string(out))
 }
 
 func TestWorktreePostCreateHooks(t *testing.T) {
@@ -49,11 +50,8 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 `)
 		sh.Git("add .stackit.yaml").Git("commit -m 'add hooks config'")
 
-		// Pre-approve only the valid hook
-		writeRepoConfig(t, sh.Dir(), `{
-  "trunk": "main",
-  "hooks.approvedPostWorktreeCreate": ["touch .valid_hook_ran"]
-}`)
+		// Pre-approve only the valid hook (using git config)
+		addApprovedHook(t, sh.Dir(), "touch .valid_hook_ran")
 
 		// Create a worktree
 		sh.WriteFile("empty.txt", "empty").
@@ -81,11 +79,8 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 		// Commit to main so it persists across branch checkouts
 		sh.Git("add .stackit.yaml").Git("commit -m 'add hooks config'")
 
-		// Pre-approve the hook in .git/.stackit_config
-		writeRepoConfig(t, sh.Dir(), `{
-  "trunk": "main",
-  "hooks.approvedPostWorktreeCreate": ["touch .hook_ran"]
-}`)
+		// Pre-approve the hook (using git config)
+		addApprovedHook(t, sh.Dir(), "touch .hook_ran")
 
 		// Create a worktree
 		sh.WriteFile("feature.txt", "feature content").
@@ -112,11 +107,9 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 `)
 		sh.Git("add .stackit.yaml").Git("commit -m 'add hooks config'")
 
-		// Pre-approve both hooks
-		writeRepoConfig(t, sh.Dir(), `{
-  "trunk": "main",
-  "hooks.approvedPostWorktreeCreate": ["echo \"first\" > .hook_order", "echo \"second\" >> .hook_order"]
-}`)
+		// Pre-approve both hooks (using git config)
+		addApprovedHook(t, sh.Dir(), `echo "first" > .hook_order`)
+		addApprovedHook(t, sh.Dir(), `echo "second" >> .hook_order`)
 
 		// Create a worktree
 		sh.WriteFile("multi.txt", "multi").
@@ -144,10 +137,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 `)
 		sh.Git("add .stackit.yaml").Git("commit -m 'add hooks config'")
 
-		// Do NOT pre-approve the hook - only set trunk
-		writeRepoConfig(t, sh.Dir(), `{
-  "trunk": "main"
-}`)
+		// Do NOT pre-approve the hook - trunk is already set by init
 
 		// Create a worktree (hook should be skipped since it requires approval and we're non-interactive)
 		sh.WriteFile("skip.txt", "skip").
@@ -188,11 +178,8 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 `)
 		sh.Git("add .stackit.yaml").Git("commit -m 'add hooks config'")
 
-		// Pre-approve the hook
-		writeRepoConfig(t, sh.Dir(), `{
-  "trunk": "main",
-  "hooks.approvedPostWorktreeCreate": ["touch .wt_create_hook_ran"]
-}`)
+		// Pre-approve the hook (using git config)
+		addApprovedHook(t, sh.Dir(), "touch .wt_create_hook_ran")
 
 		// Create a worktree using the worktree create command
 		sh.Run("worktree create my-worktree")
@@ -218,11 +205,9 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 `)
 		sh.Git("add .stackit.yaml").Git("commit -m 'add hooks config'")
 
-		// Pre-approve both hooks
-		writeRepoConfig(t, sh.Dir(), `{
-  "trunk": "main",
-  "hooks.approvedPostWorktreeCreate": ["exit 1", "touch .after_failure_hook_ran"]
-}`)
+		// Pre-approve both hooks (using git config)
+		addApprovedHook(t, sh.Dir(), "exit 1")
+		addApprovedHook(t, sh.Dir(), "touch .after_failure_hook_ran")
 
 		// Create a worktree - should succeed despite hook failure
 		sh.WriteFile("fail.txt", "fail").
