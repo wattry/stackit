@@ -1,5 +1,6 @@
 ---
 description: Sync with trunk, cleanup merged branches, and restack
+model: claude-sonnet-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
 

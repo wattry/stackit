@@ -1,5 +1,6 @@
 ---
 description: Rebase all branches to ensure proper ancestry
+model: claude-sonnet-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
 

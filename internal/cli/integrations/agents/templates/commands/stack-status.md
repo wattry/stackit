@@ -1,5 +1,6 @@
 ---
 description: View current stack state, branch position, and health status
+model: claude-sonnet-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*)
 ---
 
