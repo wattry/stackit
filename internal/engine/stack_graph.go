@@ -205,6 +205,16 @@ func (g *StackGraph) IsDescendant(branch Branch, potentialDescendant string) boo
 	return false
 }
 
+// GetBranchesByDepth returns a map from depth to branch names at that depth.
+// This is useful for parallel operations where branches at the same depth are independent.
+func (g *StackGraph) GetBranchesByDepth() map[int][]string {
+	byDepth := make(map[int][]string)
+	for name, node := range g.Nodes {
+		byDepth[node.Depth] = append(byDepth[node.Depth], name)
+	}
+	return byDepth
+}
+
 // Range returns branches matching the provided StackRange, ordered the same as the legacy
 // GetRelativeStack implementation: ancestors (oldest to nearest), current, then descendants.
 // Descendants are traversed depth-first using the graph's pre-sorted children.

@@ -1,13 +1,22 @@
-package engine
+package engine_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/testhelpers"
+	"stackit.dev/stackit/testhelpers/scenario"
 )
+
+// branchName generates a branch name from an index
+func branchName(i int) string {
+	return fmt.Sprintf("branch-%d", i)
+}
 
 // BenchmarkWorktreeCreation specifically benchmarks worktree creation
 func BenchmarkWorktreeCreation(b *testing.B) {
@@ -52,7 +61,7 @@ func BenchmarkWorktreeCreation(b *testing.B) {
 	}
 
 	// Create engine
-	eng, err := NewEngine(Options{
+	eng, err := engine.NewEngine(engine.Options{
 		RepoRoot: repoPath,
 		Trunk:    "main",
 	})
@@ -69,5 +78,178 @@ func BenchmarkWorktreeCreation(b *testing.B) {
 			b.Fatalf("CreateTemporaryWorktree failed: %v", err)
 		}
 		cleanup()
+	}
+}
+
+// BenchmarkValidateRebases benchmarks the parallel validation approach
+func BenchmarkValidateRebases(b *testing.B) {
+	b.Run("wide_stack_5_siblings", func(b *testing.B) {
+		benchmarkWideStack(b, 5)
+	})
+
+	b.Run("wide_stack_10_siblings", func(b *testing.B) {
+		benchmarkWideStack(b, 10)
+	})
+
+	b.Run("linear_stack_5_deep", func(b *testing.B) {
+		benchmarkLinearStack(b, 5)
+	})
+
+	b.Run("linear_stack_10_deep", func(b *testing.B) {
+		benchmarkLinearStack(b, 10)
+	})
+
+	b.Run("mixed_stack_wide_and_deep", func(b *testing.B) {
+		benchmarkMixedStack(b)
+	})
+}
+
+// benchmarkWideStack creates N sibling branches and validates them
+func benchmarkWideStack(b *testing.B, numBranches int) {
+	// Setup once before benchmark
+	s := &scenario.Scenario{}
+	setupBenchmark := func() {
+		// Create a fresh scenario for setup
+		setupScenario := scenario.NewScenario(&testing.T{}, testhelpers.BasicSceneSetup)
+
+		// Create N sibling branches
+		branches := make(map[string]string)
+		for i := 0; i < numBranches; i++ {
+			branches[branchName(i)] = "main"
+		}
+		s = setupScenario.WithStack(branches)
+
+		// Add commit to main
+		s.Checkout("main").Commit("main update")
+	}
+
+	// Setup before timing
+	setupBenchmark()
+
+	mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+	oldBase, _ := s.Engine.Git().GetMergeBase("main", branchName(0))
+
+	// Build specs
+	specs := make([]engine.RebaseSpec, numBranches)
+	for i := 0; i < numBranches; i++ {
+		specs[i] = engine.RebaseSpec{
+			Branch:      branchName(i),
+			NewParent:   mainRev,
+			OldUpstream: oldBase,
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		if err != nil || !result.Success {
+			b.Fatalf("validation failed: %v, result: %+v", err, result)
+		}
+	}
+}
+
+// benchmarkLinearStack creates a linear chain of N branches
+func benchmarkLinearStack(b *testing.B, depth int) {
+	s := &scenario.Scenario{}
+	setupBenchmark := func() {
+		setupScenario := scenario.NewScenario(&testing.T{}, testhelpers.BasicSceneSetup)
+
+		// Create linear stack
+		branches := make(map[string]string)
+		for i := 0; i < depth; i++ {
+			if i == 0 {
+				branches[branchName(i)] = "main"
+			} else {
+				branches[branchName(i)] = branchName(i - 1)
+			}
+		}
+		s = setupScenario.WithStack(branches)
+
+		// Add commit to main
+		s.Checkout("main").Commit("main update")
+	}
+
+	setupBenchmark()
+
+	mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+	oldBase, _ := s.Engine.Git().GetMergeBase("main", branchName(0))
+
+	// Build specs for chained rebases
+	specs := make([]engine.RebaseSpec, depth)
+	specs[0] = engine.RebaseSpec{
+		Branch:      branchName(0),
+		NewParent:   mainRev,
+		OldUpstream: oldBase,
+	}
+
+	for i := 1; i < depth; i++ {
+		parentRev, _ := s.Engine.GetRevision(s.Engine.GetBranch(branchName(i - 1)))
+		specs[i] = engine.RebaseSpec{
+			Branch:      branchName(i),
+			NewParent:   parentRev,
+			OldUpstream: parentRev,
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		if err != nil || !result.Success {
+			b.Fatalf("validation failed: %v, result: %+v", err, result)
+		}
+	}
+}
+
+// benchmarkMixedStack creates a realistic mixed topology
+func benchmarkMixedStack(b *testing.B) {
+	s := &scenario.Scenario{}
+	setupBenchmark := func() {
+		s = scenario.NewScenario(&testing.T{}, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				// Depth 1: 3 siblings
+				"feature-a": "main",
+				"feature-b": "main",
+				"feature-c": "main",
+				// Depth 2: 2 children under feature-a, 1 under feature-b
+				"feature-a1": "feature-a",
+				"feature-a2": "feature-a",
+				"feature-b1": "feature-b",
+				// Depth 3: 1 child under feature-a1
+				"feature-a1-1": "feature-a1",
+			})
+
+		// Add commit to main
+		s.Checkout("main").Commit("main update")
+	}
+
+	setupBenchmark()
+
+	mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+	oldBase, _ := s.Engine.Git().GetMergeBase("main", "feature-a")
+
+	// Get revisions for chaining
+	featureARev, _ := s.Engine.GetRevision(s.Engine.GetBranch("feature-a"))
+	featureBRev, _ := s.Engine.GetRevision(s.Engine.GetBranch("feature-b"))
+	featureA1Rev, _ := s.Engine.GetRevision(s.Engine.GetBranch("feature-a1"))
+
+	specs := []engine.RebaseSpec{
+		// Depth 1
+		{Branch: "feature-a", NewParent: mainRev, OldUpstream: oldBase},
+		{Branch: "feature-b", NewParent: mainRev, OldUpstream: oldBase},
+		{Branch: "feature-c", NewParent: mainRev, OldUpstream: oldBase},
+		// Depth 2
+		{Branch: "feature-a1", NewParent: featureARev, OldUpstream: featureARev},
+		{Branch: "feature-a2", NewParent: featureARev, OldUpstream: featureARev},
+		{Branch: "feature-b1", NewParent: featureBRev, OldUpstream: featureBRev},
+		// Depth 3
+		{Branch: "feature-a1-1", NewParent: featureA1Rev, OldUpstream: featureA1Rev},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		if err != nil || !result.Success {
+			b.Fatalf("validation failed: %v, result: %+v", err, result)
+		}
 	}
 }

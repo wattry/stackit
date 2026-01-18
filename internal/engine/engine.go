@@ -41,6 +41,7 @@ type SyncManager interface {
 
 	// Validation
 	ValidateRebases(ctx context.Context, specs []RebaseSpec) (*RebaseValidation, error)
+	ValidateRebasesParallel(ctx context.Context, specs []RebaseSpec) (*RebaseValidation, error)
 }
 
 // StackRewriter provides operations for modifying commit history and branch structure
@@ -106,6 +107,10 @@ type Options struct {
 	// MaxUndoStackDepth is the maximum number of undo snapshots to keep.
 	// If zero or negative, defaults to DefaultMaxUndoStackDepth (10).
 	MaxUndoStackDepth int
+
+	// MaxConcurrency is the maximum number of concurrent validation operations.
+	// If zero or negative, defaults to min(NumCPU, 8).
+	MaxConcurrency int
 
 	// Git is the git runner to use. If nil, a default real git runner is used.
 	Git git.Runner

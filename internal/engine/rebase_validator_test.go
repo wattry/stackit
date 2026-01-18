@@ -346,3 +346,330 @@ func TestValidateRebases(t *testing.T) {
 		require.Equal(t, engine.ValidationErrorNone, result.ErrorType, "should set ValidationErrorNone for successful validation")
 	})
 }
+
+//nolint:tparallel // Cannot use t.Parallel with t.Setenv in subtests
+func TestValidateRebasesParallel(t *testing.T) {
+	// NOTE: Not using t.Parallel() because one subtest uses t.Setenv
+
+	t.Run("validates wide stack with multiple siblings in parallel", func(t *testing.T) {
+		t.Parallel()
+		// Create a wide stack: main has 5 child branches (all at depth 1)
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"feature-a": "main",
+				"feature-b": "main",
+				"feature-c": "main",
+				"feature-d": "main",
+				"feature-e": "main",
+			})
+
+		// Add a commit to main so all branches need rebasing
+		s.Checkout("main").
+			Commit("main update")
+
+		mainRev, err := s.Engine.GetRevision(s.Engine.Trunk())
+		require.NoError(t, err)
+
+		// Get old bases for all branches (they all share the same old main)
+		oldBase, _ := s.Engine.Git().GetMergeBase("main", "feature-a")
+
+		// Build specs for all branches
+		specs := []engine.RebaseSpec{
+			{Branch: "feature-a", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "feature-b", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "feature-c", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "feature-d", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "feature-e", NewParent: mainRev, OldUpstream: oldBase},
+		}
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
+		require.NoError(t, err)
+		require.True(t, result.Success)
+
+		// All branches should have new SHAs
+		require.NotEmpty(t, result.NewSHAs["feature-a"])
+		require.NotEmpty(t, result.NewSHAs["feature-b"])
+		require.NotEmpty(t, result.NewSHAs["feature-c"])
+		require.NotEmpty(t, result.NewSHAs["feature-d"])
+		require.NotEmpty(t, result.NewSHAs["feature-e"])
+	})
+
+	t.Run("validates mixed depth stack correctly", func(t *testing.T) {
+		t.Parallel()
+		// Create a mixed stack:
+		// main
+		//   ├── feature-a (depth 1)
+		//   │   ├── feature-a1 (depth 2)
+		//   │   └── feature-a2 (depth 2)
+		//   └── feature-b (depth 1)
+		//       └── feature-b1 (depth 2)
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"feature-a":  "main",
+				"feature-a1": "feature-a",
+				"feature-a2": "feature-a",
+				"feature-b":  "main",
+				"feature-b1": "feature-b",
+			})
+
+		// Add commit to main
+		s.Checkout("main").
+			Commit("main update")
+
+		mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+		oldMainBase, _ := s.Engine.Git().GetMergeBase("main", "feature-a")
+
+		// Get SHAs for depth-1 branches (for depth-2 rebases)
+		featureARev, _ := s.Engine.GetRevision(s.Engine.GetBranch("feature-a"))
+		featureBRev, _ := s.Engine.GetRevision(s.Engine.GetBranch("feature-b"))
+
+		specs := []engine.RebaseSpec{
+			// Depth 1: feature-a and feature-b (can run in parallel)
+			{Branch: "feature-a", NewParent: mainRev, OldUpstream: oldMainBase},
+			{Branch: "feature-b", NewParent: mainRev, OldUpstream: oldMainBase},
+			// Depth 2: children (can run in parallel after depth 1 completes)
+			{Branch: "feature-a1", NewParent: featureARev, OldUpstream: featureARev},
+			{Branch: "feature-a2", NewParent: featureARev, OldUpstream: featureARev},
+			{Branch: "feature-b1", NewParent: featureBRev, OldUpstream: featureBRev},
+		}
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
+		require.NoError(t, err)
+		require.True(t, result.Success)
+
+		// All branches should have new SHAs
+		require.NotEmpty(t, result.NewSHAs["feature-a"])
+		require.NotEmpty(t, result.NewSHAs["feature-a1"])
+		require.NotEmpty(t, result.NewSHAs["feature-a2"])
+		require.NotEmpty(t, result.NewSHAs["feature-b"])
+		require.NotEmpty(t, result.NewSHAs["feature-b1"])
+	})
+
+	t.Run("detects conflict in parallel execution", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create file on main
+		s.Checkout("main").
+			CommitChange("file.txt", "original")
+
+		oldBase, _ := s.Engine.GetRevision(s.Engine.Trunk())
+
+		// Create two branches that both modify the same file
+		s.CreateBranch("branch1").
+			CommitChange("file.txt", "branch1 version").
+			TrackBranch("branch1", "main")
+
+		s.Checkout("main").
+			CreateBranch("branch2").
+			CommitChange("other-file.txt", "branch2 change").
+			TrackBranch("branch2", "main")
+
+		// Update main with conflicting change
+		s.Checkout("main").
+			CommitChange("file.txt", "main conflicting version")
+
+		newMainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: newMainRev, OldUpstream: oldBase},
+			{Branch: "branch2", NewParent: newMainRev, OldUpstream: oldBase},
+		}
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
+		require.NoError(t, err)
+		require.False(t, result.Success)
+		require.Equal(t, "branch1", result.FailedBranch)
+		require.Contains(t, result.ErrorMessage, "conflict")
+	})
+
+	t.Run("validates complex stack correctly", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+				"branch3": "main",
+				"branch4": "branch3",
+			})
+
+		// Add commit to main
+		s.Checkout("main").
+			Commit("main update")
+
+		mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+		oldBase, _ := s.Engine.Git().GetMergeBase("main", "branch1")
+		branch1Rev, _ := s.Engine.GetRevision(s.Engine.GetBranch("branch1"))
+		branch3Rev, _ := s.Engine.GetRevision(s.Engine.GetBranch("branch3"))
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch2", NewParent: branch1Rev, OldUpstream: branch1Rev},
+			{Branch: "branch3", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch4", NewParent: branch3Rev, OldUpstream: branch3Rev},
+		}
+
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.Len(t, result.NewSHAs, 4)
+
+		// All branches should have new SHAs
+		for _, spec := range specs {
+			require.NotEmpty(t, result.NewSHAs[spec.Branch], "should have SHA for %s", spec.Branch)
+		}
+	})
+
+	t.Run("validates multiple sibling branches", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "main",
+				"branch3": "main",
+			})
+
+		s.Checkout("main").Commit("main update")
+
+		mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+		oldBase, _ := s.Engine.Git().GetMergeBase("main", "branch1")
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch2", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch3", NewParent: mainRev, OldUpstream: oldBase},
+		}
+
+		result, err := s.Engine.ValidateRebases(context.Background(), specs)
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.Len(t, result.NewSHAs, 3)
+	})
+
+	t.Run("handles empty specs", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), []engine.RebaseSpec{})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.Empty(t, result.NewSHAs)
+	})
+
+	t.Run("handles single spec efficiently", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		s.Checkout("main").Commit("main update")
+
+		mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+		oldBase, _ := s.Engine.Git().GetMergeBase("main", "branch1")
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: mainRev, OldUpstream: oldBase},
+		}
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.NotEmpty(t, result.NewSHAs["branch1"])
+	})
+
+	t.Run("stops on first conflict in level", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create file on main
+		s.Checkout("main").
+			CommitChange("file.txt", "original")
+
+		oldBase, _ := s.Engine.GetRevision(s.Engine.Trunk())
+
+		// Create three siblings, one will conflict
+		s.CreateBranch("branch1").
+			CommitChange("file.txt", "branch1 conflict").
+			TrackBranch("branch1", "main")
+
+		s.Checkout("main").
+			CreateBranch("branch2").
+			CommitChange("other.txt", "branch2 safe").
+			TrackBranch("branch2", "main")
+
+		s.Checkout("main").
+			CreateBranch("branch3").
+			CommitChange("third.txt", "branch3 safe").
+			TrackBranch("branch3", "main")
+
+		// Update main with conflicting change
+		s.Checkout("main").
+			CommitChange("file.txt", "main conflicting")
+
+		newMainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: newMainRev, OldUpstream: oldBase},
+			{Branch: "branch2", NewParent: newMainRev, OldUpstream: oldBase},
+			{Branch: "branch3", NewParent: newMainRev, OldUpstream: oldBase},
+		}
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
+		require.NoError(t, err)
+		require.False(t, result.Success)
+		require.Equal(t, "branch1", result.FailedBranch)
+		require.Contains(t, result.ErrorMessage, "conflict")
+	})
+
+	t.Run("respects context cancellation", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "main",
+				"branch3": "main",
+			})
+
+		s.Checkout("main").Commit("main update")
+
+		mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+		oldBase, _ := s.Engine.Git().GetMergeBase("main", "branch1")
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch2", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch3", NewParent: mainRev, OldUpstream: oldBase},
+		}
+
+		// Create a canceled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		result, err := s.Engine.ValidateRebasesParallel(ctx, specs)
+		require.NoError(t, err)
+		require.False(t, result.Success)
+		require.Contains(t, result.ErrorMessage, "canceled")
+	})
+
+	t.Run("rejects duplicate branches in specs", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
+		oldBase, _ := s.Engine.Git().GetMergeBase("main", "branch1")
+
+		specs := []engine.RebaseSpec{
+			{Branch: "branch1", NewParent: mainRev, OldUpstream: oldBase},
+			{Branch: "branch1", NewParent: mainRev, OldUpstream: oldBase}, // Duplicate!
+		}
+
+		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Contains(t, err.Error(), "duplicate branch")
+	})
+}

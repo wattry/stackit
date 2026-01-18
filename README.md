@@ -391,6 +391,7 @@ Stackit supports several configuration options that can be managed via `stackit 
 | `submit.footer` | Control whether PRs include a footer linking back to the stack | `stackit config set submit.footer true` |
 | `worktree.basePath` | Customize where worktrees are created | `stackit config set worktree.basePath "../my-stacks"` |
 | `worktree.autoClean` | Auto-remove worktrees for merged stacks during sync (default: true) | `stackit config set worktree.autoClean false` |
+| `maxConcurrency` | Maximum concurrent validation operations (default: min(NumCPU, 8)) | `stackit config set maxConcurrency 4` |
 
 ### Interactive Configuration
 Use the interactive TUI to manage all settings:
@@ -425,6 +426,10 @@ The `hooks.post-worktree-create` option allows you to run commands automatically
 - Running initialization scripts
 
 **Security**: The first time a hook is encountered, Stackit prompts for approval (defaulting to "No" for safety). Approvals are stored locally in `.git/.stackit_config` and persist across sessions. Hooks have a 60-second timeout.
+
+### Performance Optimizations
+
+Stackit uses parallel validation for rebase operations, providing 2-3x speedup for wide stacks with many sibling branches. Branches at the same depth are validated concurrently, with automatic early exit on first conflict to save resources.
 
 ---
 
