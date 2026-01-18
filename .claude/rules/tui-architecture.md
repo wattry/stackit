@@ -42,6 +42,21 @@ func (h *InteractiveMoveHandler) PromptConfirmMove(preview move.Preview) (bool, 
 
 ## Tree Rendering System
 
+### Always Use the Tree Component
+
+**IMPORTANT:** When rendering a stack or branch tree visualization, always use `tree.StackTreeRenderer` from `internal/tui/components/tree`. Never implement custom tree rendering logic.
+
+The tree component provides:
+- Consistent visual appearance across all commands
+- Proper handling of branch annotations, scopes, and status indicators
+- Support for collapsed nodes, search filtering, and selection
+
+**For virtual/modified trees** (e.g., showing where a new branch will be inserted), implement the `tree.Data` interface to provide the modified structure, then use `tree.NewRenderer()`. See `virtualDirectionTree` in `direction_select.go` for an example.
+
+**Key options:**
+- `HideSummary: true` - Hide stats/PR info for clean previews
+- `SkipSelectionPrefix: true` - Omit selection cursor padding for previews
+
 ### Key Files
 
 - `internal/tui/components/tree/tree.go` - Core `StackTreeRenderer` with `RenderOptions` and `BranchAnnotation`

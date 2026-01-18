@@ -159,12 +159,20 @@ func TestForeachAction(t *testing.T) {
 
 		events := handler.Events()
 		var executedBranches []string
+		var errorBranches []string
 		for _, e := range events {
-			if bpe, ok := e.(foreach.BranchProgressEvent); ok && bpe.Status == foreach.StatusDone {
-				executedBranches = append(executedBranches, bpe.BranchName)
+			if bpe, ok := e.(foreach.BranchProgressEvent); ok {
+				if bpe.Status == foreach.StatusDone {
+					executedBranches = append(executedBranches, bpe.BranchName)
+				} else if bpe.Status == foreach.StatusError {
+					errorBranches = append(errorBranches, bpe.BranchName)
+					t.Logf("Branch %s failed: %v", bpe.BranchName, bpe.Error)
+				}
 			}
 		}
-		require.ElementsMatch(t, []string{"branch1", "branch2", "branch3"}, executedBranches)
+		require.Empty(t, errorBranches, "Expected no branch errors, but got errors for: %v", errorBranches)
+		require.ElementsMatch(t, []string{"branch1", "branch2", "branch3"}, executedBranches,
+			"Expected exactly branches [branch1, branch2, branch3] to complete successfully, got: %v", executedBranches)
 	})
 
 	t.Run("environment variable STACKIT_BRANCH", func(t *testing.T) {

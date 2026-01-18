@@ -25,7 +25,6 @@ const (
 // LogOptions contains options for the log command
 type LogOptions struct {
 	Style         string // LogStyleNormal, LogStyleFull, or LogStyleShort
-	Reverse       bool
 	Steps         *int
 	BranchName    string
 	ShowUntracked bool
@@ -40,7 +39,6 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 		// Run interactive TUI
 		m := tui.NewLogModel(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
 			Style:         opts.Style,
-			Reverse:       opts.Reverse,
 			ShowUntracked: opts.ShowUntracked,
 			Logger:        ctx.Logger,
 		})
@@ -112,7 +110,6 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 
 	stackLines := renderer.RenderStack(opts.BranchName, tree.RenderOptions{
 		Mode:        tree.RenderModeFull, // We want the full tree characters with stats
-		Reverse:     opts.Reverse,
 		Steps:       opts.Steps,
 		ShowSHAs:    opts.ShowSHAs,
 		HideSummary: opts.Style == LogStyleShort,

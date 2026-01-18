@@ -51,17 +51,6 @@ func TestLogCommand(t *testing.T) {
 		require.Contains(t, output, "feature")
 	})
 
-	t.Run("log with --reverse flag", func(t *testing.T) {
-		t.Parallel()
-		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
-
-		// Run log command with reverse
-		output, err := s.RunCliAndGetOutput("log", "--reverse")
-
-		require.NoError(t, err, "log command failed: %s", output)
-		require.Contains(t, output, "main")
-	})
-
 	t.Run("log with --stack flag", func(t *testing.T) {
 		t.Parallel()
 		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)

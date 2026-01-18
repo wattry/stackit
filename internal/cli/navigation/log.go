@@ -62,7 +62,6 @@ func newLogShortCmd() *cobra.Command {
 }
 
 type logFlags struct {
-	reverse       bool
 	stack         bool
 	steps         int
 	showUntracked bool
@@ -71,7 +70,6 @@ type logFlags struct {
 }
 
 func addLogFlags(cmd *cobra.Command, f *logFlags) {
-	cmd.Flags().BoolVarP(&f.reverse, "reverse", "r", false, "Print the log upside down. Handy when you have a lot of branches!")
 	cmd.Flags().BoolVarP(&f.stack, "stack", "s", false, "Only show ancestors and descendants of the current branch")
 	cmd.Flags().IntVarP(&f.steps, "steps", "n", 0, "Only show this many levels upstack and downstack. Implies --stack")
 	cmd.Flags().BoolVarP(&f.showUntracked, "show-untracked", "u", false, "Include untracked branches in interactive selection")
@@ -97,7 +95,6 @@ func executeLog(cmd *cobra.Command, f *logFlags, style string) error {
 		// Prepare options
 		opts := actions.LogOptions{
 			Style:         style,
-			Reverse:       f.reverse,
 			BranchName:    branchName,
 			ShowUntracked: f.showUntracked,
 			Interactive:   f.interactive,

@@ -150,6 +150,15 @@ check:
 	@echo "🧪 Testing (fast)..."
 	@just test-fast
 
+# Run all checks with minimal output, fail fast (optimized for LLM iteration)
+check-fast:
+	#!/usr/bin/env bash
+	set -e
+	goimports -w . 2>/dev/null || go fmt ./...
+	golangci-lint run --fast --allow-parallel-runners 2>&1 | head -50
+	PACKAGES=$(go list ./... | grep -v /integration)
+	STACKIT_NO_LOGGING=1 gotestsum --format dots-v2 --hide-summary=skipped -- -failfast $PACKAGES 2>&1 | tail -30
+
 # Build the stackit binary with local version info
 build:
 	#!/bin/bash

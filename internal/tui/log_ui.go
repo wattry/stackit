@@ -72,7 +72,6 @@ type LogModel struct {
 
 	// Options
 	style             string
-	reverse           bool
 	showUntracked     bool
 	exclude           map[string]bool
 	nonSelectable     map[string]bool // Branches visible but cursor skips them
@@ -171,7 +170,6 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		logKeys:           keys.DefaultLog,
 		selectKeys:        keys.DefaultSelect,
 		style:             opts.Style,
-		reverse:           opts.Reverse,
 		showUntracked:     opts.ShowUntracked,
 		exclude:           opts.Exclude,
 		nonSelectable:     opts.NonSelectable,
@@ -823,7 +821,6 @@ type SelectionValidation struct {
 // but we'll probably use actions.LogOptions
 type LogOptions struct {
 	Style               string
-	Reverse             bool
 	ShowUntracked       bool
 	Exclude             map[string]bool                  // Branches to exclude from selection
 	NonSelectable       map[string]bool                  // Branches visible but not selectable (cursor skips them)
