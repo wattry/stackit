@@ -127,5 +127,4 @@ markdown_extensions:
       custom_checkbox: true
   - toc: {permalink: true}
 
-watch:
-  - includes
+watch: []
