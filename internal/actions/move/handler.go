@@ -32,14 +32,15 @@ type Result struct {
 
 // Preview contains information about the planned move for confirmation
 type Preview struct {
-	SourceBranch   string   // Branch being moved
-	OldParent      string   // Current parent branch
-	NewParent      string   // Target parent branch
-	Commits        []string // Commit subjects that will be moved
-	Descendants    []string // Descendant branches that will be restacked
-	HasConflicts   bool     // Whether the move will cause conflicts
-	ConflictBranch string   // Which branch would have conflicts (if any)
-	ConflictError  string   // Error message describing the conflict
+	SourceBranch     string   // Branch being moved
+	OldParent        string   // Current parent branch
+	NewParent        string   // Target parent branch
+	Commits          []string // Commit subjects that will be moved
+	Descendants      []string // Descendant branches that will be restacked
+	HasConflicts     bool     // Whether the move will cause conflicts
+	ConflictBranch   string   // Which branch would have conflicts (if any)
+	ConflictError    string   // Error message describing the conflict
+	ConflictingFiles []string // Files that have conflicts (if any)
 }
 
 // Handler receives events from move action

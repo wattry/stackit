@@ -61,6 +61,11 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		return nil
 	}
 
+	// Pre-flight validation: check branch ancestry relationships
+	if err := validateBranchAncestry(ctx, branches); err != nil {
+		return fmt.Errorf("pre-flight validation failed: %w", err)
+	}
+
 	// Build rebase specs for validation
 	specs, branchMap := buildRebaseSpecs(ctx, branches)
 	if len(specs) == 0 {
@@ -79,6 +84,12 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 			return fmt.Errorf("validation failed for %s: %s", validation.FailedBranch, validation.ErrorMessage)
 		}
 		// Else: conflict - continue with conflict workflow
+		// Log conflicting files for debugging
+		if len(validation.ConflictingFiles) > 0 {
+			ctx.Logger.Debug("conflict detected during validation",
+				"branch", validation.FailedBranch,
+				"files", validation.ConflictingFiles)
+		}
 	}
 
 	// Split branches into successful and conflicting
@@ -304,6 +315,49 @@ func EnterConflictWorkflow(ctx *app.Context, firstConflict string, allBranches [
 	}
 
 	return fmt.Errorf("restack stopped due to conflict on %s", firstConflict)
+}
+
+// validateBranchAncestry performs pre-flight checks on branch ancestry relationships.
+// Returns an error if any branch has invalid parent relationships.
+// Note: Missing parents are tolerated as buildRebaseSpecs will handle auto-reparenting.
+func validateBranchAncestry(ctx *app.Context, branches []engine.Branch) error {
+	for _, branch := range branches {
+		branchName := branch.GetName()
+
+		// Trunk branches don't need validation
+		if branch.IsTrunk() {
+			continue
+		}
+
+		// Verify branch itself exists
+		branchRev, err := branch.GetRevision()
+		if err != nil {
+			return fmt.Errorf("branch %s cannot be resolved: %w", branchName, err)
+		}
+
+		// If branch has a parent, validate it only if it exists
+		// (missing parents will be handled by auto-reparenting logic)
+		parent := branch.GetParent()
+		if parent != nil {
+			parentName := parent.GetName()
+			parentRev, err := parent.GetRevision()
+			if err != nil {
+				// Parent doesn't exist - this is OK, auto-reparenting will handle it
+				ctx.Logger.Debug("parent branch missing, will auto-reparent",
+					"branch", branchName,
+					"parent", parentName)
+				continue
+			}
+
+			// Parent exists - verify they have a common ancestor
+			_, err = ctx.Engine.Git().GetMergeBase(parentRev, branchRev)
+			if err != nil {
+				return fmt.Errorf("branch %s and parent %s have no common ancestor: %w",
+					branchName, parentName, err)
+			}
+		}
+	}
+	return nil
 }
 
 // buildRebaseSpecs builds RebaseSpec list for validation
