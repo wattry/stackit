@@ -116,39 +116,6 @@ func TestStackTreeRenderer_RenderStack_FullFormat(t *testing.T) {
 	}
 }
 
-func TestStackTreeRenderer_RenderStack_Reversed(t *testing.T) {
-	mock := NewMockTreeData()
-	renderer := NewRenderer(mock)
-
-	normalLines := renderer.RenderStack("main", RenderOptions{
-		Mode: RenderModeCompact,
-	})
-
-	reversedLines := renderer.RenderStack("main", RenderOptions{
-		Mode:    RenderModeCompact,
-		Reverse: true,
-	})
-
-	// Both should have same number of lines
-	if len(normalLines) != len(reversedLines) {
-		t.Errorf("expected same number of lines, got normal=%d reversed=%d", len(normalLines), len(reversedLines))
-	}
-
-	// First branch in normal should be last in reversed (approximately)
-	normalOutput := strings.Join(normalLines, "\n")
-	reversedOutput := strings.Join(reversedLines, "\n")
-
-	// Both should contain all branches
-	for _, branch := range []string{"main", "feature-1", "feature-2"} {
-		if !strings.Contains(normalOutput, branch) {
-			t.Errorf("normal output missing %q", branch)
-		}
-		if !strings.Contains(reversedOutput, branch) {
-			t.Errorf("reversed output missing %q", branch)
-		}
-	}
-}
-
 func TestStackTreeRenderer_RenderBranchList(t *testing.T) {
 	mock := NewMockTreeData()
 	renderer := NewRenderer(mock)

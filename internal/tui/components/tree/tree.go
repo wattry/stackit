@@ -83,9 +83,6 @@ type RenderOptions struct {
 	// Mode specifies the rendering style. Defaults to RenderModeFull.
 	Mode RenderMode
 
-	// Reverse renders the tree with children above parents (trunk at bottom).
-	Reverse bool
-
 	// Steps limits traversal depth in each direction.
 	Steps *int
 
@@ -280,7 +277,6 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		// Config fields (use helper methods to handle Mode and legacy flags)
 		short:               opts.isShortMode(),
 		singleLine:          opts.isSingleLineMode(),
-		reverse:             opts.Reverse,
 		omitCurrentBranch:   opts.OmitCurrentBranch,
 		noStyleBranchName:   opts.NoStyleBranchName,
 		hideStats:           opts.HideStats,
@@ -309,13 +305,6 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		r.getDownstackExclusiveRendered(args),
 	}
 
-	// Reverse if needed
-	if opts.Reverse {
-		for i, j := 0, len(outputDeep)-1; i < j; i, j = i+1, j-1 {
-			outputDeep[i], outputDeep[j] = outputDeep[j], outputDeep[i]
-		}
-	}
-
 	// Flatten with pre-allocated capacity
 	totalLen := 0
 	for _, section := range outputDeep {
@@ -338,7 +327,6 @@ type treeRenderArgs struct {
 	// Config fields - constant during entire render
 	short               bool
 	singleLine          bool
-	reverse             bool
 	omitCurrentBranch   bool
 	noStyleBranchName   bool
 	hideStats           bool
@@ -371,7 +359,6 @@ func (a treeRenderArgs) childArgs(branchName string, indentLevel int, parentScop
 		// Config fields (inherited)
 		short:               a.short,
 		singleLine:          a.singleLine,
-		reverse:             a.reverse,
 		omitCurrentBranch:   a.omitCurrentBranch,
 		noStyleBranchName:   a.noStyleBranchName,
 		hideStats:           a.hideStats,
@@ -402,7 +389,6 @@ func (a treeRenderArgs) downstackArgs(branchName string) treeRenderArgs {
 		// Config fields (inherited)
 		short:               a.short,
 		singleLine:          a.singleLine,
-		reverse:             a.reverse,
 		omitCurrentBranch:   a.omitCurrentBranch,
 		noStyleBranchName:   a.noStyleBranchName,
 		hideStats:           a.hideStats,
@@ -461,9 +447,6 @@ func (r *StackTreeRenderer) getUpstackExclusiveRendered(args treeRenderArgs) []R
 		}
 
 		childIndent := args.indentLevel + i
-		if args.reverse {
-			childIndent = args.indentLevel + (len(filteredChildren) - i - 1)
-		}
 
 		childParentScopes := append([]string{}, args.parentScopes...)
 		parentScope := r.Annotations[args.branchName].Scope
@@ -483,11 +466,6 @@ func (r *StackTreeRenderer) getUpstackInclusiveRendered(args treeRenderArgs) []R
 	current := r.getBranchRendered(args)
 
 	outputDeep := [][]RenderedBranch{upstack, current}
-	if args.reverse {
-		for i, j := 0, len(outputDeep)-1; i < j; i, j = i+1, j-1 {
-			outputDeep[i], outputDeep[j] = outputDeep[j], outputDeep[i]
-		}
-	}
 
 	// Pre-allocate with known capacity
 	result := make([]RenderedBranch, 0, len(upstack)+len(current))
@@ -537,10 +515,9 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 		result = append(result, branchData...)
 	}
 
-	if !args.reverse {
-		for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
-			result[i], result[j] = result[j], result[i]
-		}
+	// Reverse to get trunk at bottom
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
 	}
 
 	return result
@@ -570,11 +547,6 @@ func (r *StackTreeRenderer) getBranchLinesWithCursor(args treeRenderArgs) ([]str
 	cursorIdx := 0
 	if hasBranchingLine {
 		cursorIdx = 1 // Cursor is on the info line after the branching line
-	}
-
-	// If reversed, the cursor line moves to the end
-	if args.reverse && len(lines) > 0 {
-		cursorIdx = len(lines) - 1 - cursorIdx
 	}
 
 	return lines, cursorIdx
@@ -615,19 +587,10 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 
 		// Add branching characters
 		if !args.skipBranchingLine && numChildren > 1 {
-			if args.reverse {
-				b.WriteString(strings.Repeat("─┬", numChildren-2))
-				b.WriteString("─┐")
-			} else {
-				b.WriteString(strings.Repeat("─┴", numChildren-2))
-				b.WriteString("─┘")
-			}
+			b.WriteString(strings.Repeat("─┴", numChildren-2))
+			b.WriteString("─┘")
 		} else if !args.skipBranchingLine && numChildren == 1 {
-			if args.reverse {
-				b.WriteString("─┐")
-			} else {
-				b.WriteString("─┘")
-			}
+			b.WriteString("─┘")
 		}
 
 		// Add circle and branch name
@@ -674,23 +637,17 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 
 	// Branching line
 	if !args.skipBranchingLine && numChildren >= 2 {
-		result = append(result, r.getBranchingLine(numChildren, args.reverse, args.indentLevel, args.parentScopes, args.branchName, args.skipSelectionPrefix))
+		result = append(result, r.getBranchingLine(numChildren, args.indentLevel, args.parentScopes, args.branchName, args.skipSelectionPrefix))
 	}
 
 	// Branch info lines
 	infoLines := r.getInfoLines(args)
 	result = append(result, infoLines...)
 
-	if args.reverse {
-		for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
-			result[i], result[j] = result[j], result[i]
-		}
-	}
-
 	return result
 }
 
-func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, indentLevel int, parentScopes []string, branchName string, skipSelectionPrefix bool) string {
+func (r *StackTreeRenderer) getBranchingLine(numChildren int, indentLevel int, parentScopes []string, branchName string, skipSelectionPrefix bool) string {
 	if numChildren < 2 {
 		return ""
 	}
@@ -709,7 +666,6 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, inde
 	}
 	prefix := prefixBuilder.String()
 
-	var middle, last string
 	// The branching characters connect the current branch to its children.
 	// They should use the current branch's scope color.
 	annotation := r.Annotations[branchName]
@@ -727,13 +683,8 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, reverse bool, inde
 		styleObj = styleObj.Foreground(style.DimColor())
 	}
 
-	if reverse {
-		middle = "──┬"
-		last = "──┐"
-	} else {
-		middle = "──┴"
-		last = "──┘"
-	}
+	middle := "──┴"
+	last := "──┘"
 
 	branchingChars := "├"
 	if numChildren > 2 {
