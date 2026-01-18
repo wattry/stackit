@@ -1,5 +1,6 @@
 ---
 description: Create a new stacked branch with intelligent naming
+model: claude-sonnet-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion, Skill
 argument-hint: [-m "message"] [branch-name]
 ---

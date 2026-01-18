@@ -1,5 +1,6 @@
 ---
 description: Extract commits or files to an independent branch
+model: claude-sonnet-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Glob, Grep
 ---
 
