@@ -540,7 +540,7 @@ func (m *Model) renderStackTree() string {
 	}
 
 	opts := tree.RenderOptions{
-		Short:               false,
+		Mode:                tree.RenderModeFull,
 		HideSummary:         true,
 		SkipSelectionPrefix: true,
 	}

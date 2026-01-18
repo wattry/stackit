@@ -579,10 +579,14 @@ func (m *LogModel) renderTree() {
 
 	trunk := m.engine.Trunk().GetName()
 	// Render with selection - the tree component handles cursor prefix and branch name styling
+	mode := tree.RenderModeFull
+	if m.mode == LogModeSelect {
+		mode = tree.RenderModeSelect
+	}
 	opts := tree.RenderOptions{
+		Mode:           mode,
 		SelectedBranch: m.selectedBranch,
 		Collapsed:      m.collapsed,
-		SingleLine:     m.mode == LogModeSelect,
 		SearchQuery:    m.searchQuery,
 		SearchMatches:  m.searchMatches,
 		NonSelectable:  m.nonSelectable,
@@ -731,10 +735,14 @@ func (m *LogModel) View() string {
 	default:
 		// Fallback: render tree directly for immediate display before first renderTree call
 		trunk := m.engine.Trunk().GetName()
+		mode := tree.RenderModeFull
+		if m.mode == LogModeSelect {
+			mode = tree.RenderModeSelect
+		}
 		opts := tree.RenderOptions{
+			Mode:           mode,
 			SelectedBranch: m.selectedBranch,
 			Collapsed:      m.collapsed,
-			SingleLine:     m.mode == LogModeSelect,
 			SearchQuery:    m.searchQuery,
 			SearchMatches:  m.searchMatches,
 			NonSelectable:  m.nonSelectable,

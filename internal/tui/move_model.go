@@ -163,7 +163,7 @@ func NewMoveModel(eng engine.Engine, config MoveModelConfig) *MoveModel {
 	// Use SkipSelectionPrefix so we can add our own cursor indicators in viewSelecting
 	opts := tree.RenderOptions{
 		Reverse:             false,
-		SingleLine:          true,
+		Mode:                tree.RenderModeSelect,
 		NonSelectable:       nonSelectable,
 		SkipSelectionPrefix: true,
 	}

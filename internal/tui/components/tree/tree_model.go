@@ -20,7 +20,7 @@ func NewModel(renderer *StackTreeRenderer) *Model {
 	return &Model{
 		Renderer: renderer,
 		Options: RenderOptions{
-			Short: false,
+			Mode: RenderModeFull,
 		},
 	}
 }
@@ -36,7 +36,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "s":
-			m.Options.Short = !m.Options.Short
+			if m.Options.Mode == RenderModeFull {
+				m.Options.Mode = RenderModeCompact
+			} else {
+				m.Options.Mode = RenderModeFull
+			}
 			return m, nil
 		case "r":
 			m.Options.Reverse = !m.Options.Reverse

@@ -98,7 +98,7 @@ func BenchmarkRenderStack_SmallTree(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: true})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeCompact})
 	}
 }
 
@@ -108,7 +108,7 @@ func BenchmarkRenderStack_SmallTree_Full(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: false})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	}
 }
 
@@ -118,7 +118,7 @@ func BenchmarkRenderStack_LargeTree_100Branches(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: true})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeCompact})
 	}
 }
 
@@ -128,7 +128,7 @@ func BenchmarkRenderStack_LargeTree_100Branches_Full(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: false})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	}
 }
 
@@ -138,7 +138,7 @@ func BenchmarkRenderStack_DeepLinear_50Levels(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: true})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeCompact})
 	}
 }
 
@@ -148,7 +148,7 @@ func BenchmarkRenderStack_DeepLinear_50Levels_Full(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: false})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	}
 }
 
@@ -173,7 +173,7 @@ func BenchmarkRenderStack_WithAnnotations(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: false})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	}
 }
 
@@ -183,7 +183,7 @@ func BenchmarkRenderStack_Reversed(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: true, Reverse: true})
+		renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeCompact, Reverse: true})
 	}
 }
 
@@ -193,6 +193,6 @@ func BenchmarkRenderStackDetailed(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		renderer.RenderStackDetailed(mock.TrunkVal, RenderOptions{Short: false})
+		renderer.RenderStackDetailed(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	}
 }

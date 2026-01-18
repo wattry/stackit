@@ -37,22 +37,22 @@ func buildGoldenTests() []goldenTest {
 		{
 			name: "linear_short",
 			mock: NewMockTreeData(),
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 		{
 			name: "linear_full",
 			mock: NewMockTreeData(),
-			opts: RenderOptions{Short: false},
+			opts: RenderOptions{Mode: RenderModeFull},
 		},
 		{
 			name: "linear_reversed",
 			mock: NewMockTreeData(),
-			opts: RenderOptions{Short: true, Reverse: true},
+			opts: RenderOptions{Mode: RenderModeCompact, Reverse: true},
 		},
 		{
 			name: "linear_single_line",
 			mock: NewMockTreeData(),
-			opts: RenderOptions{SingleLine: true},
+			opts: RenderOptions{Mode: RenderModeSelect},
 		},
 
 		// Branching stacks
@@ -76,7 +76,7 @@ func buildGoldenTests() []goldenTest {
 					"feature-1b": true,
 				},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 		{
 			name: "branching_full",
@@ -98,7 +98,7 @@ func buildGoldenTests() []goldenTest {
 					"feature-1b": true,
 				},
 			},
-			opts: RenderOptions{Short: false},
+			opts: RenderOptions{Mode: RenderModeFull},
 		},
 
 		// Deep branching
@@ -137,7 +137,7 @@ func buildGoldenTests() []goldenTest {
 					"grandchild": true,
 				},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 
 		// With selection cursor
@@ -145,7 +145,7 @@ func buildGoldenTests() []goldenTest {
 			name: "with_selection",
 			mock: NewMockTreeData(),
 			opts: RenderOptions{
-				Short:          true,
+				Mode:           RenderModeCompact,
 				SelectedBranch: "feature-1",
 			},
 		},
@@ -153,7 +153,7 @@ func buildGoldenTests() []goldenTest {
 			name: "with_selection_full",
 			mock: NewMockTreeData(),
 			opts: RenderOptions{
-				Short:          false,
+				Mode:           RenderModeFull,
 				SelectedBranch: "feature-1",
 			},
 		},
@@ -166,7 +166,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-1": {PRNumber: intPtr(123)},
 				"feature-2": {PRNumber: intPtr(456)},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 		{
 			name: "with_check_status",
@@ -175,7 +175,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-1": {CheckStatus: CheckStatusPassing},
 				"feature-2": {CheckStatus: CheckStatusFailing},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 		{
 			name: "with_full_annotations",
@@ -198,7 +198,7 @@ func buildGoldenTests() []goldenTest {
 					LinesDeleted: 0,
 				},
 			},
-			opts: RenderOptions{Short: false},
+			opts: RenderOptions{Mode: RenderModeFull},
 		},
 
 		// Needs restack indicator
@@ -219,7 +219,7 @@ func buildGoldenTests() []goldenTest {
 					"feature-1": false, // Not fixed
 				},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 
 		// Merged/Closed PRs (dimmed)
@@ -229,7 +229,7 @@ func buildGoldenTests() []goldenTest {
 			annotations: map[string]BranchAnnotation{
 				"feature-1": {PRNumber: intPtr(123), PRState: PRStateMerged},
 			},
-			opts: RenderOptions{Short: false},
+			opts: RenderOptions{Mode: RenderModeFull},
 		},
 		{
 			name: "closed_pr",
@@ -237,7 +237,7 @@ func buildGoldenTests() []goldenTest {
 			annotations: map[string]BranchAnnotation{
 				"feature-1": {PRNumber: intPtr(123), PRState: PRStateClosed},
 			},
-			opts: RenderOptions{Short: false},
+			opts: RenderOptions{Mode: RenderModeFull},
 		},
 
 		// With scopes
@@ -269,7 +269,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-login":     {Scope: "AUTH"},
 				"feature-api":       {Scope: "API", ExplicitScope: "API"},
 			},
-			opts: RenderOptions{Short: false},
+			opts: RenderOptions{Mode: RenderModeFull},
 		},
 
 		// Non-selectable branches
@@ -277,7 +277,7 @@ func buildGoldenTests() []goldenTest {
 			name: "non_selectable",
 			mock: NewMockTreeData(),
 			opts: RenderOptions{
-				Short:          true,
+				Mode:           RenderModeCompact,
 				SelectedBranch: "feature-2",
 				NonSelectable: map[string]bool{
 					"feature-1": true,
@@ -293,7 +293,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-1": {CustomLabel: "<---- source branch"},
 				"feature-2": {CustomLabel: "(will be moved)"},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 
 		// Locked and frozen
@@ -304,7 +304,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-1": {IsLocked: true},
 				"feature-2": {IsFrozen: true},
 			},
-			opts: RenderOptions{Short: true},
+			opts: RenderOptions{Mode: RenderModeCompact},
 		},
 
 		// Hide stats
@@ -315,7 +315,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-1": {CommitCount: 5, LinesAdded: 100, LinesDeleted: 20},
 				"feature-2": {CommitCount: 3, LinesAdded: 50, LinesDeleted: 10},
 			},
-			opts: RenderOptions{Short: false, HideStats: true},
+			opts: RenderOptions{Mode: RenderModeFull, HideStats: true},
 		},
 
 		// Hide summary
@@ -326,7 +326,7 @@ func buildGoldenTests() []goldenTest {
 				"feature-1": {PRNumber: intPtr(123), CommitCount: 5},
 				"feature-2": {PRNumber: intPtr(456), CommitCount: 3},
 			},
-			opts: RenderOptions{Short: false, HideSummary: true},
+			opts: RenderOptions{Mode: RenderModeFull, HideSummary: true},
 		},
 
 		// RenderMode tests (new enum-based API)
@@ -455,7 +455,7 @@ func TestStackTreeRenderer_GoldenWithColors(t *testing.T) {
 		Scope:       "AUTH",
 	})
 
-	lines := renderer.RenderStack(mock.TrunkVal, RenderOptions{Short: false})
+	lines := renderer.RenderStack(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	output := strings.Join(lines, "\n")
 
 	// Verify ANSI codes are present (colors are being applied)

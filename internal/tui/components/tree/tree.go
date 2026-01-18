@@ -81,19 +81,10 @@ const (
 // RenderOptions configures rendering behavior
 type RenderOptions struct {
 	// Mode specifies the rendering style. Defaults to RenderModeFull.
-	// When Mode is set, it takes precedence over Short/SingleLine flags.
 	Mode RenderMode
 
 	// Reverse renders the tree with children above parents (trunk at bottom).
 	Reverse bool
-
-	// Short is deprecated - use Mode=RenderModeCompact instead.
-	// Kept for backward compatibility during migration.
-	Short bool
-
-	// SingleLine is deprecated - use Mode=RenderModeSelect instead.
-	// Kept for backward compatibility during migration.
-	SingleLine bool
 
 	// Steps limits traversal depth in each direction.
 	Steps *int
@@ -133,15 +124,13 @@ type RenderOptions struct {
 }
 
 // isShortMode returns true if the options indicate short/compact rendering.
-// This handles both the new Mode field and legacy Short field.
 func (o RenderOptions) isShortMode() bool {
-	return o.Mode == RenderModeCompact || o.Short
+	return o.Mode == RenderModeCompact
 }
 
 // isSingleLineMode returns true if the options indicate single-line rendering.
-// This handles both the new Mode field and legacy SingleLine field.
 func (o RenderOptions) isSingleLineMode() bool {
-	return o.Mode == RenderModeSelect || o.SingleLine
+	return o.Mode == RenderModeSelect
 }
 
 // Data provides the tree structure data for rendering.
@@ -187,29 +176,6 @@ func NewRenderer(data Data) *StackTreeRenderer {
 		getParent:     data.Parent,
 		isTrunk:       data.IsTrunk,
 		isBranchFixed: data.IsFixed,
-		Annotations:   make(map[string]BranchAnnotation),
-	}
-}
-
-// NewStackTreeRenderer creates a new tree renderer with explicit callback functions.
-//
-// Deprecated: Use NewRenderer with a Data implementation instead.
-// This constructor is kept for backward compatibility and will be removed in a future release.
-func NewStackTreeRenderer(
-	currentBranch string,
-	trunk string,
-	getChildren func(branchName string) []string,
-	getParent func(branchName string) string,
-	isTrunk func(branchName string) bool,
-	isBranchFixed func(branchName string) bool,
-) *StackTreeRenderer {
-	return &StackTreeRenderer{
-		currentBranch: currentBranch,
-		trunk:         trunk,
-		getChildren:   getChildren,
-		getParent:     getParent,
-		isTrunk:       isTrunk,
-		isBranchFixed: isBranchFixed,
 		Annotations:   make(map[string]BranchAnnotation),
 	}
 }
