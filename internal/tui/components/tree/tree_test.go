@@ -17,18 +17,10 @@ func init() {
 
 func TestStackTreeRenderer_RenderStack_LinearStack(t *testing.T) {
 	mock := NewMockTreeData()
-
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: true,
+		Mode: RenderModeCompact,
 	})
 
 	// Should have 3 branches: main, feature-1, feature-2
@@ -47,15 +39,7 @@ func TestStackTreeRenderer_RenderStack_LinearStack(t *testing.T) {
 
 func TestStackTreeRenderer_RenderStack_WithAnnotations(t *testing.T) {
 	mock := NewMockTreeData()
-
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	prNum := 123
 	renderer.SetAnnotation("feature-1", BranchAnnotation{
@@ -64,7 +48,7 @@ func TestStackTreeRenderer_RenderStack_WithAnnotations(t *testing.T) {
 	})
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: true,
+		Mode: RenderModeCompact,
 	})
 
 	output := strings.Join(lines, "\n")
@@ -94,17 +78,10 @@ func TestStackTreeRenderer_RenderStack_BranchingStack(t *testing.T) {
 		},
 	}
 
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: true,
+		Mode: RenderModeCompact,
 	})
 
 	// Should have 3 branches
@@ -121,18 +98,10 @@ func TestStackTreeRenderer_RenderStack_BranchingStack(t *testing.T) {
 
 func TestStackTreeRenderer_RenderStack_FullFormat(t *testing.T) {
 	mock := NewMockTreeData()
-
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: false,
+		Mode: RenderModeFull,
 	})
 
 	// Full format has more lines (branch line + trailing │ line for each)
@@ -149,22 +118,14 @@ func TestStackTreeRenderer_RenderStack_FullFormat(t *testing.T) {
 
 func TestStackTreeRenderer_RenderStack_Reversed(t *testing.T) {
 	mock := NewMockTreeData()
-
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	normalLines := renderer.RenderStack("main", RenderOptions{
-		Short: true,
+		Mode: RenderModeCompact,
 	})
 
 	reversedLines := renderer.RenderStack("main", RenderOptions{
-		Short:   true,
+		Mode:    RenderModeCompact,
 		Reverse: true,
 	})
 
@@ -190,15 +151,7 @@ func TestStackTreeRenderer_RenderStack_Reversed(t *testing.T) {
 
 func TestStackTreeRenderer_RenderBranchList(t *testing.T) {
 	mock := NewMockTreeData()
-
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	prNum := 42
 	renderer.SetAnnotation("feature-1", BranchAnnotation{
@@ -234,17 +187,10 @@ func TestStackTreeRenderer_NeedsRestack(t *testing.T) {
 		},
 	}
 
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: true,
+		Mode: RenderModeCompact,
 	})
 
 	output := strings.Join(lines, "\n")
@@ -255,15 +201,7 @@ func TestStackTreeRenderer_NeedsRestack(t *testing.T) {
 
 func TestBranchAnnotation_CheckStatus(t *testing.T) {
 	mock := NewMockTreeData()
-
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	renderer.SetAnnotation("feature-1", BranchAnnotation{
 		CheckStatus: CheckStatusPassing,
@@ -273,7 +211,7 @@ func TestBranchAnnotation_CheckStatus(t *testing.T) {
 	})
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: true,
+		Mode: RenderModeCompact,
 	})
 
 	output := strings.Join(lines, "\n")
@@ -309,14 +247,7 @@ func TestStackTreeRenderer_ScopeColoring(t *testing.T) {
 		},
 	}
 
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	// Set scopes
 	renderer.SetAnnotation("feature-auth-base", BranchAnnotation{Scope: "AUTH", ExplicitScope: "AUTH"})
@@ -324,7 +255,7 @@ func TestStackTreeRenderer_ScopeColoring(t *testing.T) {
 	renderer.SetAnnotation("feature-api-v1", BranchAnnotation{Scope: "API", ExplicitScope: "API"})
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: false,
+		Mode: RenderModeFull,
 	})
 
 	output := strings.Join(lines, "\n")
@@ -368,14 +299,7 @@ func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 		},
 	}
 
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	// Set scope only on the base branch
 	renderer.SetAnnotation("feature-auth-base", BranchAnnotation{Scope: "AUTH", ExplicitScope: "AUTH"})
@@ -383,7 +307,7 @@ func TestStackTreeRenderer_InheritedScopeColoring(t *testing.T) {
 	renderer.SetAnnotation("feature-login", BranchAnnotation{Scope: "AUTH"})
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: false,
+		Mode: RenderModeFull,
 	})
 
 	output := strings.Join(lines, "\n")
@@ -448,14 +372,7 @@ func TestStackTreeRenderer_BranchingScopeColoring(t *testing.T) {
 		},
 	}
 
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	// Set scope on main
 	renderer.SetAnnotation("main", BranchAnnotation{Scope: "AUTH", ExplicitScope: "AUTH"})
@@ -463,7 +380,7 @@ func TestStackTreeRenderer_BranchingScopeColoring(t *testing.T) {
 	renderer.SetAnnotation("feature-1b", BranchAnnotation{Scope: "AUTH"})
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: false,
+		Mode: RenderModeFull,
 	})
 
 	output := strings.Join(lines, "\n")
@@ -508,14 +425,7 @@ func TestStackTreeRenderer_ScopeColoringBoundaries(t *testing.T) {
 		},
 	}
 
-	renderer := NewStackTreeRenderer(
-		mock.CurrentBranch(),
-		mock.Trunk(),
-		mock.GetChildren,
-		mock.GetParent,
-		mock.IsTrunk,
-		mock.IsBranchFixed,
-	)
+	renderer := NewRenderer(mock)
 
 	// Only scoped-branch has the scope
 	renderer.SetAnnotation("scoped-branch", BranchAnnotation{
@@ -526,7 +436,7 @@ func TestStackTreeRenderer_ScopeColoringBoundaries(t *testing.T) {
 	renderer.SetAnnotation("unscoped-branch", BranchAnnotation{Scope: ""})
 
 	lines := renderer.RenderStack("main", RenderOptions{
-		Short: false,
+		Mode: RenderModeFull,
 	})
 
 	// Get colors
@@ -572,5 +482,311 @@ func TestStackTreeRenderer_ScopeColoringBoundaries(t *testing.T) {
 	}
 	if !foundSymbol {
 		t.Error("scoped-branch symbol should be colored")
+	}
+}
+
+// Edge case tests
+
+func TestStackTreeRenderer_EmptyTree(t *testing.T) {
+	// A tree with just the trunk and no children
+	mock := &MockTreeData{
+		CurrentVal: "main",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
+			"main": {},
+		},
+		ParentsMap: map[string]string{},
+		FixedMap: map[string]bool{
+			"main": true,
+		},
+	}
+
+	renderer := NewRenderer(mock)
+	lines := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	// Should have exactly 1 line (just main)
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line for empty tree, got %d: %v", len(lines), lines)
+	}
+
+	if !strings.Contains(lines[0], "main") {
+		t.Errorf("expected 'main' in output, got: %s", lines[0])
+	}
+}
+
+func TestStackTreeRenderer_SingleBranch(t *testing.T) {
+	// A tree with trunk -> one branch
+	mock := &MockTreeData{
+		CurrentVal: "feature",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
+			"main":    {"feature"},
+			"feature": {},
+		},
+		ParentsMap: map[string]string{
+			"feature": "main",
+		},
+		FixedMap: map[string]bool{
+			"main":    true,
+			"feature": true,
+		},
+	}
+
+	renderer := NewRenderer(mock)
+	lines := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	// Should have 2 lines
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines, got %d: %v", len(lines), lines)
+	}
+
+	output := strings.Join(lines, "\n")
+	if !strings.Contains(output, "main") || !strings.Contains(output, "feature") {
+		t.Errorf("expected both main and feature in output, got: %s", output)
+	}
+}
+
+func TestStackTreeRenderer_DeeplyNested(t *testing.T) {
+	// A deeply nested linear tree with 15 levels
+	depth := 15
+	childrenMap := make(map[string][]string)
+	parentsMap := make(map[string]string)
+	fixedMap := make(map[string]bool)
+
+	branches := make([]string, depth)
+	branches[0] = "main"
+	for i := 1; i < depth; i++ {
+		branches[i] = strings.Repeat("f", i) // "f", "ff", "fff", etc.
+	}
+
+	fixedMap["main"] = true
+	for i := 1; i < depth; i++ {
+		branch := branches[i]
+		parent := branches[i-1]
+		parentsMap[branch] = parent
+		childrenMap[parent] = []string{branch}
+		fixedMap[branch] = true
+	}
+	childrenMap[branches[depth-1]] = []string{}
+
+	mock := &MockTreeData{
+		CurrentVal:  branches[depth-1], // Deepest branch
+		TrunkVal:    "main",
+		ChildrenMap: childrenMap,
+		ParentsMap:  parentsMap,
+		FixedMap:    fixedMap,
+	}
+
+	renderer := NewRenderer(mock)
+	lines := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	// Should have all 15 branches
+	if len(lines) != depth {
+		t.Errorf("expected %d lines, got %d: %v", depth, len(lines), lines)
+	}
+
+	// The deepest branch should have significant indentation
+	output := strings.Join(lines, "\n")
+	if !strings.Contains(output, branches[depth-1]) {
+		t.Errorf("expected deepest branch %q in output", branches[depth-1])
+	}
+}
+
+func TestStackTreeRenderer_CollapsedBranch(t *testing.T) {
+	mock := &MockTreeData{
+		CurrentVal: "feature-1",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
+			"main":      {"feature-1"},
+			"feature-1": {"feature-2", "feature-3"},
+			"feature-2": {},
+			"feature-3": {},
+		},
+		ParentsMap: map[string]string{
+			"feature-1": "main",
+			"feature-2": "feature-1",
+			"feature-3": "feature-1",
+		},
+		FixedMap: map[string]bool{
+			"main":      true,
+			"feature-1": true,
+			"feature-2": true,
+			"feature-3": true,
+		},
+	}
+
+	renderer := NewRenderer(mock)
+
+	// Without collapse
+	linesExpanded := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	// With collapse on feature-1
+	linesCollapsed := renderer.RenderStack("main", RenderOptions{
+		Mode:      RenderModeCompact,
+		Collapsed: map[string]bool{"feature-1": true},
+	})
+
+	// Collapsed should have fewer lines (children not shown)
+	if len(linesCollapsed) >= len(linesExpanded) {
+		t.Errorf("collapsed tree should have fewer lines: expanded=%d, collapsed=%d",
+			len(linesExpanded), len(linesCollapsed))
+	}
+
+	// Collapsed output should still have main and feature-1
+	collapsedOutput := strings.Join(linesCollapsed, "\n")
+	if !strings.Contains(collapsedOutput, "main") {
+		t.Error("collapsed output should contain main")
+	}
+	if !strings.Contains(collapsedOutput, "feature-1") {
+		t.Error("collapsed output should contain feature-1")
+	}
+
+	// Collapsed output should NOT have feature-2 or feature-3
+	if strings.Contains(collapsedOutput, "feature-2") {
+		t.Error("collapsed output should not contain feature-2")
+	}
+	if strings.Contains(collapsedOutput, "feature-3") {
+		t.Error("collapsed output should not contain feature-3")
+	}
+}
+
+func TestStackTreeRenderer_WideBranching(t *testing.T) {
+	// A tree where main has 5 direct children
+	mock := &MockTreeData{
+		CurrentVal: "branch-1",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
+			"main":     {"branch-1", "branch-2", "branch-3", "branch-4", "branch-5"},
+			"branch-1": {},
+			"branch-2": {},
+			"branch-3": {},
+			"branch-4": {},
+			"branch-5": {},
+		},
+		ParentsMap: map[string]string{
+			"branch-1": "main",
+			"branch-2": "main",
+			"branch-3": "main",
+			"branch-4": "main",
+			"branch-5": "main",
+		},
+		FixedMap: map[string]bool{
+			"main":     true,
+			"branch-1": true,
+			"branch-2": true,
+			"branch-3": true,
+			"branch-4": true,
+			"branch-5": true,
+		},
+	}
+
+	renderer := NewRenderer(mock)
+	lines := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	// Should have 6 lines (main + 5 children)
+	if len(lines) != 6 {
+		t.Errorf("expected 6 lines, got %d: %v", len(lines), lines)
+	}
+
+	output := strings.Join(lines, "\n")
+	// Should contain branching characters for 5 children
+	if !strings.Contains(output, "─") {
+		t.Error("expected branching characters in output")
+	}
+
+	// All branches should be present
+	for i := 1; i <= 5; i++ {
+		branchName := "branch-" + string(rune('0'+i))
+		if !strings.Contains(output, branchName) {
+			t.Errorf("expected %s in output", branchName)
+		}
+	}
+}
+
+func TestStackTreeRenderer_RenderFromMiddleBranch(t *testing.T) {
+	// Test rendering from a branch in the middle of the stack
+	mock := &MockTreeData{
+		CurrentVal: "feature-2",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
+			"main":      {"feature-1"},
+			"feature-1": {"feature-2"},
+			"feature-2": {"feature-3"},
+			"feature-3": {},
+		},
+		ParentsMap: map[string]string{
+			"feature-1": "main",
+			"feature-2": "feature-1",
+			"feature-3": "feature-2",
+		},
+		FixedMap: map[string]bool{
+			"main":      true,
+			"feature-1": true,
+			"feature-2": true,
+			"feature-3": true,
+		},
+	}
+
+	renderer := NewRenderer(mock)
+
+	// Render from feature-2 (middle of stack)
+	lines := renderer.RenderStack("feature-2", RenderOptions{Mode: RenderModeCompact})
+
+	output := strings.Join(lines, "\n")
+
+	// Should include upstack (feature-3)
+	if !strings.Contains(output, "feature-3") {
+		t.Error("expected feature-3 in upstack")
+	}
+
+	// Should include downstack (main, feature-1)
+	if !strings.Contains(output, "main") {
+		t.Error("expected main in downstack")
+	}
+	if !strings.Contains(output, "feature-1") {
+		t.Error("expected feature-1 in downstack")
+	}
+}
+
+func TestStackTreeRenderer_CacheIsCleared(t *testing.T) {
+	// Test that cache is properly cleared between renders
+	mock := &MockTreeData{
+		CurrentVal: "feature-1",
+		TrunkVal:   "main",
+		ChildrenMap: map[string][]string{
+			"main":      {"feature-1"},
+			"feature-1": {},
+		},
+		ParentsMap: map[string]string{
+			"feature-1": "main",
+		},
+		FixedMap: map[string]bool{
+			"main":      true,
+			"feature-1": true,
+		},
+	}
+
+	renderer := NewRenderer(mock)
+
+	// First render
+	lines1 := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	// Modify the tree (add a new child)
+	mock.ChildrenMap["feature-1"] = []string{"feature-2"}
+	mock.ChildrenMap["feature-2"] = []string{}
+	mock.ParentsMap["feature-2"] = "feature-1"
+	mock.FixedMap["feature-2"] = true
+
+	// Second render should include the new branch
+	lines2 := renderer.RenderStack("main", RenderOptions{Mode: RenderModeCompact})
+
+	if len(lines2) <= len(lines1) {
+		t.Errorf("second render should have more lines after adding branch: got %d, want > %d",
+			len(lines2), len(lines1))
+	}
+
+	output := strings.Join(lines2, "\n")
+	if !strings.Contains(output, "feature-2") {
+		t.Error("expected feature-2 in second render")
 	}
 }

@@ -133,16 +133,18 @@ type CompleteMsg struct {
 
 // NewModel creates a new merge model
 func NewModel() *Model {
+	styles := newStyles()
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = styles.spinnerStyle
 
 	return &Model{
 		Groups:     []Group{},
 		Steps:      []StepItem{},
 		CurrentIdx: 0,
 		spinner:    s,
-		styles:     newStyles(),
+		styles:     styles,
 	}
 }
 

@@ -50,6 +50,9 @@ type Handler interface {
 
 	// Cleanup restores terminal state (may be no-op)
 	Cleanup()
+
+	// IsInteractive returns true if the handler supports interactive prompts
+	IsInteractive() bool
 }
 
 // NullHandler is a no-op handler for when nil is passed
@@ -69,3 +72,6 @@ func (h *NullHandler) Complete(_ ActionResult) {}
 
 // Cleanup implements Handler.
 func (h *NullHandler) Cleanup() {}
+
+// IsInteractive implements Handler.
+func (h *NullHandler) IsInteractive() bool { return false }

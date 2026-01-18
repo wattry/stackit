@@ -1,9 +1,8 @@
 package branch
 
 import (
-	"sync"
-
 	"stackit.dev/stackit/internal/actions/delete"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -21,65 +20,56 @@ func NewDeleteUI(out output.Output, _ output.Logger) (*tui.Runner, delete.Handle
 
 // SimpleDeleteHandler provides streaming text output for delete operations
 type SimpleDeleteHandler struct {
-	splog   output.Output
-	mu      sync.Mutex
+	common.BaseHandler
 	deleted int
 	skipped int
 }
 
 // NewSimpleDeleteHandler creates a new SimpleDeleteHandler
-func NewSimpleDeleteHandler(splog output.Output) *SimpleDeleteHandler {
+func NewSimpleDeleteHandler(out output.Output) *SimpleDeleteHandler {
 	return &SimpleDeleteHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of delete
 func (h *SimpleDeleteHandler) Start(_ int) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.deleted = 0
 	h.skipped = 0
 }
 
 // OnBranch is called for each branch being deleted
 func (h *SimpleDeleteHandler) OnBranch(name string, status delete.Status, _ *int) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	switch status {
 	case delete.StatusDeleted:
 		h.deleted++
-		h.splog.Info("Deleted branch %s", style.ColorBranchName(name, false))
+		h.Output.Info("Deleted branch %s", style.ColorBranchName(name, false))
 	case delete.StatusSkipped:
 		h.skipped++
-		h.splog.Info("Skipped branch %s", style.ColorBranchName(name, false))
+		h.Output.Info("Skipped branch %s", style.ColorBranchName(name, false))
 	case delete.StatusRestacked:
-		h.splog.Info("Restacked branch %s", style.ColorBranchName(name, false))
+		h.Output.Info("Restacked branch %s", style.ColorBranchName(name, false))
 	}
 }
 
 // OnRestack is called when restacking children
 func (h *SimpleDeleteHandler) OnRestack(childCount int) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
 	if childCount > 0 {
-		h.splog.Info("Restacking %d child branch(es)...", childCount)
+		h.Output.Info("Restacking %d child branch(es)...", childCount)
 	}
 }
 
 // Complete is called when delete finishes
 func (h *SimpleDeleteHandler) Complete(_, _ int) {
 	// Summary is implicit from OnBranch calls
-}
-
-// Cleanup is a no-op for the simple handler
-func (h *SimpleDeleteHandler) Cleanup() {}
-
-// IsInteractive returns false for simple handler
-func (h *SimpleDeleteHandler) IsInteractive() bool {
-	return false
 }
 
 // PromptConfirm returns false for simple handler (non-interactive)

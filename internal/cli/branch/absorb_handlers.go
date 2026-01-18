@@ -1,9 +1,8 @@
 package branch
 
 import (
-	"sync"
-
 	"stackit.dev/stackit/internal/actions/absorb"
+	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
@@ -21,22 +20,21 @@ func NewAbsorbUI(out output.Output, _ output.Logger) (*tui.Runner, absorb.Handle
 
 // SimpleAbsorbHandler provides streaming text output for absorb operations
 type SimpleAbsorbHandler struct {
-	splog    output.Output
-	mu       sync.Mutex
+	common.BaseHandler
 	absorbed int
 }
 
 // NewSimpleAbsorbHandler creates a new SimpleAbsorbHandler
-func NewSimpleAbsorbHandler(splog output.Output) *SimpleAbsorbHandler {
+func NewSimpleAbsorbHandler(out output.Output) *SimpleAbsorbHandler {
 	return &SimpleAbsorbHandler{
-		splog: splog,
+		BaseHandler: common.NewBaseHandler(out),
 	}
 }
 
 // Start is called at the beginning of absorb
 func (h *SimpleAbsorbHandler) Start(_ bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.absorbed = 0
 }
 
@@ -57,22 +55,14 @@ func (h *SimpleAbsorbHandler) OnUnabsorbedHunk(_ git.Hunk) {
 
 // OnApply is called when hunks are applied to a branch
 func (h *SimpleAbsorbHandler) OnApply(_ string, _ string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	h.absorbed++
 }
 
 // Complete is called when absorb finishes
 func (h *SimpleAbsorbHandler) Complete(_ absorb.Result) {
 	// Summary is implicit from OnApply calls and action output
-}
-
-// Cleanup is a no-op for the simple handler
-func (h *SimpleAbsorbHandler) Cleanup() {}
-
-// IsInteractive returns false for simple handler
-func (h *SimpleAbsorbHandler) IsInteractive() bool {
-	return false
 }
 
 // PromptConfirm returns false for simple handler (non-interactive)

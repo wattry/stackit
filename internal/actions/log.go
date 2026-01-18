@@ -111,7 +111,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	renderer.SetAnnotations(annotations)
 
 	stackLines := renderer.RenderStack(opts.BranchName, tree.RenderOptions{
-		Short:       false, // We want the full tree characters with stats
+		Mode:        tree.RenderModeFull, // We want the full tree characters with stats
 		Reverse:     opts.Reverse,
 		Steps:       opts.Steps,
 		ShowSHAs:    opts.ShowSHAs,
