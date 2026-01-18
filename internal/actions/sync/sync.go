@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
@@ -220,6 +221,23 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return err
 	}
 
+	// Check for conflicts and prompt user if interactive
+	if len(summary.ConflictBranches) > 0 && handler.IsInteractive() {
+		resolve, err := handler.PromptResolveConflicts(summary.ConflictBranches)
+		if err != nil {
+			handler.Complete(*summary)
+			return fmt.Errorf("failed to prompt for conflict resolution: %w", err)
+		}
+
+		if resolve {
+			// User wants to resolve conflicts - enter conflict workflow for the first conflict
+			firstConflict := summary.ConflictBranches[0]
+			allBranches := ctx.Navigator().AllBranches()
+			return actions.EnterConflictWorkflow(ctx, firstConflict, allBranches)
+		}
+		// User chose to skip conflicts - continue with summary
+	}
+
 	// Check if everything was up to date
 	if !summary.HasChanges() {
 		summary.UpToDate = true
@@ -349,6 +367,11 @@ type Handler interface {
 	// In non-interactive mode, returns all branches (auto-confirm).
 	PromptBranchDeletions(branches map[string]string) (confirmed map[string]bool, err error)
 
+	// PromptResolveConflicts asks user if they want to resolve restack conflicts now or skip them.
+	// Returns true to start conflict resolution workflow, false to skip and continue.
+	// In non-interactive mode, returns (false, nil) to skip conflicts.
+	PromptResolveConflicts(conflictBranches []string) (resolve bool, err error)
+
 	// RestackHandler methods are available for restack-specific output
 	// This allows the same handler to be used for standalone restack operations
 	RestackHandler
@@ -389,6 +412,11 @@ func (h *NullHandler) PromptMetadataConflict(_ *engine.MetadataDiff) (bool, erro
 
 // PromptOrphanedMetadata implements Handler. Returns false (accept deletion) in non-interactive mode.
 func (h *NullHandler) PromptOrphanedMetadata(_ engine.OrphanedMetadataInfo) (bool, error) {
+	return false, nil
+}
+
+// PromptResolveConflicts implements Handler. Returns false (skip) in non-interactive mode.
+func (h *NullHandler) PromptResolveConflicts(_ []string) (bool, error) {
 	return false, nil
 }
 

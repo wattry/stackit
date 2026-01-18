@@ -7,6 +7,18 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
+// ValidationErrorType distinguishes between conflict errors and system errors
+type ValidationErrorType int
+
+const (
+	// ValidationErrorNone indicates no error occurred
+	ValidationErrorNone ValidationErrorType = iota
+	// ValidationErrorConflict indicates a merge conflict occurred
+	ValidationErrorConflict
+	// ValidationErrorSystem indicates a system error (not a conflict)
+	ValidationErrorSystem
+)
+
 // RebaseSpec describes a planned rebase operation
 type RebaseSpec struct {
 	Branch      string // Branch to rebase
@@ -16,10 +28,12 @@ type RebaseSpec struct {
 
 // RebaseValidation is the result of dry-run validation
 type RebaseValidation struct {
-	Success      bool              // Whether all rebases would succeed
-	FailedBranch string            // Which branch caused the conflict (if any)
-	ErrorMessage string            // Error message describing the failure
-	NewSHAs      map[string]string // Branch -> resulting SHA after rebase (if successful)
+	Success          bool                // Whether all rebases would succeed
+	FailedBranch     string              // Which branch caused the conflict (if any)
+	ErrorType        ValidationErrorType // Type of error (conflict vs system error)
+	ErrorMessage     string              // Error message describing the failure
+	ConflictingFiles []string            // Files that have conflicts (if ErrorType is ValidationErrorConflict)
+	NewSHAs          map[string]string   // Branch -> resulting SHA after rebase (if successful)
 }
 
 // ValidateRebases tests if a sequence of rebases will succeed by performing them
@@ -74,14 +88,17 @@ func (e *engineImpl) ValidateRebases(ctx context.Context, specs []RebaseSpec) (*
 		// Get the branch's current SHA before rebasing (to track old SHA -> new SHA)
 		oldBranchSHA, _ := wtGit.GetRevision(spec.Branch)
 
-		rebaseResult, newSHA, err := dryRunRebase(ctx, wtGit, spec.Branch, newParent, spec.OldUpstream)
+		rebaseResult, newSHA, conflictFiles, err := dryRunRebase(ctx, wtGit, spec.Branch, newParent, spec.OldUpstream)
 		if err != nil || rebaseResult == git.RebaseConflict {
 			result.Success = false
 			result.FailedBranch = spec.Branch
 			if err != nil {
 				result.ErrorMessage = fmt.Sprintf("rebase failed: %v", err)
+				result.ErrorType = ValidationErrorSystem
 			} else {
 				result.ErrorMessage = fmt.Sprintf("conflict rebasing onto %s", spec.NewParent)
+				result.ErrorType = ValidationErrorConflict
+				result.ConflictingFiles = conflictFiles
 			}
 
 			// Abort the in-progress rebase if any
@@ -105,8 +122,8 @@ func (e *engineImpl) ValidateRebases(ctx context.Context, specs []RebaseSpec) (*
 
 // dryRunRebase performs a rebase without updating branch refs.
 // This allows testing if a rebase would succeed without modifying the repository.
-// Returns the rebase result, the new SHA (if successful), and any error.
-func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUpstream string) (git.RebaseResult, string, error) {
+// Returns the rebase result, the new SHA (if successful), conflicting files (if any), and any error.
+func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUpstream string) (git.RebaseResult, string, []string, error) {
 	// Perform rebase in detached HEAD mode using branchName~0.
 	// The ~0 suffix resolves to the same commit as branchName but tells git to check out
 	// the commit directly (detached HEAD) rather than the branch ref. This means the rebase
@@ -115,21 +132,23 @@ func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUp
 	_, err := g.RunGitCommandWithContext(ctx, "rebase", "--onto", upstream, oldUpstream, branchName+"~0")
 	if err != nil {
 		if g.IsRebaseInProgress(ctx) {
-			return git.RebaseConflict, "", nil
+			// Get conflicting files before aborting
+			conflictFiles, _ := g.GetUnmergedFiles(ctx)
+			return git.RebaseConflict, "", conflictFiles, nil
 		}
 		// Abort rebase if it failed for other reasons
 		_, _ = g.RunGitCommandWithContext(ctx, "rebase", "--abort")
-		return git.RebaseConflict, "", err
+		return git.RebaseConflict, "", nil, err
 	}
 
 	// Get the resulting SHA from the detached HEAD
 	newSHA, err := g.GetCurrentRevision(ctx)
 	if err != nil {
-		return git.RebaseConflict, "", fmt.Errorf("failed to get revision after rebase: %w", err)
+		return git.RebaseConflict, "", nil, fmt.Errorf("failed to get revision after rebase: %w", err)
 	}
 
 	// DO NOT update the branch ref - this is the key difference from normal Rebase
 	// The branch ref stays unchanged, keeping the main repo unmodified
 
-	return git.RebaseDone, newSHA, nil
+	return git.RebaseDone, newSHA, nil, nil
 }

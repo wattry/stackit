@@ -166,6 +166,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			preview.HasConflicts = true
 			preview.ConflictBranch = validation.FailedBranch
 			preview.ConflictError = validation.ErrorMessage
+			preview.ConflictingFiles = validation.ConflictingFiles
 		}
 
 		confirmed, err := handler.PromptConfirmMove(preview)
@@ -334,6 +335,12 @@ func dryRun(ctx *app.Context, source, oldParentName, onto string, sourceBranch e
 		out.Info("Validation: %s", style.ColorRed("conflicts detected"))
 		out.Info("  Branch: %s", style.ColorBranchName(validation.FailedBranch, false))
 		out.Info("  Error: %s", validation.ErrorMessage)
+		if len(validation.ConflictingFiles) > 0 {
+			out.Info("  Conflicting files:")
+			for _, file := range validation.ConflictingFiles {
+				out.Info("    - %s", file)
+			}
+		}
 		return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
 	}
 

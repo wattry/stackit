@@ -89,7 +89,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		}
 
 		handler.OnRestackBranch(branchName, res, newRev, prNumber, lockReason, frozen, isCurrent, parentName, reparented, oldParent, newParent)
-	}); err != nil {
+	}, true); err != nil {
 		handler.OnRestackComplete(restacked, skipped, conflicts)
 		return fmt.Errorf("restack failed: %w", err)
 	}
