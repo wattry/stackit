@@ -163,6 +163,37 @@ type CreateResult struct {
 func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	eng := ctx.Engine
 	out := ctx.Output
+	repoRoot := ctx.RepoRoot
+
+	// If we're in a managed worktree, we need to create the new worktree from the main repo
+	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil {
+		out.Info("Creating worktree from main repository (currently in worktree: %s)", ctx.WorktreeInfo.Name)
+
+		// Create a temporary engine for the main repository
+		mainRepoRoot := ctx.WorktreeInfo.MainRepoDir
+		mainGit := git.NewRunnerWithPath(mainRepoRoot, ctx.Logger)
+
+		// Load config from main repo for trunk and undo settings
+		mainCfg, err := config.LoadConfig(mainRepoRoot)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config from main repo: %w", err)
+		}
+
+		mainEng, err := engine.NewEngine(engine.Options{
+			RepoRoot:          mainRepoRoot,
+			Trunk:             mainCfg.Trunk(),
+			MaxUndoStackDepth: mainCfg.UndoStackDepth(),
+			Git:               mainGit,
+			Writer:            os.Stderr,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create engine for main repo: %w", err)
+		}
+
+		// Use the main repo engine for the rest of the operation
+		eng = mainEng
+		repoRoot = mainRepoRoot
+	}
 
 	trunk := eng.Trunk()
 
@@ -177,11 +208,6 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 		out.Info("Creating worktree from %s (currently in detached HEAD state)", trunk.GetName())
 	} else if currentBranch.GetName() != trunk.GetName() {
 		out.Info("Creating worktree from %s (current branch: %s)", trunk.GetName(), currentBranch.GetName())
-	}
-
-	// Validate we're not already in a managed worktree
-	if ctx.InManagedWorktree {
-		return nil, fmt.Errorf("cannot create worktree from within another managed worktree")
 	}
 
 	// Validate name
@@ -206,7 +232,7 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	}
 
 	// Generate anchor branch name using the branch naming pattern
-	cfg, _ := config.LoadConfig(ctx.RepoRoot)
+	cfg, _ := config.LoadConfig(repoRoot)
 	patternStr := cfg.BranchNamePattern()
 	pattern, err := config.NewBranchPattern(patternStr)
 	if err != nil {
@@ -258,7 +284,7 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	}
 
 	// Create the worktree
-	worktreePath, err := createWorktreeForAnchor(ctx, opts.Name, anchorBranchName)
+	worktreePath, err := createWorktreeForAnchor(ctx, eng, repoRoot, opts.Name, anchorBranchName)
 	if err != nil {
 		cleanupAnchorBranch(ctx.Context, eng, anchorBranchName, out)
 		return nil, err
@@ -281,17 +307,15 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 }
 
 // createWorktreeForAnchor creates a worktree for the given anchor branch and registers it
-func createWorktreeForAnchor(ctx *app.Context, name string, anchorBranch string) (string, error) {
-	eng := ctx.Engine
-
+func createWorktreeForAnchor(ctx *app.Context, eng engine.Engine, repoRoot string, name string, anchorBranch string) (string, error) {
 	// Get worktree base path from config, or use default
-	cfg, _ := config.LoadConfig(ctx.RepoRoot)
+	cfg, _ := config.LoadConfig(repoRoot)
 	basePath := cfg.WorktreeBasePath()
 
 	// Default: sibling directory named {repo}-stacks
 	if basePath == "" {
-		repoName := filepath.Base(ctx.RepoRoot)
-		basePath = filepath.Join(filepath.Dir(ctx.RepoRoot), repoName+"-stacks")
+		repoName := filepath.Base(repoRoot)
+		basePath = filepath.Join(filepath.Dir(repoRoot), repoName+"-stacks")
 	}
 
 	// Worktree path: basePath/name
