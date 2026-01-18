@@ -128,7 +128,7 @@ If a proposed branch name already exists, choose a different name or ask the use
 **If provided in arguments**: Use that command.
 
 **Otherwise, auto-detect**:
-1. Check for `justfile` → use `just check` or `just test`
+1. Check for `mise.toml` → use `mise run check` or `mise run test`
 2. Check for `Makefile` → use `make test` or `make check`
 3. Check for `package.json` → use `npm test` or `npm run check`
 4. Check README.md or CONTRIBUTING.md for build/test instructions

@@ -2,7 +2,7 @@
 
 Go-based CLI tool for managing stacked changes in Git repositories.
 
-**Tech stack:** Go 1.25, Cobra, Just (justfile)
+**Tech stack:** Go 1.25, Cobra, bubbletea, mise
 
 ## Architecture
 
@@ -39,22 +39,21 @@ jq '.dependencies' package.json       # Parse JSON
 **All changes must pass tests and lint before committing:**
 
 ```bash
-just check-fast        # Minimal output, fail fast (best for LLM iteration)
-just check             # Runs fmt, lint, and fast tests (recommended for humans)
-just test-fast         # Run fast unit tests (~30s)
-just test-integration  # Run integration tests (~90s)
-just test              # Run all tests
-just test-pkg ./pkg    # Run tests for a specific package (e.g. ./internal/git)
-just lint              # Run linter
+mise run check         # Runs fmt, lint, and fast tests
+mise run test-fast     # Run fast unit tests (~30s)
+mise run test-integration  # Run integration tests (~90s)
+mise run test          # Run all tests
+mise run test-pkg ./pkg    # Run tests for a specific package (e.g. ./internal/git)
+mise run lint          # Run linter
 ```
 
-**Workflow:** Run `just check-fast` for quick iteration with minimal output. Run `just check` for more detailed feedback. Run `just test` before submitting PRs to ensure all tests pass.
+**Workflow:** Run `mise run check` during development for quick feedback. Run `mise run test` before submitting PRs to ensure all tests pass.
 
 ## Build
 
 ```bash
-just build   # Builds ./stackit binary
-just deps    # Install dependencies
+mise run build   # Builds ./stackit binary
+mise run deps    # Install dependencies
 ```
 
 ## Commit Messages

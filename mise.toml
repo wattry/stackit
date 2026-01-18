@@ -1,0 +1,128 @@
+[settings]
+experimental = true
+
+[env]
+STACKIT_NO_LOGGING = "1"  # Used for tests
+GOBIN = "{{ config_root }}/bin"
+PROJECT_ROOT = "{{ config_root }}"
+_.path = ["{{ config_root }}/bin", "{{ env.HOME }}/go/bin"]
+
+[tools]
+# Go toolchain
+go = "1.25.5"
+
+# Test runner with prettier output
+"go:gotest.tools/gotestsum" = "latest"
+
+# Code formatting
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+
+# Linting
+golangci-lint = "latest"
+
+# CLI utilities (recommended in AGENTS.md)
+"aqua:BurntSushi/ripgrep" = "latest"  # Fast text search (rg)
+"aqua:sharkdp/fd" = "latest"          # Fast file search
+"aqua:ast-grep/ast-grep" = "latest"   # AST-based code search
+"aqua:jqlang/jq" = "latest"           # JSON processing
+"aqua:mikefarah/yq" = "latest"        # YAML processing
+"cargo:tokei" = "latest"              # Code statistics
+
+[tasks.deps]
+description = "Download dependencies for all modules"
+run = """
+  go mod download
+  go mod tidy
+"""
+
+[tasks.build]
+description = "Build the stackit binary with local version info"
+run = """
+  mkdir -p bin
+  COMMIT=$(git rev-parse --short HEAD)
+  DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  go build -a -ldflags "-X main.version=dev-local -X main.commit=$COMMIT -X main.date=$DATE" -o bin/stackit ./cmd/stackit
+  if [ ! -L ./bin/st ] && [ ! -f ./bin/st ]; then
+    ln -s stackit ./bin/st
+    echo "Created symlink: bin/st -> stackit"
+  fi
+"""
+
+[tasks.fmt]
+description = "Format code"
+run = "goimports -w ."
+
+[tasks.lint]
+description = "Run linter"
+run = "golangci-lint run --allow-parallel-runners"
+
+[tasks."lint-fix"]
+description = "Run linter and fix issues"
+run = "golangci-lint run --allow-parallel-runners --fix"
+
+[tasks.test]
+description = "Run all tests (with caching for faster repeated runs)"
+run = "gotestsum --format pkgname-and-test-fails -- ./..."
+
+[tasks."test-fresh"]
+description = "Run all tests without caching"
+run = "gotestsum --format pkgname-and-test-fails -- ./... -count=1"
+
+[tasks."test-verbose"]
+description = "Run tests with verbose output"
+run = "gotestsum --format standard-verbose -- ./..."
+
+[tasks."test-coverage"]
+description = "Run tests with coverage"
+run = """
+  gotestsum --format pkgname-and-test-fails -- -coverprofile=coverage.out ./...
+  go tool cover -html=coverage.out -o coverage.html
+"""
+
+[tasks."test-race"]
+description = "Run tests with race detection"
+run = "gotestsum --format pkgname-and-test-fails -- -race ./..."
+
+[tasks."test-pkg"]
+description = "Run tests for a specific package"
+usage = '''
+arg "package" help="Package to test (e.g. ./testhelpers)"
+'''
+run = "gotestsum --format standard-verbose -- {{arg(name='package')}}"
+
+[tasks."test-fast"]
+description = "Run fast unit tests (excludes integration tests)"
+run = """
+  PACKAGES=$(go list ./... | grep -v /integration)
+  gotestsum --format pkgname-and-test-fails -- $PACKAGES
+"""
+
+[tasks."test-integration"]
+description = "Run integration tests only"
+run = "gotestsum --format pkgname-and-test-fails -- ./internal/integration/... ./internal/cli/integrations/... ./internal/actions/integrations/..."
+
+[tasks.clean]
+description = "Clean test artifacts"
+run = """
+  rm -f coverage.out coverage.html
+  find . -type d -name "stackit-test-*" -exec rm -rf {} + 2>/dev/null || true
+"""
+
+[tasks.check]
+description = "Run all checks (format, lint, fast tests)"
+depends = ["fmt", "lint", "test-fast"]
+
+[tasks."install-shims"]
+description = "Install shims to repo root for local development"
+depends = ["build"]
+run = """
+  cp scripts/stackit-shim.sh ./stackit
+  cp scripts/st-shim.sh ./st
+  chmod +x ./stackit ./st
+  echo "Dev shims installed to repo root"
+"""
+
+[tasks.init]
+description = "Initialize stackit in this repository"
+depends = ["build"]
+run = "./bin/stackit init"
