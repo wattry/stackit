@@ -297,6 +297,12 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 		out.Info("  Scope: %s", style.ColorDim(opts.Scope))
 	}
 	out.Newline()
+
+	// Run post-create hooks
+	if err := RunPostCreateHooks(ctx, worktreePath); err != nil {
+		out.Warn("Post-create hooks failed: %v", err)
+	}
+
 	out.Tip("Navigate to the worktree with: cd $(stackit worktree open %s)", opts.Name)
 
 	return &CreateResult{

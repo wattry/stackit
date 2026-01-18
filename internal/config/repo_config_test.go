@@ -419,6 +419,142 @@ func TestConfigSetCITimeout(t *testing.T) {
 	})
 }
 
+func TestConfigApprovedPostWorktreeCreateHooks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty list when nothing configured", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Empty(t, cfg.ApprovedPostWorktreeCreateHooks())
+	})
+
+	t.Run("returns approved hooks when configured", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		config := &RepoConfig{
+			Trunk:                           stringPtr("main"),
+			ApprovedPostWorktreeCreateHooks: []string{"mise trust", "npm install"},
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Equal(t, []string{"mise trust", "npm install"}, cfg.ApprovedPostWorktreeCreateHooks())
+	})
+
+	t.Run("IsPostWorktreeCreateHookApproved returns true for approved hook", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		config := &RepoConfig{
+			Trunk:                           stringPtr("main"),
+			ApprovedPostWorktreeCreateHooks: []string{"mise trust"},
+		}
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		require.NoError(t, err)
+		err = os.WriteFile(configPath, configJSON, 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.True(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
+		require.False(t, cfg.IsPostWorktreeCreateHookApproved("npm install"))
+	})
+
+	t.Run("AddApprovedPostWorktreeCreateHook adds new hook", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.False(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
+
+		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		require.True(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
+
+		// Save and reload to verify persistence
+		err = cfg.Save()
+		require.NoError(t, err)
+
+		cfg2, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.True(t, cfg2.IsPostWorktreeCreateHookApproved("mise trust"))
+	})
+
+	t.Run("AddApprovedPostWorktreeCreateHook does not duplicate", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+
+		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		cfg.AddApprovedPostWorktreeCreateHook("mise trust") // Add again
+		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 1)
+	})
+
+	t.Run("RemoveApprovedPostWorktreeCreateHook removes existing hook", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+
+		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		cfg.AddApprovedPostWorktreeCreateHook("npm install")
+		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 2)
+
+		cfg.RemoveApprovedPostWorktreeCreateHook("mise trust")
+		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 1)
+		require.False(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
+		require.True(t, cfg.IsPostWorktreeCreateHookApproved("npm install"))
+	})
+
+	t.Run("RemoveApprovedPostWorktreeCreateHook handles non-existent hook", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+
+		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		cfg.RemoveApprovedPostWorktreeCreateHook("non-existent") // Should not panic
+		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 1)
+	})
+
+	t.Run("ClearApprovedPostWorktreeCreateHooks removes all hooks", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+
+		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		cfg.AddApprovedPostWorktreeCreateHook("npm install")
+		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 2)
+
+		cfg.ClearApprovedPostWorktreeCreateHooks()
+		require.Empty(t, cfg.ApprovedPostWorktreeCreateHooks())
+
+		// Verify persistence
+		err = cfg.Save()
+		require.NoError(t, err)
+
+		cfg2, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+		require.Empty(t, cfg2.ApprovedPostWorktreeCreateHooks())
+	})
+}
+
 // Helper function to create string pointer
 func stringPtr(s string) *string {
 	return &s
