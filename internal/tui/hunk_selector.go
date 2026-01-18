@@ -13,6 +13,7 @@ import (
 
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -114,19 +115,19 @@ var defaultHunkSelectorKeys = hunkSelectorKeyMap{
 	),
 }
 
-// HunkSelectorModel is a bubbletea model for selecting hunks
+// HunkSelectorModel is a bubbletea model for selecting hunks.
+// It embeds core.BaseModel for standard lifecycle handling.
 type HunkSelectorModel struct {
+	core.BaseModel // Embedded for ReadySignaler interface
+
 	items      []HunkItem
 	fileGroups []FileGroup
 	cursor     int
 	viewport   viewport.Model
 	help       help.Model
 	keys       hunkSelectorKeyMap
-	done       bool
 	err        error
-	width      int
-	height     int
-	ready      bool
+	ready      bool // viewport ready flag (separate from BaseModel)
 
 	// Preview settings
 	previewLines int // Number of lines to show in collapsed preview
@@ -176,6 +177,7 @@ func NewHunkSelectorModel(hunks []git.Hunk) *HunkSelectorModel {
 
 // Init implements tea.Model
 func (m *HunkSelectorModel) Init() tea.Cmd {
+	m.SignalReady()
 	return nil
 }
 
@@ -183,8 +185,8 @@ func (m *HunkSelectorModel) Init() tea.Cmd {
 func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.Width = msg.Width
+		m.Height = msg.Height
 
 		headerHeight := 3 // Title + summary line + blank
 		footerHeight := 4 // Help + padding
@@ -198,7 +200,7 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Cancel):
 			m.err = errors.ErrCanceled
-			m.done = true
+			m.Done = true
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Submit):
@@ -215,7 +217,7 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// or press cancel/escape to abort
 				return m, nil
 			}
-			m.done = true
+			m.Done = true
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Up):
@@ -283,7 +285,7 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View implements tea.Model
 func (m *HunkSelectorModel) View() string {
-	if m.done {
+	if m.Done {
 		return ""
 	}
 
@@ -584,6 +586,65 @@ func (m *HunkSelectorModel) SelectedHunks() []git.Hunk {
 		}
 	}
 	return selected
+}
+
+// SetHunks replaces the hunks in the model for reuse in subsequent selections.
+// This allows the hunk selector to be reused in a loop without creating new models.
+func (m *HunkSelectorModel) SetHunks(hunks []git.Hunk) {
+	items := make([]HunkItem, len(hunks))
+	fileMap := make(map[string][]int)
+	fileOrder := make([]string, 0)
+	fileBinary := make(map[string]bool)
+
+	for i, h := range hunks {
+		items[i] = HunkItem{
+			Hunk:       h,
+			Selected:   false,
+			Expanded:   false,
+			Splittable: !h.Binary && git.CanSplitHunk(h),
+		}
+		if _, exists := fileMap[h.File]; !exists {
+			fileOrder = append(fileOrder, h.File)
+		}
+		fileMap[h.File] = append(fileMap[h.File], i)
+		if h.Binary {
+			fileBinary[h.File] = true
+		}
+	}
+
+	fileGroups := make([]FileGroup, len(fileOrder))
+	for i, file := range fileOrder {
+		fileGroups[i] = FileGroup{
+			File:   file,
+			Hunks:  fileMap[file],
+			Binary: fileBinary[file],
+		}
+	}
+
+	m.items = items
+	m.fileGroups = fileGroups
+	m.cursor = 0
+	m.Done = false
+	m.err = nil
+
+	// Update viewport content if ready
+	if m.ready {
+		m.updateViewportContent()
+	}
+}
+
+// Reset resets the model state for reuse
+func (m *HunkSelectorModel) Reset() {
+	m.Done = false
+	m.err = nil
+	for i := range m.items {
+		m.items[i].Selected = false
+		m.items[i].Expanded = false
+	}
+	m.cursor = 0
+	if m.ready {
+		m.updateViewportContent()
+	}
 }
 
 // Err returns any error that occurred
