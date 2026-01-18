@@ -39,7 +39,8 @@ jq '.dependencies' package.json       # Parse JSON
 **All changes must pass tests and lint before committing:**
 
 ```bash
-just check             # Runs fmt, lint, and fast tests (recommended)
+just check-fast        # Minimal output, fail fast (best for LLM iteration)
+just check             # Runs fmt, lint, and fast tests (recommended for humans)
 just test-fast         # Run fast unit tests (~30s)
 just test-integration  # Run integration tests (~90s)
 just test              # Run all tests
@@ -47,7 +48,7 @@ just test-pkg ./pkg    # Run tests for a specific package (e.g. ./internal/git)
 just lint              # Run linter
 ```
 
-**Workflow:** Run `just check` during development for quick feedback. Run `just test` before submitting PRs to ensure all tests pass.
+**Workflow:** Run `just check-fast` for quick iteration with minimal output. Run `just check` for more detailed feedback. Run `just test` before submitting PRs to ensure all tests pass.
 
 ## Build
 
