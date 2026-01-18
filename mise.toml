@@ -17,7 +17,16 @@ go = "1.25.5"
 # Code formatting
 "go:golang.org/x/tools/cmd/goimports" = "latest"
 
+# Linting
 golangci-lint = "latest"
+
+# CLI utilities (recommended in AGENTS.md)
+"aqua:BurntSushi/ripgrep" = "latest"  # Fast text search (rg)
+"aqua:sharkdp/fd" = "latest"          # Fast file search
+"aqua:ast-grep/ast-grep" = "latest"   # AST-based code search
+"aqua:jqlang/jq" = "latest"           # JSON processing
+"aqua:mikefarah/yq" = "latest"        # YAML processing
+"cargo:tokei" = "latest"              # Code statistics
 
 [tasks.deps]
 description = "Download dependencies for all modules"

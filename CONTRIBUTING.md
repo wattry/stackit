@@ -29,7 +29,7 @@ Thank you for your interest in contributing to Stackit! This document outlines t
    mise install
    ```
 
-This installs Go, gotestsum, goimports, golangci-lint, and all other dev tools with pinned versions.
+This installs Go, gotestsum, goimports, golangci-lint, and CLI utilities (ripgrep, fd, ast-grep, jq, yq, tokei).
 
 ### Setting Up Your Development Environment
 

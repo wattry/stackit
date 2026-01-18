@@ -38,8 +38,7 @@ mise upgrade           # Upgrade tools to latest versions
 
 ## How It Works
 
-- `mise.toml` defines tools (Go, gotestsum, etc.) and tasks (build, test, lint)
-- `mise install` creates `mise.lock` with pinned versions and checksums
+- `mise.toml` defines tools (Go, gotestsum, golangci-lint, ripgrep, fd, etc.) and tasks (build, test, lint)
 - Tools are automatically available in your PATH when in the project directory
 - Environment variables like `GOBIN` and `PROJECT_ROOT` are set automatically
 
