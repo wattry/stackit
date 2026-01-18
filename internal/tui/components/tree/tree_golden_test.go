@@ -354,6 +354,110 @@ func buildGoldenTests() []goldenTest {
 			},
 			opts: RenderOptions{Mode: RenderModeCompact},
 		},
+
+		// Split direction previews - linear stack with virtual branch inserted
+		// These simulate the split command's direction selection UI
+		// Uses full format (not short) with HideSummary to show clean │ connectors
+
+		// Split below: insert [new branch] between feature-1 and feature-2
+		// main → feature-1 → [new branch] → feature-2 (current)
+		{
+			name: "split_below_linear",
+			mock: &MockTreeData{
+				CurrentVal: "feature-2",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
+					"main":         {"feature-1"},
+					"feature-1":    {"[new branch]"},
+					"[new branch]": {"feature-2"},
+					"feature-2":    {},
+				},
+				ParentsMap: map[string]string{
+					"feature-1":    "main",
+					"[new branch]": "feature-1",
+					"feature-2":    "[new branch]",
+				},
+				FixedMap: map[string]bool{
+					"main":         true,
+					"feature-1":    true,
+					"[new branch]": true,
+					"feature-2":    true,
+				},
+			},
+			annotations: map[string]BranchAnnotation{
+				"feature-2":    {CustomLabel: "← current"},
+				"[new branch]": {CustomLabel: "← new"},
+			},
+			opts: RenderOptions{Short: false, Reverse: false, HideSummary: true, SkipSelectionPrefix: true},
+		},
+
+		// Split above: insert [new branch] as child of feature-2 (current)
+		// main → feature-1 → feature-2 (current) → [new branch]
+		{
+			name: "split_above_linear",
+			mock: &MockTreeData{
+				CurrentVal: "feature-2",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
+					"main":         {"feature-1"},
+					"feature-1":    {"feature-2"},
+					"feature-2":    {"[new branch]"},
+					"[new branch]": {},
+				},
+				ParentsMap: map[string]string{
+					"feature-1":    "main",
+					"feature-2":    "feature-1",
+					"[new branch]": "feature-2",
+				},
+				FixedMap: map[string]bool{
+					"main":         true,
+					"feature-1":    true,
+					"feature-2":    true,
+					"[new branch]": true,
+				},
+			},
+			annotations: map[string]BranchAnnotation{
+				"feature-2":    {CustomLabel: "← current"},
+				"[new branch]": {CustomLabel: "← new"},
+			},
+			opts: RenderOptions{Short: false, Reverse: false, HideSummary: true, SkipSelectionPrefix: true},
+		},
+
+		// Split above with re-parented children
+		// main → feature-1 → feature-2 (current) → [new branch] → child-1
+		{
+			name: "split_above_with_children",
+			mock: &MockTreeData{
+				CurrentVal: "feature-2",
+				TrunkVal:   "main",
+				ChildrenMap: map[string][]string{
+					"main":         {"feature-1"},
+					"feature-1":    {"feature-2"},
+					"feature-2":    {"[new branch]"},
+					"[new branch]": {"child-1"},
+					"child-1":      {},
+				},
+				ParentsMap: map[string]string{
+					"feature-1":    "main",
+					"feature-2":    "feature-1",
+					"[new branch]": "feature-2",
+					"child-1":      "[new branch]",
+				},
+				FixedMap: map[string]bool{
+					"main":         true,
+					"feature-1":    true,
+					"feature-2":    true,
+					"[new branch]": true,
+					"child-1":      true,
+				},
+			},
+			annotations: map[string]BranchAnnotation{
+				"feature-2":    {CustomLabel: "← current"},
+				"[new branch]": {CustomLabel: "← new"},
+				"child-1":      {CustomLabel: "(re-parented)"},
+			},
+			opts: RenderOptions{Short: false, Reverse: false, HideSummary: true, SkipSelectionPrefix: true},
+		},
 	}
 }
 

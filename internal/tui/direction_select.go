@@ -12,7 +12,7 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/tui/components/tree"
 )
 
 // Direction represents where to place a new branch
@@ -23,6 +23,135 @@ const (
 	DirectionBelow Direction = "below"
 	DirectionAbove Direction = "above"
 )
+
+const newBranchPlaceholder = "[new branch]"
+
+// virtualDirectionTree implements tree.Data to show a tree with a virtual new branch
+// inserted at the correct position based on the selected direction.
+type virtualDirectionTree struct {
+	stackPath     []string  // Path from trunk to current branch
+	currentBranch string    // The actual current branch
+	trunkBranch   string    // The trunk branch name
+	children      []string  // Children of the current branch
+	direction     Direction // Where to insert the new branch
+}
+
+// CurrentBranch returns the actual current branch name.
+func (v *virtualDirectionTree) CurrentBranch() string {
+	return v.currentBranch
+}
+
+// Trunk returns the trunk branch name.
+func (v *virtualDirectionTree) Trunk() string {
+	return v.trunkBranch
+}
+
+// Children returns the children of a branch, modified based on direction.
+func (v *virtualDirectionTree) Children(branchName string) []string {
+	// Find the parent of current (one step before current in stack path)
+	parentOfCurrent := ""
+	currentIdx := -1
+	for i, b := range v.stackPath {
+		if b == v.currentBranch {
+			currentIdx = i
+			if i > 0 {
+				parentOfCurrent = v.stackPath[i-1]
+			}
+			break
+		}
+	}
+
+	switch v.direction {
+	case DirectionBelow:
+		// Insert [new branch] between parent and current
+		// parent's children = [new branch], [new branch]'s children = [current]
+		if branchName == parentOfCurrent {
+			return []string{newBranchPlaceholder}
+		}
+		if branchName == newBranchPlaceholder {
+			return []string{v.currentBranch}
+		}
+		if branchName == v.currentBranch {
+			return v.children
+		}
+
+	case DirectionAbove:
+		// Insert [new branch] as child of current
+		// current's children = [new branch], [new branch]'s children = original children
+		if branchName == v.currentBranch {
+			return []string{newBranchPlaceholder}
+		}
+		if branchName == newBranchPlaceholder {
+			return v.children
+		}
+	}
+
+	// For other branches in the stack path, return their normal child
+	for i, b := range v.stackPath {
+		if b == branchName && i+1 < len(v.stackPath) {
+			nextInPath := v.stackPath[i+1]
+			// For DirectionBelow, skip if this is the parent→current relationship (we replaced it)
+			if v.direction == DirectionBelow && i == currentIdx-1 {
+				return []string{newBranchPlaceholder}
+			}
+			return []string{nextInPath}
+		}
+	}
+
+	return nil
+}
+
+// Parent returns the parent of a branch, modified based on direction.
+func (v *virtualDirectionTree) Parent(branchName string) string {
+	// Find parent of current
+	parentOfCurrent := ""
+	for i, b := range v.stackPath {
+		if b == v.currentBranch && i > 0 {
+			parentOfCurrent = v.stackPath[i-1]
+			break
+		}
+	}
+
+	switch v.direction {
+	case DirectionBelow:
+		if branchName == newBranchPlaceholder {
+			return parentOfCurrent
+		}
+		if branchName == v.currentBranch {
+			return newBranchPlaceholder
+		}
+
+	case DirectionAbove:
+		if branchName == newBranchPlaceholder {
+			return v.currentBranch
+		}
+		// Re-parented children now have [new branch] as parent
+		for _, child := range v.children {
+			if branchName == child {
+				return newBranchPlaceholder
+			}
+		}
+	}
+
+	// For other branches, return normal parent from stack path
+	for i, b := range v.stackPath {
+		if b == branchName && i > 0 {
+			return v.stackPath[i-1]
+		}
+	}
+
+	return ""
+}
+
+// IsTrunk returns whether the branch is the trunk branch.
+func (v *virtualDirectionTree) IsTrunk(branchName string) bool {
+	return branchName == v.trunkBranch
+}
+
+// IsFixed returns true for all branches (no restack indicators needed).
+func (v *virtualDirectionTree) IsFixed(_ string) bool {
+	return true
+}
 
 // directionSelectKeyMap defines the keybindings for direction selection
 type directionSelectKeyMap struct {
@@ -192,67 +321,66 @@ func (m *DirectionSelectModel) renderOptions() string {
 	return sb.String()
 }
 
-// renderStackTree renders only the current stack with insertion point indicator.
-// Tree is rendered with main at the bottom (like st log).
+// renderStackTree renders the current stack with insertion point indicator using the tree component.
 func (m *DirectionSelectModel) renderStackTree() string {
-	// Pre-allocate: stack path + potential insertion point + potential children
-	lines := make([]string, 0, len(m.stackPath)+1+len(m.children))
+	// Build virtual tree with the new branch placeholder inserted
+	virtualTree := m.buildVirtualTree()
+	renderer := tree.NewRenderer(virtualTree)
 
-	insertStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")) // green
-	currentStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("243"))
+	// Set annotation for current branch
+	renderer.SetAnnotation(m.currentBranch, tree.BranchAnnotation{
+		CustomLabel: "← current",
+	})
 
-	// Calculate max depth for prefix calculation (we render bottom-up)
-	maxDepth := len(m.stackPath) - 1
+	// Set annotation for the new branch placeholder
+	renderer.SetAnnotation(newBranchPlaceholder, tree.BranchAnnotation{
+		CustomLabel: "← new",
+	})
 
-	// Render in reverse order (current branch first, trunk last)
-	for i := len(m.stackPath) - 1; i >= 0; i-- {
-		branch := m.stackPath[i]
-		isCurrent := branch == m.currentBranch
-		isParentOfCurrent := i < len(m.stackPath)-1 && m.stackPath[i+1] == m.currentBranch
-
-		// Build prefix based on reversed depth
-		depth := maxDepth - i
-		prefix := strings.Repeat("│ ", depth)
-
-		// Determine symbol and style
-		symbol := "◯"
-		branchStyle := dimStyle
-		if isCurrent {
-			symbol = "◉"
-			branchStyle = currentStyle
+	// Mark children as re-parented when direction is "above"
+	if m.direction == DirectionAbove {
+		for _, child := range m.children {
+			renderer.SetAnnotation(child, tree.BranchAnnotation{
+				CustomLabel: "(re-parented)",
+			})
 		}
+	}
 
-		// If direction is "above" and this is the current branch, show children and insertion point first
-		if m.direction == DirectionAbove && isCurrent {
-			// Show children that will be re-parented (at top)
-			if len(m.children) > 0 {
-				childPrefix := strings.Repeat("│ ", depth+2)
-				for _, child := range m.children {
-					lines = append(lines, fmt.Sprintf("%s%s %s", childPrefix, "◯", dimStyle.Render(child+" (re-parented)")))
-				}
-			}
+	opts := tree.RenderOptions{
+		Short:               false, // Full format with │ connectors
+		Reverse:             false, // Current at top, trunk at bottom
+		HideSummary:         true,  // Don't show stats/PR info
+		SkipSelectionPrefix: true,
+	}
 
-			// Show insertion point
-			insertPrefix := strings.Repeat("│ ", depth+1)
-			lines = append(lines, fmt.Sprintf("%s%s %s", insertPrefix, "◆", insertStyle.Render("[new branch]")))
-		}
+	lines := renderer.RenderStack(virtualTree.Trunk(), opts)
 
-		// Render the branch line
-		line := fmt.Sprintf("%s%s %s", prefix, symbol, branchStyle.Render(branch))
-		if isCurrent {
-			line += style.ColorDim(" ← current")
-		}
-		lines = append(lines, line)
-
-		// If direction is "below" and this is the parent of current, show insertion point after parent
-		if m.direction == DirectionBelow && isParentOfCurrent {
-			insertPrefix := strings.Repeat("│ ", depth+1)
-			lines = append(lines, fmt.Sprintf("%s%s %s", insertPrefix, "◆", insertStyle.Render("[new branch]")))
+	// Style the new branch line with green color
+	insertStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
+	for i, line := range lines {
+		if strings.Contains(line, newBranchPlaceholder) {
+			// Replace the placeholder with styled version
+			lines[i] = strings.Replace(line, newBranchPlaceholder, insertStyle.Render(newBranchPlaceholder), 1)
 		}
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// buildVirtualTree creates a tree data structure with the virtual new branch inserted.
+func (m *DirectionSelectModel) buildVirtualTree() *virtualDirectionTree {
+	trunkBranch := ""
+	if len(m.stackPath) > 0 {
+		trunkBranch = m.stackPath[0]
+	}
+
+	return &virtualDirectionTree{
+		stackPath:     m.stackPath,
+		currentBranch: m.currentBranch,
+		trunkBranch:   trunkBranch,
+		children:      m.children,
+		direction:     m.direction,
+	}
 }
 
 // Direction returns the selected direction
