@@ -64,7 +64,7 @@ Stacks naturally form a tree structure—a single branch can have multiple child
 - 🤖 **AI assistant integration** — Generate integration files for Cursor and Claude Code
 - 🐙 **GitHub Integration** — Install CI checks to prevent merging locked PRs
 - ⚓ **Git Hooks** — Automatically validate branch state before committing with `precommit`
-- 📂 **Worktrees** — Work on multiple stacks in parallel with dedicated directories
+- 📂 **Worktrees** — Work on multiple stacks in parallel with dedicated directories and post-creation hooks
 
 ---
 
@@ -403,6 +403,28 @@ View all current configuration values:
 ```bash
 stackit config --list
 ```
+
+### Project Configuration (`.stackit.yaml`)
+
+For team-wide settings, create a `.stackit.yaml` file in your repository root. This file should be committed to version control and is shared across all team members.
+
+```yaml
+# .stackit.yaml
+hooks:
+  post-worktree-create:
+    - npm install
+    - cp .env.example .env
+```
+
+#### Worktree Hooks
+
+The `hooks.post-worktree-create` option allows you to run commands automatically after creating a worktree with `stackit create -w`. This is useful for:
+
+- Installing dependencies (`npm install`, `bundle install`, etc.)
+- Setting up environment files
+- Running initialization scripts
+
+**Security**: The first time a hook is encountered, Stackit prompts for approval (defaulting to "No" for safety). Approvals are stored locally in `.git/.stackit_config` and persist across sessions. Hooks have a 60-second timeout.
 
 ---
 

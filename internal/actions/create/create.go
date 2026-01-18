@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/worktree"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
@@ -198,6 +199,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		}
 		handler.OnStep(StepWorktree, StatusCompleted, fmt.Sprintf("Created worktree at %s", worktreePath))
 		out.Info("Created worktree at %s", worktreePath)
+
+		// Run post-create hooks in the worktree
+		if hookErr := worktree.RunPostCreateHooks(ctx, worktreePath); hookErr != nil {
+			out.Warn("Post-create hooks failed: %v", hookErr)
+		}
 	}
 
 	// Set scope: use provided scope if given, otherwise let it inherit from parent naturally

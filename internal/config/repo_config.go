@@ -319,22 +319,56 @@ func (c *Config) SetSplitHunkSelector(selector string) error {
 	}
 }
 
+// ApprovedPostWorktreeCreateHooks returns the list of approved post-worktree-create hooks
+func (c *Config) ApprovedPostWorktreeCreateHooks() []string {
+	return c.data.ApprovedPostWorktreeCreateHooks
+}
+
+// IsPostWorktreeCreateHookApproved checks if a hook command is in the approved list
+func (c *Config) IsPostWorktreeCreateHookApproved(hook string) bool {
+	return slices.Contains(c.data.ApprovedPostWorktreeCreateHooks, hook)
+}
+
+// AddApprovedPostWorktreeCreateHook adds a hook to the approved list if not already present
+func (c *Config) AddApprovedPostWorktreeCreateHook(hook string) {
+	if !c.IsPostWorktreeCreateHookApproved(hook) {
+		c.data.ApprovedPostWorktreeCreateHooks = append(c.data.ApprovedPostWorktreeCreateHooks, hook)
+	}
+}
+
+// RemoveApprovedPostWorktreeCreateHook removes a hook from the approved list
+func (c *Config) RemoveApprovedPostWorktreeCreateHook(hook string) {
+	hooks := c.data.ApprovedPostWorktreeCreateHooks
+	for i, h := range hooks {
+		if h == hook {
+			c.data.ApprovedPostWorktreeCreateHooks = slices.Delete(hooks, i, i+1)
+			return
+		}
+	}
+}
+
+// ClearApprovedPostWorktreeCreateHooks removes all hook approvals
+func (c *Config) ClearApprovedPostWorktreeCreateHooks() {
+	c.data.ApprovedPostWorktreeCreateHooks = nil
+}
+
 // RepoConfig represents the repository configuration
 type RepoConfig struct {
-	Trunk                      *string  `json:"trunk,omitempty"`
-	Trunks                     []string `json:"trunks,omitempty"`
-	IsGithubIntegrationEnabled *bool    `json:"isGithubIntegrationEnabled,omitempty"`
-	BranchNamePattern          *string  `json:"branchNamePattern,omitempty"`
-	SubmitFooter               *bool    `json:"submit.footer,omitempty"`
-	UndoStackDepth             *int     `json:"undo.stackDepth,omitempty"`
-	WorktreeBasePath           *string  `json:"worktree.basePath,omitempty"`
-	WorktreeAutoClean          *bool    `json:"worktree.autoClean,omitempty"`
-	MergeMethod                *string  `json:"merge.method,omitempty"`
-	CombineCICommand           *string  `json:"combine.ciCommand,omitempty"` // Deprecated: use CICommand
-	CombineCITimeout           *int     `json:"combine.ciTimeout,omitempty"` // Deprecated: use CITimeout
-	CICommand                  *string  `json:"ci.command,omitempty"`        // Unified CI command for all validation
-	CITimeout                  *int     `json:"ci.timeout,omitempty"`        // Unified CI timeout in seconds
-	SplitHunkSelector          *string  `json:"split.hunkSelector,omitempty"`
+	Trunk                           *string  `json:"trunk,omitempty"`
+	Trunks                          []string `json:"trunks,omitempty"`
+	IsGithubIntegrationEnabled      *bool    `json:"isGithubIntegrationEnabled,omitempty"`
+	BranchNamePattern               *string  `json:"branchNamePattern,omitempty"`
+	SubmitFooter                    *bool    `json:"submit.footer,omitempty"`
+	UndoStackDepth                  *int     `json:"undo.stackDepth,omitempty"`
+	WorktreeBasePath                *string  `json:"worktree.basePath,omitempty"`
+	WorktreeAutoClean               *bool    `json:"worktree.autoClean,omitempty"`
+	MergeMethod                     *string  `json:"merge.method,omitempty"`
+	CombineCICommand                *string  `json:"combine.ciCommand,omitempty"` // Deprecated: use CICommand
+	CombineCITimeout                *int     `json:"combine.ciTimeout,omitempty"` // Deprecated: use CITimeout
+	CICommand                       *string  `json:"ci.command,omitempty"`        // Unified CI command for all validation
+	CITimeout                       *int     `json:"ci.timeout,omitempty"`        // Unified CI timeout in seconds
+	SplitHunkSelector               *string  `json:"split.hunkSelector,omitempty"`
+	ApprovedPostWorktreeCreateHooks []string `json:"hooks.approvedPostWorktreeCreate,omitempty"`
 }
 
 // GetBranchPattern returns the branch name pattern as a BranchPattern type

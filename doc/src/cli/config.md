@@ -102,6 +102,71 @@ Auto-remove worktrees for merged stacks during sync.
 stackit config set worktree.autoClean false
 ```
 
+## Project configuration (`.stackit.yaml`)
+
+For team-wide settings that should be shared across all contributors, create a `.stackit.yaml` file in your repository root and commit it to version control.
+
+### Worktree hooks
+
+The `hooks.post-worktree-create` option allows you to run commands automatically after creating a worktree with `stackit create -w`:
+
+```yaml
+# .stackit.yaml
+hooks:
+  post-worktree-create:
+    - npm install
+    - cp .env.example .env
+```
+
+This is useful for:
+
+- Installing dependencies (`npm install`, `bundle install`, `pip install -r requirements.txt`)
+- Setting up environment files
+- Running initialization scripts
+- Configuring IDE settings
+
+### Security
+
+For safety, the first time a hook is encountered, stackit prompts for approval:
+
+```
+This repo wants to run "npm install" after creating worktrees. Allow? [y/N]
+```
+
+- The default answer is "No" for security
+- Approvals are stored locally in `.git/.stackit_config`
+- Approvals persist across sessions
+- Hooks have a 60-second timeout
+
+### Example configurations
+
+**Node.js project**:
+
+```yaml
+hooks:
+  post-worktree-create:
+    - npm install
+```
+
+**Python project**:
+
+```yaml
+hooks:
+  post-worktree-create:
+    - python -m venv .venv
+    - .venv/bin/pip install -r requirements.txt
+```
+
+**Multi-step setup**:
+
+```yaml
+hooks:
+  post-worktree-create:
+    - npm install
+    - cp .env.example .env
+    - npm run setup
+```
+
 ## Configuration file location
 
 Stackit configuration is stored in `.git/config` under the `[stackit]` section.
