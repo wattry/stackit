@@ -178,6 +178,20 @@ func (c *Config) SetUndoStackDepth(depth int) {
 	c.data.UndoStackDepth = &depth
 }
 
+// MaxConcurrency returns the maximum number of concurrent validation operations.
+// Returns 0 if not set (engine will use default based on CPU count).
+func (c *Config) MaxConcurrency() int {
+	if c.data.MaxConcurrency != nil {
+		return *c.data.MaxConcurrency
+	}
+	return 0
+}
+
+// SetMaxConcurrency sets the maximum number of concurrent validation operations.
+func (c *Config) SetMaxConcurrency(n int) {
+	c.data.MaxConcurrency = &n
+}
+
 // WorktreeBasePath returns the base path for worktrees, or empty string for default
 // Default is "../{repo-name}-stacks" relative to the repository root
 func (c *Config) WorktreeBasePath() string {
@@ -360,6 +374,7 @@ type RepoConfig struct {
 	BranchNamePattern               *string  `json:"branchNamePattern,omitempty"`
 	SubmitFooter                    *bool    `json:"submit.footer,omitempty"`
 	UndoStackDepth                  *int     `json:"undo.stackDepth,omitempty"`
+	MaxConcurrency                  *int     `json:"maxConcurrency,omitempty"` // Maximum concurrent validation operations
 	WorktreeBasePath                *string  `json:"worktree.basePath,omitempty"`
 	WorktreeAutoClean               *bool    `json:"worktree.autoClean,omitempty"`
 	MergeMethod                     *string  `json:"merge.method,omitempty"`

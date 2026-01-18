@@ -262,6 +262,7 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 	}
 	trunk := cfg.Trunk()
 	maxUndoDepth := cfg.UndoStackDepth()
+	maxConcurrency := cfg.MaxConcurrency()
 
 	// Create file logger first so git commands during engine init are logged
 	var logger output.Logger
@@ -285,6 +286,7 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 		RepoRoot:          repoRoot,
 		Trunk:             trunk,
 		MaxUndoStackDepth: maxUndoDepth,
+		MaxConcurrency:    maxConcurrency,
 		Writer:            writer,
 		Git:               gitRunner,
 	})

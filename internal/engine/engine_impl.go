@@ -92,6 +92,7 @@ type engineImpl struct {
 	childrenMap       map[string][]string  // branch -> children (computed from parents)
 	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata (can include non-local branches)
 	maxUndoStackDepth int
+	maxConcurrency    int
 	git               git.Runner
 	writer            io.Writer
 	mu                sync.RWMutex
@@ -133,6 +134,7 @@ func NewEngine(opts Options) (Engine, error) {
 		childrenMap:       make(map[string][]string),
 		remoteMetaCache:   make(map[string]*git.Meta),
 		maxUndoStackDepth: maxDepth,
+		maxConcurrency:    opts.MaxConcurrency,
 		git:               g,
 		writer:            writer,
 	}
