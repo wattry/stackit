@@ -102,10 +102,13 @@ description = "Run integration tests only"
 run = "gotestsum --format pkgname-and-test-fails -- ./internal/integration/... ./internal/cli/integrations/... ./internal/actions/integrations/..."
 
 [tasks.clean]
-description = "Clean test artifacts"
+description = "Clean built binaries, shims, and test artifacts"
 run = """
   rm -f coverage.out coverage.html
+  rm -rf bin/
+  rm -f ./stackit ./st
   find . -type d -name "stackit-test-*" -exec rm -rf {} + 2>/dev/null || true
+  echo "Cleaned: binaries (bin/), shims (./stackit, ./st), and test artifacts"
 """
 
 [tasks.check]
