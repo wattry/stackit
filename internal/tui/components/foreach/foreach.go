@@ -4,13 +4,14 @@ package foreach
 import (
 	"github.com/charmbracelet/lipgloss"
 
+	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // Item represents a branch being processed
 type Item struct {
 	BranchName string
-	Status     string // "pending", "running", "done", "error"
+	Status     core.Status
 	Output     string
 	Error      error
 }
@@ -40,14 +41,3 @@ func DefaultStyles() Styles {
 		DimStyle:     commonStyles.Subtle,
 	}
 }
-
-const (
-	// StatusRunning indicates the branch is currently executing
-	StatusRunning = "running"
-	// StatusDone indicates the branch execution was successful
-	StatusDone = "done"
-	// StatusError indicates the branch execution failed
-	StatusError = "error"
-	// StatusPending indicates the branch is waiting to be executed
-	StatusPending = "pending"
-)

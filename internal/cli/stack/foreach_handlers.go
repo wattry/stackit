@@ -12,6 +12,7 @@ import (
 	"stackit.dev/stackit/internal/tui"
 	foreachComponent "stackit.dev/stackit/internal/tui/components/foreach"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -133,6 +134,22 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 	}
 }
 
+// branchStatusToCoreStatus converts action's BranchStatus to TUI's core.Status.
+func branchStatusToCoreStatus(status foreach.BranchStatus) core.Status {
+	switch status {
+	case foreach.StatusRunning:
+		return core.StatusActive
+	case foreach.StatusDone:
+		return core.StatusDone
+	case foreach.StatusError:
+		return core.StatusError
+	case foreach.StatusSkipped:
+		return core.StatusSkipped
+	default:
+		return core.StatusPending
+	}
+}
+
 // convertToCommonResults converts foreach.BranchResult slice to common.BranchResult slice.
 // The isCurrentFn callback determines if each branch is the current branch.
 func convertToCommonResults(results []foreach.BranchResult, isCurrentFn func(branchName string) bool) []common.BranchResult {
@@ -211,7 +228,7 @@ func (h *InteractiveForeachHandler) OnEvent(e foreach.Event) {
 		for _, branch := range ev.Branches {
 			item := foreachComponent.Item{
 				BranchName: branch.Name,
-				Status:     "pending",
+				Status:     core.StatusPending,
 			}
 			found := false
 			for i, existing := range h.model.Items {
@@ -235,7 +252,7 @@ func (h *InteractiveForeachHandler) OnEvent(e foreach.Event) {
 
 		h.runner.Send(foreachComponent.ProgressUpdateMsg{
 			BranchName: ev.BranchName,
-			Status:     string(ev.Status),
+			Status:     branchStatusToCoreStatus(ev.Status),
 			Output:     ev.Output,
 			Err:        ev.Error,
 		})
