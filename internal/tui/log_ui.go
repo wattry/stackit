@@ -629,9 +629,10 @@ func (m *LogModel) ensureVisible() {
 // updateSearchMatches updates the searchMatches map based on current searchQuery
 func (m *LogModel) updateSearchMatches() {
 	m.searchMatches = make(map[string]bool)
+	allBranches := m.engine.AllBranches() // Call once and reuse
+
 	if m.searchQuery == "" {
-		// All branches match when search is empty - populate from engine
-		allBranches := m.engine.AllBranches()
+		// All branches match when search is empty
 		for _, b := range allBranches {
 			m.searchMatches[b.GetName()] = true
 		}
@@ -639,7 +640,6 @@ func (m *LogModel) updateSearchMatches() {
 	}
 
 	query := strings.ToLower(m.searchQuery)
-	allBranches := m.engine.AllBranches()
 	for _, b := range allBranches {
 		branchName := strings.ToLower(b.GetName())
 		m.searchMatches[b.GetName()] = strings.Contains(branchName, query)

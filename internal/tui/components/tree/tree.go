@@ -164,6 +164,10 @@ type StackTreeRenderer struct {
 	// childrenCache memoizes getChildren calls during rendering.
 	// This is lazily populated and cleared between render operations.
 	childrenCache map[string][]string
+
+	// indentCache caches pre-computed indent strings to avoid repeated strings.Repeat calls.
+	// Key is indent level, value is the pre-computed string like "│ │ │ ".
+	indentCache map[int]string
 }
 
 // NewRenderer creates a new tree renderer from a Data source.
@@ -205,14 +209,30 @@ func (r *StackTreeRenderer) children(branchName string) []string {
 	return result
 }
 
-// initCache initializes the children cache for a new render operation.
+// initCache initializes the caches for a new render operation.
 func (r *StackTreeRenderer) initCache() {
 	r.childrenCache = make(map[string][]string)
+	r.indentCache = make(map[int]string)
 }
 
-// clearCache clears the children cache after a render operation.
+// clearCache clears the caches after a render operation.
 func (r *StackTreeRenderer) clearCache() {
 	r.childrenCache = nil
+	r.indentCache = nil
+}
+
+// getIndentString returns a cached indent string for the given level.
+// This avoids repeated strings.Repeat calls which allocate new strings each time.
+func (r *StackTreeRenderer) getIndentString(level int) string {
+	if r.indentCache == nil {
+		r.indentCache = make(map[int]string)
+	}
+	if s, ok := r.indentCache[level]; ok {
+		return s
+	}
+	s := strings.Repeat("│ ", level)
+	r.indentCache[level] = s
+	return s
 }
 
 // RenderedBranch represents a branch and its rendered lines
@@ -226,7 +246,12 @@ type RenderedBranch struct {
 // RenderStack renders the full stack tree starting from a branch
 func (r *StackTreeRenderer) RenderStack(branchName string, opts RenderOptions) []string {
 	rendered := r.RenderStackDetailed(branchName, opts)
-	var result []string
+	// Pre-allocate capacity based on total lines across all branches
+	totalLines := 0
+	for _, b := range rendered {
+		totalLines += len(b.Lines)
+	}
+	result := make([]string, 0, totalLines)
 	for _, b := range rendered {
 		result = append(result, b.Lines...)
 	}
@@ -291,8 +316,12 @@ func (r *StackTreeRenderer) RenderStackDetailed(branchName string, opts RenderOp
 		}
 	}
 
-	// Flatten
-	var result []RenderedBranch
+	// Flatten with pre-allocated capacity
+	totalLen := 0
+	for _, section := range outputDeep {
+		totalLen += len(section)
+	}
+	result := make([]RenderedBranch, 0, totalLen)
 	for _, section := range outputDeep {
 		result = append(result, section...)
 	}
@@ -460,7 +489,8 @@ func (r *StackTreeRenderer) getUpstackInclusiveRendered(args treeRenderArgs) []R
 		}
 	}
 
-	var result []RenderedBranch
+	// Pre-allocate with known capacity
+	result := make([]RenderedBranch, 0, len(upstack)+len(current))
 	for _, section := range outputDeep {
 		result = append(result, section...)
 	}
@@ -472,6 +502,8 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 		return []RenderedBranch{}
 	}
 
+	// Build stack in reverse order (parent to grandparent), then reverse once
+	// This avoids O(n²) behavior from prepending to a slice
 	var fullStack []string
 	current := args.branchName
 	visited := make(map[string]bool)
@@ -480,10 +512,15 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 		if parent == "" || r.isTrunk(parent) || visited[parent] {
 			break
 		}
-		fullStack = append([]string{parent}, fullStack...)
+		fullStack = append(fullStack, parent)
 		current = parent
 		visited[current] = true
 	}
+	// Reverse to get correct order (grandparent to parent)
+	for i, j := 0, len(fullStack)-1; i < j; i, j = i+1, j-1 {
+		fullStack[i], fullStack[j] = fullStack[j], fullStack[i]
+	}
+	// Prepend trunk (single allocation)
 	fullStack = append([]string{r.trunk}, fullStack...)
 
 	if args.steps != nil && *args.steps > 0 {
@@ -574,7 +611,7 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 		b.Grow(100 + args.indentLevel*3)
 
 		b.WriteString(cursorPrefix)
-		b.WriteString(strings.Repeat("│ ", args.indentLevel))
+		b.WriteString(r.getIndentString(args.indentLevel))
 
 		// Add branching characters
 		if !args.skipBranchingLine && numChildren > 1 {

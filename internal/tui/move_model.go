@@ -63,10 +63,11 @@ type MoveValidation struct {
 // branchItem represents a selectable branch in the list
 type branchItem struct {
 	name          string
-	display       string // Rendered display with tree characters (may be multi-line)
-	cursorLineIdx int    // Which line within display should have the cursor
-	isSource      bool   // Is this the branch being moved?
-	selectable    bool   // Can this branch be selected as a target?
+	display       string   // Rendered display with tree characters (may be multi-line)
+	displayLines  []string // Pre-split display lines (cached to avoid repeated splits in View)
+	cursorLineIdx int      // Which line within display should have the cursor
+	isSource      bool     // Is this the branch being moved?
+	selectable    bool     // Can this branch be selected as a target?
 }
 
 // MoveModel is the bubbletea model for the interactive move flow
@@ -182,6 +183,7 @@ func NewMoveModel(eng engine.Engine, config MoveModelConfig) *MoveModel {
 		branches = append(branches, branchItem{
 			name:          rb.Name,
 			display:       display,
+			displayLines:  rb.Lines, // Cache pre-split lines to avoid repeated splits in View
 			cursorLineIdx: rb.CursorLineIndex,
 			isSource:      isSource,
 			selectable:    selectable,
@@ -456,9 +458,8 @@ func (m *MoveModel) viewSelecting() string {
 
 	for i := m.scrollOffset; i < visibleEnd; i++ {
 		branch := m.branches[i]
-		displayLines := strings.Split(branch.display, "\n")
 
-		for lineIdx, line := range displayLines {
+		for lineIdx, line := range branch.displayLines {
 			// Cursor indicator - only on the cursorLineIdx for the selected branch
 			if i == m.cursor && lineIdx == branch.cursorLineIdx {
 				sb.WriteString(style.SelectionCursorStyle().Render(style.SelectionCursor))
