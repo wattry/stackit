@@ -303,6 +303,11 @@ func (b Branch) GetPrInfo() (*PrInfo, error) {
 	return b.reader.getPrInfo(b)
 }
 
+// GetMergedDownstack returns the merged downstack history for this branch
+func (b Branch) GetMergedDownstack() []git.MergedParent {
+	return b.reader.getMergedDownstack(b)
+}
+
 // GetExplicitScope returns the explicit scope set for this branch (no inheritance)
 func (b Branch) GetExplicitScope() Scope {
 	return b.reader.getExplicitScope(b)

@@ -32,6 +32,13 @@ const (
 	CheckStatusPending = "PENDING"
 )
 
+// MergedParentDisplay represents a historical merged parent for display purposes
+type MergedParentDisplay struct {
+	BranchName string
+	PRNumber   *int
+	PRState    string // "MERGED", "CLOSED"
+}
+
 // BranchAnnotation holds per-branch display metadata
 type BranchAnnotation struct {
 	PRNumber      *int
@@ -59,6 +66,9 @@ type BranchAnnotation struct {
 
 	// LocalSHA is the short commit SHA of the branch head (for debugging/diagnostics)
 	LocalSHA string
+
+	// MergedDownstack holds historical merged parents for display
+	MergedDownstack []MergedParentDisplay
 }
 
 // RenderMode specifies the rendering style for the tree.
@@ -873,6 +883,16 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 
 	result = append(result, cursorPrefix+prefix+styleObj.Render(symbol)+" "+coloredBranchName)
 
+	// Show merged downstack history (most recent first)
+	if !args.singleLine && !args.hideSummary && len(annotation.MergedDownstack) > 0 {
+		branchPipe := styleObj.Render("│")
+		for i := len(annotation.MergedDownstack) - 1; i >= 0; i-- {
+			merged := annotation.MergedDownstack[i]
+			historyLine := r.formatMergedParentLine(merged, prefix, branchPipe, selectionPadding)
+			result = append(result, historyLine)
+		}
+	}
+
 	if args.singleLine {
 		// Add compact indicators for single-line mode
 		compactSummary := r.formatCompactSummary(annotation, isTrunk)
@@ -989,6 +1009,31 @@ func (r *StackTreeRenderer) formatContextualStats(annotation BranchAnnotation) s
 	}
 
 	return strings.Join(parts, " ")
+}
+
+// formatMergedParentLine formats a single merged parent history line
+func (r *StackTreeRenderer) formatMergedParentLine(
+	merged MergedParentDisplay,
+	prefix string,
+	branchPipe string,
+	selectionPadding string,
+) string {
+	var text string
+	if merged.PRNumber != nil {
+		prNum := style.ColorPRNumberByState(*merged.PRNumber, merged.PRState, false)
+		text = fmt.Sprintf("previously based on %s", prNum)
+
+		switch merged.PRState {
+		case PRStateMerged:
+			text += " " + style.ColorDim("(merged)")
+		case PRStateClosed:
+			text += " " + style.ColorDim("(closed)")
+		}
+	} else {
+		text = fmt.Sprintf("previously based on %s", style.ColorDim(merged.BranchName))
+	}
+
+	return selectionPadding + prefix + branchPipe + "  " + style.ColorDim(text)
 }
 
 // formatCompactSummary returns a compact summary for single-line mode
