@@ -64,7 +64,7 @@ func TestRestackBranch_CapturesMergedHistory(t *testing.T) {
 		branch1 := s.Engine.GetBranch("branch1")
 		prNum := 99
 		prInfo := engine.NewPrInfoFull(&prNum, "Fix bug", "Body", prStateMerged, "main", "https://github.com/test/99", false, "", "")
-		err := s.Engine.UpsertPrInfo(branch1, prInfo)
+		err := s.Engine.UpsertPrInfo(context.Background(), branch1, prInfo)
 		require.NoError(t, err)
 
 		// Simulate branch1 being merged (mark it in metadata)

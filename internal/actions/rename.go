@@ -70,7 +70,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 			return fmt.Errorf("branch %s is associated with PR #%d. Renaming it will remove this association. Use --force to proceed", currentBranch, *prInfo.Number())
 		}
 		out.Info("Removing association with PR #%d as GitHub PR branch names are immutable.", *prInfo.Number())
-		if err := eng.UpsertPrInfo(branch, nil); err != nil {
+		if err := eng.UpsertPrInfo(ctx.Context, branch, nil); err != nil {
 			return fmt.Errorf("failed to update metadata: %w", err)
 		}
 	}

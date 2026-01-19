@@ -95,7 +95,7 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 
 	// Successfully updated (or already up to date), clear the PR body update flag and update local engine state
 	_ = ctx.Engine.ClearNeedsPRBodyUpdate(name)
-	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLockReason(branch.GetLockReason()))
+	_ = ctx.Engine.UpsertPrInfo(ctx.Context, branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLockReason(branch.GetLockReason()))
 
 	// Handle navigation comment based on location setting
 	switch navOpts.Location {

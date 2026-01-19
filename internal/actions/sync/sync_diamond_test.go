@@ -348,7 +348,7 @@ func TestSyncDiamondStackParentPreservation(t *testing.T) {
 func storeLocalPRInfo(t *testing.T, eng engine.Engine, branchName string, prNumber int, baseBranch string) {
 	t.Helper()
 	branch := eng.GetBranch(branchName)
-	err := eng.UpsertPrInfo(branch, testhelpers.NewTestPrInfoWithTitle(prNumber, branchName+" PR").
+	err := eng.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfoWithTitle(prNumber, branchName+" PR").
 		WithBase(baseBranch).
 		WithURL("https://github.com/owner/repo/pull/"+string(rune('0'+prNumber))))
 	require.NoError(t, err)

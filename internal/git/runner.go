@@ -49,13 +49,14 @@ func (r *runner) VerifyRef(ctx context.Context, refName string) error {
 
 // RefUpdate represents a single reference update operation.
 type RefUpdate struct {
-	RefName string
-	NewSHA  string
-	OldSHA  string // Optional: for optimistic locking verification
+	RefName  string
+	NewSHA   string
+	OldSHA   string // Optional: for optimistic locking verification
+	IsDelete bool   // If true, this is a deletion instead of an update
 }
 
 // UpdateRefsBatch performs atomic updates of multiple references using git update-ref --stdin.
-// All updates succeed or all fail.
+// All updates succeed or all fail. Supports both updates and deletions via the IsDelete flag.
 func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -63,10 +64,15 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 
 	var stdin strings.Builder
 	for _, update := range updates {
-		if update.OldSHA != "" {
-			stdin.WriteString(fmt.Sprintf("update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA))
-		} else {
-			stdin.WriteString(fmt.Sprintf("update %s %s\n", update.RefName, update.NewSHA))
+		switch {
+		case update.IsDelete && update.OldSHA != "":
+			fmt.Fprintf(&stdin, "delete %s %s\n", update.RefName, update.OldSHA)
+		case update.IsDelete:
+			fmt.Fprintf(&stdin, "delete %s\n", update.RefName)
+		case update.OldSHA != "":
+			fmt.Fprintf(&stdin, "update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA)
+		default:
+			fmt.Fprintf(&stdin, "update %s %s\n", update.RefName, update.NewSHA)
 		}
 	}
 
@@ -78,6 +84,7 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 }
 
 // UpdateRefsBatchWithLog performs atomic updates with a reflog message.
+// Supports both updates and deletions via the IsDelete flag.
 func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate, reflogMessage string) error {
 	if len(updates) == 0 {
 		return nil
@@ -85,10 +92,15 @@ func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate
 
 	var stdin strings.Builder
 	for _, update := range updates {
-		if update.OldSHA != "" {
-			stdin.WriteString(fmt.Sprintf("update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA))
-		} else {
-			stdin.WriteString(fmt.Sprintf("update %s %s\n", update.RefName, update.NewSHA))
+		switch {
+		case update.IsDelete && update.OldSHA != "":
+			fmt.Fprintf(&stdin, "delete %s %s\n", update.RefName, update.OldSHA)
+		case update.IsDelete:
+			fmt.Fprintf(&stdin, "delete %s\n", update.RefName)
+		case update.OldSHA != "":
+			fmt.Fprintf(&stdin, "update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA)
+		default:
+			fmt.Fprintf(&stdin, "update %s %s\n", update.RefName, update.NewSHA)
 		}
 	}
 

@@ -674,7 +674,7 @@ func TestUpsertPrInfo(t *testing.T) {
 		)
 
 		branch := s.Engine.GetBranch("branch1")
-		err := s.Engine.UpsertPrInfo(branch, prInfo)
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
 		require.NoError(t, err)
 
 		// Verify PR info
@@ -697,12 +697,12 @@ func TestUpsertPrInfo(t *testing.T) {
 		prInfo := testhelpers.NewTestPrInfoWithTitle(123, "Original Title")
 
 		branch := s.Engine.GetBranch("branch1")
-		err := s.Engine.UpsertPrInfo(branch, prInfo)
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
 		require.NoError(t, err)
 
 		// Update PR info
 		prInfo = prInfo.WithTitleAndBody("Updated Title", "Updated body")
-		err = s.Engine.UpsertPrInfo(branch, prInfo)
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
 		require.NoError(t, err)
 
 		// Verify updated PR info

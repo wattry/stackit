@@ -93,7 +93,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 
 		// Store PR info in engine
 		branch := s.Engine.GetBranch(branchName)
-		err = s.Engine.UpsertPrInfo(branch, testhelpers.NewTestPrInfoWithTitle(prNumber, prData.Title).
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfoWithTitle(prNumber, prData.Title).
 			WithBody(prData.Body).
 			WithIsDraft(prData.Draft))
 		require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 
 		// Store PR info in engine with A as the base (simulating after reorder)
 		branchB := s.Engine.GetBranch("B")
-		err = s.Engine.UpsertPrInfo(branchB, testhelpers.NewTestPrInfoWithTitle(prNumberB, prDataB.Title).
+		err = s.Engine.UpsertPrInfo(context.Background(), branchB, testhelpers.NewTestPrInfoWithTitle(prNumberB, prDataB.Title).
 			WithBody(prDataB.Body).
 			WithBase("main")) // Will be changed to "A" in prepareBranchesForSubmit
 		require.NoError(t, err)

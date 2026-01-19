@@ -74,9 +74,8 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 		return fmt.Errorf("branch cannot be its own parent")
 	}
 
+	// Validate branches exist (under lock for consistent reads)
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	// Update current branch if it changed
 	if current, err := e.git.GetCurrentBranch(); err == nil {
 		e.currentBranch = current
@@ -94,6 +93,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 		// Refresh branches list
 		branches, err := e.git.GetAllBranchNames()
 		if err != nil {
+			e.mu.Unlock()
 			return fmt.Errorf("failed to get branches: %w", err)
 		}
 		e.branches = branches
@@ -105,6 +105,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 			}
 		}
 		if !branchExists {
+			e.mu.Unlock()
 			return fmt.Errorf("branch %s does not exist", branchName)
 		}
 	}
@@ -122,6 +123,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 			// Refresh branches list to check again
 			branches, err := e.git.GetAllBranchNames()
 			if err != nil {
+				e.mu.Unlock()
 				return fmt.Errorf("failed to get branches: %w", err)
 			}
 			e.branches = branches
@@ -133,12 +135,15 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 				}
 			}
 			if !parentExists {
+				e.mu.Unlock()
 				return fmt.Errorf("parent branch %s does not exist", parentBranchName)
 			}
 		}
 	}
+	e.mu.Unlock()
 
-	return e.setParentInternal(ctx, branchName, parentBranchName)
+	// SetParent handles its own transaction and locking
+	return e.SetParent(ctx, e.GetBranch(branchName), e.GetBranch(parentBranchName))
 }
 
 // UntrackBranch stops tracking a branch by deleting its metadata
@@ -159,8 +164,8 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		return fmt.Errorf("cannot delete trunk branch")
 	}
 
+	// Get children and parent info under lock, then release for SetParent calls
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	// Get children before deletion
 	children := make([]string, len(e.childrenMap[branchName]))
@@ -177,12 +182,14 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		// Access trunk directly while holding the lock (avoid deadlock from e.Trunk() trying to acquire RLock)
 		trunkBranch := NewBranch(e.trunk, e)
 		if err := e.git.CheckoutBranch(ctx, trunkBranch.GetName()); err != nil {
+			e.mu.Unlock()
 			return fmt.Errorf("failed to switch to trunk before deleting current branch: %w", err)
 		}
 		e.currentBranch = e.trunk
 	}
+	e.mu.Unlock()
 
-	// Delete git branch
+	// Delete git branch (no lock needed for git operations)
 	if err := e.git.DeleteBranch(ctx, branch.GetName()); err != nil {
 		if !git.IsBranchNotFoundError(err) {
 			return fmt.Errorf("failed to delete branch: %w", err)
@@ -199,12 +206,17 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		_, _ = fmt.Fprintf(e.writer, "Warning: failed to delete local metadata ref for %s: %v\n", branchName, err)
 	}
 
-	// Update children to point to parent
+	// Update children to point to parent (SetParent handles its own transactions)
+	parentBranch := e.GetBranch(parent)
 	for _, child := range children {
-		if err := e.setParentInternal(ctx, child, parent); err != nil {
+		if err := e.SetParent(ctx, e.GetBranch(child), parentBranch); err != nil {
 			continue
 		}
 	}
+
+	// Clean up in-memory cache for deleted branch
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// Remove from parent's children list
 	if parent != "" {
@@ -317,11 +329,60 @@ func (e *engineImpl) CreateAndCheckoutBranch(ctx context.Context, branch Branch)
 	return nil
 }
 
-// SetParent updates a branch's parent
+// SetParent updates a branch's parent using transaction API with retry logic
+// for concurrent modification resilience.
 func (e *engineImpl) SetParent(ctx context.Context, branch Branch, parentBranch Branch) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.setParentInternal(ctx, branch.GetName(), parentBranch.GetName())
+	branchName := branch.GetName()
+	parentBranchName := parentBranch.GetName()
+
+	if branchName == parentBranchName {
+		return fmt.Errorf("branch %s cannot be its own parent", branchName)
+	}
+
+	return e.WithRetry(ctx, func() error {
+		// Get new parent revision (may run multiple times on retry)
+		parentRev, err := e.git.GetMergeBase(branchName, parentBranchName)
+		if err != nil {
+			return fmt.Errorf("failed to get merge base: %w", err)
+		}
+
+		// Read existing metadata
+		meta, err := e.git.ReadMetadata(branchName)
+		if err != nil {
+			return fmt.Errorf("failed to read metadata: %w", err)
+		}
+
+		// Get old parent
+		oldParent := ""
+		if meta.ParentBranchName != nil {
+			oldParent = *meta.ParentBranchName
+		}
+
+		// Only update ParentBranchRevision if it's currently nil, invalid, or if we're not
+		// in a "parent merged into trunk" situation.
+		shouldUpdateRevision := true
+		if oldParent != "" && oldParent != parentBranchName && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
+			// Check if existing revision is still a valid ancestor of the branch
+			if isAncestor, _ := e.git.IsAncestor(*meta.ParentBranchRevision, branchName); isAncestor {
+				// Check if the old parent was merged into the new parent (the "merge" case)
+				if merged, _ := e.git.IsMerged(ctx, oldParent, parentBranchName); merged {
+					shouldUpdateRevision = false
+				}
+			}
+		}
+
+		meta.ParentBranchName = &parentBranchName
+		if shouldUpdateRevision {
+			meta.ParentBranchRevision = &parentRev
+		}
+
+		// Use transaction for atomic update (Commit handles in-memory cache updates)
+		tx := e.BeginTx(fmt.Sprintf("set parent: %s -> %s", branchName, parentBranchName))
+		if err := tx.UpdateMeta(branchName, meta); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
 }
 
 // SetParentPreservingDivergence updates a branch's parent while preserving
@@ -337,68 +398,60 @@ func (e *engineImpl) SetParentPreservingDivergence(ctx context.Context, branch B
 	if oldDivergencePoint != "" {
 		isAncestor, err := e.git.IsAncestor(oldDivergencePoint, branch.GetName())
 		if err == nil && isAncestor {
-			return e.UpdateParentRevision(branch.GetName(), oldDivergencePoint)
+			return e.UpdateParentRevision(ctx, branch.GetName(), oldDivergencePoint)
 		}
 	}
 
 	return nil
 }
 
-// UpdateParentRevision updates the parent revision in metadata
-func (e *engineImpl) UpdateParentRevision(branchName string, parentRev string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+// UpdateParentRevision updates the parent revision in metadata using transaction API
+// with retry logic for concurrent modification resilience.
+func (e *engineImpl) UpdateParentRevision(ctx context.Context, branchName string, parentRev string) error {
+	return e.WithRetry(ctx, func() error {
+		// Read existing metadata (outside lock for performance)
+		meta, err := e.git.ReadMetadata(branchName)
+		if err != nil {
+			return fmt.Errorf("failed to read metadata: %w", err)
+		}
 
-	meta, err := e.git.ReadMetadata(branchName)
-	if err != nil {
-		return fmt.Errorf("failed to read metadata: %w", err)
-	}
+		meta.ParentBranchRevision = &parentRev
 
-	meta.ParentBranchRevision = &parentRev
-
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
-		return fmt.Errorf("failed to write metadata: %w", err)
-	}
-
-	return nil
+		// Use transaction for atomic update
+		tx := e.BeginTx(fmt.Sprintf("update parent revision: %s", branchName))
+		if err := tx.UpdateMeta(branchName, meta); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
 }
 
-// SetScope updates a branch's scope
-func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
+// SetScope updates a branch's scope with retry logic for concurrent modification resilience.
+func (e *engineImpl) SetScope(ctx context.Context, branch Branch, scope Scope) error {
 	branchName := branch.GetName()
 
-	// Read existing metadata
-	meta, err := e.git.ReadMetadata(branchName)
-	if err != nil {
-		return fmt.Errorf("failed to read metadata: %w", err)
-	}
-
-	// Update scope
-	if scope.IsEmpty() {
-		meta.Scope = nil
-	} else {
-		scopeStr := scope.String()
-		meta.Scope = &scopeStr
-	}
-
-	// Write metadata
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
-		return fmt.Errorf("failed to write metadata: %w", err)
-	}
-
-	// Update in-memory state
-	if state := e.branchState.GetByName(branchName); state != nil {
-		if scope.IsEmpty() {
-			state.Scope = ""
-		} else {
-			state.Scope = scope.String()
+	return e.WithRetry(ctx, func() error {
+		// Read existing metadata (outside lock for performance)
+		meta, err := e.git.ReadMetadata(branchName)
+		if err != nil {
+			return fmt.Errorf("failed to read metadata: %w", err)
 		}
-	}
 
-	return nil
+		// Update scope
+		if scope.IsEmpty() {
+			meta.Scope = nil
+		} else {
+			scopeStr := scope.String()
+			meta.Scope = &scopeStr
+		}
+
+		// Use transaction for atomic update
+		tx := e.BeginTx(fmt.Sprintf("set scope: %s", branchName))
+		if err := tx.UpdateMeta(branchName, meta); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
 }
 
 // SetLocked updates multiple branches' locked status atomically using transactions.
@@ -898,85 +951,4 @@ func (e *engineImpl) GetBranchesNeedingPRBodyUpdate() []string {
 		}
 	}
 	return result
-}
-
-// setParentInternal updates parent without locking (caller must hold lock)
-func (e *engineImpl) setParentInternal(ctx context.Context, branchName string, parentBranchName string) error {
-	if branchName == parentBranchName {
-		return fmt.Errorf("branch %s cannot be its own parent", branchName)
-	}
-
-	// Get new parent revision
-	parentRev, err := e.git.GetMergeBase(branchName, parentBranchName)
-	if err != nil {
-		return fmt.Errorf("failed to get merge base: %w", err)
-	}
-
-	// Read existing metadata
-	meta, err := e.git.ReadMetadata(branchName)
-	if err != nil {
-		return fmt.Errorf("failed to read metadata: %w", err)
-	}
-
-	// Update parent
-	oldParent := ""
-	if meta.ParentBranchName != nil {
-		oldParent = *meta.ParentBranchName
-	}
-
-	// Only update ParentBranchRevision if it's currently nil, invalid, or if we're not
-	// in a "parent merged into trunk" situation.
-	shouldUpdateRevision := true
-	if oldParent != "" && oldParent != parentBranchName && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
-		// Check if existing revision is still a valid ancestor of the branch
-		if isAncestor, _ := e.git.IsAncestor(*meta.ParentBranchRevision, branchName); isAncestor {
-			// Check if the old parent was merged into the new parent (the "merge" case)
-			// OR if the new parent is the same as the old parent (no change)
-			// We use the branch name to check for merging.
-			if merged, _ := e.git.IsMerged(ctx, oldParent, parentBranchName); merged {
-				shouldUpdateRevision = false
-			}
-		}
-	}
-
-	meta.ParentBranchName = &parentBranchName
-	if shouldUpdateRevision {
-		meta.ParentBranchRevision = &parentRev
-	}
-
-	// Write metadata
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
-		return fmt.Errorf("failed to write metadata: %w", err)
-	}
-
-	// Update in-memory maps
-	if oldParent != "" {
-		// Remove from old parent's children
-		oldChildren := e.childrenMap[oldParent]
-		if i := slices.Index(oldChildren, branchName); i >= 0 {
-			e.childrenMap[oldParent] = slices.Delete(oldChildren, i, i+1)
-		}
-	}
-
-	// Update branchState with new parent
-	state := e.branchState.GetOrCreate(branchName)
-	state.Parent = parentBranchName
-	if e.childrenMap[parentBranchName] == nil {
-		e.childrenMap[parentBranchName] = []string{}
-	}
-
-	// Check if already in children list
-	found := false
-	for _, c := range e.childrenMap[parentBranchName] {
-		if c == branchName {
-			found = true
-			break
-		}
-	}
-	if !found {
-		e.childrenMap[parentBranchName] = append(e.childrenMap[parentBranchName], branchName)
-		slices.Sort(e.childrenMap[parentBranchName])
-	}
-
-	return nil
 }

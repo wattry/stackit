@@ -13,7 +13,7 @@ import (
 // prCleanupEngine is the minimal interface needed for PR cleanup
 type prCleanupEngine interface {
 	GetBranch(name string) engine.Branch
-	UpsertPrInfo(branch engine.Branch, prInfo *engine.PrInfo) error
+	UpsertPrInfo(ctx context.Context, branch engine.Branch, prInfo *engine.PrInfo) error
 }
 
 // PRCleanupSource identifies how a consolidation happened (for footer text)
@@ -132,7 +132,7 @@ func (c *PRCleaner) CleanupBranches(ctx context.Context, branchNames []string) P
 		}
 
 		// Upsert PR info to keep metadata in sync
-		if err := c.engine.UpsertPrInfo(branch, prInfo); err != nil {
+		if err := c.engine.UpsertPrInfo(ctx, branch, prInfo); err != nil {
 			out.Debug("Failed to upsert PR info for %s: %v", branchName, err)
 		}
 

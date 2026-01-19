@@ -211,7 +211,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		handler.OnStep(StepScope, StatusStarted, fmt.Sprintf("Setting scope to %s", opts.Scope))
 		// Set explicit scope if provided
 		newScope := engine.NewScope(opts.Scope)
-		if err := eng.SetScope(branch, newScope); err != nil {
+		if err := eng.SetScope(ctx.Context, branch, newScope); err != nil {
 			handler.OnStep(StepScope, StatusFailed, err.Error())
 			out.Info("Warning: failed to set scope: %v", err)
 		} else {

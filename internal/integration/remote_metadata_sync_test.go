@@ -30,7 +30,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		branch := eng.GetBranch("feature-a")
 		_, err := eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonNone)
 		require.NoError(t, err)
-		require.NoError(t, eng.SetScope(branch, engine.NewScope("local-scope")))
+		require.NoError(t, eng.SetScope(context.Background(), branch, engine.NewScope("local-scope")))
 
 		// Verify local metadata
 		require.False(t, eng.IsLocked(branch))
@@ -89,7 +89,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		branch := eng.GetBranch("feature-b")
 		_, err := eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
-		require.NoError(t, eng.SetScope(branch, engine.NewScope("same-scope")))
+		require.NoError(t, eng.SetScope(context.Background(), branch, engine.NewScope("same-scope")))
 
 		// Create identical remote metadata
 		remoteMeta := &git.Meta{

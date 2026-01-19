@@ -59,7 +59,7 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 		if isOnTrunk {
 			return fmt.Errorf("cannot unset scope on trunk")
 		}
-		if err := eng.SetScope(eng.GetBranch(currentBranch), engine.Empty()); err != nil {
+		if err := eng.SetScope(ctx.Context, eng.GetBranch(currentBranch), engine.Empty()); err != nil {
 			return fmt.Errorf("failed to unset scope: %w", err)
 		}
 		out.Info("Unset explicit scope for branch %s. It will now inherit from its parent.", style.ColorBranchName(currentBranch, false))
@@ -85,7 +85,7 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 	currentBranchObj := eng.GetBranch(currentBranch)
 	oldScope := eng.GetScope(currentBranchObj)
 	newScope := engine.NewScope(opts.Scope)
-	if err := eng.SetScope(eng.GetBranch(currentBranch), newScope); err != nil {
+	if err := eng.SetScope(ctx.Context, eng.GetBranch(currentBranch), newScope); err != nil {
 		return fmt.Errorf("failed to set scope: %w", err)
 	}
 

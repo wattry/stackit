@@ -13,6 +13,8 @@ import (
 	"stackit.dev/stackit/testhelpers/scenario"
 )
 
+const mainBranch = "main"
+
 // branchName generates a branch name from an index
 func branchName(i int) string {
 	return fmt.Sprintf("branch-%d", i)
@@ -63,7 +65,7 @@ func BenchmarkWorktreeCreation(b *testing.B) {
 	// Create engine
 	eng, err := engine.NewEngine(engine.Options{
 		RepoRoot: repoPath,
-		Trunk:    "main",
+		Trunk:    mainBranch,
 	})
 	if err != nil {
 		b.Fatalf("failed to create engine: %v", err)
@@ -115,19 +117,19 @@ func benchmarkWideStack(b *testing.B, numBranches int) {
 		// Create N sibling branches
 		branches := make(map[string]string)
 		for i := 0; i < numBranches; i++ {
-			branches[branchName(i)] = "main"
+			branches[branchName(i)] = mainBranch
 		}
 		s = setupScenario.WithStack(branches)
 
 		// Add commit to main
-		s.Checkout("main").Commit("main update")
+		s.Checkout(mainBranch).Commit("main update")
 	}
 
 	// Setup before timing
 	setupBenchmark()
 
 	mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
-	oldBase, _ := s.Engine.Git().GetMergeBase("main", branchName(0))
+	oldBase, _ := s.Engine.Git().GetMergeBase(mainBranch, branchName(0))
 
 	// Build specs
 	specs := make([]engine.RebaseSpec, numBranches)
@@ -158,7 +160,7 @@ func benchmarkLinearStack(b *testing.B, depth int) {
 		branches := make(map[string]string)
 		for i := 0; i < depth; i++ {
 			if i == 0 {
-				branches[branchName(i)] = "main"
+				branches[branchName(i)] = mainBranch
 			} else {
 				branches[branchName(i)] = branchName(i - 1)
 			}
@@ -166,13 +168,13 @@ func benchmarkLinearStack(b *testing.B, depth int) {
 		s = setupScenario.WithStack(branches)
 
 		// Add commit to main
-		s.Checkout("main").Commit("main update")
+		s.Checkout(mainBranch).Commit("main update")
 	}
 
 	setupBenchmark()
 
 	mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
-	oldBase, _ := s.Engine.Git().GetMergeBase("main", branchName(0))
+	oldBase, _ := s.Engine.Git().GetMergeBase(mainBranch, branchName(0))
 
 	// Build specs for chained rebases
 	specs := make([]engine.RebaseSpec, depth)
@@ -219,13 +221,13 @@ func benchmarkMixedStack(b *testing.B) {
 			})
 
 		// Add commit to main
-		s.Checkout("main").Commit("main update")
+		s.Checkout(mainBranch).Commit("main update")
 	}
 
 	setupBenchmark()
 
 	mainRev, _ := s.Engine.GetRevision(s.Engine.Trunk())
-	oldBase, _ := s.Engine.Git().GetMergeBase("main", "feature-a")
+	oldBase, _ := s.Engine.Git().GetMergeBase(mainBranch, "feature-a")
 
 	// Get revisions for chaining
 	featureARev, _ := s.Engine.GetRevision(s.Engine.GetBranch("feature-a"))

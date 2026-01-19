@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestScopeSubmitSyncFlow(t *testing.T) {
 	branch := eng.GetBranch("feature")
 
 	// 2. Set a scope locally
-	require.NoError(t, eng.SetScope(branch, engine.NewScope("JIRA-123")))
+	require.NoError(t, eng.SetScope(context.Background(), branch, engine.NewScope("JIRA-123")))
 	require.Equal(t, "JIRA-123", eng.GetScope(branch).String())
 
 	// 3. Setup a local remote to simulate "origin"

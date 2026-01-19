@@ -30,7 +30,7 @@ func TestPrInfoLockedPersistence(t *testing.T) {
 	// 2. Upsert PR info with lockReason="user"
 	prNumber := 123
 	prInfo := engine.NewPrInfo(&prNumber, "Title", "Body", "OPEN", "main", "http://url", false).WithLockReason(engine.LockReasonUser)
-	err = eng.UpsertPrInfo(branch, prInfo)
+	err = eng.UpsertPrInfo(context.Background(), branch, prInfo)
 	require.NoError(t, err)
 
 	// Simulate push by updating remote SHA

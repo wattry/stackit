@@ -32,7 +32,7 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 				lockReason = existing.LockReason()
 			}
 
-			_ = pr.UpsertPrInfo(branch, engine.NewPrInfo(
+			_ = pr.UpsertPrInfo(ctx.Context, branch, engine.NewPrInfo(
 				&prInfo.Number,
 				prInfo.Title,
 				prInfo.Body,

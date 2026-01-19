@@ -220,7 +220,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		// SetParent uses merge-base which may be incorrect when flattening branches
 		// that have diverged from their original parent.
 		if oldUpstream, ok := oldUpstreamMap[move.Branch]; ok {
-			if err := eng.UpdateParentRevision(move.Branch, oldUpstream); err != nil {
+			if err := eng.UpdateParentRevision(gctx, move.Branch, oldUpstream); err != nil {
 				out.Debug("Failed to update parent revision for %s: %v", move.Branch, err)
 			}
 		}

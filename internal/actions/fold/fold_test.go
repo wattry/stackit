@@ -370,9 +370,9 @@ func TestFoldAction(t *testing.T) {
 		// Set different scopes on the branches
 		branch1 := s.Engine.GetBranch("branch1")
 		branch2 := s.Engine.GetBranch("branch2")
-		err := s.Engine.SetScope(branch1, engine.NewScope("PROJ-123"))
+		err := s.Engine.SetScope(context.Background(), branch1, engine.NewScope("PROJ-123"))
 		require.NoError(t, err)
-		err = s.Engine.SetScope(branch2, engine.NewScope("PROJ-456"))
+		err = s.Engine.SetScope(context.Background(), branch2, engine.NewScope("PROJ-456"))
 		require.NoError(t, err)
 
 		// Switch to branch2 and try to fold

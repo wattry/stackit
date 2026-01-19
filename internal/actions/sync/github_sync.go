@@ -86,7 +86,7 @@ func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, dirtyAn
 			lockReason = existing.LockReason()
 		}
 
-		_ = eng.UpsertPrInfo(branch, engine.NewPrInfo(
+		_ = eng.UpsertPrInfo(ctx.Context, branch, engine.NewPrInfo(
 			&prInfo.Number,
 			prInfo.Title,
 			prInfo.Body,

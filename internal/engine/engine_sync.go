@@ -657,7 +657,7 @@ func (e *engineImpl) ContinueRebase(ctx context.Context, branchName string, reba
 
 	// Update metadata
 	if rebasedBranchBase != "" {
-		if err := e.UpdateParentRevision(branchName, rebasedBranchBase); err != nil {
+		if err := e.UpdateParentRevision(ctx, branchName, rebasedBranchBase); err != nil {
 			return ContinueRebaseResult{BranchName: branchName}, fmt.Errorf("failed to update metadata: %w", err)
 		}
 	}

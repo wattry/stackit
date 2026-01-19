@@ -442,9 +442,17 @@ func (e *engineImpl) DeleteLocalMetadataHash(branchName string) error {
 	return e.git.WriteMetadata(branchName, local)
 }
 
-// DeleteMetadata deletes the metadata ref for a branch
-func (e *engineImpl) DeleteMetadata(_ context.Context, branchName string) error {
-	return e.git.DeleteMetadata(branchName)
+// DeleteMetadata deletes the metadata ref for a branch with retry logic.
+// Uses the transaction API to ensure concurrent modification resilience
+// and proper in-memory cache cleanup.
+func (e *engineImpl) DeleteMetadata(ctx context.Context, branchName string) error {
+	return e.WithRetry(ctx, func() error {
+		tx := e.BeginTx(fmt.Sprintf("delete metadata: %s", branchName))
+		if err := tx.DeleteMeta(branchName); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
 }
 
 // FetchRemoteMetadata fetches metadata refs from origin

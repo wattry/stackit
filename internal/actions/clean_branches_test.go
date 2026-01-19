@@ -31,7 +31,7 @@ func TestCleanBranches(t *testing.T) {
 		// Mark branch1 as merged via PR info
 		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
 		branch := s.Engine.GetBranch("branch1")
-		err = s.Engine.UpsertPrInfo(branch, prInfo)
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
 		require.NoError(t, err)
 
 		result, err := actions.CleanBranches(s.Context, actions.CleanBranchesOptions{
@@ -69,7 +69,7 @@ func TestCleanBranches(t *testing.T) {
 		// Mark branch1 as merged
 		prInfo := testhelpers.NewTestPrInfoWithState(1, "MERGED")
 		branch := s.Engine.GetBranch("branch1")
-		err = s.Engine.UpsertPrInfo(branch, prInfo)
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
 		require.NoError(t, err)
 
 		result, err := actions.CleanBranches(s.Context, actions.CleanBranchesOptions{
@@ -128,7 +128,7 @@ func TestCleanBranches(t *testing.T) {
 
 		// Mark branch1 as merged via PR info
 		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
-		err = s.Engine.UpsertPrInfo(branch, prInfo)
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
 		require.NoError(t, err)
 
 		// Clean should delete the locked branch
@@ -152,7 +152,7 @@ func TestCleanBranches(t *testing.T) {
 		// branch2: IS merged
 		prInfo := testhelpers.NewTestPrInfoMerged(2, "branch1")
 		branch2 := s.Engine.GetBranch("branch2")
-		err := s.Engine.UpsertPrInfo(branch2, prInfo)
+		err := s.Engine.UpsertPrInfo(context.Background(), branch2, prInfo)
 		require.NoError(t, err)
 
 		_, err = actions.CleanBranches(s.Context, actions.CleanBranchesOptions{

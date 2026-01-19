@@ -288,7 +288,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	for _, b := range branchesToLock {
 		prInfo, _ := b.GetPrInfo()
 		if prInfo != nil {
-			if err := c.engine.UpsertPrInfo(b, prInfo.WithMergeBranch(consolidationBranch)); err != nil {
+			if err := c.engine.UpsertPrInfo(c.ctx.Context, b, prInfo.WithMergeBranch(consolidationBranch)); err != nil {
 				splog.Debug("Failed to upsert PR info for %s: %v", b.GetName(), err)
 			}
 		}

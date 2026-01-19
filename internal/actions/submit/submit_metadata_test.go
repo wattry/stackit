@@ -64,7 +64,7 @@ func TestPreparePRMetadata_DraftStatus(t *testing.T) {
 
 		// Create existing PR info with draft status
 		branch := s.Engine.GetBranch(branchName)
-		err := s.Engine.UpsertPrInfo(branch, testhelpers.NewTestPrInfoEmpty().
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfoEmpty().
 			WithTitle("Existing PR").
 			WithBody("PR body").
 			WithIsDraft(true))
@@ -81,7 +81,7 @@ func TestPreparePRMetadata_DraftStatus(t *testing.T) {
 
 		// Test with non-draft existing PR
 		branch = s.Engine.GetBranch(branchName)
-		err = s.Engine.UpsertPrInfo(branch, testhelpers.NewTestPrInfoEmpty().
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfoEmpty().
 			WithTitle("Existing PR").
 			WithBody("PR body").
 			WithIsDraft(false))
@@ -98,7 +98,7 @@ func TestPreparePRMetadata_DraftStatus(t *testing.T) {
 
 		// Create existing PR info with non-draft status
 		branch := s.Engine.GetBranch(branchName)
-		err := s.Engine.UpsertPrInfo(branch, testhelpers.NewTestPrInfoEmpty().
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfoEmpty().
 			WithTitle("Existing PR").
 			WithBody("PR body").
 			WithIsDraft(false))
@@ -120,7 +120,7 @@ func TestPreparePRMetadata_DraftStatus(t *testing.T) {
 
 		// Create existing PR info with draft status
 		branch := s.Engine.GetBranch(branchName)
-		err := s.Engine.UpsertPrInfo(branch, testhelpers.NewTestPrInfoEmpty().
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfoEmpty().
 			WithTitle("Existing PR").
 			WithBody("PR body").
 			WithIsDraft(true))

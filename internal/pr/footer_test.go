@@ -134,7 +134,7 @@ func TestShouldShowNavigation(t *testing.T) {
 		// Mock a PR for the branch
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "always"}
@@ -150,7 +150,7 @@ func TestShouldShowNavigation(t *testing.T) {
 
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "never"}
@@ -166,7 +166,7 @@ func TestShouldShowNavigation(t *testing.T) {
 
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "multiple"}
@@ -186,12 +186,12 @@ func TestShouldShowNavigation(t *testing.T) {
 		// Add PRs to both branches
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title A", "Body A", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title A", "Body A", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		branch2 := s.Engine.GetBranch("feature-b")
 		prNum2 := 2
-		err = s.Engine.UpsertPrInfo(branch2, engine.NewPrInfo(&prNum2, "Title B", "Body B", "OPEN", "feature-a", "http://pr/2", false))
+		err = s.Engine.UpsertPrInfo(context.Background(), branch2, engine.NewPrInfo(&prNum2, "Title B", "Body B", "OPEN", "feature-a", "http://pr/2", false))
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "multiple"}
@@ -209,7 +209,7 @@ func TestCreatePRBodyFooterWithOptions(t *testing.T) {
 
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "always", Marker: "<--"}
@@ -286,7 +286,7 @@ func TestCreateNavigationComment(t *testing.T) {
 
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "always", Marker: "👈"}
@@ -305,11 +305,11 @@ func TestCreateNavigationComment(t *testing.T) {
 
 		branch := s.Engine.GetBranch("feature-a")
 		prNum := 1
-		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
 		require.NoError(t, err)
 
 		// Lock the branch
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		opts := NavigationOptions{When: "always", Marker: "👈"}

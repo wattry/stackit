@@ -399,7 +399,7 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 	branch := nav.GetBranch(submissionInfo.BranchName)
 	// Use bodyToCreate (the body that was actually sent) instead of submissionInfo.Metadata.Body
 	// This ensures local state matches what's on GitHub
-	_ = pr.UpsertPrInfo(branch, engine.NewPrInfo(
+	_ = pr.UpsertPrInfo(ctx.Context, branch, engine.NewPrInfo(
 		&prNumber,
 		submissionInfo.Metadata.Title,
 		bodyToCreate,
@@ -486,7 +486,7 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		}
 	}
 
-	_ = pr.UpsertPrInfo(branch, engine.NewPrInfo(
+	_ = pr.UpsertPrInfo(ctx.Context, branch, engine.NewPrInfo(
 		submissionInfo.PRNumber,
 		submissionInfo.Metadata.Title,
 		submissionInfo.Metadata.Body,

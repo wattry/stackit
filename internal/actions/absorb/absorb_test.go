@@ -1,6 +1,7 @@
 package absorb
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,9 +24,9 @@ func TestAbsorbScopeBoundaries(t *testing.T) {
 			})
 
 		// Set scopes: scoped-a and scoped-b have PROJ-123, unscoped-c has no scope
-		err := s.Engine.SetScope(s.Engine.GetBranch("scoped-a"), engine.NewScope("PROJ-123"))
+		err := s.Engine.SetScope(context.Background(), s.Engine.GetBranch("scoped-a"), engine.NewScope("PROJ-123"))
 		require.NoError(t, err)
-		err = s.Engine.SetScope(s.Engine.GetBranch("scoped-b"), engine.NewScope("PROJ-123"))
+		err = s.Engine.SetScope(context.Background(), s.Engine.GetBranch("scoped-b"), engine.NewScope("PROJ-123"))
 		require.NoError(t, err)
 		// unscoped-c has no scope
 
@@ -141,13 +142,13 @@ func TestAbsorbScopeBoundaries(t *testing.T) {
 			})
 
 		// Set mixed scopes: PROJ-123 for a/b, PROJ-456 for c/d
-		err := s.Engine.SetScope(s.Engine.GetBranch("scoped-a"), engine.NewScope("PROJ-123"))
+		err := s.Engine.SetScope(context.Background(), s.Engine.GetBranch("scoped-a"), engine.NewScope("PROJ-123"))
 		require.NoError(t, err)
-		err = s.Engine.SetScope(s.Engine.GetBranch("scoped-b"), engine.NewScope("PROJ-123"))
+		err = s.Engine.SetScope(context.Background(), s.Engine.GetBranch("scoped-b"), engine.NewScope("PROJ-123"))
 		require.NoError(t, err)
-		err = s.Engine.SetScope(s.Engine.GetBranch("different-c"), engine.NewScope("PROJ-456"))
+		err = s.Engine.SetScope(context.Background(), s.Engine.GetBranch("different-c"), engine.NewScope("PROJ-456"))
 		require.NoError(t, err)
-		err = s.Engine.SetScope(s.Engine.GetBranch("scoped-d"), engine.NewScope("PROJ-456"))
+		err = s.Engine.SetScope(context.Background(), s.Engine.GetBranch("scoped-d"), engine.NewScope("PROJ-456"))
 		require.NoError(t, err)
 
 		// Switch to scoped-b (PROJ-123)

@@ -47,6 +47,10 @@ type MetadataTx struct {
 	metaUpdates  map[string]*git.Meta
 	localUpdates map[string]*git.LocalMeta
 
+	// Staged deletions
+	metaDeletes      map[string]bool
+	localMetaDeletes map[string]bool
+
 	// Original ref SHAs for compare-and-swap validation
 	originalMeta      map[string]string
 	originalLocalMeta map[string]string
@@ -64,6 +68,8 @@ func (e *engineImpl) BeginTx(message string) *MetadataTx {
 		eng:               e,
 		metaUpdates:       make(map[string]*git.Meta),
 		localUpdates:      make(map[string]*git.LocalMeta),
+		metaDeletes:       make(map[string]bool),
+		localMetaDeletes:  make(map[string]bool),
 		originalMeta:      make(map[string]string),
 		originalLocalMeta: make(map[string]string),
 		message:           message,
@@ -113,7 +119,54 @@ func (tx *MetadataTx) UpdateLocalMeta(branch string, meta *git.LocalMeta) error 
 	return nil
 }
 
-// Commit atomically applies all staged metadata changes.
+// DeleteMeta stages a metadata deletion for atomic commit.
+// The deletion uses CAS validation to ensure the ref hasn't changed.
+func (tx *MetadataTx) DeleteMeta(branch string) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.committed {
+		return ErrTransactionCommitted
+	}
+	if tx.rolledBack {
+		return ErrTransactionRolledBack
+	}
+
+	// Capture original SHA on first access for CAS validation
+	if _, exists := tx.originalMeta[branch]; !exists {
+		tx.originalMeta[branch] = tx.eng.git.GetMetadataRefSHA(branch)
+	}
+
+	// Remove from updates if previously staged (delete takes precedence)
+	delete(tx.metaUpdates, branch)
+	tx.metaDeletes[branch] = true
+	return nil
+}
+
+// DeleteLocalMeta stages a local metadata deletion for atomic commit.
+func (tx *MetadataTx) DeleteLocalMeta(branch string) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.committed {
+		return ErrTransactionCommitted
+	}
+	if tx.rolledBack {
+		return ErrTransactionRolledBack
+	}
+
+	// Capture original SHA on first access for CAS validation
+	if _, exists := tx.originalLocalMeta[branch]; !exists {
+		tx.originalLocalMeta[branch] = tx.eng.git.GetLocalMetadataRefSHA(branch)
+	}
+
+	// Remove from updates if previously staged (delete takes precedence)
+	delete(tx.localUpdates, branch)
+	tx.localMetaDeletes[branch] = true
+	return nil
+}
+
+// Commit atomically applies all staged metadata changes and deletions.
 // All updates succeed together or fail together via git update-ref --stdin.
 // On success, the in-memory cache is updated to reflect the changes.
 func (tx *MetadataTx) Commit(ctx context.Context) error {
@@ -127,13 +180,15 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 		return ErrTransactionRolledBack
 	}
 
-	if len(tx.metaUpdates) == 0 && len(tx.localUpdates) == 0 {
+	if len(tx.metaUpdates) == 0 && len(tx.localUpdates) == 0 &&
+		len(tx.metaDeletes) == 0 && len(tx.localMetaDeletes) == 0 {
 		tx.committed = true
 		return nil
 	}
 
 	// Build batch of ref updates with deterministic ordering
-	refUpdates := make([]git.RefUpdate, 0, len(tx.metaUpdates)+len(tx.localUpdates))
+	totalOps := len(tx.metaUpdates) + len(tx.localUpdates) + len(tx.metaDeletes) + len(tx.localMetaDeletes)
+	refUpdates := make([]git.RefUpdate, 0, totalOps)
 
 	// Sort branch names for deterministic order (makes debugging easier)
 	metaBranches := make([]string, 0, len(tx.metaUpdates))
@@ -177,6 +232,36 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 		})
 	}
 
+	// Add metadata deletions
+	metaDeleteBranches := make([]string, 0, len(tx.metaDeletes))
+	for branch := range tx.metaDeletes {
+		metaDeleteBranches = append(metaDeleteBranches, branch)
+	}
+	slices.Sort(metaDeleteBranches)
+
+	for _, branch := range metaDeleteBranches {
+		refUpdates = append(refUpdates, git.RefUpdate{
+			RefName:  git.MetadataRefName(branch),
+			OldSHA:   tx.originalMeta[branch], // CAS validation
+			IsDelete: true,
+		})
+	}
+
+	// Add local metadata deletions
+	localMetaDeleteBranches := make([]string, 0, len(tx.localMetaDeletes))
+	for branch := range tx.localMetaDeletes {
+		localMetaDeleteBranches = append(localMetaDeleteBranches, branch)
+	}
+	slices.Sort(localMetaDeleteBranches)
+
+	for _, branch := range localMetaDeleteBranches {
+		refUpdates = append(refUpdates, git.RefUpdate{
+			RefName:  git.LocalMetadataRefName(branch),
+			OldSHA:   tx.originalLocalMeta[branch], // CAS validation
+			IsDelete: true,
+		})
+	}
+
 	// Atomic batch update with reflog message
 	if err := tx.eng.git.UpdateRefsBatchWithLog(ctx, refUpdates, tx.message); err != nil {
 		return fmt.Errorf("atomic commit failed: %w", err)
@@ -189,6 +274,10 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	}
 	for _, branch := range localBranches {
 		tx.eng.updateBranchStateFromLocalMeta(branch, tx.localUpdates[branch])
+	}
+	// Remove deleted branches from cache
+	for _, branch := range metaDeleteBranches {
+		tx.eng.removeBranchFromState(branch)
 	}
 	tx.eng.mu.Unlock()
 
@@ -261,6 +350,33 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 func (e *engineImpl) updateBranchStateFromLocalMeta(branch string, meta *git.LocalMeta) {
 	state := e.branchState.GetOrCreate(branch)
 	state.Frozen = meta.Frozen
+}
+
+// removeBranchFromState removes a branch from in-memory caches.
+//
+// IMPORTANT: Caller MUST hold e.mu lock before calling this function.
+// This function modifies e.childrenMap and e.branchState which are not
+// individually thread-safe.
+func (e *engineImpl) removeBranchFromState(branch string) {
+	state := e.branchState.GetByName(branch)
+	if state == nil {
+		return
+	}
+
+	// Remove from parent's children list
+	if state.Parent != "" {
+		parentChildren := e.childrenMap[state.Parent]
+		for i, c := range parentChildren {
+			if c == branch {
+				e.childrenMap[state.Parent] = append(parentChildren[:i], parentChildren[i+1:]...)
+				break
+			}
+		}
+	}
+
+	// Delete branch state and children map entry
+	e.branchState.Delete(branch)
+	delete(e.childrenMap, branch)
 }
 
 // IsConcurrentModificationError returns true if the error indicates a concurrent
