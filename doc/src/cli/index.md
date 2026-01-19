@@ -65,8 +65,9 @@ Manage your entire stack.
 Work on multiple stacks simultaneously.
 
 - `stackit create -w` - Create branch with worktree
+- `stackit worktree create` - Create a standalone worktree
 - `stackit worktree list` - List all worktrees
-- `stackit worktree open` - Get worktree path
+- `stackit worktree open` - Open worktree (auto-cd with shell integration)
 
 ## Global flags
 

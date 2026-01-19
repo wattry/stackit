@@ -158,6 +158,10 @@ stackit worktree remove <stack-name>
 Or navigate to the existing worktree:
 
 ```bash
+# With shell integration
+stackit worktree open <stack-name>
+
+# Without shell integration
 cd $(stackit worktree open <stack-name>)
 ```
 

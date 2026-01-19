@@ -155,9 +155,13 @@ This creates:
 - A new tracked branch `my-feature`
 - A worktree at `../your-repo-stacks/my-feature/`
 
-Navigate to worktrees with:
+Navigate to worktrees:
 
 ```bash
+# With shell integration: auto-changes directory
+stackit worktree open my-feature
+
+# Without shell integration: use command substitution
 cd $(stackit worktree open my-feature)
 ```
 

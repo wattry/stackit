@@ -67,7 +67,7 @@ In interactive mode, you will be prompted to open the worktree if --open is not 
 				shouldOpen := open
 				if !shouldOpen && tui.IsTTY() {
 					// Prompt in interactive mode
-					confirmed, promptErr := tui.PromptConfirm("Open worktree now?", true)
+					confirmed, promptErr := tui.PromptConfirm("Change to worktree directory now?", true)
 					if promptErr == nil && confirmed {
 						shouldOpen = true
 					}
@@ -195,12 +195,13 @@ To enable shell integration, add to your shell config:
 					return err
 				}
 
+				// Always print the path for scripting compatibility (cd $(stackit worktree open foo))
+				ctx.Output.Print(path)
+				ctx.Output.Newline()
+
+				// Also emit directive for shell integration auto-cd
 				if common.HasShellIntegration() {
 					ctx.Output.DirectiveCD(path)
-				} else {
-					// Print just the path so it can be used with cd
-					ctx.Output.Print(path)
-					ctx.Output.Newline()
 				}
 				return nil
 			})
