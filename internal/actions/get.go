@@ -264,7 +264,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 			isFrozen := !opts.Unfrozen
 			branchFrozenStatus[branchName] = isFrozen
 			if isFrozen {
-				if _, err := eng.SetFrozen([]engine.Branch{eng.GetBranch(branchName)}, true); err != nil {
+				if _, err := eng.SetFrozen(ctx, []engine.Branch{eng.GetBranch(branchName)}, true); err != nil {
 					out.Debug("Failed to freeze new branch %s: %v", branchName, err)
 				}
 			}

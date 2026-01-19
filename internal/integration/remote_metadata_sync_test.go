@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// Set local metadata: locked=false, scope="local-scope"
 		branch := eng.GetBranch("feature-a")
-		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonNone)
+		_, err := eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonNone)
 		require.NoError(t, err)
 		require.NoError(t, eng.SetScope(branch, engine.NewScope("local-scope")))
 
@@ -86,7 +87,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// Set local metadata
 		branch := eng.GetBranch("feature-b")
-		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err := eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 		require.NoError(t, eng.SetScope(branch, engine.NewScope("same-scope")))
 
@@ -120,7 +121,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// Set local metadata and simulate it was previously synced
 		branch := eng.GetBranch("feature-c")
-		_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err := eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Simulate that this metadata was synced from remote by setting LastModifiedBy
@@ -159,7 +160,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 		require.False(t, eng.HasLocalModifications("feature-d"))
 
 		// Now make a local change
-		_, err = eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err = eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Should now be detected as modified

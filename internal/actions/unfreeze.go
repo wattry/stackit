@@ -36,7 +36,7 @@ func UnfreezeAction(ctx *app.Context, branchName string) error {
 	}
 
 	if len(branchesToUnfreeze) > 0 {
-		res, err := eng.SetFrozen(branchesToUnfreeze, false)
+		res, err := eng.SetFrozen(ctx, branchesToUnfreeze, false)
 		if err != nil {
 			for name, branchErr := range res.Errors {
 				out.Warn("Failed to unfreeze %s: %v", name, branchErr)

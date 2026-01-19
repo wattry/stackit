@@ -402,7 +402,8 @@ func (e *engineImpl) SetScope(branch Branch, scope Scope) error {
 }
 
 // SetLocked updates multiple branches' locked status atomically using transactions.
-func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error) {
+// It retries on concurrent modification errors with exponential backoff.
+func (e *engineImpl) SetLocked(ctx context.Context, branches []Branch, reason LockReason) (BatchLockResult, error) {
 	result := BatchLockResult{
 		AffectedBranches: make([]string, 0, len(branches)),
 		Errors:           make(map[string]error),
@@ -412,67 +413,83 @@ func (e *engineImpl) SetLocked(branches []Branch, reason LockReason) (BatchLockR
 		return result, nil
 	}
 
-	// Extract branch names for batch read
+	// Extract branch names for batch read (preserves order for deterministic results)
 	branchNames := make([]string, len(branches))
 	for i, b := range branches {
 		branchNames[i] = b.GetName()
 	}
 
-	// Batch read all metadata first (parallel, outside any lock)
-	metas, readErrs := e.git.BatchReadMetadata(branchNames)
+	err := e.WithRetry(ctx, func() error {
+		// Reset result for retry
+		result.AffectedBranches = result.AffectedBranches[:0]
+		result.Errors = make(map[string]error)
 
-	// Collect read errors
-	for name, err := range readErrs {
-		result.Errors[name] = fmt.Errorf("failed to read metadata: %w", err)
-	}
+		// Batch read all metadata first (parallel, outside any lock)
+		metas, readErrs := e.git.BatchReadMetadata(branchNames)
 
-	// If all reads failed, return early
-	if len(metas) == 0 {
-		return result, fmt.Errorf("failed to read metadata for any branches")
-	}
-
-	// Create transaction for atomic update
-	tx := e.BeginTx(fmt.Sprintf("lock: set %s on %d branches", reason, len(metas)))
-
-	// Stage all updates
-	for name, meta := range metas {
-		if meta == nil {
-			meta = &git.Meta{}
+		// Collect read errors
+		for name, readErr := range readErrs {
+			result.Errors[name] = fmt.Errorf("failed to read metadata: %w", readErr)
 		}
-		meta.LockReason = reason
-		if err := tx.UpdateMeta(name, meta); err != nil {
-			result.Errors[name] = fmt.Errorf("failed to stage update: %w", err)
-		}
-	}
 
-	// Commit atomically
-	ctx := context.Background()
-	if err := tx.Commit(ctx); err != nil {
-		// Transaction failed - all updates rolled back
-		for name := range metas {
-			if _, hasErr := result.Errors[name]; !hasErr {
-				result.Errors[name] = fmt.Errorf("transaction commit failed: %w", err)
+		// If all reads failed, return early
+		if len(metas) == 0 {
+			return fmt.Errorf("failed to read metadata for any branches")
+		}
+
+		// Create transaction for atomic update
+		tx := e.BeginTx(fmt.Sprintf("lock: set %s on %d branches", reason, len(metas)))
+
+		// Stage all updates - iterate over branchNames for deterministic order
+		for _, name := range branchNames {
+			meta, ok := metas[name]
+			if !ok {
+				continue // Skip branches that had read errors
+			}
+			if meta == nil {
+				meta = &git.Meta{}
+			}
+			meta.LockReason = reason
+			if stageErr := tx.UpdateMeta(name, meta); stageErr != nil {
+				result.Errors[name] = fmt.Errorf("failed to stage update: %w", stageErr)
 			}
 		}
-		return result, fmt.Errorf("failed to commit lock changes: %w", err)
-	}
 
-	// All staged updates succeeded
-	for name := range metas {
-		if _, hasErr := result.Errors[name]; !hasErr {
-			result.AffectedBranches = append(result.AffectedBranches, name)
+		// Commit atomically
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			// Transaction failed - all updates rolled back
+			for _, name := range branchNames {
+				if _, hasErr := result.Errors[name]; !hasErr {
+					if _, hasMeta := metas[name]; hasMeta {
+						result.Errors[name] = fmt.Errorf("transaction commit failed: %w", commitErr)
+					}
+				}
+			}
+			return fmt.Errorf("failed to commit lock changes: %w", commitErr)
 		}
-	}
 
-	if len(result.Errors) > 0 {
-		return result, fmt.Errorf("failed to update locked status for some branches")
-	}
+		// All staged updates succeeded - iterate over branchNames for deterministic order
+		for _, name := range branchNames {
+			if _, hasErr := result.Errors[name]; !hasErr {
+				if _, hasMeta := metas[name]; hasMeta {
+					result.AffectedBranches = append(result.AffectedBranches, name)
+				}
+			}
+		}
 
-	return result, nil
+		if len(result.Errors) > 0 {
+			return fmt.Errorf("failed to update locked status for some branches")
+		}
+
+		return nil
+	})
+
+	return result, err
 }
 
 // SetFrozen updates multiple branches' frozen status atomically using transactions.
-func (e *engineImpl) SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error) {
+// It retries on concurrent modification errors with exponential backoff.
+func (e *engineImpl) SetFrozen(ctx context.Context, branches []Branch, frozen bool) (BatchFreezeResult, error) {
 	result := BatchFreezeResult{
 		AffectedBranches: make([]string, 0, len(branches)),
 		Errors:           make(map[string]error),
@@ -482,54 +499,61 @@ func (e *engineImpl) SetFrozen(branches []Branch, frozen bool) (BatchFreezeResul
 		return result, nil
 	}
 
-	// Extract branch names for batch read
+	// Extract branch names for batch read (preserves order for deterministic results)
 	branchNames := make([]string, len(branches))
 	for i, b := range branches {
 		branchNames[i] = b.GetName()
 	}
 
-	// Batch read all local metadata first (parallel, outside any lock)
-	metas := e.git.BatchReadLocalMetadata(branchNames)
+	err := e.WithRetry(ctx, func() error {
+		// Reset result for retry
+		result.AffectedBranches = result.AffectedBranches[:0]
+		result.Errors = make(map[string]error)
 
-	// Create transaction for atomic update
-	tx := e.BeginTx(fmt.Sprintf("freeze: set frozen=%t on %d branches", frozen, len(branches)))
+		// Batch read all local metadata first (parallel, outside any lock)
+		metas := e.git.BatchReadLocalMetadata(branchNames)
 
-	// Stage all updates
-	for _, name := range branchNames {
-		meta := metas[name]
-		if meta == nil {
-			meta = &git.LocalMeta{}
-		}
-		meta.Frozen = frozen
-		if err := tx.UpdateLocalMeta(name, meta); err != nil {
-			result.Errors[name] = fmt.Errorf("failed to stage update: %w", err)
-		}
-	}
+		// Create transaction for atomic update
+		tx := e.BeginTx(fmt.Sprintf("freeze: set frozen=%t on %d branches", frozen, len(branches)))
 
-	// Commit atomically
-	ctx := context.Background()
-	if err := tx.Commit(ctx); err != nil {
-		// Transaction failed - all updates rolled back
+		// Stage all updates
 		for _, name := range branchNames {
-			if _, hasErr := result.Errors[name]; !hasErr {
-				result.Errors[name] = fmt.Errorf("transaction commit failed: %w", err)
+			meta := metas[name]
+			if meta == nil {
+				meta = &git.LocalMeta{}
+			}
+			meta.Frozen = frozen
+			if stageErr := tx.UpdateLocalMeta(name, meta); stageErr != nil {
+				result.Errors[name] = fmt.Errorf("failed to stage update: %w", stageErr)
 			}
 		}
-		return result, fmt.Errorf("failed to commit freeze changes: %w", err)
-	}
 
-	// All staged updates succeeded
-	for _, name := range branchNames {
-		if _, hasErr := result.Errors[name]; !hasErr {
-			result.AffectedBranches = append(result.AffectedBranches, name)
+		// Commit atomically
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			// Transaction failed - all updates rolled back
+			for _, name := range branchNames {
+				if _, hasErr := result.Errors[name]; !hasErr {
+					result.Errors[name] = fmt.Errorf("transaction commit failed: %w", commitErr)
+				}
+			}
+			return fmt.Errorf("failed to commit freeze changes: %w", commitErr)
 		}
-	}
 
-	if len(result.Errors) > 0 {
-		return result, fmt.Errorf("failed to update frozen status for some branches")
-	}
+		// All staged updates succeeded
+		for _, name := range branchNames {
+			if _, hasErr := result.Errors[name]; !hasErr {
+				result.AffectedBranches = append(result.AffectedBranches, name)
+			}
+		}
 
-	return result, nil
+		if len(result.Errors) > 0 {
+			return fmt.Errorf("failed to update frozen status for some branches")
+		}
+
+		return nil
+	})
+
+	return result, err
 }
 
 // RenameBranch renames a branch and its metadata

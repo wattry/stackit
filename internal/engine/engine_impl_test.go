@@ -1290,11 +1290,11 @@ func TestFrozenBranches(t *testing.T) {
 		branch := s.Engine.GetBranch("feature")
 		require.False(t, branch.IsFrozen())
 
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, true)
 		require.NoError(t, err)
 		require.True(t, s.Engine.GetBranch("feature").IsFrozen())
 
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, false)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, false)
 		require.NoError(t, err)
 		require.False(t, s.Engine.GetBranch("feature").IsFrozen())
 	})
@@ -1314,14 +1314,14 @@ func TestFrozenBranches(t *testing.T) {
 		require.True(t, branch.CanModify())
 
 		// Test frozen
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, true)
 		require.NoError(t, err)
 		require.False(t, s.Engine.GetBranch("feature").CanModify())
 
 		// Test locked
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, false)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, false)
 		require.NoError(t, err)
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 		require.False(t, s.Engine.GetBranch("feature").CanModify())
 	})
@@ -1344,7 +1344,7 @@ func TestFrozenBranches(t *testing.T) {
 		require.NoError(t, err)
 
 		// Freeze the branch
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, true)
 		require.NoError(t, err)
 
 		// Now EnsureCanModify should return an error
@@ -1377,7 +1377,7 @@ func TestFrozenBranches(t *testing.T) {
 		branch := s.Engine.GetBranch("feature")
 
 		// Lock the branch
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Now EnsureCanModify should return an error
@@ -1410,9 +1410,9 @@ func TestFrozenBranches(t *testing.T) {
 		branch := s.Engine.GetBranch("feature")
 
 		// Lock and freeze the branch
-		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 		require.NoError(t, err)
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, true)
 		require.NoError(t, err)
 
 		// Now EnsureCanModify should return an error
@@ -1443,7 +1443,7 @@ func TestFrozenBranches(t *testing.T) {
 		require.NoError(t, err)
 
 		branch := s.Engine.GetBranch("feature")
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch}, true)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, true)
 		require.NoError(t, err)
 		require.True(t, s.Engine.GetBranch("feature").IsFrozen())
 

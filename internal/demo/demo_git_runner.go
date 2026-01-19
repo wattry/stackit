@@ -538,6 +538,7 @@ func (d *demoGitRunner) CatFile(_ string) (string, error) {
 }
 
 const demoBlobSHA = "blob-sha"
+const demoRefSHA = "demo-ref-sha"
 
 func (d *demoGitRunner) CreateBlob(_ string) (string, error) {
 	return demoBlobSHA, nil
@@ -652,9 +653,11 @@ func (d *demoGitRunner) WriteLocalMetadataBlob(_ *git.LocalMeta) (string, error)
 }
 
 func (d *demoGitRunner) GetMetadataRefSHA(_ string) string {
-	return ""
+	// Return a mock SHA to simulate existing metadata refs for CAS testing
+	return demoRefSHA
 }
 
 func (d *demoGitRunner) GetLocalMetadataRefSHA(_ string) string {
-	return ""
+	// Return a mock SHA to simulate existing local metadata refs for CAS testing
+	return demoRefSHA
 }

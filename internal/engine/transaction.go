@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"sync"
@@ -13,10 +15,25 @@ import (
 
 // Transaction retry configuration
 const (
-	// MaxRetries is the maximum number of retry attempts for transactional operations
+	// MaxRetries is the maximum number of retry attempts for transactional operations.
+	// 5 retries with exponential backoff gives ~3 seconds total wait time.
 	MaxRetries = 5
-	// RetryBaseDelay is the base delay between retry attempts
+
+	// RetryBaseDelay is the base delay between retry attempts.
+	// With exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms (capped).
 	RetryBaseDelay = 100 * time.Millisecond
+
+	// maxBackoffExponent caps exponential backoff to prevent excessive delays.
+	// 2^4 * 100ms = 1.6s maximum base delay before jitter.
+	maxBackoffExponent = 4
+)
+
+// Sentinel errors for transaction operations
+var (
+	// ErrTransactionCommitted is returned when attempting to modify a committed transaction
+	ErrTransactionCommitted = errors.New("transaction already committed")
+	// ErrTransactionRolledBack is returned when attempting to use a rolled-back transaction
+	ErrTransactionRolledBack = errors.New("transaction was rolled back")
 )
 
 // MetadataTx represents an atomic metadata transaction.
@@ -60,10 +77,10 @@ func (tx *MetadataTx) UpdateMeta(branch string, meta *git.Meta) error {
 	defer tx.mu.Unlock()
 
 	if tx.committed {
-		return fmt.Errorf("transaction already committed")
+		return ErrTransactionCommitted
 	}
 	if tx.rolledBack {
-		return fmt.Errorf("transaction was rolled back")
+		return ErrTransactionRolledBack
 	}
 
 	// Capture original SHA on first access for CAS validation
@@ -81,10 +98,10 @@ func (tx *MetadataTx) UpdateLocalMeta(branch string, meta *git.LocalMeta) error 
 	defer tx.mu.Unlock()
 
 	if tx.committed {
-		return fmt.Errorf("transaction already committed")
+		return ErrTransactionCommitted
 	}
 	if tx.rolledBack {
-		return fmt.Errorf("transaction was rolled back")
+		return ErrTransactionRolledBack
 	}
 
 	// Capture original SHA on first access
@@ -104,10 +121,10 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	defer tx.mu.Unlock()
 
 	if tx.committed {
-		return fmt.Errorf("transaction already committed")
+		return ErrTransactionCommitted
 	}
 	if tx.rolledBack {
-		return fmt.Errorf("transaction was rolled back")
+		return ErrTransactionRolledBack
 	}
 
 	if len(tx.metaUpdates) == 0 && len(tx.localUpdates) == 0 {
@@ -115,10 +132,18 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 		return nil
 	}
 
-	// Build batch of ref updates
+	// Build batch of ref updates with deterministic ordering
 	refUpdates := make([]git.RefUpdate, 0, len(tx.metaUpdates)+len(tx.localUpdates))
 
-	for branch, meta := range tx.metaUpdates {
+	// Sort branch names for deterministic order (makes debugging easier)
+	metaBranches := make([]string, 0, len(tx.metaUpdates))
+	for branch := range tx.metaUpdates {
+		metaBranches = append(metaBranches, branch)
+	}
+	slices.Sort(metaBranches)
+
+	for _, branch := range metaBranches {
+		meta := tx.metaUpdates[branch]
 		blobSHA, err := tx.eng.git.WriteMetadataBlob(meta)
 		if err != nil {
 			return fmt.Errorf("write blob for %s: %w", branch, err)
@@ -131,7 +156,15 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 		})
 	}
 
-	for branch, meta := range tx.localUpdates {
+	// Sort local metadata branches for deterministic order
+	localBranches := make([]string, 0, len(tx.localUpdates))
+	for branch := range tx.localUpdates {
+		localBranches = append(localBranches, branch)
+	}
+	slices.Sort(localBranches)
+
+	for _, branch := range localBranches {
+		meta := tx.localUpdates[branch]
 		blobSHA, err := tx.eng.git.WriteLocalMetadataBlob(meta)
 		if err != nil {
 			return fmt.Errorf("write local blob for %s: %w", branch, err)
@@ -149,13 +182,13 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 		return fmt.Errorf("atomic commit failed: %w", err)
 	}
 
-	// Update in-memory cache
+	// Update in-memory cache (using same sorted order for consistency)
 	tx.eng.mu.Lock()
-	for branch, meta := range tx.metaUpdates {
-		tx.eng.updateBranchStateFromMeta(branch, meta)
+	for _, branch := range metaBranches {
+		tx.eng.updateBranchStateFromMeta(branch, tx.metaUpdates[branch])
 	}
-	for branch, meta := range tx.localUpdates {
-		tx.eng.updateBranchStateFromLocalMeta(branch, meta)
+	for _, branch := range localBranches {
+		tx.eng.updateBranchStateFromLocalMeta(branch, tx.localUpdates[branch])
 	}
 	tx.eng.mu.Unlock()
 
@@ -181,7 +214,11 @@ func (tx *MetadataTx) IsCommitted() bool {
 }
 
 // updateBranchStateFromMeta updates the in-memory branch state from metadata.
-// Caller must hold e.mu lock.
+//
+// IMPORTANT: Caller MUST hold e.mu lock before calling this function.
+// This function modifies e.childrenMap and e.branchState which are not
+// individually thread-safe. Failing to hold the lock can cause data races
+// and corrupt the in-memory cache.
 func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 	state := e.branchState.GetOrCreate(branch)
 
@@ -218,26 +255,33 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 }
 
 // updateBranchStateFromLocalMeta updates the in-memory branch state from local metadata.
-// Caller must hold e.mu lock.
+//
+// IMPORTANT: Caller MUST hold e.mu lock before calling this function.
+// This function modifies e.branchState which is not individually thread-safe.
 func (e *engineImpl) updateBranchStateFromLocalMeta(branch string, meta *git.LocalMeta) {
 	state := e.branchState.GetOrCreate(branch)
 	state.Frozen = meta.Frozen
 }
 
 // IsConcurrentModificationError returns true if the error indicates a concurrent
-// modification conflict (CAS failure).
+// modification conflict (CAS failure). This includes various git update-ref errors
+// that occur when references are modified between read and write operations.
 func IsConcurrentModificationError(err error) bool {
 	if err == nil {
 		return false
 	}
 	errStr := err.Error()
+	// Standard git update-ref CAS failures
 	return strings.Contains(errStr, "cannot lock ref") ||
 		strings.Contains(errStr, "reference is not expected") ||
-		strings.Contains(errStr, "expected old-value")
+		strings.Contains(errStr, "expected old-value") ||
+		// Additional git lock contention errors
+		strings.Contains(errStr, "stale info") ||
+		strings.Contains(errStr, "Unable to create") && strings.Contains(errStr, ".lock")
 }
 
 // WithRetry executes an operation with automatic retry on concurrent modification errors.
-// It uses exponential backoff with jitter.
+// It uses exponential backoff with jitter to prevent thundering herd.
 func (e *engineImpl) WithRetry(ctx context.Context, operation func() error) error {
 	var lastErr error
 
@@ -246,9 +290,12 @@ func (e *engineImpl) WithRetry(ctx context.Context, operation func() error) erro
 			if IsConcurrentModificationError(err) {
 				lastErr = err
 
-				// Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
-				// Use attempt as a simple "jitter" to spread out retries
-				delay := RetryBaseDelay * time.Duration(1<<min(attempt, 4))
+				// Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms base
+				baseDelay := RetryBaseDelay * time.Duration(1<<min(attempt, maxBackoffExponent))
+				// Add jitter: +/- 25% of base delay to prevent thundering herd
+				// Using math/rand is fine here - jitter doesn't need cryptographic security
+				jitter := time.Duration(rand.Int64N(int64(baseDelay / 2))) //nolint:gosec
+				delay := baseDelay - baseDelay/4 + jitter
 
 				select {
 				case <-ctx.Done():
@@ -256,7 +303,9 @@ func (e *engineImpl) WithRetry(ctx context.Context, operation func() error) erro
 				case <-time.After(delay):
 				}
 
-				// Refresh cache before retry
+				// Refresh cache before retry.
+				// We ignore rebuild errors because the operation itself might still succeed,
+				// and if it doesn't, it will fail with a more specific error.
 				_ = e.rebuild()
 				continue
 			}

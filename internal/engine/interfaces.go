@@ -118,8 +118,8 @@ type BranchTracking interface {
 	UpdateParentRevision(branchName string, parentRev string) error
 	SetScope(branch Branch, scope Scope) error
 	SetBranchType(branch Branch, branchType git.BranchType) error
-	SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error)
-	SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error)
+	SetLocked(ctx context.Context, branches []Branch, reason LockReason) (BatchLockResult, error)
+	SetFrozen(ctx context.Context, branches []Branch, frozen bool) (BatchFreezeResult, error)
 
 	// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
 	MarkNeedsPRBodyUpdate(branchName string) error

@@ -1,6 +1,7 @@
 package pr
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -99,7 +100,7 @@ func TestCreatePRBodyFooter(t *testing.T) {
 			TrackBranch("feature-a", "main")
 
 		// Lock the branch
-		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Use When: "always" to ensure footer is generated for single-branch stack

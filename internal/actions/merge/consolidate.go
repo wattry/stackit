@@ -280,7 +280,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 	}
 
 	if len(branchesToLock) > 0 {
-		if _, err := c.engine.SetLocked(branchesToLock, engine.LockReasonConsolidating); err != nil {
+		if _, err := c.engine.SetLocked(c.ctx, branchesToLock, engine.LockReasonConsolidating); err != nil {
 			return fmt.Errorf("failed to lock branches: %w", err)
 		}
 	}

@@ -2,6 +2,7 @@ package lock_test
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-a", "main")
 
 		// Pre-lock
-		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		var buf bytes.Buffer
@@ -67,9 +68,9 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-b", "feature-a")
 
 		// Pre-lock
-		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
-		_, err = s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-b")}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-b")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		err = lock.Unlock(s.Context, "feature-a")
@@ -183,9 +184,9 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-b", "feature-a")
 
 		// Pre-lock both
-		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
-		_, err = s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-b")}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-b")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Mock PromptConfirm to return true
@@ -215,9 +216,9 @@ func TestLockUnlockAction(t *testing.T) {
 			TrackBranch("feature-b", "feature-a")
 
 		// Pre-lock both
-		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
-		_, err = s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-b")}, engine.LockReasonUser)
+		_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{s.Engine.GetBranch("feature-b")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Mock PromptConfirm to return false

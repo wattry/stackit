@@ -261,7 +261,7 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	// Lock the branch
 	branch := s.Engine.GetBranch("feature")
-	_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+	_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 	require.NoError(t, err)
 	require.True(t, branch.IsLocked())
 
