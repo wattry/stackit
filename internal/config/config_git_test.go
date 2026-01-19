@@ -214,14 +214,27 @@ func TestGitConfigCISettings(t *testing.T) {
 		require.Equal(t, 300, cfg.CITimeout())
 	})
 
-	t.Run("rejects invalid CI timeout", func(t *testing.T) {
+	t.Run("rejects zero CI timeout", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, nil)
 
 		cfg, err := LoadGitConfig(scene.Dir)
 		require.NoError(t, err)
 
+		// 0 is not allowed - use unset to revert to default
 		err = cfg.SetCITimeout(0)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "at least 1 second")
+	})
+
+	t.Run("rejects negative CI timeout", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetCITimeout(-1)
 		require.Error(t, err)
 	})
 }
@@ -526,6 +539,43 @@ func TestMigrationFromJSON(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, cfg.IsInitialized())
 	})
+
+	t.Run("handles corrupt JSON config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		// Create corrupt JSON config
+		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
+		err := os.WriteFile(configPath, []byte("not valid json{"), 0600)
+		require.NoError(t, err)
+
+		// Should return error for corrupt JSON
+		_, err = LoadGitConfig(scene.Dir)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "parse JSON config")
+	})
+}
+
+func TestUnsetNonExistentKey(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unset key that was never set returns no error", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		// All unset methods should succeed even if key was never set
+		require.NoError(t, cfg.UnsetTrunk())
+		require.NoError(t, cfg.UnsetBranchNamePattern())
+		require.NoError(t, cfg.UnsetSubmitFooter())
+		require.NoError(t, cfg.UnsetMergeMethod())
+		require.NoError(t, cfg.UnsetCICommand())
+		require.NoError(t, cfg.UnsetCITimeout())
+		require.NoError(t, cfg.UnsetMaxConcurrency())
+	})
 }
 
 func TestGitConfigSaveNoop(t *testing.T) {
@@ -554,6 +604,21 @@ func TestGitConfigSaveNoop(t *testing.T) {
 
 func TestGitConfigWithProjectFallback(t *testing.T) {
 	t.Parallel()
+
+	t.Run("returns error for invalid project config YAML", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create invalid YAML project config
+		projectConfig := "trunk: [invalid yaml\n"
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadGitConfigWithProject(scene.Dir)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse")
+	})
 
 	t.Run("trunk falls back to project config", func(t *testing.T) {
 		t.Parallel()
@@ -773,5 +838,113 @@ merge:
 
 		require.Equal(t, "develop", cfg.Trunk())
 		require.Equal(t, "squash", cfg.MergeMethod())
+	})
+
+	t.Run("deduplicates trunks from git and project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with trunks
+		projectConfig := `trunk: main
+trunks:
+  - staging
+  - production
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Add same trunk that's already in project config - should fail
+		err = cfg.AddTrunk("staging")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "already configured")
+	})
+
+	t.Run("RemoveTrunk gives helpful error for project config trunks", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with trunks
+		projectConfig := `trunk: main
+trunks:
+  - staging
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Try to remove trunk that's in project config
+		err = cfg.RemoveTrunk("staging")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), ".stackit.yaml")
+	})
+
+	t.Run("ClearTrunks only clears personal trunks", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with trunks
+		projectConfig := `trunk: main
+trunks:
+  - staging
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Add personal trunks
+		err = cfg.AddTrunk("develop")
+		require.NoError(t, err)
+		err = cfg.AddTrunk("feature")
+		require.NoError(t, err)
+
+		// Should have all trunks
+		require.Equal(t, []string{"main", "develop", "feature", "staging"}, cfg.AllTrunks())
+
+		// Clear personal trunks
+		err = cfg.ClearTrunks()
+		require.NoError(t, err)
+
+		// Should still have project trunks
+		require.Equal(t, []string{"main", "staging"}, cfg.AllTrunks())
+	})
+
+	t.Run("UnsetTrunk reverts to project config trunk", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with trunk
+		projectConfig := `trunk: develop
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project trunk
+		require.Equal(t, "develop", cfg.Trunk())
+
+		// Override with personal trunk
+		err = cfg.SetTrunk("main")
+		require.NoError(t, err)
+		require.Equal(t, "main", cfg.Trunk())
+
+		// Unset personal trunk
+		err = cfg.UnsetTrunk()
+		require.NoError(t, err)
+
+		// Should revert to project trunk
+		require.Equal(t, "develop", cfg.Trunk())
 	})
 }

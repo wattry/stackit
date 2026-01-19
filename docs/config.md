@@ -75,14 +75,17 @@ type ConfigStore struct {
 }
 
 // Core operations
-func (c *ConfigStore) Get(key string) string
-func (c *ConfigStore) GetAll(key string) []string           // Multi-value keys
+func (c *ConfigStore) Get(key string) (string, error)
+func (c *ConfigStore) GetAll(key string) ([]string, error)  // Multi-value keys
 func (c *ConfigStore) Set(key, value string) error
 func (c *ConfigStore) Add(key, value string) error          // Add to multi-value
 func (c *ConfigStore) Unset(key string) error               // Remove all values
+func (c *ConfigStore) Exists(key string) bool               // Check if key exists
 
 // Typed helpers
+func (c *ConfigStore) GetBool(key string) (bool, error)
 func (c *ConfigStore) GetBoolWithDefault(key string, def bool) bool
+func (c *ConfigStore) GetInt(key string) (int, error)
 func (c *ConfigStore) GetIntWithDefault(key string, def int) int
 func (c *ConfigStore) SetBool(key string, value bool) error
 func (c *ConfigStore) SetInt(key string, value int) error
@@ -153,7 +156,20 @@ ci:
   command: "make test"
   timeout: 600  # seconds
 
-# Worktree hooks
+# Undo settings
+undo:
+  depth: 10  # Max snapshots to retain
+
+# Worktree settings
+worktree:
+  basePath: ""  # Base directory for worktrees (empty = auto)
+  autoClean: true  # Auto-clean worktrees during sync
+
+# Split settings
+split:
+  hunkSelector: tui  # tui or git
+
+# Worktree hooks (require approval before execution)
 hooks:
   post-worktree-create:
     - "npm install"
@@ -162,16 +178,23 @@ hooks:
 
 ### Configuration Options
 
-| Option | Type | Description | Can Override in Git Config |
-|--------|------|-------------|---------------------------|
-| `trunk` | string | Primary trunk branch | Yes |
-| `trunks` | string[] | Additional trunk branches (merged with git config) | Yes (additive) |
-| `branch.pattern` | string | Branch naming template | Yes |
-| `submit.footer` | bool | Include PR footer | Yes |
-| `merge.method` | string | Merge strategy (squash/merge/rebase) | Yes |
-| `ci.command` | string | CI validation command | Yes |
-| `ci.timeout` | int | CI timeout in seconds | Yes |
-| `hooks.post-worktree-create` | string[] | Post-worktree-create commands | No (requires approval) |
+The table below shows all options available in `.stackit.yaml`. The "Team Fallback" column indicates whether the setting is read from `.stackit.yaml` when not set in personal git config.
+
+| Option | Type | Default | Description | Team Fallback |
+|--------|------|---------|-------------|---------------|
+| `trunk` | string | `main` | Primary trunk branch | Yes |
+| `trunks` | string[] | `[]` | Additional trunk branches (merged with git config) | Yes (additive) |
+| `branch.pattern` | string | `{username}/{date}/{message}` | Branch naming template | Yes |
+| `submit.footer` | bool | `true` | Include PR footer | Yes |
+| `merge.method` | string | `""` | Merge strategy (squash/merge/rebase) | Yes |
+| `ci.command` | string | `""` | CI validation command | Yes |
+| `ci.timeout` | int | `600` | CI timeout in seconds | Yes |
+| `undo.depth` | int | `10` | Max undo snapshots to retain | Yes |
+| `worktree.basePath` | string | `""` | Base directory for worktrees | Yes |
+| `worktree.autoClean` | bool | `true` | Auto-clean worktrees during sync | Yes |
+| `split.hunkSelector` | string | `tui` | Hunk selector mode (tui/git) | Yes |
+| `maxConcurrency` | int | `0` | Max concurrent operations (0 = auto) | Yes |
+| `hooks.post-worktree-create` | string[] | `[]` | Post-worktree-create commands | No (requires approval) |
 
 ### Layered Configuration Example
 
@@ -287,13 +310,23 @@ stackit config
 # List all configuration
 stackit config --list
 
+# Show all configuration with sources (personal/team/default)
+stackit config show
+
 # Get a specific value
 stackit config get branch.pattern
 stackit config get submit.footer
 
-# Set a value
+# Set a value (personal override)
 stackit config set branch.pattern "{username}/{date}/{message}"
 stackit config set submit.footer false
+
+# Unset a value (revert to team/default)
+stackit config unset branch.pattern
+stackit config unset merge.method
+
+# Reset all personal configuration overrides
+stackit config reset
 ```
 
 **Code:** `internal/cli/config.go`

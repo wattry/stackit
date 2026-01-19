@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,43 @@ const (
 	jsonConfigFile   = ".stackit_config"
 	jsonConfigBackup = ".stackit_config.migrated"
 )
+
+// hasContentToMigrate checks if the legacy config has any meaningful content worth migrating.
+func hasContentToMigrate(cfg *RepoConfig) bool {
+	// Primary indicator: trunk is set
+	if cfg.Trunk != nil && *cfg.Trunk != "" {
+		return true
+	}
+	// Secondary indicators: any other meaningful configuration
+	if len(cfg.Trunks) > 0 {
+		return true
+	}
+	if cfg.BranchNamePattern != nil && *cfg.BranchNamePattern != "" {
+		return true
+	}
+	if cfg.SubmitFooter != nil {
+		return true
+	}
+	if cfg.UndoStackDepth != nil {
+		return true
+	}
+	if cfg.MaxConcurrency != nil {
+		return true
+	}
+	if cfg.MergeMethod != nil && *cfg.MergeMethod != "" {
+		return true
+	}
+	if cfg.CICommand != nil && *cfg.CICommand != "" {
+		return true
+	}
+	if cfg.CombineCICommand != nil && *cfg.CombineCICommand != "" {
+		return true
+	}
+	if len(cfg.ApprovedPostWorktreeCreateHooks) > 0 {
+		return true
+	}
+	return false
+}
 
 // needsMigration checks if JSON config exists and git config doesn't have trunk set.
 func needsMigration(repoRoot string) bool {
@@ -44,6 +82,21 @@ func migrateFromJSON(repoRoot string, store *git.ConfigStore) error {
 	var oldConfig RepoConfig
 	if err := json.Unmarshal(data, &oldConfig); err != nil {
 		return fmt.Errorf("parse JSON config: %w", err)
+	}
+
+	// Check if config has any meaningful content worth migrating
+	// If it's essentially empty (no trunk set), just remove it
+	if !hasContentToMigrate(&oldConfig) {
+		// Just rename the empty file to mark it as processed
+		backupPath := filepath.Join(gitDir, jsonConfigBackup)
+		if err := os.Rename(jsonPath, backupPath); err != nil {
+			// If rename fails, try to remove. If that also fails, return error
+			// to avoid repeated migration attempts
+			if removeErr := os.Remove(jsonPath); removeErr != nil {
+				return fmt.Errorf("failed to process empty config file: %w", errors.Join(err, removeErr))
+			}
+		}
+		return nil
 	}
 
 	// Migrate each field
@@ -145,9 +198,8 @@ func migrateFromJSON(repoRoot string, store *git.ConfigStore) error {
 		return fmt.Errorf("backup old config: %w", err)
 	}
 
-	// Inform user about the migration
-	fmt.Fprintln(os.Stderr, "Migrated stackit config from JSON to git config.")
-	fmt.Fprintf(os.Stderr, "Backup saved to: %s\n", backupPath)
+	// Migration is silent - the backup file's existence indicates migration occurred.
+	// Users can check for .stackit_config.migrated if they need to know.
 
 	return nil
 }

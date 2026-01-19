@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"stackit.dev/stackit/internal/git"
 )
@@ -119,6 +120,45 @@ func (c *GitConfig) AddTrunk(trunk string) error {
 	return c.store.Add(KeyTrunks, trunk)
 }
 
+// ClearTrunks removes all additional trunks from personal git config.
+// Note: Trunks from team config (.stackit.yaml) will still be visible in AllTrunks().
+func (c *GitConfig) ClearTrunks() error {
+	return c.store.Unset(KeyTrunks)
+}
+
+// RemoveTrunk removes a trunk from the additional trunks list.
+// Cannot remove the primary trunk (use SetTrunk to change it).
+func (c *GitConfig) RemoveTrunk(trunk string) error {
+	// Check if it's the primary trunk
+	if trunk == c.Trunk() {
+		return fmt.Errorf("cannot remove primary trunk '%s'; use 'config set trunk <new-trunk>' to change it", trunk)
+	}
+
+	// Get current additional trunks from git config
+	currentTrunks, _ := c.store.GetAll(KeyTrunks)
+	if !slices.Contains(currentTrunks, trunk) {
+		// Check if it's from project config - give a better error message
+		if c.project != nil && c.project.HasTrunks() && slices.Contains(c.project.Trunks, trunk) {
+			return fmt.Errorf("'%s' is defined in .stackit.yaml (team config), not in your personal config; edit .stackit.yaml to remove it", trunk)
+		}
+		return fmt.Errorf("'%s' is not in the additional trunks list", trunk)
+	}
+
+	// Remove all and re-add without the specified trunk
+	if err := c.store.Unset(KeyTrunks); err != nil {
+		return fmt.Errorf("failed to remove trunk: %w", err)
+	}
+
+	for _, t := range currentTrunks {
+		if t != trunk {
+			if err := c.store.Add(KeyTrunks, t); err != nil {
+				return fmt.Errorf("failed to restore trunks: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 // BranchNamePattern returns the branch name pattern.
 // Priority: personal git config > team project config > default.
 func (c *GitConfig) BranchNamePattern() string {
@@ -179,12 +219,25 @@ func (c *GitConfig) SetSubmitFooter(enabled bool) error {
 }
 
 // UndoStackDepth returns the max undo depth.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) UndoStackDepth() int {
-	depth := c.store.GetIntWithDefault(KeyUndoDepth, DefaultUndoDepth)
-	if depth < 1 {
-		return DefaultUndoDepth
+	// Check personal git config first
+	if c.store.Exists(KeyUndoDepth) {
+		depth := c.store.GetIntWithDefault(KeyUndoDepth, DefaultUndoDepth)
+		if depth < 1 {
+			return DefaultUndoDepth
+		}
+		return depth
 	}
-	return depth
+	// Fall back to team project config
+	if c.project != nil && c.project.HasUndoDepth() {
+		if c.project.Undo.Depth < 1 {
+			return DefaultUndoDepth
+		}
+		return c.project.Undo.Depth
+	}
+	// Return default
+	return DefaultUndoDepth
 }
 
 // SetUndoStackDepth sets the max undo depth.
@@ -196,9 +249,19 @@ func (c *GitConfig) SetUndoStackDepth(depth int) error {
 }
 
 // WorktreeBasePath returns the worktree base path.
+// Priority: personal git config > team project config > empty (not set).
 func (c *GitConfig) WorktreeBasePath() string {
+	// Check personal git config first
 	path, _ := c.store.Get(KeyWorktreeBasePath)
-	return path
+	if path != "" {
+		return path
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasWorktreeBasePath() {
+		return c.project.Worktree.BasePath
+	}
+	// Return empty (not set)
+	return ""
 }
 
 // SetWorktreeBasePath sets the worktree base path.
@@ -207,8 +270,18 @@ func (c *GitConfig) SetWorktreeBasePath(path string) error {
 }
 
 // WorktreeAutoClean returns whether to auto-clean worktrees.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) WorktreeAutoClean() bool {
-	return c.store.GetBoolWithDefault(KeyWorktreeAutoClean, DefaultWorktreeAutoClean)
+	// Check personal git config first
+	if c.store.Exists(KeyWorktreeAutoClean) {
+		return c.store.GetBoolWithDefault(KeyWorktreeAutoClean, DefaultWorktreeAutoClean)
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasWorktreeAutoClean() {
+		return c.project.GetWorktreeAutoClean()
+	}
+	// Return default
+	return DefaultWorktreeAutoClean
 }
 
 // SetWorktreeAutoClean sets whether to auto-clean worktrees.
@@ -235,7 +308,7 @@ func (c *GitConfig) MergeMethod() string {
 // SetMergeMethod sets the merge method preference.
 func (c *GitConfig) SetMergeMethod(method string) error {
 	if !slices.Contains(ValidMergeMethods, method) {
-		return fmt.Errorf("invalid merge method: %s (must be %v)", method, ValidMergeMethods)
+		return fmt.Errorf("invalid merge method: %s (must be one of: %s)", method, strings.Join(ValidMergeMethods, ", "))
 	}
 	return c.store.Set(KeyMergeMethod, method)
 }
@@ -281,29 +354,39 @@ func (c *GitConfig) CITimeout() int {
 }
 
 // SetCITimeout sets the CI timeout in seconds.
+// Must be at least 1 second. To revert to the default timeout,
+// use UnsetCITimeout() instead of setting to 0.
 func (c *GitConfig) SetCITimeout(seconds int) error {
 	if seconds < 1 {
-		return fmt.Errorf("CI timeout must be at least 1 second")
+		return fmt.Errorf("CI timeout must be at least 1 second; use 'config unset ci.timeout' to revert to default (%d seconds)", DefaultCITimeout)
 	}
 	return c.store.SetInt(KeyCITimeout, seconds)
 }
 
 // SplitHunkSelector returns the hunk selector mode.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) SplitHunkSelector() string {
+	// Check personal git config first
 	selector, _ := c.store.Get(KeySplitHunkSelector)
-	if selector == "" {
-		return DefaultSplitHunkSelector
+	if selector != "" {
+		if !slices.Contains(ValidHunkSelectors, selector) {
+			return DefaultSplitHunkSelector
+		}
+		return selector
 	}
-	if !slices.Contains(ValidHunkSelectors, selector) {
-		return DefaultSplitHunkSelector
+	// Fall back to team project config
+	if c.project != nil && c.project.HasSplitHunkSelector() {
+		// Already validated during LoadProjectConfig
+		return c.project.Split.HunkSelector
 	}
-	return selector
+	// Return default
+	return DefaultSplitHunkSelector
 }
 
 // SetSplitHunkSelector sets the hunk selector mode.
 func (c *GitConfig) SetSplitHunkSelector(selector string) error {
 	if !slices.Contains(ValidHunkSelectors, selector) {
-		return fmt.Errorf("invalid hunk selector: %s (must be %v)", selector, ValidHunkSelectors)
+		return fmt.Errorf("invalid hunk selector: %s (must be one of: %s)", selector, strings.Join(ValidHunkSelectors, ", "))
 	}
 	return c.store.Set(KeySplitHunkSelector, selector)
 }
@@ -335,16 +418,28 @@ func (c *GitConfig) RemoveApprovedPostWorktreeCreateHook(hook string) error {
 		return nil // Not in list
 	}
 
-	// Remove all and re-add the ones we want to keep
+	// Build the list of hooks to keep
+	hooksToKeep := make([]string, 0, len(hooks)-1)
+	for _, h := range hooks {
+		if h != hook {
+			hooksToKeep = append(hooksToKeep, h)
+		}
+	}
+
+	// Remove all hooks first
 	if err := c.store.Unset(KeyApprovedHooks); err != nil {
 		return err
 	}
 
-	for _, h := range hooks {
-		if h != hook {
-			if err := c.store.Add(KeyApprovedHooks, h); err != nil {
-				return err
+	// Re-add the ones we want to keep
+	// If this fails, try to restore the original state
+	for _, h := range hooksToKeep {
+		if err := c.store.Add(KeyApprovedHooks, h); err != nil {
+			// Try to restore original hooks
+			for _, original := range hooks {
+				_ = c.store.Add(KeyApprovedHooks, original)
 			}
+			return fmt.Errorf("failed to update hooks, attempted recovery: %w", err)
 		}
 	}
 	return nil
@@ -356,13 +451,20 @@ func (c *GitConfig) ClearApprovedPostWorktreeCreateHooks() error {
 }
 
 // MaxConcurrency returns the maximum number of concurrent validation operations.
-// Returns 0 if not set (engine will use default based on CPU count).
+// Priority: personal git config > team project config > default (0 = auto based on CPU count).
 func (c *GitConfig) MaxConcurrency() int {
-	concurrency := c.store.GetIntWithDefault(KeyMaxConcurrency, DefaultMaxConcurrency)
-	if concurrency < 0 {
-		return DefaultMaxConcurrency
+	// Check personal git config first
+	if c.store.Exists(KeyMaxConcurrency) {
+		concurrency, _ := c.store.GetInt(KeyMaxConcurrency)
+		if concurrency >= 0 {
+			return concurrency
+		}
 	}
-	return concurrency
+	// Fall back to team project config
+	if c.project != nil && c.project.HasMaxConcurrency() {
+		return c.project.GetMaxConcurrency()
+	}
+	return DefaultMaxConcurrency
 }
 
 // SetMaxConcurrency sets the maximum number of concurrent validation operations.
@@ -399,4 +501,89 @@ func (c *GitConfig) SetCombineCITimeout(seconds int) {
 // This method exists for API compatibility with the old Config type.
 func (c *GitConfig) Save() error {
 	return nil
+}
+
+// UnsetTrunk removes the personal trunk setting, reverting to project/default.
+// Note: This only makes sense if there's a project config with a trunk set,
+// otherwise the effective trunk will be the built-in default ("main").
+func (c *GitConfig) UnsetTrunk() error {
+	return c.store.Unset(KeyTrunk)
+}
+
+// UnsetBranchNamePattern removes the personal branch name pattern, reverting to project/default.
+func (c *GitConfig) UnsetBranchNamePattern() error {
+	return c.store.Unset(KeyBranchPattern)
+}
+
+// UnsetSubmitFooter removes the personal submit footer setting, reverting to project/default.
+func (c *GitConfig) UnsetSubmitFooter() error {
+	return c.store.Unset(KeySubmitFooter)
+}
+
+// UnsetMergeMethod removes the personal merge method setting, reverting to project/default.
+func (c *GitConfig) UnsetMergeMethod() error {
+	return c.store.Unset(KeyMergeMethod)
+}
+
+// UnsetWorktreeBasePath removes the personal worktree base path setting, reverting to project/default.
+func (c *GitConfig) UnsetWorktreeBasePath() error {
+	return c.store.Unset(KeyWorktreeBasePath)
+}
+
+// UnsetWorktreeAutoClean removes the personal worktree auto clean setting, reverting to project/default.
+func (c *GitConfig) UnsetWorktreeAutoClean() error {
+	return c.store.Unset(KeyWorktreeAutoClean)
+}
+
+// UnsetSplitHunkSelector removes the personal split hunk selector setting, reverting to project/default.
+func (c *GitConfig) UnsetSplitHunkSelector() error {
+	return c.store.Unset(KeySplitHunkSelector)
+}
+
+// UnsetUndoStackDepth removes the personal undo stack depth setting, reverting to project/default.
+func (c *GitConfig) UnsetUndoStackDepth() error {
+	return c.store.Unset(KeyUndoDepth)
+}
+
+// UnsetCICommand removes the personal CI command setting, reverting to project/default.
+func (c *GitConfig) UnsetCICommand() error {
+	return c.store.Unset(KeyCICommand)
+}
+
+// UnsetCITimeout removes the personal CI timeout setting, reverting to project/default.
+func (c *GitConfig) UnsetCITimeout() error {
+	return c.store.Unset(KeyCITimeout)
+}
+
+// UnsetMaxConcurrency removes the personal max concurrency setting, reverting to default.
+func (c *GitConfig) UnsetMaxConcurrency() error {
+	return c.store.Unset(KeyMaxConcurrency)
+}
+
+// ResetAllPersonal removes all personal configuration overrides, reverting to team/default values.
+// This clears all stackit.* keys from the local git config.
+func (c *GitConfig) ResetAllPersonal() error {
+	keys := []string{
+		KeyTrunk,
+		KeyTrunks,
+		KeyBranchPattern,
+		KeySubmitFooter,
+		KeyUndoDepth,
+		KeyWorktreeBasePath,
+		KeyWorktreeAutoClean,
+		KeyMergeMethod,
+		KeyCICommand,
+		KeyCITimeout,
+		KeySplitHunkSelector,
+		KeyApprovedHooks,
+		KeyMaxConcurrency,
+	}
+
+	var firstErr error
+	for _, key := range keys {
+		if err := c.store.Unset(key); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }

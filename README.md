@@ -395,14 +395,19 @@ This allows teams to define shared settings that individual developers can overr
 
 | Option | Description | Example |
 |:---|:---|:---|
-| `branch.pattern` | Customize how branch names are generated when not explicitly specified | `stackit config set branch.pattern "{username}/{date}/{message}"` |
-| `submit.footer` | Control whether PRs include a footer linking back to the stack | `stackit config set submit.footer true` |
+| `trunk` | Primary trunk branch (default: main) | `stackit config set trunk main` |
+| `trunks.add` | Add an additional trunk branch | `stackit config set trunks.add develop` |
+| `trunks.remove` | Remove an additional trunk branch | `stackit config set trunks.remove develop` |
+| `branch.pattern` | Customize how branch names are generated | `stackit config set branch.pattern "{username}/{date}/{message}"` |
+| `submit.footer` | Include PR footer linking back to the stack (default: true) | `stackit config set submit.footer false` |
 | `merge.method` | Default merge strategy (squash, merge, or rebase) | `stackit config set merge.method squash` |
 | `ci.command` | CI validation command to run with `stackit foreach` | `stackit config set ci.command "make test"` |
 | `ci.timeout` | CI command timeout in seconds (default: 600) | `stackit config set ci.timeout 300` |
+| `undo.depth` | Maximum undo snapshots to retain (default: 10) | `stackit config set undo.depth 20` |
 | `worktree.basePath` | Customize where worktrees are created | `stackit config set worktree.basePath "../my-stacks"` |
 | `worktree.autoClean` | Auto-remove worktrees for merged stacks during sync (default: true) | `stackit config set worktree.autoClean false` |
-| `maxConcurrency` | Maximum concurrent validation operations (default: min(NumCPU, 8)) | `stackit config set maxConcurrency 4` |
+| `split.hunkSelector` | Hunk selector mode: tui or git (default: tui) | `stackit config set split.hunkSelector git` |
+| `maxConcurrency` | Maximum concurrent validation operations (default: auto) | `stackit config set maxConcurrency 4` |
 
 ### Interactive Configuration
 Use the interactive TUI to manage all settings:
@@ -445,6 +450,22 @@ merge:
 ci:
   command: "make test"
   timeout: 600
+
+# Undo history
+undo:
+  depth: 10
+
+# Worktree settings
+worktree:
+  basePath: ""
+  autoClean: true
+
+# Split settings
+split:
+  hunkSelector: tui
+
+# Concurrency (0 = auto based on CPU count)
+maxConcurrency: 0
 
 # Worktree hooks
 hooks:

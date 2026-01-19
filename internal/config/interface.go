@@ -35,6 +35,9 @@ type Configurer interface {
 	// Split settings
 	SplitHunkSelector() string
 
+	// Concurrency settings
+	MaxConcurrency() int
+
 	// Hook approvals
 	ApprovedPostWorktreeCreateHooks() []string
 	IsPostWorktreeCreateHookApproved(hook string) bool

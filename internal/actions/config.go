@@ -10,6 +10,8 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
+const valueNotSet = "(not set)"
+
 // ConfigListAction prints all configuration values in a formatted way
 func ConfigListAction(repoRoot string, writer io.Writer) error {
 	out := output.NewConsoleOutput(writer, false)
@@ -34,7 +36,7 @@ func ConfigListAction(repoRoot string, writer io.Writer) error {
 	// Get merge.method
 	mergeMethod := cfg.MergeMethod()
 	if mergeMethod == "" {
-		mergeMethod = "(not set)"
+		mergeMethod = valueNotSet
 	}
 
 	// Format and print
@@ -57,13 +59,30 @@ func ConfigListAction(repoRoot string, writer io.Writer) error {
 	lines = append(lines, fmt.Sprintf("%s: %v", style.ColorCyan("submit.footer"), submitFooter))
 	lines = append(lines, fmt.Sprintf("%s: %s", style.ColorCyan("merge.method"), mergeMethod))
 
+	// CI settings
+	ciCommand := cfg.CICommand()
+	if ciCommand == "" {
+		ciCommand = valueNotSet
+	}
+	lines = append(lines, fmt.Sprintf("%s: %s", style.ColorCyan("ci.command"), ciCommand))
+	lines = append(lines, fmt.Sprintf("%s: %d", style.ColorCyan("ci.timeout"), cfg.CITimeout()))
+
+	// Undo settings
+	lines = append(lines, fmt.Sprintf("%s: %d", style.ColorCyan("undo.depth"), cfg.UndoStackDepth()))
+
 	// Worktree settings
 	worktreeBasePath := cfg.WorktreeBasePath()
 	if worktreeBasePath == "" {
-		worktreeBasePath = "(not set)"
+		worktreeBasePath = valueNotSet
 	}
 	lines = append(lines, fmt.Sprintf("%s: %s", style.ColorCyan("worktree.basePath"), worktreeBasePath))
 	lines = append(lines, fmt.Sprintf("%s: %v", style.ColorCyan("worktree.autoClean"), cfg.WorktreeAutoClean()))
+
+	// Split settings
+	lines = append(lines, fmt.Sprintf("%s: %s", style.ColorCyan("split.hunkSelector"), cfg.SplitHunkSelector()))
+
+	// Concurrency settings
+	lines = append(lines, fmt.Sprintf("%s: %d", style.ColorCyan("maxConcurrency"), cfg.MaxConcurrency()))
 
 	out.Print(strings.Join(lines, "\n"))
 	out.Newline()

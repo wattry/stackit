@@ -73,7 +73,7 @@ func TestLoadProjectConfig(t *testing.T) {
 		assert.Empty(t, cfg.Hooks.PostWorktreeCreate)
 	})
 
-	t.Run("handles config with only other fields", func(t *testing.T) {
+	t.Run("rejects config with unknown top-level keys", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		configContent := `other:
@@ -82,9 +82,10 @@ func TestLoadProjectConfig(t *testing.T) {
 		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
 		require.NoError(t, err)
 
-		cfg, err := LoadProjectConfig(tmpDir)
-		require.NoError(t, err)
-		assert.Empty(t, cfg.Hooks.PostWorktreeCreate)
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown key")
+		assert.Contains(t, err.Error(), "other")
 	})
 }
 
@@ -245,6 +246,23 @@ func TestProjectConfigHelpers(t *testing.T) {
 }
 
 func TestProjectConfigValidation(t *testing.T) {
+	t.Run("rejects duplicate trunk in trunks list", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `trunk: main
+trunks:
+  - main
+  - develop
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate trunk")
+		assert.Contains(t, err.Error(), "main")
+	})
+
 	t.Run("rejects invalid branch pattern", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -314,5 +332,60 @@ func TestProjectConfigValidation(t *testing.T) {
 		cfg, err := LoadProjectConfig(tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "feature/{message}", cfg.Branch.Pattern)
+	})
+
+	t.Run("rejects invalid split.hunkSelector", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `split:
+  hunkSelector: invalid
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid split.hunkSelector")
+	})
+
+	t.Run("accepts valid split.hunkSelector values", func(t *testing.T) {
+		for _, selector := range []string{"tui", "git"} {
+			tmpDir := t.TempDir()
+
+			configContent := "split:\n  hunkSelector: " + selector + "\n"
+			err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+			require.NoError(t, err)
+
+			cfg, err := LoadProjectConfig(tmpDir)
+			require.NoError(t, err)
+			assert.Equal(t, selector, cfg.Split.HunkSelector)
+		}
+	})
+
+	t.Run("rejects negative maxConcurrency", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `maxConcurrency: -1
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid maxConcurrency")
+	})
+
+	t.Run("accepts zero maxConcurrency", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `maxConcurrency: 0
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+		assert.True(t, cfg.HasMaxConcurrency())
+		assert.Equal(t, 0, cfg.GetMaxConcurrency())
 	})
 }

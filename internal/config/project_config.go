@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -33,6 +34,22 @@ type CIConfig struct {
 	Timeout int    `yaml:"timeout,omitempty"`
 }
 
+// UndoConfig contains undo settings
+type UndoConfig struct {
+	Depth int `yaml:"depth,omitempty"`
+}
+
+// WorktreeConfig contains worktree settings
+type WorktreeConfig struct {
+	BasePath  string `yaml:"basePath,omitempty"`
+	AutoClean *bool  `yaml:"autoClean,omitempty"` // Pointer to distinguish unset from false
+}
+
+// SplitConfig contains split settings
+type SplitConfig struct {
+	HunkSelector string `yaml:"hunkSelector,omitempty"`
+}
+
 // ProjectConfig represents the project-level configuration stored in .stackit.yaml
 // This file is committed to the repository and shared across the team.
 // Team settings can be overridden by personal git config (git config > project config > defaults).
@@ -40,17 +57,36 @@ type ProjectConfig struct {
 	Trunk  string   `yaml:"trunk,omitempty"`
 	Trunks []string `yaml:"trunks,omitempty"`
 
-	Branch BranchConfig `yaml:"branch,omitempty"`
-	Submit SubmitConfig `yaml:"submit,omitempty"`
-	Merge  MergeConfig  `yaml:"merge,omitempty"`
-	CI     CIConfig     `yaml:"ci,omitempty"`
-	Hooks  HooksConfig  `yaml:"hooks,omitempty"`
+	Branch         BranchConfig   `yaml:"branch,omitempty"`
+	Submit         SubmitConfig   `yaml:"submit,omitempty"`
+	Merge          MergeConfig    `yaml:"merge,omitempty"`
+	CI             CIConfig       `yaml:"ci,omitempty"`
+	Undo           UndoConfig     `yaml:"undo,omitempty"`
+	Worktree       WorktreeConfig `yaml:"worktree,omitempty"`
+	Split          SplitConfig    `yaml:"split,omitempty"`
+	Hooks          HooksConfig    `yaml:"hooks,omitempty"`
+	MaxConcurrency *int           `yaml:"maxConcurrency,omitempty"` // Pointer to distinguish unset from 0
 }
 
 // HooksConfig contains hook configurations
 type HooksConfig struct {
 	// PostWorktreeCreate contains commands to run after creating a worktree
 	PostWorktreeCreate []string `yaml:"post-worktree-create"`
+}
+
+// knownTopLevelKeys contains all valid top-level keys in .stackit.yaml
+var knownTopLevelKeys = map[string]bool{
+	"trunk":          true,
+	"trunks":         true,
+	"branch":         true,
+	"submit":         true,
+	"merge":          true,
+	"ci":             true,
+	"undo":           true,
+	"worktree":       true,
+	"split":          true,
+	"hooks":          true,
+	"maxConcurrency": true,
 }
 
 // LoadProjectConfig reads the project configuration from .stackit.yaml in the repo root.
@@ -70,6 +106,16 @@ func LoadProjectConfig(repoRoot string) (*ProjectConfig, error) {
 	var config ProjectConfig
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w (content: %q)", ProjectConfigFileName, err, string(data))
+	}
+
+	// Check for unknown top-level keys (likely typos)
+	var rawConfig map[string]any
+	if err := yaml.Unmarshal(data, &rawConfig); err == nil {
+		for key := range rawConfig {
+			if !knownTopLevelKeys[key] {
+				return nil, fmt.Errorf("unknown key %q in %s (check for typos)", key, ProjectConfigFileName)
+			}
+		}
 	}
 
 	// Validate the configuration
@@ -128,8 +174,54 @@ func (c *ProjectConfig) HasCITimeout() bool {
 	return c.CI.Timeout > 0
 }
 
+// HasUndoDepth returns true if undo depth is configured
+func (c *ProjectConfig) HasUndoDepth() bool {
+	return c.Undo.Depth > 0
+}
+
+// HasWorktreeBasePath returns true if worktree base path is configured
+func (c *ProjectConfig) HasWorktreeBasePath() bool {
+	return c.Worktree.BasePath != ""
+}
+
+// HasWorktreeAutoClean returns true if worktree auto clean is configured
+func (c *ProjectConfig) HasWorktreeAutoClean() bool {
+	return c.Worktree.AutoClean != nil
+}
+
+// GetWorktreeAutoClean returns the worktree auto clean value (caller should check HasWorktreeAutoClean first)
+func (c *ProjectConfig) GetWorktreeAutoClean() bool {
+	if c.Worktree.AutoClean == nil {
+		return true // Default
+	}
+	return *c.Worktree.AutoClean
+}
+
+// HasSplitHunkSelector returns true if split hunk selector is configured
+func (c *ProjectConfig) HasSplitHunkSelector() bool {
+	return c.Split.HunkSelector != ""
+}
+
+// HasMaxConcurrency returns true if max concurrency is configured
+func (c *ProjectConfig) HasMaxConcurrency() bool {
+	return c.MaxConcurrency != nil
+}
+
+// GetMaxConcurrency returns the max concurrency value (caller should check HasMaxConcurrency first)
+func (c *ProjectConfig) GetMaxConcurrency() int {
+	if c.MaxConcurrency == nil {
+		return DefaultMaxConcurrency
+	}
+	return *c.MaxConcurrency
+}
+
 // Validate checks the configuration for invalid values
 func (c *ProjectConfig) Validate() error {
+	// Validate trunks doesn't duplicate the primary trunk
+	if c.HasTrunk() && c.HasTrunks() && slices.Contains(c.Trunks, c.Trunk) {
+		return fmt.Errorf("duplicate trunk in %s: %q appears in both 'trunk' and 'trunks'", ProjectConfigFileName, c.Trunk)
+	}
+
 	// Validate branch pattern if set
 	if c.HasBranchPattern() {
 		if _, err := NewBranchPattern(c.Branch.Pattern); err != nil {
@@ -140,13 +232,30 @@ func (c *ProjectConfig) Validate() error {
 	// Validate merge method if set
 	if c.HasMergeMethod() {
 		if !slices.Contains(ValidMergeMethods, c.Merge.Method) {
-			return fmt.Errorf("invalid merge.method in %s: %q (must be one of %v)", ProjectConfigFileName, c.Merge.Method, ValidMergeMethods)
+			return fmt.Errorf("invalid merge.method in %s: %q (must be one of: %s)", ProjectConfigFileName, c.Merge.Method, strings.Join(ValidMergeMethods, ", "))
 		}
 	}
 
-	// Validate CI timeout if set
+	// Validate CI timeout if set (0 means not set in YAML, which is fine)
 	if c.CI.Timeout < 0 {
-		return fmt.Errorf("invalid ci.timeout in %s: must be >= 0", ProjectConfigFileName)
+		return fmt.Errorf("invalid ci.timeout in %s: must be a positive number", ProjectConfigFileName)
+	}
+
+	// Validate undo depth if set
+	if c.Undo.Depth < 0 {
+		return fmt.Errorf("invalid undo.depth in %s: must be >= 0", ProjectConfigFileName)
+	}
+
+	// Validate split hunk selector if set
+	if c.HasSplitHunkSelector() {
+		if !slices.Contains(ValidHunkSelectors, c.Split.HunkSelector) {
+			return fmt.Errorf("invalid split.hunkSelector in %s: %q (must be one of: %s)", ProjectConfigFileName, c.Split.HunkSelector, strings.Join(ValidHunkSelectors, ", "))
+		}
+	}
+
+	// Validate maxConcurrency if set
+	if c.HasMaxConcurrency() && *c.MaxConcurrency < 0 {
+		return fmt.Errorf("invalid maxConcurrency in %s: must be >= 0", ProjectConfigFileName)
 	}
 
 	return nil

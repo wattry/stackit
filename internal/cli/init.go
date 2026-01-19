@@ -95,31 +95,55 @@ func (h *cliInitHandler) OnSuccess(trunkName string, wasInitialized bool, isRese
 
 // offerIntegrations prompts the user to install integrations interactively
 func (h *cliInitHandler) offerIntegrations(splog output.Output) {
+	// Check which integrations are already installed
+	githubInstalled := integrations.IsGitHubInstalled(h.runner)
+	precommitInstalled := integrations.IsPrecommitInstalled(h.runner)
+	agentsInstalled := integrations.IsAgentsInstalled(h.runner)
+
+	// If all are installed, skip the integration prompts
+	if githubInstalled && precommitInstalled && agentsInstalled {
+		splog.Newline()
+		splog.Info("All integrations already installed.")
+		return
+	}
+
 	splog.Newline()
 	splog.Info("Would you like to install any integrations?")
 	splog.Newline()
 
-	// Offer GitHub integration
-	installGitHub, err := tui.PromptConfirm("Install GitHub Actions workflow? (CI checks for stacked PRs)", true)
-	if err == nil && installGitHub {
-		if err := integrations.InstallGitHub(h.runner, false, h.writer); err != nil {
-			splog.Warn("Failed to install GitHub integration: %v", err)
+	// Offer GitHub integration (skip if already installed)
+	if githubInstalled {
+		splog.Info("✓ GitHub Actions workflow already installed")
+	} else {
+		installGitHub, err := tui.PromptConfirm("Install GitHub Actions workflow? (CI checks for stacked PRs)", true)
+		if err == nil && installGitHub {
+			if err := integrations.InstallGitHub(h.runner, false, h.writer); err != nil {
+				splog.Warn("Failed to install GitHub integration: %v", err)
+			}
 		}
 	}
 
-	// Offer pre-commit hook
-	installPrecommit, err := tui.PromptConfirm("Install pre-commit hook? (Prevents commits on locked branches)", true)
-	if err == nil && installPrecommit {
-		if err := integrations.InstallPrecommit(h.runner, h.writer); err != nil {
-			splog.Warn("Failed to install pre-commit hook: %v", err)
+	// Offer pre-commit hook (skip if already installed)
+	if precommitInstalled {
+		splog.Info("✓ Pre-commit hook already installed")
+	} else {
+		installPrecommit, err := tui.PromptConfirm("Install pre-commit hook? (Prevents commits on locked branches)", true)
+		if err == nil && installPrecommit {
+			if err := integrations.InstallPrecommit(h.runner, h.writer); err != nil {
+				splog.Warn("Failed to install pre-commit hook: %v", err)
+			}
 		}
 	}
 
-	// Offer agent integration
-	installAgents, err := tui.PromptConfirm("Install AI agent files? (Claude Code / Cursor integration)", false)
-	if err == nil && installAgents {
-		if err := integrations.InstallAgents(h.runner, false, false, h.version, h.writer); err != nil {
-			splog.Warn("Failed to install agent files: %v", err)
+	// Offer agent integration (skip if already installed)
+	if agentsInstalled {
+		splog.Info("✓ AI agent files already installed")
+	} else {
+		installAgents, err := tui.PromptConfirm("Install AI agent files? (Claude Code / Cursor integration)", false)
+		if err == nil && installAgents {
+			if err := integrations.InstallAgents(h.runner, false, false, h.version, h.writer); err != nil {
+				splog.Warn("Failed to install agent files: %v", err)
+			}
 		}
 	}
 }

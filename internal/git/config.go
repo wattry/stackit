@@ -3,6 +3,7 @@
 package git
 
 import (
+	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -33,8 +34,15 @@ func (c *ConfigStore) Get(key string) (string, error) {
 	cmd.Dir = c.repoRoot
 	out, err := cmd.Output()
 	if err != nil {
-		// git config returns exit code 1 if key not found - treat as empty
-		return "", nil //nolint:nilerr
+		// git config returns exit code 1 if key not found
+		// Other exit codes indicate actual errors
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if exitErr.ExitCode() == 1 {
+				return "", nil // key not found
+			}
+		}
+		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -46,8 +54,15 @@ func (c *ConfigStore) GetAll(key string) ([]string, error) {
 	cmd.Dir = c.repoRoot
 	out, err := cmd.Output()
 	if err != nil {
-		// git config returns exit code 1 if key not found - treat as empty
-		return nil, nil //nolint:nilerr
+		// git config returns exit code 1 if key not found
+		// Other exit codes indicate actual errors
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if exitErr.ExitCode() == 1 {
+				return nil, nil // key not found
+			}
+		}
+		return nil, err
 	}
 	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {
@@ -85,7 +100,18 @@ func (c *ConfigStore) Add(key, value string) error {
 func (c *ConfigStore) Unset(key string) error {
 	cmd := exec.Command("git", "config", "--local", "--unset-all", key)
 	cmd.Dir = c.repoRoot
-	_ = cmd.Run() // Ignore error if key doesn't exist
+	err := cmd.Run()
+	if err != nil {
+		// git config --unset-all returns exit code 5 if key not found
+		// Other exit codes indicate actual errors
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if exitErr.ExitCode() == 5 {
+				return nil // key not found, that's fine
+			}
+		}
+		return err
+	}
 	return nil
 }
 
