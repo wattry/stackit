@@ -29,6 +29,14 @@ const (
 	KeyApprovedHooks = "stackit.hooks.approvedPostWorktreeCreate"
 	// KeyMaxConcurrency is the maximum number of concurrent validation operations.
 	KeyMaxConcurrency = "stackit.maxConcurrency"
+	// KeyNavigationWhen controls when navigation is displayed (always/never/multiple).
+	KeyNavigationWhen = "stackit.navigation.when"
+	// KeyNavigationMarker is the custom marker symbol for the current branch.
+	KeyNavigationMarker = "stackit.navigation.marker"
+	// KeyNavigationLocation controls where navigation appears (body/comment).
+	KeyNavigationLocation = "stackit.navigation.location"
+	// KeyNavigationShowMerged controls whether to show merged branch history.
+	KeyNavigationShowMerged = "stackit.navigation.showMerged"
 )
 
 // Default values for configuration.
@@ -47,6 +55,14 @@ const (
 	DefaultSplitHunkSelector = "tui"
 	// DefaultMaxConcurrency is the default max concurrent operations (0 = auto).
 	DefaultMaxConcurrency = 0
+	// DefaultNavigationWhen is the default navigation display mode.
+	DefaultNavigationWhen = "multiple"
+	// DefaultNavigationMarker is the default marker for the current branch.
+	DefaultNavigationMarker = "👈"
+	// DefaultNavigationLocation is the default location for navigation (PR body).
+	DefaultNavigationLocation = "body"
+	// DefaultNavigationShowMerged is whether to show merged history by default.
+	DefaultNavigationShowMerged = true
 )
 
 // ValidMergeMethods contains the allowed merge method values.
@@ -54,3 +70,17 @@ var ValidMergeMethods = []string{"squash", "merge", "rebase"}
 
 // ValidHunkSelectors contains the allowed hunk selector values.
 var ValidHunkSelectors = []string{"tui", "git"}
+
+// ValidNavigationWhen contains the allowed navigation when values.
+var ValidNavigationWhen = []string{"always", "never", "multiple"}
+
+// Navigation location constants.
+const (
+	NavigationLocationBody    = "body"
+	NavigationLocationComment = "comment"
+	NavigationLocationNone    = "none"
+)
+
+// ValidNavigationLocation contains the allowed navigation location values.
+// "none" is an alias for disabling navigation (equivalent to when=never).
+var ValidNavigationLocation = []string{NavigationLocationBody, NavigationLocationComment, NavigationLocationNone}

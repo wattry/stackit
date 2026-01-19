@@ -602,6 +602,162 @@ func TestGitConfigSaveNoop(t *testing.T) {
 	})
 }
 
+func TestGitConfigNavigation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns defaults", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.Equal(t, DefaultNavigationWhen, cfg.NavigationWhen())
+		require.Equal(t, DefaultNavigationMarker, cfg.NavigationMarker())
+		require.Equal(t, DefaultNavigationLocation, cfg.NavigationLocation())
+		require.Equal(t, DefaultNavigationShowMerged, cfg.NavigationShowMerged())
+	})
+
+	t.Run("sets valid navigation.when values", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		for _, when := range []string{"always", "never", "multiple"} {
+			err = cfg.SetNavigationWhen(when)
+			require.NoError(t, err)
+			require.Equal(t, when, cfg.NavigationWhen())
+		}
+	})
+
+	t.Run("rejects invalid navigation.when value", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationWhen("invalid")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid navigation.when")
+	})
+
+	t.Run("sets valid navigation.location values", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		for _, location := range []string{"body", "comment"} {
+			err = cfg.SetNavigationLocation(location)
+			require.NoError(t, err)
+			require.Equal(t, location, cfg.NavigationLocation())
+		}
+	})
+
+	t.Run("rejects invalid navigation.location value", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationLocation("invalid")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid navigation.location")
+	})
+
+	t.Run("sets navigation.marker", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationMarker("<--")
+		require.NoError(t, err)
+		require.Equal(t, "<--", cfg.NavigationMarker())
+	})
+
+	t.Run("accepts emoji markers counting runes not bytes", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		// "👈👈👈" is 3 runes (12 bytes) - should be accepted since 3 <= 10
+		err = cfg.SetNavigationMarker("👈👈👈")
+		require.NoError(t, err)
+		require.Equal(t, "👈👈👈", cfg.NavigationMarker())
+
+		// 10 emoji runes (40 bytes) - should be accepted at the limit
+		err = cfg.SetNavigationMarker("🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴")
+		require.NoError(t, err)
+
+		// 11 emoji runes - should be rejected
+		err = cfg.SetNavigationMarker("🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot exceed 10 characters")
+	})
+
+	t.Run("rejects empty navigation.marker", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationMarker("")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot be empty")
+	})
+
+	t.Run("rejects navigation.marker with newlines", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationMarker("arrow\n")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot contain newlines")
+	})
+
+	t.Run("rejects navigation.marker exceeding 10 chars", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationMarker("12345678901") // 11 chars
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot exceed 10 characters")
+	})
+
+	t.Run("sets and gets navigation.showMerged", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetNavigationShowMerged(true)
+		require.NoError(t, err)
+		require.True(t, cfg.NavigationShowMerged())
+
+		err = cfg.SetNavigationShowMerged(false)
+		require.NoError(t, err)
+		require.False(t, cfg.NavigationShowMerged())
+	})
+}
+
 func TestGitConfigWithProjectFallback(t *testing.T) {
 	t.Parallel()
 

@@ -19,22 +19,26 @@ import (
 
 // Config key constants for CLI commands
 const (
-	keyTrunk             = "trunk"
-	keyTrunks            = "trunks"
-	keyTrunksAdd         = "trunks.add"
-	keyTrunksRemove      = "trunks.remove"
-	keyTrunksClear       = "trunks.clear"
-	keyBranchPattern     = "branch.pattern"
-	keySubmitFooter      = "submit.footer"
-	keyMergeMethod       = "merge.method"
-	keyWorktreeBasePath  = "worktree.basePath"
-	keyWorktreeAutoClean = "worktree.autoClean"
-	keySplitHunkSelector = "split.hunkSelector"
-	keyUndoDepth         = "undo.depth"
-	keyCICommand         = "ci.command"
-	keyCITimeout         = "ci.timeout"
-	keyMaxConcurrency    = "maxConcurrency"
-	valueNotSet          = "(not set)"
+	keyTrunk                = "trunk"
+	keyTrunks               = "trunks"
+	keyTrunksAdd            = "trunks.add"
+	keyTrunksRemove         = "trunks.remove"
+	keyTrunksClear          = "trunks.clear"
+	keyBranchPattern        = "branch.pattern"
+	keySubmitFooter         = "submit.footer"
+	keyMergeMethod          = "merge.method"
+	keyWorktreeBasePath     = "worktree.basePath"
+	keyWorktreeAutoClean    = "worktree.autoClean"
+	keySplitHunkSelector    = "split.hunkSelector"
+	keyUndoDepth            = "undo.depth"
+	keyCICommand            = "ci.command"
+	keyCITimeout            = "ci.timeout"
+	keyMaxConcurrency       = "maxConcurrency"
+	keyNavigationWhen       = "navigation.when"
+	keyNavigationMarker     = "navigation.marker"
+	keyNavigationLocation   = "navigation.location"
+	keyNavigationShowMerged = "navigation.showMerged"
+	valueNotSet             = "(not set)"
 )
 
 // newConfigCmd creates the config command
@@ -158,6 +162,14 @@ func newConfigGetCmd() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.CITimeout())
 			case keyMaxConcurrency:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.MaxConcurrency())
+			case keyNavigationWhen:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.NavigationWhen())
+			case keyNavigationMarker:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.NavigationMarker())
+			case keyNavigationLocation:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.NavigationLocation())
+			case keyNavigationShowMerged:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.NavigationShowMerged())
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
@@ -289,6 +301,30 @@ func newConfigSetCmd() *cobra.Command {
 					return fmt.Errorf("failed to set %s: %w", keyMaxConcurrency, err)
 				}
 				splog.Info("Set %s to: %d", keyMaxConcurrency, concurrency)
+			case keyNavigationWhen:
+				if err := cfg.SetNavigationWhen(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyNavigationWhen, err)
+				}
+				splog.Info("Set %s to: %s", keyNavigationWhen, value)
+			case keyNavigationMarker:
+				if err := cfg.SetNavigationMarker(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyNavigationMarker, err)
+				}
+				splog.Info("Set %s to: %s", keyNavigationMarker, value)
+			case keyNavigationLocation:
+				if err := cfg.SetNavigationLocation(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyNavigationLocation, err)
+				}
+				splog.Info("Set %s to: %s", keyNavigationLocation, value)
+			case keyNavigationShowMerged:
+				show, err := strconv.ParseBool(value)
+				if err != nil {
+					return fmt.Errorf("invalid value for %s: %s (must be 'true' or 'false')", keyNavigationShowMerged, value)
+				}
+				if err := cfg.SetNavigationShowMerged(show); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyNavigationShowMerged, err)
+				}
+				splog.Info("Set %s to: %v", keyNavigationShowMerged, show)
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
@@ -403,6 +439,26 @@ Examples:
 					return fmt.Errorf("failed to unset %s: %w", keyMaxConcurrency, err)
 				}
 				splog.Info("Unset %s (now using: %d)", keyMaxConcurrency, cfg.MaxConcurrency())
+			case keyNavigationWhen:
+				if err := cfg.UnsetNavigationWhen(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyNavigationWhen, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keyNavigationWhen, cfg.NavigationWhen())
+			case keyNavigationMarker:
+				if err := cfg.UnsetNavigationMarker(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyNavigationMarker, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keyNavigationMarker, cfg.NavigationMarker())
+			case keyNavigationLocation:
+				if err := cfg.UnsetNavigationLocation(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyNavigationLocation, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keyNavigationLocation, cfg.NavigationLocation())
+			case keyNavigationShowMerged:
+				if err := cfg.UnsetNavigationShowMerged(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyNavigationShowMerged, err)
+				}
+				splog.Info("Unset %s (now using: %v)", keyNavigationShowMerged, cfg.NavigationShowMerged())
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
@@ -642,6 +698,22 @@ func showConfigWithSources(repoRoot string, w io.Writer) error {
 	// maxConcurrency
 	maxConcurrencySource := getIntSource(config.KeyMaxConcurrency, projectCfg != nil && projectCfg.HasMaxConcurrency())
 	formatLine("maxConcurrency", fmt.Sprintf("%d", cfg.MaxConcurrency()), maxConcurrencySource)
+
+	// navigation.when
+	navWhenSource := getStringSource(config.KeyNavigationWhen, projectCfg != nil && projectCfg.HasNavigationWhen())
+	formatLine("navigation.when", cfg.NavigationWhen(), navWhenSource)
+
+	// navigation.marker
+	navMarkerSource := getStringSource(config.KeyNavigationMarker, projectCfg != nil && projectCfg.HasNavigationMarker())
+	formatLine("navigation.marker", cfg.NavigationMarker(), navMarkerSource)
+
+	// navigation.location
+	navLocationSource := getStringSource(config.KeyNavigationLocation, projectCfg != nil && projectCfg.HasNavigationLocation())
+	formatLine("navigation.location", cfg.NavigationLocation(), navLocationSource)
+
+	// navigation.showMerged
+	navShowMergedSource := getBoolSource(config.KeyNavigationShowMerged, projectCfg != nil && projectCfg.HasNavigationShowMerged())
+	formatLine("navigation.showMerged", strconv.FormatBool(cfg.NavigationShowMerged()), navShowMergedSource)
 
 	// approved hooks (personal only, no team fallback)
 	approvedHooks := cfg.ApprovedPostWorktreeCreateHooks()

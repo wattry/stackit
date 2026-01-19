@@ -65,8 +65,9 @@ type MergedParent struct {
 
 // LocalMeta represents branch metadata that is strictly local and never pushed
 type LocalMeta struct {
-	Frozen            bool `json:"frozen,omitempty"`
-	NeedsPRBodyUpdate bool `json:"needsPRBodyUpdate,omitempty"`
+	Frozen              bool   `json:"frozen,omitempty"`
+	NeedsPRBodyUpdate   bool   `json:"needsPRBodyUpdate,omitempty"`
+	NavigationCommentID *int64 `json:"navigationCommentId,omitempty"`
 }
 
 // ModifiedBy represents information about who last modified the metadata

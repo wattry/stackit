@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"stackit.dev/stackit/internal/git"
 )
@@ -475,6 +476,112 @@ func (c *GitConfig) SetMaxConcurrency(n int) error {
 	return c.store.SetInt(KeyMaxConcurrency, n)
 }
 
+// NavigationWhen returns when navigation should be displayed.
+// Priority: personal git config > team project config > default.
+func (c *GitConfig) NavigationWhen() string {
+	// Check personal git config first
+	when, _ := c.store.Get(KeyNavigationWhen)
+	if when != "" {
+		if !slices.Contains(ValidNavigationWhen, when) {
+			return DefaultNavigationWhen
+		}
+		return when
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasNavigationWhen() {
+		return c.project.Navigation.When
+	}
+	// Return default
+	return DefaultNavigationWhen
+}
+
+// SetNavigationWhen sets when navigation should be displayed.
+func (c *GitConfig) SetNavigationWhen(when string) error {
+	if !slices.Contains(ValidNavigationWhen, when) {
+		return fmt.Errorf("invalid navigation.when: %s (must be one of: %s)", when, strings.Join(ValidNavigationWhen, ", "))
+	}
+	return c.store.Set(KeyNavigationWhen, when)
+}
+
+// NavigationMarker returns the marker symbol for the current branch.
+// Priority: personal git config > team project config > default.
+func (c *GitConfig) NavigationMarker() string {
+	// Check personal git config first
+	marker, _ := c.store.Get(KeyNavigationMarker)
+	if marker != "" {
+		return marker
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasNavigationMarker() {
+		return c.project.Navigation.Marker
+	}
+	// Return default
+	return DefaultNavigationMarker
+}
+
+// SetNavigationMarker sets the marker symbol for the current branch.
+func (c *GitConfig) SetNavigationMarker(marker string) error {
+	// Check for newlines before trimming (since TrimSpace removes trailing newlines)
+	if strings.ContainsAny(marker, "\n\r") {
+		return fmt.Errorf("navigation.marker cannot contain newlines")
+	}
+	marker = strings.TrimSpace(marker)
+	if marker == "" {
+		return fmt.Errorf("navigation.marker cannot be empty")
+	}
+	if utf8.RuneCountInString(marker) > 10 {
+		return fmt.Errorf("navigation.marker cannot exceed 10 characters")
+	}
+	return c.store.Set(KeyNavigationMarker, marker)
+}
+
+// NavigationLocation returns where navigation should appear.
+// Priority: personal git config > team project config > default.
+func (c *GitConfig) NavigationLocation() string {
+	// Check personal git config first
+	location, _ := c.store.Get(KeyNavigationLocation)
+	if location != "" {
+		if !slices.Contains(ValidNavigationLocation, location) {
+			return DefaultNavigationLocation
+		}
+		return location
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasNavigationLocation() {
+		return c.project.Navigation.Location
+	}
+	// Return default
+	return DefaultNavigationLocation
+}
+
+// SetNavigationLocation sets where navigation should appear.
+func (c *GitConfig) SetNavigationLocation(location string) error {
+	if !slices.Contains(ValidNavigationLocation, location) {
+		return fmt.Errorf("invalid navigation.location: %s (must be one of: %s)", location, strings.Join(ValidNavigationLocation, ", "))
+	}
+	return c.store.Set(KeyNavigationLocation, location)
+}
+
+// NavigationShowMerged returns whether to show merged branch history.
+// Priority: personal git config > team project config > default.
+func (c *GitConfig) NavigationShowMerged() bool {
+	// Check personal git config first
+	if c.store.Exists(KeyNavigationShowMerged) {
+		return c.store.GetBoolWithDefault(KeyNavigationShowMerged, DefaultNavigationShowMerged)
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasNavigationShowMerged() {
+		return c.project.GetNavigationShowMerged()
+	}
+	// Return default
+	return DefaultNavigationShowMerged
+}
+
+// SetNavigationShowMerged sets whether to show merged branch history.
+func (c *GitConfig) SetNavigationShowMerged(show bool) error {
+	return c.store.SetBool(KeyNavigationShowMerged, show)
+}
+
 // Deprecated methods for backwards compatibility during migration.
 
 // CombineCICommand returns the CI command (deprecated, use CICommand).
@@ -560,6 +667,26 @@ func (c *GitConfig) UnsetMaxConcurrency() error {
 	return c.store.Unset(KeyMaxConcurrency)
 }
 
+// UnsetNavigationWhen removes the personal navigation.when setting, reverting to project/default.
+func (c *GitConfig) UnsetNavigationWhen() error {
+	return c.store.Unset(KeyNavigationWhen)
+}
+
+// UnsetNavigationMarker removes the personal navigation.marker setting, reverting to project/default.
+func (c *GitConfig) UnsetNavigationMarker() error {
+	return c.store.Unset(KeyNavigationMarker)
+}
+
+// UnsetNavigationLocation removes the personal navigation.location setting, reverting to project/default.
+func (c *GitConfig) UnsetNavigationLocation() error {
+	return c.store.Unset(KeyNavigationLocation)
+}
+
+// UnsetNavigationShowMerged removes the personal navigation.showMerged setting, reverting to project/default.
+func (c *GitConfig) UnsetNavigationShowMerged() error {
+	return c.store.Unset(KeyNavigationShowMerged)
+}
+
 // ResetAllPersonal removes all personal configuration overrides, reverting to team/default values.
 // This clears all stackit.* keys from the local git config.
 func (c *GitConfig) ResetAllPersonal() error {
@@ -577,6 +704,10 @@ func (c *GitConfig) ResetAllPersonal() error {
 		KeySplitHunkSelector,
 		KeyApprovedHooks,
 		KeyMaxConcurrency,
+		KeyNavigationWhen,
+		KeyNavigationMarker,
+		KeyNavigationLocation,
+		KeyNavigationShowMerged,
 	}
 
 	var firstErr error
