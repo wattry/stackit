@@ -9,6 +9,7 @@ import (
 	"stackit.dev/stackit/internal/actions/worktree"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -33,7 +34,10 @@ directory. Create a worktree with 'stackit worktree create' from trunk.`,
 
 // newCreateCmd creates the worktree create command
 func newCreateCmd() *cobra.Command {
-	var scope string
+	var (
+		scope string
+		open  bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "create <name>",
@@ -43,21 +47,50 @@ func newCreateCmd() *cobra.Command {
 Creates a worktree with an anchor branch that tracks trunk. The anchor branch
 serves as the base for stacked branches created within the worktree.
 
-The worktree will be created in a sibling directory to your repository.`,
+The worktree will be created in a sibling directory to your repository.
+
+Use --open to automatically change to the new worktree directory after creation.
+In interactive mode, you will be prompted to open the worktree if --open is not specified.`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				_, err := worktree.CreateAction(ctx, worktree.CreateOptions{
+				result, err := worktree.CreateAction(ctx, worktree.CreateOptions{
 					Name:  args[0],
 					Scope: scope,
 				})
-				return err
+				if err != nil {
+					return err
+				}
+
+				// Determine if we should open the worktree
+				shouldOpen := open
+				if !shouldOpen && tui.IsTTY() {
+					// Prompt in interactive mode
+					confirmed, promptErr := tui.PromptConfirm("Open worktree now?", true)
+					if promptErr == nil && confirmed {
+						shouldOpen = true
+					}
+				}
+
+				if shouldOpen && result.Path != "" {
+					if common.HasShellIntegration() {
+						ctx.Output.DirectiveCD(result.Path)
+					} else {
+						ctx.Output.Tip("cd %s", result.Path)
+					}
+				} else if result.Path != "" {
+					// User declined or non-interactive without --open
+					ctx.Output.Tip("Open with: cd $(stackit worktree open %s)", result.Name)
+				}
+
+				return nil
 			})
 		},
 	}
 
 	cmd.Flags().StringVarP(&scope, "scope", "s", "", "Scope to apply to all branches in this worktree")
+	cmd.Flags().BoolVarP(&open, "open", "o", false, "Open the worktree after creation (change to its directory)")
 
 	return cmd
 }
@@ -137,12 +170,20 @@ name or the anchor branch name.`,
 func newOpenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "open <name-or-anchor-branch>",
-		Short: "Print the path to a worktree",
-		Long: `Print the path to a stackit-managed worktree.
+		Short: "Open a worktree (with shell integration) or print its path",
+		Long: `Open a stackit-managed worktree.
 
 You can specify either the worktree name or the anchor branch name.
 
-Use with cd to navigate: cd $(stackit worktree open my-feature)`,
+With shell integration enabled, this command will automatically change
+your working directory to the worktree. Without shell integration, it
+prints the path for use with cd:
+
+  cd $(stackit worktree open my-feature)
+
+To enable shell integration, add to your shell config:
+
+  eval "$(stackit shell zsh)"   # or bash/fish`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -154,9 +195,13 @@ Use with cd to navigate: cd $(stackit worktree open my-feature)`,
 					return err
 				}
 
-				// Print just the path so it can be used with cd
-				ctx.Output.Print(path)
-				ctx.Output.Newline()
+				if common.HasShellIntegration() {
+					ctx.Output.DirectiveCD(path)
+				} else {
+					// Print just the path so it can be used with cd
+					ctx.Output.Print(path)
+					ctx.Output.Newline()
+				}
 				return nil
 			})
 		},
