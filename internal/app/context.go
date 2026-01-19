@@ -27,7 +27,7 @@ type Context struct {
 	Logger       output.Logger
 	RepoRoot     string
 	GitHubClient github.Client
-	Config       *config.Config // Cached config to avoid repeated loading
+	Config       config.Configurer // Cached config to avoid repeated loading
 
 	// Global settings from flags
 	Interactive bool

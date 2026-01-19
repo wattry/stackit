@@ -14,13 +14,13 @@ import (
 // Combiner analyzes whether multiple stacks can be merged together.
 type Combiner struct {
 	eng       engine.Engine
-	cfg       *config.Config
+	cfg       config.Configurer
 	output    output.Output
 	validator *merge.LocalCIValidator
 }
 
 // NewCombiner creates a new stack combiner.
-func NewCombiner(eng engine.Engine, cfg *config.Config, out output.Output) *Combiner {
+func NewCombiner(eng engine.Engine, cfg config.Configurer, out output.Output) *Combiner {
 	return &Combiner{
 		eng:       eng,
 		cfg:       cfg,

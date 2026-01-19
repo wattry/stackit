@@ -3,11 +3,13 @@ package integrations
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/output"
 )
 
 const precommitHookTemplate = `#!/bin/bash
@@ -17,7 +19,18 @@ stackit precommit verify
 
 // PrecommitInstallAction installs the pre-commit hook
 func PrecommitInstallAction(ctx *app.Context) error {
-	repoRoot := ctx.RepoRoot
+	return installPrecommitHook(ctx.RepoRoot, ctx.Output)
+}
+
+// PrecommitInstallActionWithOutput installs the pre-commit hook with a custom writer.
+// This is a convenience function for use during init where we don't have an app.Context.
+func PrecommitInstallActionWithOutput(repoRoot string, writer io.Writer) error {
+	out := output.NewConsoleOutput(writer, false)
+	return installPrecommitHook(repoRoot, out)
+}
+
+// installPrecommitHook is the core implementation for installing the pre-commit hook.
+func installPrecommitHook(repoRoot string, out output.Output) error {
 	hooksDir := filepath.Join(repoRoot, ".git", "hooks")
 	hookPath := filepath.Join(hooksDir, "pre-commit")
 
@@ -30,34 +43,28 @@ func PrecommitInstallAction(ctx *app.Context) error {
 	if _, err := os.Stat(hookPath); err == nil {
 		content, err := os.ReadFile(hookPath)
 		if err == nil && strings.Contains(string(content), "stackit precommit verify") {
-			ctx.Output.Info("Pre-commit hook is already installed.")
+			out.Info("Pre-commit hook is already installed.")
 			return nil
 		}
 
-		// If it exists but doesn't have our command, we should probably append or warn.
-		// For simplicity, let's append.
+		// If it exists but doesn't have our command, append
 		f, err := os.OpenFile(hookPath, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open existing pre-commit hook: %w", err)
 		}
-		defer func() {
-			// Close errors are typically non-critical for write operations that have already succeeded.
-			// We ignore the error here since the write operation has completed and we don't want
-			// to fail the installation if the close fails (which is rare).
-			_ = f.Close()
-		}()
+		defer func() { _ = f.Close() }()
 
 		if _, err := f.WriteString("\n# Added by Stackit\nstackit precommit verify\n"); err != nil {
 			return fmt.Errorf("failed to append to pre-commit hook: %w", err)
 		}
-		ctx.Output.Info("Appended Stackit verification to existing pre-commit hook.")
+		out.Info("Appended Stackit verification to existing pre-commit hook.")
 	} else {
 		// Create new hook
 		// #nosec G306 - Git hooks need to be executable
 		if err := os.WriteFile(hookPath, []byte(precommitHookTemplate), 0750); err != nil {
 			return fmt.Errorf("failed to write pre-commit hook: %w", err)
 		}
-		ctx.Output.Info("Installed Stackit pre-commit hook.")
+		out.Info("Installed Stackit pre-commit hook.")
 	}
 
 	return nil

@@ -2,7 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -12,6 +14,27 @@ import (
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	configtui "stackit.dev/stackit/internal/tui/config"
+	"stackit.dev/stackit/internal/tui/style"
+)
+
+// Config key constants for CLI commands
+const (
+	keyTrunk             = "trunk"
+	keyTrunks            = "trunks"
+	keyTrunksAdd         = "trunks.add"
+	keyTrunksRemove      = "trunks.remove"
+	keyTrunksClear       = "trunks.clear"
+	keyBranchPattern     = "branch.pattern"
+	keySubmitFooter      = "submit.footer"
+	keyMergeMethod       = "merge.method"
+	keyWorktreeBasePath  = "worktree.basePath"
+	keyWorktreeAutoClean = "worktree.autoClean"
+	keySplitHunkSelector = "split.hunkSelector"
+	keyUndoDepth         = "undo.depth"
+	keyCICommand         = "ci.command"
+	keyCITimeout         = "ci.timeout"
+	keyMaxConcurrency    = "maxConcurrency"
+	valueNotSet          = "(not set)"
 )
 
 // newConfigCmd creates the config command
@@ -60,6 +83,9 @@ Examples:
 
 	cmd.AddCommand(newConfigGetCmd())
 	cmd.AddCommand(newConfigSetCmd())
+	cmd.AddCommand(newConfigUnsetCmd())
+	cmd.AddCommand(newConfigShowCmd())
+	cmd.AddCommand(newConfigResetCmd())
 
 	return cmd
 }
@@ -90,26 +116,48 @@ func newConfigGetCmd() *cobra.Command {
 			}
 
 			switch key {
-			case "branch.pattern":
+			case keyTrunk:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.Trunk())
+			case keyTrunks:
+				allTrunks := cfg.AllTrunks()
+				if len(allTrunks) > 1 {
+					// Show additional trunks (skip primary trunk)
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), strings.Join(allTrunks[1:], ", "))
+				} else {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), valueNotSet)
+				}
+			case keyBranchPattern:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.BranchNamePattern())
-			case "submit.footer":
+			case keySubmitFooter:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.SubmitFooter())
-			case "merge.method":
+			case keyMergeMethod:
 				method := cfg.MergeMethod()
 				if method == "" {
-					method = "(not set)"
+					method = valueNotSet
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), method)
-			case "worktree.basePath":
+			case keyWorktreeBasePath:
 				basePath := cfg.WorktreeBasePath()
 				if basePath == "" {
-					basePath = "(not set)"
+					basePath = valueNotSet
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), basePath)
-			case "worktree.autoClean":
+			case keyWorktreeAutoClean:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.WorktreeAutoClean())
-			case "split.hunkSelector":
+			case keySplitHunkSelector:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.SplitHunkSelector())
+			case keyUndoDepth:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.UndoStackDepth())
+			case keyCICommand:
+				ciCmd := cfg.CICommand()
+				if ciCmd == "" {
+					ciCmd = valueNotSet
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), ciCmd)
+			case keyCITimeout:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.CITimeout())
+			case keyMaxConcurrency:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.MaxConcurrency())
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
@@ -151,56 +199,96 @@ func newConfigSetCmd() *cobra.Command {
 			splog := output.NewConsoleOutput(cmd.OutOrStdout(), false)
 
 			switch key {
-			case "branch.pattern":
+			case keyTrunk:
+				if err := cfg.SetTrunk(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyTrunk, err)
+				}
+				splog.Info("Set %s to: %s", keyTrunk, value)
+			case keyTrunksAdd:
+				if err := cfg.AddTrunk(value); err != nil {
+					return fmt.Errorf("failed to add trunk: %w", err)
+				}
+				splog.Info("Added '%s' to additional trunks", value)
+			case keyTrunksRemove:
+				if err := cfg.RemoveTrunk(value); err != nil {
+					return fmt.Errorf("failed to remove trunk: %w", err)
+				}
+				splog.Info("Removed '%s' from additional trunks", value)
+			case keyTrunksClear:
+				if err := cfg.ClearTrunks(); err != nil {
+					return fmt.Errorf("failed to clear trunks: %w", err)
+				}
+				splog.Info("Cleared all personal additional trunks")
+			case keyBranchPattern:
 				if err := cfg.SetBranchNamePattern(value); err != nil {
-					return fmt.Errorf("failed to set branch.pattern: %w", err)
+					return fmt.Errorf("failed to set %s: %w", keyBranchPattern, err)
 				}
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
-				}
-				splog.Info("Set branch.pattern to: %s", value)
-			case "submit.footer":
+				splog.Info("Set %s to: %s", keyBranchPattern, value)
+			case keySubmitFooter:
 				enabled, err := strconv.ParseBool(value)
 				if err != nil {
-					return fmt.Errorf("invalid value for submit.footer: %s (must be 'true' or 'false')", value)
+					return fmt.Errorf("invalid value for %s: %s (must be 'true' or 'false')", keySubmitFooter, value)
 				}
-				cfg.SetSubmitFooter(enabled)
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
+				if err := cfg.SetSubmitFooter(enabled); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keySubmitFooter, err)
 				}
-				splog.Info("Set submit.footer to: %v", enabled)
-			case "merge.method":
+				splog.Info("Set %s to: %v", keySubmitFooter, enabled)
+			case keyMergeMethod:
 				if err := cfg.SetMergeMethod(value); err != nil {
-					return fmt.Errorf("failed to set merge.method: %w", err)
+					return fmt.Errorf("failed to set %s: %w", keyMergeMethod, err)
 				}
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
+				splog.Info("Set %s to: %s", keyMergeMethod, value)
+			case keyWorktreeBasePath:
+				if err := cfg.SetWorktreeBasePath(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyWorktreeBasePath, err)
 				}
-				splog.Info("Set merge.method to: %s", value)
-			case "worktree.basePath":
-				cfg.SetWorktreeBasePath(value)
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
-				}
-				splog.Info("Set worktree.basePath to: %s", value)
-			case "worktree.autoClean":
+				splog.Info("Set %s to: %s", keyWorktreeBasePath, value)
+			case keyWorktreeAutoClean:
 				enabled, err := strconv.ParseBool(value)
 				if err != nil {
-					return fmt.Errorf("invalid value for worktree.autoClean: %s (must be 'true' or 'false')", value)
+					return fmt.Errorf("invalid value for %s: %s (must be 'true' or 'false')", keyWorktreeAutoClean, value)
 				}
-				cfg.SetWorktreeAutoClean(enabled)
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
+				if err := cfg.SetWorktreeAutoClean(enabled); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyWorktreeAutoClean, err)
 				}
-				splog.Info("Set worktree.autoClean to: %v", enabled)
-			case "split.hunkSelector":
+				splog.Info("Set %s to: %v", keyWorktreeAutoClean, enabled)
+			case keySplitHunkSelector:
 				if err := cfg.SetSplitHunkSelector(value); err != nil {
-					return fmt.Errorf("failed to set split.hunkSelector: %w", err)
+					return fmt.Errorf("failed to set %s: %w", keySplitHunkSelector, err)
 				}
-				if err := cfg.Save(); err != nil {
-					return fmt.Errorf("failed to save config: %w", err)
+				splog.Info("Set %s to: %s", keySplitHunkSelector, value)
+			case keyUndoDepth:
+				depth, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid value for %s: %s (must be a positive integer)", keyUndoDepth, value)
 				}
-				splog.Info("Set split.hunkSelector to: %s", value)
+				if err := cfg.SetUndoStackDepth(depth); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyUndoDepth, err)
+				}
+				splog.Info("Set %s to: %d", keyUndoDepth, depth)
+			case keyCICommand:
+				if err := cfg.SetCICommand(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyCICommand, err)
+				}
+				splog.Info("Set %s to: %s", keyCICommand, value)
+			case keyCITimeout:
+				timeout, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid value for %s: %s (must be a positive integer)", keyCITimeout, value)
+				}
+				if err := cfg.SetCITimeout(timeout); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyCITimeout, err)
+				}
+				splog.Info("Set %s to: %d", keyCITimeout, timeout)
+			case keyMaxConcurrency:
+				concurrency, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid value for %s: %s (must be a non-negative integer)", keyMaxConcurrency, value)
+				}
+				if err := cfg.SetMaxConcurrency(concurrency); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keyMaxConcurrency, err)
+				}
+				splog.Info("Set %s to: %d", keyMaxConcurrency, concurrency)
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
@@ -210,4 +298,361 @@ func newConfigSetCmd() *cobra.Command {
 	}
 
 	return cmd
+}
+
+// newConfigUnsetCmd creates the config unset command
+func newConfigUnsetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unset <key>",
+		Short: "Remove a personal configuration value (reverts to team/default)",
+		Long: `Remove a personal configuration value, reverting to the team project config or default.
+
+This removes your personal override for a setting, allowing the team default
+(from .stackit.yaml) or the built-in default to take effect.
+
+Examples:
+  stackit config unset branch.pattern     # Revert to team/default pattern
+  stackit config unset merge.method       # Revert to team/default merge method
+  stackit config unset submit.footer      # Revert to team/default footer setting`,
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			runner := git.NewRunner(nil)
+			if cwd != "" {
+				runner = git.NewRunnerWithPath(cwd, nil)
+			}
+			repoRoot, err := runner.DiscoverRepoRoot()
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+
+			key := args[0]
+			cfg, err := config.LoadConfig(repoRoot)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			splog := output.NewConsoleOutput(cmd.OutOrStdout(), false)
+
+			switch key {
+			case keyTrunk:
+				if err := cfg.UnsetTrunk(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyTrunk, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keyTrunk, cfg.Trunk())
+			case keyBranchPattern:
+				if err := cfg.UnsetBranchNamePattern(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyBranchPattern, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keyBranchPattern, cfg.BranchNamePattern())
+			case keySubmitFooter:
+				if err := cfg.UnsetSubmitFooter(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySubmitFooter, err)
+				}
+				splog.Info("Unset %s (now using: %v)", keySubmitFooter, cfg.SubmitFooter())
+			case keyMergeMethod:
+				if err := cfg.UnsetMergeMethod(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyMergeMethod, err)
+				}
+				method := cfg.MergeMethod()
+				if method == "" {
+					method = valueNotSet
+				}
+				splog.Info("Unset %s (now using: %s)", keyMergeMethod, method)
+			case keyWorktreeBasePath:
+				if err := cfg.UnsetWorktreeBasePath(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyWorktreeBasePath, err)
+				}
+				basePath := cfg.WorktreeBasePath()
+				if basePath == "" {
+					basePath = valueNotSet
+				}
+				splog.Info("Unset %s (now using: %s)", keyWorktreeBasePath, basePath)
+			case keyWorktreeAutoClean:
+				if err := cfg.UnsetWorktreeAutoClean(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyWorktreeAutoClean, err)
+				}
+				splog.Info("Unset %s (now using: %v)", keyWorktreeAutoClean, cfg.WorktreeAutoClean())
+			case keySplitHunkSelector:
+				if err := cfg.UnsetSplitHunkSelector(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySplitHunkSelector, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keySplitHunkSelector, cfg.SplitHunkSelector())
+			case keyUndoDepth:
+				if err := cfg.UnsetUndoStackDepth(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyUndoDepth, err)
+				}
+				splog.Info("Unset %s (now using: %d)", keyUndoDepth, cfg.UndoStackDepth())
+			case keyCICommand:
+				if err := cfg.UnsetCICommand(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyCICommand, err)
+				}
+				ciCmd := cfg.CICommand()
+				if ciCmd == "" {
+					ciCmd = valueNotSet
+				}
+				splog.Info("Unset %s (now using: %s)", keyCICommand, ciCmd)
+			case keyCITimeout:
+				if err := cfg.UnsetCITimeout(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyCITimeout, err)
+				}
+				splog.Info("Unset %s (now using: %d)", keyCITimeout, cfg.CITimeout())
+			case keyMaxConcurrency:
+				if err := cfg.UnsetMaxConcurrency(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keyMaxConcurrency, err)
+				}
+				splog.Info("Unset %s (now using: %d)", keyMaxConcurrency, cfg.MaxConcurrency())
+			default:
+				return fmt.Errorf("unknown configuration key: %s", key)
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// newConfigShowCmd creates the config show command
+func newConfigShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show all configuration values with their sources",
+		Long: `Show all configuration values with their sources (personal, team, or default).
+
+This helps debug configuration by showing where each value comes from in the
+layered configuration system:
+  - personal: Set in your local git config (.git/config)
+  - team:     Set in the project file (.stackit.yaml)
+  - default:  Built-in default value`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			runner := git.NewRunner(nil)
+			if cwd != "" {
+				runner = git.NewRunnerWithPath(cwd, nil)
+			}
+			repoRoot, err := runner.DiscoverRepoRoot()
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+
+			return showConfigWithSources(repoRoot, cmd.OutOrStdout())
+		},
+	}
+
+	return cmd
+}
+
+// newConfigResetCmd creates the config reset command
+func newConfigResetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reset",
+		Short: "Reset all personal configuration overrides",
+		Long: `Reset all personal configuration overrides, reverting to team project config or defaults.
+
+This removes all your personal stackit settings from .git/config, allowing the team
+defaults (from .stackit.yaml) or built-in defaults to take effect.
+
+Use with caution - this will clear all personal configuration including:
+  - trunk and additional trunks
+  - branch pattern
+  - submit footer
+  - merge method
+  - CI command and timeout
+  - worktree settings
+  - approved hooks
+  - and all other personal overrides`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			runner := git.NewRunner(nil)
+			if cwd != "" {
+				runner = git.NewRunnerWithPath(cwd, nil)
+			}
+			repoRoot, err := runner.DiscoverRepoRoot()
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+
+			cfg, err := config.LoadConfig(repoRoot)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			// Confirm with user if interactive
+			if tui.IsTTY() {
+				confirmed, err := tui.PromptConfirm("This will remove all personal configuration overrides. Continue?", false)
+				if err != nil {
+					return err
+				}
+				if !confirmed {
+					return fmt.Errorf("reset canceled")
+				}
+			}
+
+			if err := cfg.ResetAllPersonal(); err != nil {
+				return fmt.Errorf("failed to reset config: %w", err)
+			}
+
+			splog := output.NewConsoleOutput(cmd.OutOrStdout(), false)
+			splog.Info("Reset all personal configuration overrides")
+			splog.Info("Run 'stackit config show' to see current effective values")
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// configSource represents where a config value comes from
+type configSource string
+
+const (
+	sourcePersonal configSource = "personal"
+	sourceTeam     configSource = "team"
+	sourceDefault  configSource = "default"
+)
+
+// showConfigWithSources displays all config values with their sources
+func showConfigWithSources(repoRoot string, w io.Writer) error {
+	// Load both git config and project config separately to determine sources
+	store := git.NewConfigStore(repoRoot)
+	projectCfg, _ := config.LoadProjectConfig(repoRoot)
+
+	// Helper to format value and source
+	formatLine := func(key, value string, source configSource) {
+		sourceColor := style.ColorDim(fmt.Sprintf("(%s)", source))
+		_, _ = fmt.Fprintf(w, "  %-20s = %-30s %s\n", key, value, sourceColor)
+	}
+
+	// Helper to determine source for string values
+	getStringSource := func(gitKey string, hasProject bool) configSource {
+		if val, _ := store.Get(gitKey); val != "" {
+			return sourcePersonal
+		}
+		if hasProject {
+			return sourceTeam
+		}
+		return sourceDefault
+	}
+
+	// Helper to determine source for bool values
+	getBoolSource := func(gitKey string, hasProject bool) configSource {
+		if store.Exists(gitKey) {
+			return sourcePersonal
+		}
+		if hasProject {
+			return sourceTeam
+		}
+		return sourceDefault
+	}
+
+	// Helper to determine source for int values
+	getIntSource := func(gitKey string, hasProject bool) configSource {
+		if store.Exists(gitKey) {
+			return sourcePersonal
+		}
+		if hasProject {
+			return sourceTeam
+		}
+		return sourceDefault
+	}
+
+	// Load config to get effective values
+	cfg, err := config.LoadConfig(repoRoot)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	_, _ = fmt.Fprintln(w, "Configuration values with sources:")
+	_, _ = fmt.Fprintln(w, "")
+
+	// trunk
+	trunkSource := getStringSource(config.KeyTrunk, projectCfg != nil && projectCfg.HasTrunk())
+	formatLine("trunk", cfg.Trunk(), trunkSource)
+
+	// additional trunks (merged from git config and project config)
+	allTrunks := cfg.AllTrunks()
+	if len(allTrunks) > 1 {
+		additionalTrunks := allTrunks[1:] // Skip primary trunk
+		// Determine source - if any are in git config, mark as personal; if in project, mark as team
+		trunksFromGit, _ := store.GetAll(config.KeyTrunks)
+		var trunksSource configSource
+		switch {
+		case len(trunksFromGit) > 0:
+			trunksSource = sourcePersonal
+		case projectCfg != nil && projectCfg.HasTrunks():
+			trunksSource = sourceTeam
+		default:
+			trunksSource = sourceDefault
+		}
+		formatLine("trunks", strings.Join(additionalTrunks, ", "), trunksSource)
+	}
+
+	// branch.pattern
+	patternSource := getStringSource(config.KeyBranchPattern, projectCfg != nil && projectCfg.HasBranchPattern())
+	formatLine("branch.pattern", cfg.BranchNamePattern(), patternSource)
+
+	// submit.footer
+	footerSource := getBoolSource(config.KeySubmitFooter, projectCfg != nil && projectCfg.HasSubmitFooter())
+	formatLine("submit.footer", strconv.FormatBool(cfg.SubmitFooter()), footerSource)
+
+	// merge.method
+	mergeMethod := cfg.MergeMethod()
+	if mergeMethod == "" {
+		mergeMethod = valueNotSet
+	}
+	mergeSource := getStringSource(config.KeyMergeMethod, projectCfg != nil && projectCfg.HasMergeMethod())
+	formatLine(keyMergeMethod, mergeMethod, mergeSource)
+
+	// ci.command
+	ciCmd := cfg.CICommand()
+	if ciCmd == "" {
+		ciCmd = valueNotSet
+	}
+	ciCmdSource := getStringSource(config.KeyCICommand, projectCfg != nil && projectCfg.HasCICommand())
+	formatLine(keyCICommand, ciCmd, ciCmdSource)
+
+	// ci.timeout
+	ciTimeoutSource := getIntSource(config.KeyCITimeout, projectCfg != nil && projectCfg.HasCITimeout())
+	formatLine("ci.timeout", fmt.Sprintf("%d", cfg.CITimeout()), ciTimeoutSource)
+
+	// undo.depth
+	undoSource := getIntSource(config.KeyUndoDepth, projectCfg != nil && projectCfg.HasUndoDepth())
+	formatLine("undo.depth", fmt.Sprintf("%d", cfg.UndoStackDepth()), undoSource)
+
+	// worktree.basePath
+	basePath := cfg.WorktreeBasePath()
+	if basePath == "" {
+		basePath = valueNotSet
+	}
+	basePathSource := getStringSource(config.KeyWorktreeBasePath, projectCfg != nil && projectCfg.HasWorktreeBasePath())
+	formatLine(keyWorktreeBasePath, basePath, basePathSource)
+
+	// worktree.autoClean
+	autoCleanSource := getBoolSource(config.KeyWorktreeAutoClean, projectCfg != nil && projectCfg.HasWorktreeAutoClean())
+	formatLine("worktree.autoClean", strconv.FormatBool(cfg.WorktreeAutoClean()), autoCleanSource)
+
+	// split.hunkSelector
+	hunkSource := getStringSource(config.KeySplitHunkSelector, projectCfg != nil && projectCfg.HasSplitHunkSelector())
+	formatLine("split.hunkSelector", cfg.SplitHunkSelector(), hunkSource)
+
+	// maxConcurrency
+	maxConcurrencySource := getIntSource(config.KeyMaxConcurrency, projectCfg != nil && projectCfg.HasMaxConcurrency())
+	formatLine("maxConcurrency", fmt.Sprintf("%d", cfg.MaxConcurrency()), maxConcurrencySource)
+
+	// approved hooks (personal only, no team fallback)
+	approvedHooks := cfg.ApprovedPostWorktreeCreateHooks()
+	if len(approvedHooks) > 0 {
+		formatLine("hooks.approved", strings.Join(approvedHooks, ", "), sourcePersonal)
+	} else {
+		formatLine("hooks.approved", valueNotSet, sourceDefault)
+	}
+
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "Sources: personal = .git/config, team = .stackit.yaml, default = built-in")
+
+	return nil
 }

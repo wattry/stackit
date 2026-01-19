@@ -110,7 +110,7 @@ In your repository, run:
 ```bash
 stackit init
 ```
-This detects your trunk branch (usually `main`) and prepares the repo for stacking.
+This detects your trunk branch (usually `main`) and prepares the repo for stacking. You'll be prompted to install optional integrations (GitHub Actions, pre-commit hooks, AI agent files).
 
 ### 2. Create your first branch
 Stage some changes, then create a branch:
@@ -383,15 +383,31 @@ stackit sync --cwd /path/to/repo --no-interactive --no-verify
 
 ## Configuration
 
-Stackit supports several configuration options that can be managed via `stackit config`:
+Stackit uses a layered configuration system:
+
+1. **Personal settings** (highest priority) — Stored in `.git/config`, not shared
+2. **Team settings** — Stored in `.stackit.yaml`, committed and shared with team
+3. **Defaults** (lowest priority) — Built-in sensible defaults
+
+This allows teams to define shared settings that individual developers can override locally.
+
+### Configuration Options
 
 | Option | Description | Example |
 |:---|:---|:---|
-| `branch.pattern` | Customize how branch names are generated when not explicitly specified | `stackit config set branch.pattern "{username}/{date}/{message}"` |
-| `submit.footer` | Control whether PRs include a footer linking back to the stack | `stackit config set submit.footer true` |
+| `trunk` | Primary trunk branch (default: main) | `stackit config set trunk main` |
+| `trunks.add` | Add an additional trunk branch | `stackit config set trunks.add develop` |
+| `trunks.remove` | Remove an additional trunk branch | `stackit config set trunks.remove develop` |
+| `branch.pattern` | Customize how branch names are generated | `stackit config set branch.pattern "{username}/{date}/{message}"` |
+| `submit.footer` | Include PR footer linking back to the stack (default: true) | `stackit config set submit.footer false` |
+| `merge.method` | Default merge strategy (squash, merge, or rebase) | `stackit config set merge.method squash` |
+| `ci.command` | CI validation command to run with `stackit foreach` | `stackit config set ci.command "make test"` |
+| `ci.timeout` | CI command timeout in seconds (default: 600) | `stackit config set ci.timeout 300` |
+| `undo.depth` | Maximum undo snapshots to retain (default: 10) | `stackit config set undo.depth 20` |
 | `worktree.basePath` | Customize where worktrees are created | `stackit config set worktree.basePath "../my-stacks"` |
 | `worktree.autoClean` | Auto-remove worktrees for merged stacks during sync (default: true) | `stackit config set worktree.autoClean false` |
-| `maxConcurrency` | Maximum concurrent validation operations (default: min(NumCPU, 8)) | `stackit config set maxConcurrency 4` |
+| `split.hunkSelector` | Hunk selector mode: tui or git (default: tui) | `stackit config set split.hunkSelector git` |
+| `maxConcurrency` | Maximum concurrent validation operations (default: auto) | `stackit config set maxConcurrency 4` |
 
 ### Interactive Configuration
 Use the interactive TUI to manage all settings:
@@ -405,12 +421,53 @@ View all current configuration values:
 stackit config --list
 ```
 
-### Project Configuration (`.stackit.yaml`)
+### Team Configuration (`.stackit.yaml`)
 
-For team-wide settings, create a `.stackit.yaml` file in your repository root. This file should be committed to version control and is shared across all team members.
+For team-wide settings, create a `.stackit.yaml` file in your repository root. This file should be committed to version control and is shared across all team members. Team settings act as defaults that individual developers can override in their personal git config.
 
 ```yaml
-# .stackit.yaml
+# .stackit.yaml - Team-wide defaults
+trunk: main
+
+# Additional trunk branches (e.g., release branches)
+trunks:
+  - develop
+  - staging
+
+# Branch naming pattern for the team
+branch:
+  pattern: "{username}/{date}/{message}"
+
+# PR submission settings
+submit:
+  footer: true
+
+# Default merge method
+merge:
+  method: squash
+
+# CI validation
+ci:
+  command: "make test"
+  timeout: 600
+
+# Undo history
+undo:
+  depth: 10
+
+# Worktree settings
+worktree:
+  basePath: ""
+  autoClean: true
+
+# Split settings
+split:
+  hunkSelector: tui
+
+# Concurrency (0 = auto based on CPU count)
+maxConcurrency: 0
+
+# Worktree hooks
 hooks:
   post-worktree-create:
     - npm install
@@ -425,7 +482,7 @@ The `hooks.post-worktree-create` option allows you to run commands automatically
 - Setting up environment files
 - Running initialization scripts
 
-**Security**: The first time a hook is encountered, Stackit prompts for approval (defaulting to "No" for safety). Approvals are stored locally in `.git/.stackit_config` and persist across sessions. Hooks have a 60-second timeout.
+**Security**: The first time a hook is encountered, Stackit prompts for approval (defaulting to "No" for safety). Approvals are stored locally in git config and persist across sessions. Hooks have a 60-second timeout.
 
 ### Performance Optimizations
 

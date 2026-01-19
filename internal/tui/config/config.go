@@ -111,8 +111,7 @@ func TUIAction(repoRoot string) error {
 				return err
 			}
 			if newValue != submitFooter {
-				cfg.SetSubmitFooter(newValue)
-				if err := cfg.Save(); err != nil {
+				if err := cfg.SetSubmitFooter(newValue); err != nil {
 					out.Info("Failed to save config: %v", err)
 					continue
 				}
@@ -138,10 +137,6 @@ func TUIAction(repoRoot string) error {
 					out.Info("Failed to set merge.method: %v", err)
 					continue
 				}
-				if err := cfg.Save(); err != nil {
-					out.Info("Failed to save config: %v", err)
-					continue
-				}
 				out.Info("Set merge.method to: %s", newValue)
 			}
 
@@ -155,8 +150,7 @@ func TUIAction(repoRoot string) error {
 				return err
 			}
 			if newPath != currentPath {
-				cfg.SetWorktreeBasePath(newPath)
-				if err := cfg.Save(); err != nil {
+				if err := cfg.SetWorktreeBasePath(newPath); err != nil {
 					out.Info("Failed to save config: %v", err)
 					continue
 				}
@@ -172,8 +166,7 @@ func TUIAction(repoRoot string) error {
 				return err
 			}
 			if newValue != worktreeAutoClean {
-				cfg.SetWorktreeAutoClean(newValue)
-				if err := cfg.Save(); err != nil {
+				if err := cfg.SetWorktreeAutoClean(newValue); err != nil {
 					out.Info("Failed to save config: %v", err)
 					continue
 				}

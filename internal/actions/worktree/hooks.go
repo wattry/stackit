@@ -47,7 +47,6 @@ func RunPostCreateHooks(ctx *app.Context, worktreePath string) error {
 
 	// For each hook, check approval or prompt
 	approved := make([]string, 0, len(hooks))
-	needsSave := false
 
 	for _, hook := range hooks {
 		if repoCfg.IsPostWorktreeCreateHookApproved(hook) {
@@ -67,17 +66,11 @@ func RunPostCreateHooks(ctx *app.Context, worktreePath string) error {
 			continue
 		}
 
-		// Save approval
-		repoCfg.AddApprovedPostWorktreeCreateHook(hook)
-		needsSave = true
-		approved = append(approved, hook)
-	}
-
-	// Save any new approvals
-	if needsSave {
-		if err := repoCfg.Save(); err != nil {
+		// Save approval (writes immediately to git config)
+		if err := repoCfg.AddApprovedPostWorktreeCreateHook(hook); err != nil {
 			out.Warn("Failed to save hook approval: %v", err)
 		}
+		approved = append(approved, hook)
 	}
 
 	// Execute approved hooks in worktree directory
