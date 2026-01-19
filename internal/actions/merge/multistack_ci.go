@@ -20,7 +20,7 @@ type LocalCIValidator struct {
 
 // NewLocalCIValidator creates a new local CI validator from config.
 // Uses the unified ci.command config, with fallback to combine.ciCommand for backwards compatibility.
-func NewLocalCIValidator(cfg *config.Config, out output.Output) *LocalCIValidator {
+func NewLocalCIValidator(cfg config.Configurer, out output.Output) *LocalCIValidator {
 	return &LocalCIValidator{
 		Command: cfg.CICommand(),
 		Timeout: time.Duration(cfg.CITimeout()) * time.Second,

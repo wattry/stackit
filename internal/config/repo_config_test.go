@@ -94,17 +94,12 @@ func TestConfigSetSubmitFooter(t *testing.T) {
 
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		cfg.SetSubmitFooter(true)
+		err = cfg.SetSubmitFooter(true)
+		require.NoError(t, err)
 		err = cfg.Save()
 		require.NoError(t, err)
 
-		// Verify config was written
-		config, err := GetRepoConfig(scene.Dir)
-		require.NoError(t, err)
-		require.NotNil(t, config.SubmitFooter)
-		require.True(t, *config.SubmitFooter)
-
-		// Verify Config.SubmitFooter returns true
+		// Verify Config.SubmitFooter returns true by reloading
 		cfg2, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 		require.True(t, cfg2.SubmitFooter())
@@ -116,17 +111,12 @@ func TestConfigSetSubmitFooter(t *testing.T) {
 
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		cfg.SetSubmitFooter(false)
+		err = cfg.SetSubmitFooter(false)
+		require.NoError(t, err)
 		err = cfg.Save()
 		require.NoError(t, err)
 
-		// Verify config was written
-		config, err := GetRepoConfig(scene.Dir)
-		require.NoError(t, err)
-		require.NotNil(t, config.SubmitFooter)
-		require.False(t, *config.SubmitFooter)
-
-		// Verify Config.SubmitFooter returns false
+		// Verify Config.SubmitFooter returns false by reloading
 		cfg2, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 		require.False(t, cfg2.SubmitFooter())
@@ -136,30 +126,23 @@ func TestConfigSetSubmitFooter(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, nil)
 
-		// Create initial config with trunk
-		configPath := filepath.Join(scene.Dir, ".git", ".stackit_config")
-		initialConfig := &RepoConfig{
-			Trunk: stringPtr("main"),
-		}
-		configJSON, err := json.MarshalIndent(initialConfig, "", "  ")
+		// Set trunk first
+		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		err = os.WriteFile(configPath, configJSON, 0600)
+		err = cfg.SetTrunk("main")
 		require.NoError(t, err)
 
 		// Set submit.footer
-		cfg, err := LoadConfig(scene.Dir)
+		err = cfg.SetSubmitFooter(false)
 		require.NoError(t, err)
-		cfg.SetSubmitFooter(false)
 		err = cfg.Save()
 		require.NoError(t, err)
 
-		// Verify both fields are present
-		config, err := GetRepoConfig(scene.Dir)
+		// Verify both fields are present by reloading
+		cfg2, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		require.NotNil(t, config.Trunk)
-		require.Equal(t, "main", *config.Trunk)
-		require.NotNil(t, config.SubmitFooter)
-		require.False(t, *config.SubmitFooter)
+		require.Equal(t, "main", cfg2.Trunk())
+		require.False(t, cfg2.SubmitFooter())
 	})
 }
 
@@ -173,9 +156,9 @@ func TestConfigWorktreeSupport(t *testing.T) {
 		// Create and save config in main repo
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		cfg.SetTrunk("main")
-		cfg.SetSubmitFooter(false)
-		err = cfg.Save()
+		err = cfg.SetTrunk("main")
+		require.NoError(t, err)
+		err = cfg.SetSubmitFooter(false)
 		require.NoError(t, err)
 
 		// Create a branch for the worktree
@@ -205,8 +188,7 @@ func TestConfigWorktreeSupport(t *testing.T) {
 		// Initialize config in main repo
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
-		cfg.SetTrunk("main")
-		err = cfg.Save()
+		err = cfg.SetTrunk("main")
 		require.NoError(t, err)
 
 		// Create a branch for the worktree
@@ -224,8 +206,7 @@ func TestConfigWorktreeSupport(t *testing.T) {
 		// Modify config from worktree
 		worktreeCfg, err := LoadConfig(worktreePath)
 		require.NoError(t, err)
-		worktreeCfg.SetSubmitFooter(false)
-		err = worktreeCfg.Save()
+		err = worktreeCfg.SetSubmitFooter(false)
 		require.NoError(t, err)
 
 		// Verify change is visible from main repo
@@ -478,13 +459,11 @@ func TestConfigApprovedPostWorktreeCreateHooks(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
 
-		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		err = cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		require.NoError(t, err)
 		require.True(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
 
-		// Save and reload to verify persistence
-		err = cfg.Save()
-		require.NoError(t, err)
-
+		// Reload to verify persistence (git config writes are immediate)
 		cfg2, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 		require.True(t, cfg2.IsPostWorktreeCreateHookApproved("mise trust"))
@@ -497,8 +476,10 @@ func TestConfigApprovedPostWorktreeCreateHooks(t *testing.T) {
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 
-		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
-		cfg.AddApprovedPostWorktreeCreateHook("mise trust") // Add again
+		err = cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		require.NoError(t, err)
+		err = cfg.AddApprovedPostWorktreeCreateHook("mise trust") // Add again - should be no-op
+		require.NoError(t, err)
 		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 1)
 	})
 
@@ -509,11 +490,14 @@ func TestConfigApprovedPostWorktreeCreateHooks(t *testing.T) {
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 
-		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
-		cfg.AddApprovedPostWorktreeCreateHook("npm install")
+		err = cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		require.NoError(t, err)
+		err = cfg.AddApprovedPostWorktreeCreateHook("npm install")
+		require.NoError(t, err)
 		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 2)
 
-		cfg.RemoveApprovedPostWorktreeCreateHook("mise trust")
+		err = cfg.RemoveApprovedPostWorktreeCreateHook("mise trust")
+		require.NoError(t, err)
 		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 1)
 		require.False(t, cfg.IsPostWorktreeCreateHookApproved("mise trust"))
 		require.True(t, cfg.IsPostWorktreeCreateHookApproved("npm install"))
@@ -526,8 +510,10 @@ func TestConfigApprovedPostWorktreeCreateHooks(t *testing.T) {
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 
-		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
-		cfg.RemoveApprovedPostWorktreeCreateHook("non-existent") // Should not panic
+		err = cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		require.NoError(t, err)
+		err = cfg.RemoveApprovedPostWorktreeCreateHook("non-existent") // Should not error
+		require.NoError(t, err)
 		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 1)
 	})
 
@@ -538,17 +524,17 @@ func TestConfigApprovedPostWorktreeCreateHooks(t *testing.T) {
 		cfg, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 
-		cfg.AddApprovedPostWorktreeCreateHook("mise trust")
-		cfg.AddApprovedPostWorktreeCreateHook("npm install")
+		err = cfg.AddApprovedPostWorktreeCreateHook("mise trust")
+		require.NoError(t, err)
+		err = cfg.AddApprovedPostWorktreeCreateHook("npm install")
+		require.NoError(t, err)
 		require.Len(t, cfg.ApprovedPostWorktreeCreateHooks(), 2)
 
-		cfg.ClearApprovedPostWorktreeCreateHooks()
+		err = cfg.ClearApprovedPostWorktreeCreateHooks()
+		require.NoError(t, err)
 		require.Empty(t, cfg.ApprovedPostWorktreeCreateHooks())
 
-		// Verify persistence
-		err = cfg.Save()
-		require.NoError(t, err)
-
+		// Verify persistence by reloading
 		cfg2, err := LoadConfig(scene.Dir)
 		require.NoError(t, err)
 		require.Empty(t, cfg2.ApprovedPostWorktreeCreateHooks())
