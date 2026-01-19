@@ -607,7 +607,10 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
-	worktreePath := filepath.Join(tmpDir, "worktree")
+	// Use the unique temp directory basename as the worktree name to avoid collisions
+	// in Git's .git/worktrees/ registry. Previously using a fixed "worktree" name caused
+	// intermittent failures when stale entries remained after incomplete cleanup.
+	worktreePath := filepath.Join(tmpDir, filepath.Base(tmpDir))
 
 	if err := e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, shallow); err != nil {
 		_ = os.RemoveAll(tmpDir)
