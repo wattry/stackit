@@ -225,3 +225,42 @@ func TestRestackBranch_HandlesNoPRInfo(t *testing.T) {
 		require.Nil(t, mergedHistory[0].PRState)  // No PR state
 	})
 }
+
+func TestRestackBranch_PreventsDuplicateHistory(t *testing.T) {
+	t.Parallel()
+	t.Run("does not add duplicate entries on retried restack", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		// Mark branch1 as merged
+		meta1, _ := s.Engine.Git().ReadMetadata("branch1")
+		mergedState := prStateMerged
+		meta1.PrInfo = &git.PrInfoPersistence{State: &mergedState}
+		_ = s.Engine.Git().WriteMetadata("branch1", meta1)
+
+		// Rebuild and restack branch2 (first time)
+		_ = s.Engine.Rebuild("main")
+		branch2 := s.Engine.GetBranch("branch2")
+		_, err := s.Engine.RestackBranches(context.Background(), []engine.Branch{branch2})
+		require.NoError(t, err)
+
+		// Verify branch2 has branch1 in history
+		history := branch2.GetMergedDownstack()
+		require.Len(t, history, 1)
+		require.Equal(t, "branch1", history[0].BranchName)
+
+		// Restack branch2 again (simulating interrupted/retried operation)
+		branch2 = s.Engine.GetBranch("branch2")
+		_, err = s.Engine.RestackBranches(context.Background(), []engine.Branch{branch2})
+		require.NoError(t, err)
+
+		// Verify history still has exactly 1 entry (no duplicate)
+		history = branch2.GetMergedDownstack()
+		require.Len(t, history, 1, "should not add duplicate history entry on retry")
+		require.Equal(t, "branch1", history[0].BranchName)
+	})
+}

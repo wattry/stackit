@@ -302,6 +302,22 @@ func (e *engineImpl) appendMergedDownstack(
 	if oldParentMeta != nil {
 		history = append(history, oldParentMeta.MergedDownstack...)
 	}
+
+	// Check if oldParent already in history (prevent duplicates from retried operations)
+	for _, existing := range history {
+		if existing.BranchName == oldParent {
+			// Already captured, skip adding duplicate
+			meta.MergedDownstack = history
+			if err := e.git.WriteMetadata(branchName, meta); err != nil {
+				return err
+			}
+			if metaMap != nil {
+				metaMap[branchName] = meta
+			}
+			return nil
+		}
+	}
+
 	history = append(history, mp)
 
 	// Limit to last 5 entries
