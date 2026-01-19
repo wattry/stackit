@@ -11,17 +11,19 @@ import (
 
 // Update handles all messages and updates the model.
 func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle window size messages (we don't use HandleCommonMsg because we have custom quit handling)
+	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.Width = wsMsg.Width
+		m.Height = wsMsg.Height
+		return m, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		return m, nil
-
 	case refreshCompleteMsg:
-		m.loading = false
+		m.state = stateMain
 		m.lastRefresh = time.Now()
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
@@ -34,7 +36,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case analysisCompleteMsg:
-		m.analyzing = false
+		m.state = stateMain
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -45,7 +47,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case combinationCompleteMsg:
-		m.analyzing = false
+		m.state = stateMain
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -59,7 +61,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case shipCompleteMsg:
-		m.analyzing = false
+		m.state = stateMain
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -76,18 +78,18 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKeyMsg handles keyboard input.
 func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// If showing confirmation, handle confirm/cancel
-	if m.showConfirmation {
+	if m.state == stateConfirming {
 		return m.handleConfirmationKey(msg)
 	}
 
 	// If showing help, any key closes it
-	if m.showHelp {
-		m.showHelp = false
+	if m.state == stateHelp {
+		m.state = stateMain
 		return m, nil
 	}
 
-	// If loading or analyzing, only allow quit
-	if m.loading || m.analyzing {
+	// If loading, analyzing, or shipping, only allow quit
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping {
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -132,12 +134,12 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startCombinationAnalysis()
 
 	case key.Matches(msg, keys.Refresh):
-		m.loading = true
+		m.state = stateLoading
 		m.statusMessage = "Refreshing..."
 		return m, m.refresh()
 
 	case key.Matches(msg, keys.Help):
-		m.showHelp = true
+		m.state = stateHelp
 		return m, nil
 	}
 
@@ -148,14 +150,14 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *shippableModel) handleConfirmationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Confirm):
-		m.showConfirmation = false
+		m.state = stateMain
 		if m.confirmAction == "ship" {
 			return m.executeShip()
 		}
 		return m, nil
 
 	case key.Matches(msg, keys.Cancel):
-		m.showConfirmation = false
+		m.state = stateMain
 		m.confirmAction = ""
 		return m, nil
 	}
@@ -192,7 +194,7 @@ func (m *shippableModel) startShip() (tea.Model, tea.Cmd) {
 	}
 
 	// Show confirmation dialog
-	m.showConfirmation = true
+	m.state = stateConfirming
 	m.confirmAction = "ship"
 	return m, nil
 }
@@ -211,7 +213,7 @@ func (m *shippableModel) executeShip() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.analyzing = true
+	m.state = stateShipping
 	m.statusMessage = "Shipping..."
 
 	return m, func() tea.Msg {
@@ -232,7 +234,7 @@ func (m *shippableModel) startCombinationAnalysis() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.analyzing = true
+	m.state = stateAnalyzing
 	m.statusMessage = "Analyzing combination..."
 
 	return m, func() tea.Msg {
