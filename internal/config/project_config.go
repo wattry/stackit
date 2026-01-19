@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -50,6 +51,14 @@ type SplitConfig struct {
 	HunkSelector string `yaml:"hunkSelector,omitempty"`
 }
 
+// NavigationConfig contains PR navigation display settings
+type NavigationConfig struct {
+	When       string `yaml:"when,omitempty"`       // always/never/multiple
+	Marker     string `yaml:"marker,omitempty"`     // custom marker symbol
+	Location   string `yaml:"location,omitempty"`   // body/comment
+	ShowMerged *bool  `yaml:"showMerged,omitempty"` // show merged history
+}
+
 // ProjectConfig represents the project-level configuration stored in .stackit.yaml
 // This file is committed to the repository and shared across the team.
 // Team settings can be overridden by personal git config (git config > project config > defaults).
@@ -57,15 +66,16 @@ type ProjectConfig struct {
 	Trunk  string   `yaml:"trunk,omitempty"`
 	Trunks []string `yaml:"trunks,omitempty"`
 
-	Branch         BranchConfig   `yaml:"branch,omitempty"`
-	Submit         SubmitConfig   `yaml:"submit,omitempty"`
-	Merge          MergeConfig    `yaml:"merge,omitempty"`
-	CI             CIConfig       `yaml:"ci,omitempty"`
-	Undo           UndoConfig     `yaml:"undo,omitempty"`
-	Worktree       WorktreeConfig `yaml:"worktree,omitempty"`
-	Split          SplitConfig    `yaml:"split,omitempty"`
-	Hooks          HooksConfig    `yaml:"hooks,omitempty"`
-	MaxConcurrency *int           `yaml:"maxConcurrency,omitempty"` // Pointer to distinguish unset from 0
+	Branch         BranchConfig     `yaml:"branch,omitempty"`
+	Submit         SubmitConfig     `yaml:"submit,omitempty"`
+	Merge          MergeConfig      `yaml:"merge,omitempty"`
+	CI             CIConfig         `yaml:"ci,omitempty"`
+	Undo           UndoConfig       `yaml:"undo,omitempty"`
+	Worktree       WorktreeConfig   `yaml:"worktree,omitempty"`
+	Split          SplitConfig      `yaml:"split,omitempty"`
+	Hooks          HooksConfig      `yaml:"hooks,omitempty"`
+	MaxConcurrency *int             `yaml:"maxConcurrency,omitempty"` // Pointer to distinguish unset from 0
+	Navigation     NavigationConfig `yaml:"navigation,omitempty"`
 }
 
 // HooksConfig contains hook configurations
@@ -87,6 +97,7 @@ var knownTopLevelKeys = map[string]bool{
 	"split":          true,
 	"hooks":          true,
 	"maxConcurrency": true,
+	"navigation":     true,
 }
 
 // LoadProjectConfig reads the project configuration from .stackit.yaml in the repo root.
@@ -215,6 +226,34 @@ func (c *ProjectConfig) GetMaxConcurrency() int {
 	return *c.MaxConcurrency
 }
 
+// HasNavigationWhen returns true if navigation.when is configured
+func (c *ProjectConfig) HasNavigationWhen() bool {
+	return c.Navigation.When != ""
+}
+
+// HasNavigationMarker returns true if navigation.marker is configured
+func (c *ProjectConfig) HasNavigationMarker() bool {
+	return c.Navigation.Marker != ""
+}
+
+// HasNavigationLocation returns true if navigation.location is configured
+func (c *ProjectConfig) HasNavigationLocation() bool {
+	return c.Navigation.Location != ""
+}
+
+// HasNavigationShowMerged returns true if navigation.showMerged is configured
+func (c *ProjectConfig) HasNavigationShowMerged() bool {
+	return c.Navigation.ShowMerged != nil
+}
+
+// GetNavigationShowMerged returns the navigation.showMerged value (caller should check HasNavigationShowMerged first)
+func (c *ProjectConfig) GetNavigationShowMerged() bool {
+	if c.Navigation.ShowMerged == nil {
+		return DefaultNavigationShowMerged
+	}
+	return *c.Navigation.ShowMerged
+}
+
 // Validate checks the configuration for invalid values
 func (c *ProjectConfig) Validate() error {
 	// Validate trunks doesn't duplicate the primary trunk
@@ -256,6 +295,31 @@ func (c *ProjectConfig) Validate() error {
 	// Validate maxConcurrency if set
 	if c.HasMaxConcurrency() && *c.MaxConcurrency < 0 {
 		return fmt.Errorf("invalid maxConcurrency in %s: must be >= 0", ProjectConfigFileName)
+	}
+
+	// Validate navigation.when if set
+	if c.HasNavigationWhen() {
+		if !slices.Contains(ValidNavigationWhen, c.Navigation.When) {
+			return fmt.Errorf("invalid navigation.when in %s: %q (must be one of: %s)", ProjectConfigFileName, c.Navigation.When, strings.Join(ValidNavigationWhen, ", "))
+		}
+	}
+
+	// Validate navigation.location if set
+	if c.HasNavigationLocation() {
+		if !slices.Contains(ValidNavigationLocation, c.Navigation.Location) {
+			return fmt.Errorf("invalid navigation.location in %s: %q (must be one of: %s)", ProjectConfigFileName, c.Navigation.Location, strings.Join(ValidNavigationLocation, ", "))
+		}
+	}
+
+	// Validate navigation.marker if set
+	if c.HasNavigationMarker() {
+		marker := c.Navigation.Marker
+		if strings.ContainsAny(marker, "\n\r") {
+			return fmt.Errorf("invalid navigation.marker in %s: cannot contain newlines", ProjectConfigFileName)
+		}
+		if utf8.RuneCountInString(marker) > 10 {
+			return fmt.Errorf("invalid navigation.marker in %s: cannot exceed 10 characters", ProjectConfigFileName)
+		}
 	}
 
 	return nil

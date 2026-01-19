@@ -2,6 +2,7 @@ package actions
 
 import (
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/pr"
 	"stackit.dev/stackit/internal/utils"
@@ -44,14 +45,35 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 
 	updatedTitle := scope.ApplyToTitle(currentTitle)
 
-	footer := pr.CreatePRBodyFooter(name, ctx.Engine)
-	updatedBody := pr.UpdatePRBodyFooter(currentBody, footer)
+	// Build navigation options from config
+	navOpts := pr.DefaultNavigationOptions()
+	if ctx.Config != nil {
+		navOpts.When = ctx.Config.NavigationWhen()
+		navOpts.Marker = ctx.Config.NavigationMarker()
+		navOpts.Location = ctx.Config.NavigationLocation()
+		navOpts.ShowMerged = ctx.Config.NavigationShowMerged()
+	}
+
+	// Only update body if location is "body"
+	var updatedBody string
+	if navOpts.Location == config.NavigationLocationBody {
+		footer := pr.CreatePRBodyFooterWithOptions(name, ctx.Engine, navOpts)
+		updatedBody = pr.UpdatePRBodyFooter(currentBody, footer)
+	} else {
+		// For comment/none location, strip any existing footer from body
+		updatedBody = pr.StripFooter(currentBody)
+	}
 
 	// 3. Apply updates if needed (Option 2)
 	// Don't update body if:
-	// - It would become empty (preserve existing body instead)
+	// - It would become empty when adding navigation (preserve existing body instead)
+	// - But DO allow empty when stripping footer (switching to comment/none location)
 	// Allow footer to be added even when body is empty (user expects stack information)
-	shouldUpdateBody := updatedBody != currentBody && updatedBody != ""
+	shouldUpdateBody := updatedBody != currentBody
+	if shouldUpdateBody && updatedBody == "" && navOpts.Location == config.NavigationLocationBody {
+		// Don't clear the body when location is "body" - preserve existing content
+		shouldUpdateBody = false
+	}
 	if updatedTitle != currentTitle || shouldUpdateBody {
 		updateOpts := github.UpdatePROptions{}
 		if updatedTitle != currentTitle {
@@ -74,6 +96,106 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 	// Successfully updated (or already up to date), clear the PR body update flag and update local engine state
 	_ = ctx.Engine.ClearNeedsPRBodyUpdate(name)
 	_ = ctx.Engine.UpsertPrInfo(branch, prInfo.WithTitleAndBody(updatedTitle, updatedBody).WithLockReason(branch.GetLockReason()))
+
+	// Handle navigation comment based on location setting
+	switch navOpts.Location {
+	case config.NavigationLocationBody, config.NavigationLocationNone:
+		// Delete navigation comment only if we have a cached ID (indicates we previously used comment mode)
+		// This avoids unnecessary API calls when the user has always used body/none mode
+		if commentID, _ := ctx.Engine.GetNavigationCommentID(branch); commentID != 0 {
+			deleteNavigationComment(ctx, name, prNumber, repoOwner, repoName)
+		}
+	case config.NavigationLocationComment:
+		// Create/update navigation comment
+		updateNavigationComment(ctx, name, prNumber, repoOwner, repoName, navOpts)
+	}
+}
+
+// deleteNavigationComment removes any existing navigation comment from a PR.
+// Uses cached comment ID when available to avoid API search.
+func deleteNavigationComment(ctx *app.Context, branchName string, prNumber int, repoOwner, repoName string) {
+	branch := ctx.Engine.GetBranch(branchName)
+
+	// Try cached comment ID first
+	commentID, err := ctx.Engine.GetNavigationCommentID(branch)
+	if err == nil && commentID != 0 {
+		if err := ctx.GitHubClient.DeletePRComment(ctx.Context, repoOwner, repoName, commentID); err == nil {
+			_ = ctx.Engine.ClearNavigationCommentID(branch)
+			ctx.Output.Debug("Deleted navigation comment %d on PR #%d", commentID, prNumber)
+			return
+		}
+		// If delete failed (comment already deleted externally?), clear cache and search
+		_ = ctx.Engine.ClearNavigationCommentID(branch)
+	}
+
+	// Fall back to search for existing comment
+	comments, err := ctx.GitHubClient.ListPRComments(ctx.Context, repoOwner, repoName, prNumber)
+	if err != nil {
+		ctx.Output.Debug("Failed to list comments on PR #%d: %v", prNumber, err)
+		return
+	}
+
+	for _, c := range comments {
+		if pr.IsStackitComment(c.Body) {
+			if err := ctx.GitHubClient.DeletePRComment(ctx.Context, repoOwner, repoName, c.ID); err == nil {
+				ctx.Output.Debug("Deleted navigation comment %d on PR #%d", c.ID, prNumber)
+			}
+			break
+		}
+	}
+}
+
+// updateNavigationComment manages the navigation comment on a PR.
+// Creates, updates, or deletes the comment as needed based on navigation options.
+// Uses cached comment ID when available to avoid API search.
+func updateNavigationComment(ctx *app.Context, branchName string, prNumber int, repoOwner, repoName string, navOpts pr.NavigationOptions) {
+	commentBody := pr.CreateNavigationComment(branchName, ctx.Engine, navOpts)
+	branch := ctx.Engine.GetBranch(branchName)
+
+	// If navigation should be hidden, delete existing comment
+	if commentBody == "" {
+		deleteNavigationComment(ctx, branchName, prNumber, repoOwner, repoName)
+		return
+	}
+
+	// Try cached comment ID first
+	commentID, _ := ctx.Engine.GetNavigationCommentID(branch)
+	if commentID != 0 {
+		// Try to update existing comment
+		if err := ctx.GitHubClient.UpdatePRComment(ctx.Context, repoOwner, repoName, commentID, commentBody); err == nil {
+			ctx.Output.Debug("Updated navigation comment %d on PR #%d", commentID, prNumber)
+			return
+		}
+		// If update failed (comment deleted externally?), clear cache and fall through
+		_ = ctx.Engine.ClearNavigationCommentID(branch)
+	}
+
+	// Search for existing comment (cache miss or stale)
+	comments, err := ctx.GitHubClient.ListPRComments(ctx.Context, repoOwner, repoName, prNumber)
+	if err != nil {
+		ctx.Output.Debug("Failed to list comments on PR #%d: %v", prNumber, err)
+		return
+	}
+
+	for _, c := range comments {
+		if pr.IsStackitComment(c.Body) {
+			// Found existing - update it and cache ID
+			if err := ctx.GitHubClient.UpdatePRComment(ctx.Context, repoOwner, repoName, c.ID, commentBody); err == nil {
+				_ = ctx.Engine.SetNavigationCommentID(branch, c.ID)
+				ctx.Output.Debug("Updated navigation comment %d on PR #%d", c.ID, prNumber)
+			}
+			return
+		}
+	}
+
+	// No existing comment - create new one and cache ID
+	newID, err := ctx.GitHubClient.CreatePRComment(ctx.Context, repoOwner, repoName, prNumber, commentBody)
+	if err == nil {
+		_ = ctx.Engine.SetNavigationCommentID(branch, newID)
+		ctx.Output.Debug("Created navigation comment %d on PR #%d", newID, prNumber)
+	} else {
+		ctx.Output.Debug("Failed to create navigation comment on PR #%d: %v", prNumber, err)
+	}
 }
 
 // PushMetadataAndSyncPRs pushes metadata for the given branches to remote and updates their PRs on GitHub

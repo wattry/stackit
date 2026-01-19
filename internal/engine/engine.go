@@ -27,6 +27,10 @@ type PRManager interface {
 	GetBranchRemoteStatus(branch Branch) (BranchRemoteStatus, error)
 	PopulateRemoteShas() error
 	PushBranch(ctx context.Context, branch Branch, remote string, opts git.PushOptions) error
+	// Navigation comment ID caching (stored in local metadata)
+	GetNavigationCommentID(branch Branch) (int64, error)
+	SetNavigationCommentID(branch Branch, commentID int64) error
+	ClearNavigationCommentID(branch Branch) error
 }
 
 // SyncManager provides operations for syncing and restacking branches

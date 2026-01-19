@@ -388,4 +388,108 @@ trunks:
 		assert.True(t, cfg.HasMaxConcurrency())
 		assert.Equal(t, 0, cfg.GetMaxConcurrency())
 	})
+
+	t.Run("accepts valid navigation config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `navigation:
+  when: multiple
+  marker: "👈"
+  location: comment
+  showMerged: true
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "multiple", cfg.Navigation.When)
+		assert.Equal(t, "👈", cfg.Navigation.Marker)
+		assert.Equal(t, "comment", cfg.Navigation.Location)
+		assert.True(t, cfg.HasNavigationShowMerged())
+		assert.True(t, cfg.GetNavigationShowMerged())
+	})
+
+	t.Run("rejects invalid navigation.when", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `navigation:
+  when: invalid
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid navigation.when")
+	})
+
+	t.Run("rejects invalid navigation.location", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `navigation:
+  location: invalid
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid navigation.location")
+	})
+
+	t.Run("accepts location none", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `navigation:
+  location: none
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "none", cfg.Navigation.Location)
+	})
+
+	t.Run("rejects navigation.marker with newlines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := "navigation:\n  marker: \"arrow\\n\"\n"
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot contain newlines")
+	})
+
+	t.Run("rejects navigation.marker exceeding 10 characters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `navigation:
+  marker: "12345678901"
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot exceed 10 characters")
+	})
+
+	t.Run("accepts navigation.marker with emoji counting runes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// 3 emoji runes (12 bytes) - should be accepted since 3 <= 10
+		configContent := `navigation:
+  marker: "👈👈👈"
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "👈👈👈", cfg.Navigation.Marker)
+	})
 }

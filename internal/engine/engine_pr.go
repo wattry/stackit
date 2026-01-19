@@ -192,3 +192,48 @@ func (e *engineImpl) prTitleNeedsUpdate(branch Branch, prInfo *PrInfo) bool {
 	scope := e.GetScope(branch)
 	return scope.TitleNeedsUpdate(prInfo.Title())
 }
+
+// GetNavigationCommentID returns the cached navigation comment ID for a branch.
+// Returns 0 if no comment ID is cached.
+func (e *engineImpl) GetNavigationCommentID(branch Branch) (int64, error) {
+	localMeta, err := e.git.ReadLocalMetadata(branch.GetName())
+	if err != nil {
+		return 0, err
+	}
+	if localMeta.NavigationCommentID == nil {
+		return 0, nil
+	}
+	return *localMeta.NavigationCommentID, nil
+}
+
+// SetNavigationCommentID caches a navigation comment ID for a branch.
+func (e *engineImpl) SetNavigationCommentID(branch Branch, commentID int64) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	localMeta, err := e.git.ReadLocalMetadata(branch.GetName())
+	if err != nil {
+		localMeta = &git.LocalMeta{}
+	}
+
+	localMeta.NavigationCommentID = &commentID
+	return e.git.WriteLocalMetadata(branch.GetName(), localMeta)
+}
+
+// ClearNavigationCommentID removes the cached navigation comment ID for a branch.
+func (e *engineImpl) ClearNavigationCommentID(branch Branch) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	localMeta, err := e.git.ReadLocalMetadata(branch.GetName())
+	if err != nil {
+		return nil // Nothing to clear if we can't read
+	}
+
+	if localMeta.NavigationCommentID == nil {
+		return nil // Already clear
+	}
+
+	localMeta.NavigationCommentID = nil
+	return e.git.WriteLocalMetadata(branch.GetName(), localMeta)
+}

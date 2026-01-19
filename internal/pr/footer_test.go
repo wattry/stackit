@@ -102,7 +102,9 @@ func TestCreatePRBodyFooter(t *testing.T) {
 		_, err := s.Engine.SetLocked([]engine.Branch{s.Engine.GetBranch("feature-a")}, engine.LockReasonUser)
 		require.NoError(t, err)
 
-		footer := CreatePRBodyFooter("feature-a", s.Engine)
+		// Use When: "always" to ensure footer is generated for single-branch stack
+		opts := NavigationOptions{When: "always", Marker: "👈"}
+		footer := CreatePRBodyFooterWithOptions("feature-a", s.Engine, opts)
 		assert.Contains(t, footer, "🔒 This PR has been locked. To unlock it, run `st unlock`.")
 	})
 
@@ -113,8 +115,216 @@ func TestCreatePRBodyFooter(t *testing.T) {
 			Commit("a1").
 			TrackBranch("feature-a", "main")
 
-		// Unlocked by default
-		footer := CreatePRBodyFooter("feature-a", s.Engine)
+		// Use When: "always" to ensure footer is generated for single-branch stack
+		opts := NavigationOptions{When: "always", Marker: "👈"}
+		footer := CreatePRBodyFooterWithOptions("feature-a", s.Engine, opts)
 		assert.NotContains(t, footer, "🔒 This PR has been locked")
+	})
+}
+
+func TestShouldShowNavigation(t *testing.T) {
+	t.Run("when=always shows navigation for single branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		// Mock a PR for the branch
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "always"}
+		assert.True(t, ShouldShowNavigation(opts, "feature-a", s.Engine))
+	})
+
+	t.Run("when=never hides navigation", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "never"}
+		assert.False(t, ShouldShowNavigation(opts, "feature-a", s.Engine))
+	})
+
+	t.Run("when=multiple hides navigation for single branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "multiple"}
+		assert.False(t, ShouldShowNavigation(opts, "feature-a", s.Engine))
+	})
+
+	t.Run("when=multiple shows navigation for multiple branches", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main").
+			CreateBranch("feature-b").
+			Commit("b1").
+			TrackBranch("feature-b", "feature-a")
+
+		// Add PRs to both branches
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title A", "Body A", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		branch2 := s.Engine.GetBranch("feature-b")
+		prNum2 := 2
+		err = s.Engine.UpsertPrInfo(branch2, engine.NewPrInfo(&prNum2, "Title B", "Body B", "OPEN", "feature-a", "http://pr/2", false))
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "multiple"}
+		assert.True(t, ShouldShowNavigation(opts, "feature-a", s.Engine))
+	})
+}
+
+func TestCreatePRBodyFooterWithOptions(t *testing.T) {
+	t.Run("uses custom marker", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "always", Marker: "<--"}
+		footer := CreatePRBodyFooterWithOptions("feature-a", s.Engine, opts)
+		assert.Contains(t, footer, "<--")
+		assert.NotContains(t, footer, "👈") // Default marker should not appear
+	})
+
+	t.Run("returns empty string when when=never", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		opts := NavigationOptions{When: "never"}
+		footer := CreatePRBodyFooterWithOptions("feature-a", s.Engine, opts)
+		assert.Empty(t, footer)
+	})
+}
+
+func TestStripFooter(t *testing.T) {
+	t.Run("removes stackit footer section", func(t *testing.T) {
+		body := "Description\n\n\n" + SectionStart + "\n#### Stack\n\nContent\n" + SectionEnd
+		result := StripFooter(body)
+		assert.Equal(t, "Description", result)
+		assert.NotContains(t, result, SectionStart)
+		assert.NotContains(t, result, SectionEnd)
+	})
+
+	t.Run("returns unchanged body without footer", func(t *testing.T) {
+		body := "Just a description\nwith multiple lines"
+		result := StripFooter(body)
+		assert.Equal(t, body, result)
+	})
+
+	t.Run("returns empty string for empty body", func(t *testing.T) {
+		result := StripFooter("")
+		assert.Empty(t, result)
+	})
+
+	t.Run("preserves content after footer", func(t *testing.T) {
+		body := "Before\n\n\n" + SectionStart + "\nStack\n" + SectionEnd + "\nAfter"
+		result := StripFooter(body)
+		assert.Contains(t, result, "Before")
+		assert.Contains(t, result, "After")
+		assert.NotContains(t, result, SectionStart)
+	})
+}
+
+func TestIsStackitComment(t *testing.T) {
+	t.Run("identifies stackit navigation comment", func(t *testing.T) {
+		body := CommentMarker + "\n#### Stack\n\n* **PR #1** 👈"
+		assert.True(t, IsStackitComment(body))
+	})
+
+	t.Run("returns false for regular comment", func(t *testing.T) {
+		body := "This is a regular comment without markers"
+		assert.False(t, IsStackitComment(body))
+	})
+
+	t.Run("returns false for empty comment", func(t *testing.T) {
+		assert.False(t, IsStackitComment(""))
+	})
+}
+
+func TestCreateNavigationComment(t *testing.T) {
+	t.Run("includes comment marker", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "always", Marker: "👈"}
+		comment := CreateNavigationComment("feature-a", s.Engine, opts)
+		assert.Contains(t, comment, CommentMarker)
+		assert.Contains(t, comment, "#### Stack")
+		assert.Contains(t, comment, "auto-generated by")
+	})
+
+	t.Run("includes lock banner for locked branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		// Lock the branch
+		_, err = s.Engine.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "always", Marker: "👈"}
+		comment := CreateNavigationComment("feature-a", s.Engine, opts)
+		assert.Contains(t, comment, "🔒 This PR has been locked")
+	})
+
+	t.Run("returns empty when when=never", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		opts := NavigationOptions{When: "never"}
+		comment := CreateNavigationComment("feature-a", s.Engine, opts)
+		assert.Empty(t, comment)
 	})
 }

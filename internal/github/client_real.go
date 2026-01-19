@@ -155,3 +155,65 @@ func (c *StackitGitHubClient) ClosePullRequest(ctx context.Context, owner, repo 
 	}
 	return nil
 }
+
+// CreatePRComment creates a new comment on a pull request
+func (c *StackitGitHubClient) CreatePRComment(ctx context.Context, owner, repo string, prNumber int, body string) (int64, error) {
+	comment, _, err := c.client.Issues.CreateComment(ctx, owner, repo, prNumber, &github.IssueComment{
+		Body: github.String(body),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create comment on PR #%d: %w", prNumber, err)
+	}
+	return comment.GetID(), nil
+}
+
+// UpdatePRComment updates an existing pull request comment
+func (c *StackitGitHubClient) UpdatePRComment(ctx context.Context, owner, repo string, commentID int64, body string) error {
+	_, _, err := c.client.Issues.EditComment(ctx, owner, repo, commentID, &github.IssueComment{
+		Body: github.String(body),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update comment %d: %w", commentID, err)
+	}
+	return nil
+}
+
+// DeletePRComment deletes a pull request comment
+func (c *StackitGitHubClient) DeletePRComment(ctx context.Context, owner, repo string, commentID int64) error {
+	_, err := c.client.Issues.DeleteComment(ctx, owner, repo, commentID)
+	if err != nil {
+		return fmt.Errorf("failed to delete comment %d: %w", commentID, err)
+	}
+	return nil
+}
+
+// ListPRComments lists all comments on a pull request with pagination
+func (c *StackitGitHubClient) ListPRComments(ctx context.Context, owner, repo string, prNumber int) ([]PRComment, error) {
+	var allComments []PRComment
+	opts := &github.IssueListCommentsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	for {
+		comments, resp, err := c.client.Issues.ListComments(ctx, owner, repo, prNumber, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list comments on PR #%d: %w", prNumber, err)
+		}
+
+		for _, comment := range comments {
+			allComments = append(allComments, PRComment{
+				ID:   comment.GetID(),
+				Body: comment.GetBody(),
+			})
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allComments, nil
+}

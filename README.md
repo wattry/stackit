@@ -408,6 +408,10 @@ This allows teams to define shared settings that individual developers can overr
 | `worktree.autoClean` | Auto-remove worktrees for merged stacks during sync (default: true) | `stackit config set worktree.autoClean false` |
 | `split.hunkSelector` | Hunk selector mode: tui or git (default: tui) | `stackit config set split.hunkSelector git` |
 | `maxConcurrency` | Maximum concurrent validation operations (default: auto) | `stackit config set maxConcurrency 4` |
+| `navigation.when` | When to show navigation: always, never, or multiple (default: always) | `stackit config set navigation.when multiple` |
+| `navigation.marker` | Symbol marking current PR in stack (default: 👈, max 10 chars) | `stackit config set navigation.marker "<--"` |
+| `navigation.location` | Where navigation appears: body, comment, or none (default: body) | `stackit config set navigation.location comment` |
+| `navigation.showMerged` | Show merged branch history in navigation (default: false) | `stackit config set navigation.showMerged true` |
 
 ### Interactive Configuration
 Use the interactive TUI to manage all settings:
@@ -466,6 +470,13 @@ split:
 
 # Concurrency (0 = auto based on CPU count)
 maxConcurrency: 0
+
+# PR navigation display options
+navigation:
+  when: always        # always, never, or multiple (only show when stack has multiple PRs)
+  marker: "👈"        # Symbol marking the current PR (max 10 chars)
+  location: body      # body, comment, or none (where navigation appears)
+  showMerged: false   # Show previously merged branch history
 
 # Worktree hooks
 hooks:

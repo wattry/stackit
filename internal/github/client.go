@@ -96,6 +96,25 @@ type Client interface {
 
 	// ClosePullRequest closes a pull request
 	ClosePullRequest(ctx context.Context, owner, repo string, prNumber int) error
+
+	// Comment methods for navigation location support
+	// CreatePRComment creates a new comment on a pull request
+	CreatePRComment(ctx context.Context, owner, repo string, prNumber int, body string) (int64, error)
+
+	// UpdatePRComment updates an existing pull request comment
+	UpdatePRComment(ctx context.Context, owner, repo string, commentID int64, body string) error
+
+	// DeletePRComment deletes a pull request comment
+	DeletePRComment(ctx context.Context, owner, repo string, commentID int64) error
+
+	// ListPRComments lists all comments on a pull request
+	ListPRComments(ctx context.Context, owner, repo string, prNumber int) ([]PRComment, error)
+}
+
+// PRComment represents a comment on a pull request
+type PRComment struct {
+	ID   int64
+	Body string
 }
 
 // ToPullRequestInfo converts a github.PullRequest to PullRequestInfo

@@ -38,6 +38,12 @@ type Configurer interface {
 	// Concurrency settings
 	MaxConcurrency() int
 
+	// Navigation settings
+	NavigationWhen() string
+	NavigationMarker() string
+	NavigationLocation() string
+	NavigationShowMerged() bool
+
 	// Hook approvals
 	ApprovedPostWorktreeCreateHooks() []string
 	IsPostWorktreeCreateHookApproved(hook string) bool

@@ -163,3 +163,49 @@ func (c *MockGitHubClient) ClosePullRequest(ctx context.Context, owner, repo str
 	_, _, err := c.client.PullRequests.Edit(ctx, owner, repo, prNumber, &github.PullRequest{State: &state})
 	return err
 }
+
+// CreatePRComment creates a new comment on a pull request
+func (c *MockGitHubClient) CreatePRComment(ctx context.Context, owner, repo string, prNumber int, body string) (int64, error) {
+	comment, _, err := c.client.Issues.CreateComment(ctx, owner, repo, prNumber, &github.IssueComment{
+		Body: github.String(body),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return comment.GetID(), nil
+}
+
+// UpdatePRComment updates an existing pull request comment
+func (c *MockGitHubClient) UpdatePRComment(ctx context.Context, owner, repo string, commentID int64, body string) error {
+	_, _, err := c.client.Issues.EditComment(ctx, owner, repo, commentID, &github.IssueComment{
+		Body: github.String(body),
+	})
+	return err
+}
+
+// DeletePRComment deletes a pull request comment
+func (c *MockGitHubClient) DeletePRComment(ctx context.Context, owner, repo string, commentID int64) error {
+	_, err := c.client.Issues.DeleteComment(ctx, owner, repo, commentID)
+	return err
+}
+
+// ListPRComments lists all comments on a pull request
+func (c *MockGitHubClient) ListPRComments(ctx context.Context, owner, repo string, prNumber int) ([]githubpkg.PRComment, error) {
+	comments, _, err := c.client.Issues.ListComments(ctx, owner, repo, prNumber, &github.IssueListCommentsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]githubpkg.PRComment, len(comments))
+	for i, comment := range comments {
+		result[i] = githubpkg.PRComment{
+			ID:   comment.GetID(),
+			Body: comment.GetBody(),
+		}
+	}
+	return result, nil
+}

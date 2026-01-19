@@ -191,3 +191,29 @@ func (c *GitHubClient) ClosePullRequest(_ context.Context, _, _ string, prNumber
 
 	return nil
 }
+
+// CreatePRComment simulates creating a PR comment
+func (c *GitHubClient) CreatePRComment(_ context.Context, _, _ string, _ int, _ string) (int64, error) {
+	simulateDelay(delayShort)
+	// In demo mode, return a simulated comment ID
+	return 12345, nil
+}
+
+// UpdatePRComment simulates updating a PR comment
+func (c *GitHubClient) UpdatePRComment(_ context.Context, _, _ string, _ int64, _ string) error {
+	simulateDelay(delayShort)
+	return nil
+}
+
+// DeletePRComment simulates deleting a PR comment
+func (c *GitHubClient) DeletePRComment(_ context.Context, _, _ string, _ int64) error {
+	simulateDelay(delayShort)
+	return nil
+}
+
+// ListPRComments simulates listing PR comments
+func (c *GitHubClient) ListPRComments(_ context.Context, _, _ string, _ int) ([]github.PRComment, error) {
+	simulateDelay(delayShort)
+	// In demo mode, return empty list
+	return []github.PRComment{}, nil
+}
