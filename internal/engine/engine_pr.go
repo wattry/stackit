@@ -43,6 +43,20 @@ func (e *engineImpl) getPrInfo(branch Branch) (*PrInfo, error) {
 	return e.GetPrInfo(branch)
 }
 
+// GetMergedDownstack returns the merged downstack history for a branch
+func (e *engineImpl) GetMergedDownstack(branch Branch) []git.MergedParent {
+	meta, err := e.git.ReadMetadata(branch.GetName())
+	if err != nil {
+		return nil
+	}
+	return meta.MergedDownstack
+}
+
+// getMergedDownstack is an internal method for Branch type
+func (e *engineImpl) getMergedDownstack(branch Branch) []git.MergedParent {
+	return e.GetMergedDownstack(branch)
+}
+
 // UpsertPrInfo updates or creates PR information for a branch
 func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
 	e.mu.Lock()

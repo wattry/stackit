@@ -202,6 +202,20 @@ func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.Bra
 			ann.IsDraft = prInfo.IsDraft()
 		}
 
+		// Merged downstack history
+		if mergedHistory := branch.GetMergedDownstack(); len(mergedHistory) > 0 {
+			ann.MergedDownstack = make([]tree.MergedParentDisplay, len(mergedHistory))
+			for i, mp := range mergedHistory {
+				ann.MergedDownstack[i] = tree.MergedParentDisplay{
+					BranchName: mp.BranchName,
+					PRNumber:   mp.PRNumber,
+				}
+				if mp.PRState != nil {
+					ann.MergedDownstack[i].PRState = *mp.PRState
+				}
+			}
+		}
+
 		// Local stats
 		if count, err := branch.GetCommitCount(); err == nil {
 			ann.CommitCount = count

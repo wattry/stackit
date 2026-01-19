@@ -308,13 +308,9 @@ func (e *engineImpl) restackBranch(
 		parent = newParent
 		reparented = true
 
-		// Update the cached metadata if we're using a metaMap, otherwise the subsequent
-		// write will overwrite the parent change.
-		if metaMap != nil {
-			if updatedMeta, err := e.git.ReadMetadata(branchName); err == nil {
-				metaMap[branchName] = updatedMeta
-			}
-		}
+		// Capture the old parent in merged history (best-effort, don't fail on error).
+		// appendMergedDownstack reads fresh from disk and updates metaMap.
+		_ = e.appendMergedDownstack(branchName, oldParent, metaMap)
 	}
 
 	// Get parent revision (needed for rebasedBranchBase even if restack is unneeded)

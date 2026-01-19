@@ -50,6 +50,17 @@ type Meta struct {
 	LastModifiedBy *ModifiedBy `json:"lastModifiedBy,omitempty"` // Who last changed this metadata
 	LastModifiedAt *time.Time  `json:"lastModifiedAt,omitempty"` // When metadata was last changed
 	LocalOnlyHash  *string     `json:"localOnlyHash,omitempty"`  // Hash of local-only state for change detection
+
+	// MergedDownstack preserves historical parent relationships when branches are reparented
+	// due to merge/deletion. Ordered oldest to newest, limited to 5 entries max.
+	MergedDownstack []MergedParent `json:"mergedDownstack,omitempty"`
+}
+
+// MergedParent represents a historical parent that was merged or deleted
+type MergedParent struct {
+	BranchName string  `json:"branchName"`
+	PRNumber   *int    `json:"prNumber,omitempty"`
+	PRState    *string `json:"prState,omitempty"` // "MERGED", "CLOSED"
 }
 
 // LocalMeta represents branch metadata that is strictly local and never pushed

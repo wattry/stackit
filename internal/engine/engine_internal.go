@@ -269,6 +269,89 @@ func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName st
 	return e.trunk
 }
 
+// appendMergedDownstack captures the old parent information when a branch is reparented.
+// It also inherits any merged history from the old parent for multi-level reparenting.
+func (e *engineImpl) appendMergedDownstack(
+	branchName string,
+	oldParent string,
+	metaMap map[string]*git.Meta,
+) error {
+	// Always read fresh metadata from disk for the branch being modified.
+	// This is critical because SetParent has just written the new parent,
+	// and metaMap may contain stale metadata with the old parent.
+	meta, err := e.git.ReadMetadata(branchName)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return nil
+	}
+
+	// Get old parent metadata
+	oldParentMeta := e.getMetaFromMapOrDisk(oldParent, metaMap)
+
+	// Build MergedParent from old parent
+	mp := git.MergedParent{BranchName: oldParent}
+	if oldParentMeta != nil && oldParentMeta.PrInfo != nil {
+		mp.PRNumber = oldParentMeta.PrInfo.Number
+		mp.PRState = oldParentMeta.PrInfo.State
+	}
+
+	// Inherit old parent's history (for multi-level: A→B→C, if B merges)
+	var history []git.MergedParent
+	if oldParentMeta != nil {
+		history = append(history, oldParentMeta.MergedDownstack...)
+	}
+
+	// Check if oldParent already in history (prevent duplicates from retried operations)
+	for _, existing := range history {
+		if existing.BranchName == oldParent {
+			// Already captured, skip adding duplicate
+			meta.MergedDownstack = history
+			if err := e.git.WriteMetadata(branchName, meta); err != nil {
+				return err
+			}
+			if metaMap != nil {
+				metaMap[branchName] = meta
+			}
+			return nil
+		}
+	}
+
+	history = append(history, mp)
+
+	// Limit to last 5 entries
+	const maxHistoryEntries = 5
+	if len(history) > maxHistoryEntries {
+		history = history[len(history)-maxHistoryEntries:]
+	}
+
+	meta.MergedDownstack = history
+
+	// Write and update cache
+	if err := e.git.WriteMetadata(branchName, meta); err != nil {
+		return err
+	}
+	if metaMap != nil {
+		metaMap[branchName] = meta
+	}
+	return nil
+}
+
+// getMetaFromMapOrDisk retrieves metadata from the cache map or from disk if not found.
+func (e *engineImpl) getMetaFromMapOrDisk(branchName string, metaMap map[string]*git.Meta) *git.Meta {
+	if metaMap != nil {
+		if meta, ok := metaMap[branchName]; ok {
+			return meta
+		}
+	}
+	meta, err := e.git.ReadMetadata(branchName)
+	if err != nil {
+		return nil
+	}
+	return meta
+}
+
 // Helper functions
 func getStringValue(s *string) string {
 	if s == nil {
