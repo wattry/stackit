@@ -234,4 +234,10 @@ type MetadataOperations interface {
 	ReadLocalMetadata(branchName string) (*LocalMeta, error)
 	BatchReadLocalMetadata(branchNames []string) map[string]*LocalMeta
 	WriteLocalMetadata(branchName string, meta *LocalMeta) error
+
+	// Transaction support methods
+	WriteMetadataBlob(meta *Meta) (string, error)
+	WriteLocalMetadataBlob(meta *LocalMeta) (string, error)
+	GetMetadataRefSHA(branchName string) string
+	GetLocalMetadataRefSHA(branchName string) string
 }

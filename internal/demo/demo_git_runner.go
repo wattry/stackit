@@ -537,8 +537,10 @@ func (d *demoGitRunner) CatFile(_ string) (string, error) {
 	return "{}", nil
 }
 
+const demoBlobSHA = "blob-sha"
+
 func (d *demoGitRunner) CreateBlob(_ string) (string, error) {
-	return "blob-sha", nil
+	return demoBlobSHA, nil
 }
 
 func (d *demoGitRunner) ReadBlob(_ string) (string, error) {
@@ -639,4 +641,20 @@ func (d *demoGitRunner) StageHunks(_ context.Context, _ []git.Hunk) error {
 
 func (d *demoGitRunner) UnstageAll(_ context.Context) error {
 	return nil
+}
+
+func (d *demoGitRunner) WriteMetadataBlob(_ *git.Meta) (string, error) {
+	return demoBlobSHA, nil
+}
+
+func (d *demoGitRunner) WriteLocalMetadataBlob(_ *git.LocalMeta) (string, error) {
+	return demoBlobSHA, nil
+}
+
+func (d *demoGitRunner) GetMetadataRefSHA(_ string) string {
+	return ""
+}
+
+func (d *demoGitRunner) GetLocalMetadataRefSHA(_ string) string {
+	return ""
 }

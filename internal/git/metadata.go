@@ -278,3 +278,65 @@ func (r *runner) ListMetadata() (map[string]string, error) {
 	}
 	return result, nil
 }
+
+// WriteMetadataBlob creates a blob containing the metadata JSON and returns its SHA.
+// This does NOT update any refs - use this for batched/transactional writes.
+func (r *runner) WriteMetadataBlob(meta *Meta) (string, error) {
+	jsonData, err := json.Marshal(meta)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	sha, err := r.CreateBlob(string(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create metadata blob: %w", err)
+	}
+
+	return sha, nil
+}
+
+// WriteLocalMetadataBlob creates a blob containing the local metadata JSON and returns its SHA.
+// This does NOT update any refs - use this for batched/transactional writes.
+func (r *runner) WriteLocalMetadataBlob(meta *LocalMeta) (string, error) {
+	jsonData, err := json.Marshal(meta)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal local metadata: %w", err)
+	}
+
+	sha, err := r.CreateBlob(string(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create local metadata blob: %w", err)
+	}
+
+	return sha, nil
+}
+
+// GetMetadataRefSHA returns the current SHA of a metadata ref, or empty string if not found.
+func (r *runner) GetMetadataRefSHA(branchName string) string {
+	refName := fmt.Sprintf("%s%s", MetadataRefPrefix, branchName)
+	sha, err := r.GetRef(refName)
+	if err != nil {
+		return ""
+	}
+	return sha
+}
+
+// GetLocalMetadataRefSHA returns the current SHA of a local metadata ref, or empty string if not found.
+func (r *runner) GetLocalMetadataRefSHA(branchName string) string {
+	refName := fmt.Sprintf("%s%s", LocalMetadataRefPrefix, branchName)
+	sha, err := r.GetRef(refName)
+	if err != nil {
+		return ""
+	}
+	return sha
+}
+
+// MetadataRefName returns the full ref name for a branch's metadata.
+func MetadataRefName(branchName string) string {
+	return fmt.Sprintf("%s%s", MetadataRefPrefix, branchName)
+}
+
+// LocalMetadataRefName returns the full ref name for a branch's local metadata.
+func LocalMetadataRefName(branchName string) string {
+	return fmt.Sprintf("%s%s", LocalMetadataRefPrefix, branchName)
+}
