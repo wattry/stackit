@@ -37,7 +37,7 @@ cd your-repository
 stackit init
 ```
 
-This detects your trunk branch (usually `main`) and prepares the repo for stacking.
+This detects your trunk branch (usually `main`) and prepares the repo for stacking. You'll be prompted to install optional integrations (GitHub Actions, pre-commit hooks, AI agent files).
 
 ### 3. Create your first branch
 

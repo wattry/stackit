@@ -6,6 +6,16 @@ icon: material/wrench
 
 Customize stackit behavior with configuration options.
 
+## Layered configuration
+
+Stackit uses a layered configuration system:
+
+1. **Personal settings** (highest priority) — Stored in `.git/config`, not shared
+2. **Team settings** — Stored in `.stackit.yaml`, committed and shared with team
+3. **Defaults** (lowest priority) — Built-in sensible defaults
+
+This allows teams to define shared settings that individual developers can override locally.
+
 ## Managing configuration
 
 ### Interactive configuration
@@ -102,21 +112,84 @@ Auto-remove worktrees for merged stacks during sync.
 stackit config set worktree.autoClean false
 ```
 
-## Project configuration (`.stackit.yaml`)
+### merge.method
 
-For team-wide settings that should be shared across all contributors, create a `.stackit.yaml` file in your repository root and commit it to version control.
+Default merge strategy for PRs.
 
-### Worktree hooks
+**Default**: `""` (GitHub default)
 
-The `hooks.post-worktree-create` option allows you to run commands automatically after creating a worktree with `stackit create -w`:
+**Options**: `squash`, `merge`, `rebase`
+
+**Example**:
+
+```bash
+stackit config set merge.method squash
+```
+
+### ci.command
+
+CI validation command to run with `stackit foreach`.
+
+**Default**: `""` (none)
+
+**Example**:
+
+```bash
+stackit config set ci.command "make test"
+```
+
+### ci.timeout
+
+CI command timeout in seconds.
+
+**Default**: `600` (10 minutes)
+
+**Example**:
+
+```bash
+stackit config set ci.timeout 300
+```
+
+## Team configuration (`.stackit.yaml`)
+
+For team-wide settings that should be shared across all contributors, create a `.stackit.yaml` file in your repository root and commit it to version control. Team settings act as defaults that individual developers can override in their personal git config.
 
 ```yaml
-# .stackit.yaml
+# .stackit.yaml - Team-wide defaults
+trunk: main
+
+# Additional trunk branches (e.g., release branches)
+trunks:
+  - develop
+  - staging
+
+# Branch naming pattern for the team
+branch:
+  pattern: "{username}/{date}/{message}"
+
+# PR submission settings
+submit:
+  footer: true
+
+# Default merge method
+merge:
+  method: squash
+
+# CI validation
+ci:
+  command: "make test"
+  timeout: 600
+
+# Worktree hooks
 hooks:
   post-worktree-create:
     - npm install
     - cp .env.example .env
 ```
+
+### Worktree hooks
+
+The `hooks.post-worktree-create` option allows you to run commands automatically after creating a worktree with `stackit create -w`.
 
 This is useful for:
 
@@ -134,7 +207,7 @@ This repo wants to run "npm install" after creating worktrees. Allow? [y/N]
 ```
 
 - The default answer is "No" for security
-- Approvals are stored locally in `.git/.stackit_config`
+- Approvals are stored locally in git config
 - Approvals persist across sessions
 - Hooks have a 60-second timeout
 
