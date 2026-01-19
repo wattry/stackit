@@ -10,6 +10,19 @@ import (
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
+	"stackit.dev/stackit/internal/tui/core"
+)
+
+// dashboardState represents the current UI state of the dashboard.
+type dashboardState int
+
+const (
+	stateLoading dashboardState = iota
+	stateMain
+	stateAnalyzing
+	stateConfirming
+	stateShipping
+	stateHelp
 )
 
 // ShippableOptions defines configuration for the shippable dashboard.
@@ -20,13 +33,11 @@ type ShippableOptions struct {
 
 // shippableModel is the main model for the shippable work dashboard.
 type shippableModel struct {
+	core.BaseModel // Provides Ready signaling, spinner, and common message handling
+
 	ctx    *app.Context
 	engine engine.Engine
 	cfg    config.Configurer
-
-	// Dimensions
-	width  int
-	height int
 
 	// Analysis state
 	analyzer    *shippable.Analyzer
@@ -35,6 +46,7 @@ type shippableModel struct {
 	combination *shippable.CombinationResult
 
 	// UI state
+	state         dashboardState // Current UI state (replaces boolean flags)
 	stacks        []shippable.Stack
 	selectedIndex int
 	expanded      map[string]bool  // Tracks which stacks are expanded
@@ -42,18 +54,12 @@ type shippableModel struct {
 	focusedStack  *shippable.Stack // Currently focused stack for detail view
 
 	// Status
-	loading       bool
-	analyzing     bool
 	lastRefresh   time.Time
 	statusMessage string
 	errorMessage  string
 
-	// Confirmation dialog
-	showConfirmation bool
-	confirmAction    string
-
-	// Help overlay
-	showHelp bool
+	// Confirmation action (used when state == stateConfirming)
+	confirmAction string
 
 	// Options
 	options ShippableOptions
@@ -139,7 +145,7 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 		combiner: combiner,
 		expanded: make(map[string]bool),
 		selected: make(map[string]bool),
-		loading:  true,
+		state:    stateLoading,
 		options:  opts,
 	}
 }
@@ -210,7 +216,8 @@ func (m *shippableModel) clearSelection() {
 
 // Init initializes the model.
 func (m *shippableModel) Init() tea.Cmd {
-	return m.refresh()
+	m.SignalReady()
+	return tea.Batch(m.InitSpinner(), m.refresh())
 }
 
 // Messages for async operations

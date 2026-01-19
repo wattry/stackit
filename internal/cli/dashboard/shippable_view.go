@@ -12,19 +12,16 @@ import (
 
 // View renders the dashboard.
 func (m *shippableModel) View() string {
-	if m.loading {
+	switch m.state {
+	case stateLoading:
 		return m.renderLoading()
-	}
-
-	if m.showHelp {
+	case stateHelp:
 		return m.renderHelp()
-	}
-
-	if m.showConfirmation {
+	case stateConfirming:
 		return m.renderConfirmation()
+	default:
+		return m.renderMain()
 	}
-
-	return m.renderMain()
 }
 
 // renderLoading shows the loading state.
@@ -39,13 +36,13 @@ func (m *shippableModel) renderMain() string {
 	// Calculate dimensions
 	headerHeight := 3
 	footerHeight := 4
-	contentHeight := m.height - headerHeight - footerHeight
+	contentHeight := m.Height - headerHeight - footerHeight
 	if contentHeight < 5 {
 		contentHeight = 5
 	}
 
-	leftWidth := m.width * 2 / 3
-	rightWidth := m.width - leftWidth
+	leftWidth := m.Width * 2 / 3
+	rightWidth := m.Width - leftWidth
 
 	// Build sections
 	header := m.renderHeader()
@@ -61,33 +58,24 @@ func (m *shippableModel) renderMain() string {
 
 // renderHeader renders the dashboard header.
 func (m *shippableModel) renderHeader() string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("6")).
-		Bold(true).
-		Padding(0, 1)
-
-	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Padding(0, 1)
-
 	title := titleStyle.Render("SHIPPABLE WORK")
 
 	var status string
 	switch {
-	case m.analyzing:
-		status = statusStyle.Render("Analyzing...")
+	case m.state == stateAnalyzing || m.state == stateShipping:
+		status = headerStatusStyle.Render("Analyzing...")
 	case m.errorMessage != "":
-		status = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(m.errorMessage)
+		status = errorTextStyle.Render(m.errorMessage)
 	case m.statusMessage != "":
-		status = statusStyle.Render(m.statusMessage)
+		status = headerStatusStyle.Render(m.statusMessage)
 	case m.analysis != nil:
-		status = statusStyle.Render(fmt.Sprintf("%d stacks (%d shippable)",
+		status = headerStatusStyle.Render(fmt.Sprintf("%d stacks (%d shippable)",
 			m.analysis.TotalStacks(), m.analysis.ShippableCount))
 	}
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
-		Width(m.width).
+		Width(m.Width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Left, title, "  ", status))
 }
 
@@ -99,15 +87,13 @@ func (m *shippableModel) renderStackList(width, height int) string {
 		Width(width).
 		Height(height)
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-
 	if len(m.stacks) == 0 {
-		return paneStyle.Render(headerStyle.Render("STACKS") + "\n\n" +
-			style.ColorDim("No stacks found. Create one with `stackit create`"))
+		return paneStyle.Render(paneHeaderStyle.Render("STACKS") + "\n\n" +
+			commonStyles.Dim.Render("No stacks found. Create one with `stackit create`"))
 	}
 
 	var sb strings.Builder
-	sb.WriteString(headerStyle.Render("STACKS") + "\n")
+	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n")
 	sb.WriteString(strings.Repeat("─", width-4) + "\n")
 
 	for i, stack := range m.stacks {
@@ -154,9 +140,7 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, selected bool) s
 
 	// Highlight if selected
 	if selected {
-		line = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Render(line)
+		line = selectedRowStyle.Render(line)
 	}
 
 	return line
@@ -202,14 +186,12 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 		Width(width).
 		Height(height)
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-
 	var sb strings.Builder
 
 	// Selection summary
 	selectedCount := m.selectedCount()
 	if selectedCount > 0 {
-		sb.WriteString(headerStyle.Render("SELECTION") + "\n")
+		sb.WriteString(paneHeaderStyle.Render("SELECTION") + "\n")
 		sb.WriteString(strings.Repeat("─", width-4) + "\n")
 		sb.WriteString(fmt.Sprintf("Selected: %d stacks\n\n", selectedCount))
 
@@ -248,13 +230,13 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 		sb.WriteString(style.ColorCyan("[S]") + " Ship selected\n")
 		sb.WriteString(style.ColorCyan("[A]") + " Analyze combination\n")
 	} else {
-		sb.WriteString(headerStyle.Render("DETAILS") + "\n")
+		sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n")
 		sb.WriteString(strings.Repeat("─", width-4) + "\n")
 
 		if m.focusedStack != nil {
 			sb.WriteString(m.renderStackDetails(m.focusedStack))
 		} else {
-			sb.WriteString(style.ColorDim("Select a stack to see details"))
+			sb.WriteString(commonStyles.Dim.Render("Select a stack to see details"))
 		}
 	}
 
@@ -263,10 +245,8 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 
 // renderStackDetails renders detailed info about a stack.
 func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Width(12)
-
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Bold(true).Render(stack.RootBranch()) + "\n\n")
+	sb.WriteString(commonStyles.Bold.Render(stack.RootBranch()) + "\n\n")
 
 	// Status
 	sb.WriteString(labelStyle.Render("Status:") + " " + m.getStatusLabel(stack.Status) + "\n")
@@ -290,7 +270,7 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 
 	// Blocking PRs
 	if len(stack.BlockingPRs) > 0 {
-		sb.WriteString("\n" + lipgloss.NewStyle().Bold(true).Render("Blocking:") + "\n")
+		sb.WriteString("\n" + commonStyles.Bold.Render("Blocking:") + "\n")
 		for _, bp := range stack.BlockingPRs {
 			sb.WriteString(fmt.Sprintf("  %s: %s\n", bp.Branch, bp.Reason))
 		}
@@ -317,11 +297,6 @@ func (m *shippableModel) getStatusLabel(status shippable.Status) string {
 
 // renderFooter renders the footer with keyboard shortcuts.
 func (m *shippableModel) renderFooter() string {
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Padding(0, 1).
-		Width(m.width)
-
 	shortcuts := []string{
 		"[Space] Toggle",
 		"[Enter] Expand",
@@ -333,45 +308,38 @@ func (m *shippableModel) renderFooter() string {
 		"[q] Quit",
 	}
 
-	return helpStyle.Render(strings.Join(shortcuts, "  "))
+	return footerStyle.Width(m.Width).Render(strings.Join(shortcuts, "  "))
 }
 
 // renderHelp renders the help overlay.
 func (m *shippableModel) renderHelp() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).MarginBottom(1)
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")).MarginTop(1)
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Width(12)
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-
 	var sb strings.Builder
-	sb.WriteString(titleStyle.Render("Shippable Work Dashboard Help") + "\n\n")
+	sb.WriteString(helpTitleStyle.Render("Shippable Work Dashboard Help") + "\n\n")
 
-	sb.WriteString(sectionStyle.Render("Navigation") + "\n")
-	sb.WriteString(keyStyle.Render("j/k, ↑/↓") + descStyle.Render("Move selection up/down") + "\n")
-	sb.WriteString(keyStyle.Render("enter") + descStyle.Render("Expand/collapse stack") + "\n")
+	sb.WriteString(helpSectionStyle.Render("Navigation") + "\n")
+	sb.WriteString(helpKeyStyle.Render("j/k, ↑/↓") + helpDescStyle.Render("Move selection up/down") + "\n")
+	sb.WriteString(helpKeyStyle.Render("enter") + helpDescStyle.Render("Expand/collapse stack") + "\n")
 
-	sb.WriteString(sectionStyle.Render("Selection") + "\n")
-	sb.WriteString(keyStyle.Render("space") + descStyle.Render("Toggle stack selection") + "\n")
-	sb.WriteString(keyStyle.Render("A") + descStyle.Render("Select all shippable") + "\n")
+	sb.WriteString(helpSectionStyle.Render("Selection") + "\n")
+	sb.WriteString(helpKeyStyle.Render("space") + helpDescStyle.Render("Toggle stack selection") + "\n")
+	sb.WriteString(helpKeyStyle.Render("A") + helpDescStyle.Render("Select all shippable") + "\n")
 
-	sb.WriteString(sectionStyle.Render("Actions") + "\n")
-	sb.WriteString(keyStyle.Render("s") + descStyle.Render("Ship selected stacks") + "\n")
-	sb.WriteString(keyStyle.Render("a") + descStyle.Render("Analyze combination") + "\n")
-	sb.WriteString(keyStyle.Render("r") + descStyle.Render("Refresh analysis") + "\n")
+	sb.WriteString(helpSectionStyle.Render("Actions") + "\n")
+	sb.WriteString(helpKeyStyle.Render("s") + helpDescStyle.Render("Ship selected stacks") + "\n")
+	sb.WriteString(helpKeyStyle.Render("a") + helpDescStyle.Render("Analyze combination") + "\n")
+	sb.WriteString(helpKeyStyle.Render("r") + helpDescStyle.Render("Refresh analysis") + "\n")
 
-	sb.WriteString(sectionStyle.Render("Other") + "\n")
-	sb.WriteString(keyStyle.Render("?") + descStyle.Render("Toggle this help") + "\n")
-	sb.WriteString(keyStyle.Render("q") + descStyle.Render("Quit") + "\n")
+	sb.WriteString(helpSectionStyle.Render("Other") + "\n")
+	sb.WriteString(helpKeyStyle.Render("?") + helpDescStyle.Render("Toggle this help") + "\n")
+	sb.WriteString(helpKeyStyle.Render("q") + helpDescStyle.Render("Quit") + "\n")
 
-	sb.WriteString("\n" + style.ColorDim("Press any key to close"))
+	sb.WriteString("\n" + commonStyles.Dim.Render("Press any key to close"))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(sb.String())
 }
 
 // renderConfirmation renders the ship confirmation dialog.
 func (m *shippableModel) renderConfirmation() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).MarginBottom(1)
-
 	selected := m.selectedStacks()
 	totalBranches := 0
 	for _, s := range selected {
@@ -379,7 +347,7 @@ func (m *shippableModel) renderConfirmation() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(titleStyle.Render("SHIP CONFIRMATION") + "\n\n")
+	sb.WriteString(helpTitleStyle.Render("SHIP CONFIRMATION") + "\n\n")
 
 	sb.WriteString(fmt.Sprintf("About to ship %d stacks (%d branches total):\n\n",
 		len(selected), totalBranches))

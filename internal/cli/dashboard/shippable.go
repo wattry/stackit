@@ -3,17 +3,18 @@ package dashboard
 
 import (
 	"fmt"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/utils"
+	"stackit.dev/stackit/internal/tui"
 )
 
 // RunShippable starts the shippable work dashboard.
 func RunShippable(ctx *app.Context, opts ShippableOptions) error {
-	if !utils.IsInteractive() {
+	if !tui.IsTTY() {
 		return fmt.Errorf("dashboard requires an interactive terminal")
 	}
 
@@ -25,7 +26,10 @@ func RunShippable(ctx *app.Context, opts ShippableOptions) error {
 
 	m := newShippableModel(ctx, cfg, opts)
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	// Note: The dashboard uses alt-screen mode which is not directly supported
+	// by tui.Runner. We use tea.NewProgram directly with appropriate options.
+	// The model embeds core.BaseModel for ready signaling and common handling.
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	_, err = p.Run()
 	return err
 }
