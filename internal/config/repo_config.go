@@ -32,10 +32,11 @@ func resolveGitDir(repoRoot string) string {
 }
 
 // LoadConfig loads the repository configuration.
-// This function delegates to LoadGitConfig for the new git-based config storage.
+// This function delegates to LoadGitConfigWithProject for git-based config storage
+// with project config (.stackit.yaml) fallback support.
 // It automatically migrates any existing JSON config to git config.
 func LoadConfig(repoRoot string) (*GitConfig, error) {
-	return LoadGitConfig(repoRoot)
+	return LoadGitConfigWithProject(repoRoot)
 }
 
 // RepoConfig represents the legacy JSON-based repository configuration.

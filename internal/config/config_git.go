@@ -9,13 +9,16 @@ import (
 
 // GitConfig provides typed access to stackit configuration stored in git config.
 // This replaces the JSON-based config storage with native git config.
+// Configuration follows a layered system: personal git config > team project config > defaults.
 type GitConfig struct {
 	repoRoot string
 	store    *git.ConfigStore
+	project  *ProjectConfig // Team config from .stackit.yaml for fallback
 }
 
 // LoadGitConfig loads configuration from git config.
 // If JSON config exists and needs migration, it will be migrated automatically.
+// This function does NOT load project config (.stackit.yaml) - use LoadGitConfigWithProject for that.
 func LoadGitConfig(repoRoot string) (*GitConfig, error) {
 	store := git.NewConfigStore(repoRoot)
 
@@ -34,18 +37,43 @@ func LoadGitConfig(repoRoot string) (*GitConfig, error) {
 	return cfg, nil
 }
 
+// LoadGitConfigWithProject loads configuration from git config with project config fallback.
+// The layered system follows: personal git config > team project config (.stackit.yaml) > defaults.
+func LoadGitConfigWithProject(repoRoot string) (*GitConfig, error) {
+	cfg, err := LoadGitConfig(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load project config for fallback
+	project, err := LoadProjectConfig(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
+	}
+
+	cfg.project = project
+	return cfg, nil
+}
+
 // IsInitialized checks if stackit has been initialized (trunk is set).
 func (c *GitConfig) IsInitialized() bool {
 	return c.store.Exists(KeyTrunk)
 }
 
 // Trunk returns the primary trunk branch name.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) Trunk() string {
+	// Check personal git config first
 	trunk, _ := c.store.Get(KeyTrunk)
-	if trunk == "" {
-		return DefaultTrunk
+	if trunk != "" {
+		return trunk
 	}
-	return trunk
+	// Fall back to team project config
+	if c.project != nil && c.project.HasTrunk() {
+		return c.project.Trunk
+	}
+	// Return default
+	return DefaultTrunk
 }
 
 // SetTrunk sets the primary trunk branch name.
@@ -54,13 +82,24 @@ func (c *GitConfig) SetTrunk(trunk string) error {
 }
 
 // AllTrunks returns all configured trunk branches (primary + additional).
+// Merges trunks from git config and project config (deduplicated).
 func (c *GitConfig) AllTrunks() []string {
 	trunks := []string{c.Trunk()}
 
+	// Add additional trunks from git config
 	additional, _ := c.store.GetAll(KeyTrunks)
 	for _, t := range additional {
 		if !slices.Contains(trunks, t) {
 			trunks = append(trunks, t)
+		}
+	}
+
+	// Add additional trunks from project config
+	if c.project != nil && c.project.HasTrunks() {
+		for _, t := range c.project.Trunks {
+			if !slices.Contains(trunks, t) {
+				trunks = append(trunks, t)
+			}
 		}
 	}
 
@@ -81,16 +120,24 @@ func (c *GitConfig) AddTrunk(trunk string) error {
 }
 
 // BranchNamePattern returns the branch name pattern.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) BranchNamePattern() string {
+	// Check personal git config first
 	pattern, _ := c.store.Get(KeyBranchPattern)
-	if pattern == "" {
-		return DefaultBranchPattern.String()
+	if pattern != "" {
+		// Validate
+		if _, err := NewBranchPattern(pattern); err != nil {
+			return DefaultBranchPattern.String()
+		}
+		return pattern
 	}
-	// Validate
-	if _, err := NewBranchPattern(pattern); err != nil {
-		return DefaultBranchPattern.String()
+	// Fall back to team project config
+	if c.project != nil && c.project.HasBranchPattern() {
+		// Already validated during LoadProjectConfig
+		return c.project.Branch.Pattern
 	}
-	return pattern
+	// Return default
+	return DefaultBranchPattern.String()
 }
 
 // SetBranchNamePattern sets the branch name pattern.
@@ -112,8 +159,18 @@ func (c *GitConfig) GetBranchPattern() BranchPattern {
 }
 
 // SubmitFooter returns whether to include PR footer.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) SubmitFooter() bool {
-	return c.store.GetBoolWithDefault(KeySubmitFooter, DefaultSubmitFooter)
+	// Check personal git config first
+	if c.store.Exists(KeySubmitFooter) {
+		return c.store.GetBoolWithDefault(KeySubmitFooter, DefaultSubmitFooter)
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasSubmitFooter() {
+		return c.project.GetSubmitFooter()
+	}
+	// Return default
+	return DefaultSubmitFooter
 }
 
 // SetSubmitFooter sets whether to include PR footer.
@@ -160,9 +217,19 @@ func (c *GitConfig) SetWorktreeAutoClean(enabled bool) error {
 }
 
 // MergeMethod returns the configured merge method (empty if not set).
+// Priority: personal git config > team project config > empty (not set).
 func (c *GitConfig) MergeMethod() string {
+	// Check personal git config first
 	method, _ := c.store.Get(KeyMergeMethod)
-	return method
+	if method != "" {
+		return method
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasMergeMethod() {
+		return c.project.Merge.Method
+	}
+	// Return empty (not set)
+	return ""
 }
 
 // SetMergeMethod sets the merge method preference.
@@ -174,9 +241,19 @@ func (c *GitConfig) SetMergeMethod(method string) error {
 }
 
 // CICommand returns the CI validation command.
+// Priority: personal git config > team project config > empty (not set).
 func (c *GitConfig) CICommand() string {
+	// Check personal git config first
 	cmd, _ := c.store.Get(KeyCICommand)
-	return cmd
+	if cmd != "" {
+		return cmd
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasCICommand() {
+		return c.project.CI.Command
+	}
+	// Return empty (not set)
+	return ""
 }
 
 // SetCICommand sets the CI validation command.
@@ -185,12 +262,22 @@ func (c *GitConfig) SetCICommand(cmd string) error {
 }
 
 // CITimeout returns the CI timeout in seconds.
+// Priority: personal git config > team project config > default.
 func (c *GitConfig) CITimeout() int {
-	timeout := c.store.GetIntWithDefault(KeyCITimeout, DefaultCITimeout)
-	if timeout < 1 {
-		return DefaultCITimeout
+	// Check personal git config first
+	if c.store.Exists(KeyCITimeout) {
+		timeout := c.store.GetIntWithDefault(KeyCITimeout, DefaultCITimeout)
+		if timeout < 1 {
+			return DefaultCITimeout
+		}
+		return timeout
 	}
-	return timeout
+	// Fall back to team project config
+	if c.project != nil && c.project.HasCITimeout() {
+		return c.project.CI.Timeout
+	}
+	// Return default
+	return DefaultCITimeout
 }
 
 // SetCITimeout sets the CI timeout in seconds.

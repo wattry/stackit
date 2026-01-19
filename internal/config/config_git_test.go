@@ -551,3 +551,227 @@ func TestGitConfigSaveNoop(t *testing.T) {
 		require.Equal(t, "main", cfg2.Trunk())
 	})
 }
+
+func TestGitConfigWithProjectFallback(t *testing.T) {
+	t.Parallel()
+
+	t.Run("trunk falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with trunk
+		projectConfig := "trunk: develop\n"
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.Equal(t, "develop", cfg.Trunk())
+
+		// Set personal config
+		err = cfg.SetTrunk("personal-main")
+		require.NoError(t, err)
+
+		// Should now use personal config
+		require.Equal(t, "personal-main", cfg.Trunk())
+	})
+
+	t.Run("all trunks merges git and project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with trunks
+		projectConfig := `trunk: main
+trunks:
+  - staging
+  - production
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should include trunk and project trunks
+		require.Equal(t, []string{"main", "staging", "production"}, cfg.AllTrunks())
+
+		// Add personal trunk
+		err = cfg.AddTrunk("develop")
+		require.NoError(t, err)
+
+		// Should include all trunks (deduplicated)
+		require.Equal(t, []string{"main", "develop", "staging", "production"}, cfg.AllTrunks())
+	})
+
+	t.Run("branch pattern falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with branch pattern
+		projectConfig := `branch:
+  pattern: "feature/{message}"
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config pattern
+		require.Equal(t, "feature/{message}", cfg.BranchNamePattern())
+
+		// Set personal pattern
+		err = cfg.SetBranchNamePattern("{username}/{message}")
+		require.NoError(t, err)
+
+		// Should now use personal pattern
+		require.Equal(t, "{username}/{message}", cfg.BranchNamePattern())
+	})
+
+	t.Run("submit footer falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with footer disabled
+		projectConfig := `submit:
+  footer: false
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.False(t, cfg.SubmitFooter())
+
+		// Set personal override
+		err = cfg.SetSubmitFooter(true)
+		require.NoError(t, err)
+
+		// Should now use personal config
+		require.True(t, cfg.SubmitFooter())
+	})
+
+	t.Run("merge method falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with merge method
+		projectConfig := `merge:
+  method: squash
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.Equal(t, "squash", cfg.MergeMethod())
+
+		// Set personal override
+		err = cfg.SetMergeMethod("rebase")
+		require.NoError(t, err)
+
+		// Should now use personal config
+		require.Equal(t, "rebase", cfg.MergeMethod())
+	})
+
+	t.Run("CI command falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with CI command
+		projectConfig := `ci:
+  command: "make test"
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.Equal(t, "make test", cfg.CICommand())
+
+		// Set personal override
+		err = cfg.SetCICommand("npm test")
+		require.NoError(t, err)
+
+		// Should now use personal config
+		require.Equal(t, "npm test", cfg.CICommand())
+	})
+
+	t.Run("CI timeout falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with CI timeout
+		projectConfig := `ci:
+  timeout: 300
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.Equal(t, 300, cfg.CITimeout())
+
+		// Set personal override
+		err = cfg.SetCITimeout(120)
+		require.NoError(t, err)
+
+		// Should now use personal config
+		require.Equal(t, 120, cfg.CITimeout())
+	})
+
+	t.Run("returns defaults when neither git nor project config set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// No project config
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		require.Equal(t, DefaultTrunk, cfg.Trunk())
+		require.Equal(t, DefaultBranchPattern.String(), cfg.BranchNamePattern())
+		require.Equal(t, DefaultSubmitFooter, cfg.SubmitFooter())
+		require.Equal(t, DefaultCITimeout, cfg.CITimeout())
+		require.Empty(t, cfg.MergeMethod())
+		require.Empty(t, cfg.CICommand())
+	})
+
+	t.Run("LoadConfig uses project fallback", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config
+		projectConfig := `trunk: develop
+merge:
+  method: squash
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		// LoadConfig should use project fallback
+		cfg, err := LoadConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.Equal(t, "develop", cfg.Trunk())
+		require.Equal(t, "squash", cfg.MergeMethod())
+	})
+}

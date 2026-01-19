@@ -112,3 +112,207 @@ func TestHasPostWorktreeCreateHooks(t *testing.T) {
 		assert.False(t, cfg.HasPostWorktreeCreateHooks())
 	})
 }
+
+func TestLoadProjectConfigNewFields(t *testing.T) {
+	t.Run("loads config with all team settings", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `trunk: develop
+trunks:
+  - staging
+  - production
+
+branch:
+  pattern: "feature/{message}"
+
+submit:
+  footer: false
+
+merge:
+  method: squash
+
+ci:
+  command: "make test"
+  timeout: 300
+
+hooks:
+  post-worktree-create:
+    - npm install
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+
+		assert.Equal(t, "develop", cfg.Trunk)
+		assert.Equal(t, []string{"staging", "production"}, cfg.Trunks)
+		assert.Equal(t, "feature/{message}", cfg.Branch.Pattern)
+		assert.False(t, cfg.GetSubmitFooter())
+		assert.Equal(t, "squash", cfg.Merge.Method)
+		assert.Equal(t, "make test", cfg.CI.Command)
+		assert.Equal(t, 300, cfg.CI.Timeout)
+		assert.Equal(t, []string{"npm install"}, cfg.Hooks.PostWorktreeCreate)
+	})
+
+	t.Run("loads partial config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `trunk: main
+merge:
+  method: rebase
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+
+		assert.Equal(t, "main", cfg.Trunk)
+		assert.Empty(t, cfg.Trunks)
+		assert.Empty(t, cfg.Branch.Pattern)
+		assert.Nil(t, cfg.Submit.Footer)
+		assert.Equal(t, "rebase", cfg.Merge.Method)
+		assert.Empty(t, cfg.CI.Command)
+		assert.Zero(t, cfg.CI.Timeout)
+	})
+}
+
+func TestProjectConfigHelpers(t *testing.T) {
+	t.Run("HasTrunk", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasTrunk())
+
+		cfg.Trunk = "main"
+		assert.True(t, cfg.HasTrunk())
+	})
+
+	t.Run("HasTrunks", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasTrunks())
+
+		cfg.Trunks = []string{"staging"}
+		assert.True(t, cfg.HasTrunks())
+	})
+
+	t.Run("HasBranchPattern", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasBranchPattern())
+
+		cfg.Branch.Pattern = "feature/{message}"
+		assert.True(t, cfg.HasBranchPattern())
+	})
+
+	t.Run("HasSubmitFooter and GetSubmitFooter", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasSubmitFooter())
+		assert.True(t, cfg.GetSubmitFooter()) // Default is true
+
+		footer := true
+		cfg.Submit.Footer = &footer
+		assert.True(t, cfg.HasSubmitFooter())
+		assert.True(t, cfg.GetSubmitFooter())
+
+		footer = false
+		cfg.Submit.Footer = &footer
+		assert.True(t, cfg.HasSubmitFooter())
+		assert.False(t, cfg.GetSubmitFooter())
+	})
+
+	t.Run("HasMergeMethod", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasMergeMethod())
+
+		cfg.Merge.Method = "squash"
+		assert.True(t, cfg.HasMergeMethod())
+	})
+
+	t.Run("HasCICommand", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasCICommand())
+
+		cfg.CI.Command = "make test"
+		assert.True(t, cfg.HasCICommand())
+	})
+
+	t.Run("HasCITimeout", func(t *testing.T) {
+		cfg := &ProjectConfig{}
+		assert.False(t, cfg.HasCITimeout())
+
+		cfg.CI.Timeout = 300
+		assert.True(t, cfg.HasCITimeout())
+	})
+}
+
+func TestProjectConfigValidation(t *testing.T) {
+	t.Run("rejects invalid branch pattern", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Pattern without {slug} or {message} is invalid
+		configContent := `branch:
+  pattern: "feature/"
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid branch.pattern")
+	})
+
+	t.Run("rejects invalid merge method", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `merge:
+  method: invalid
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid merge.method")
+	})
+
+	t.Run("rejects negative CI timeout", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `ci:
+  timeout: -1
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		_, err = LoadProjectConfig(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid ci.timeout")
+	})
+
+	t.Run("accepts valid merge methods", func(t *testing.T) {
+		for _, method := range []string{"squash", "merge", "rebase"} {
+			tmpDir := t.TempDir()
+
+			configContent := "merge:\n  method: " + method + "\n"
+			err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+			require.NoError(t, err)
+
+			cfg, err := LoadProjectConfig(tmpDir)
+			require.NoError(t, err)
+			assert.Equal(t, method, cfg.Merge.Method)
+		}
+	})
+
+	t.Run("accepts valid branch pattern", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `branch:
+  pattern: "feature/{message}"
+`
+		err := os.WriteFile(filepath.Join(tmpDir, ProjectConfigFileName), []byte(configContent), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadProjectConfig(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "feature/{message}", cfg.Branch.Pattern)
+	})
+}
