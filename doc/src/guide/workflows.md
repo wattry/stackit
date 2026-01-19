@@ -107,9 +107,13 @@ This creates:
 - A new branch `my-feature` tracked by stackit
 - A worktree at `../your-repo-stacks/my-feature/`
 
-Navigate to the worktree with:
+Navigate to the worktree:
 
 ```bash
+# With shell integration: auto-changes directory
+stackit worktree open my-feature
+
+# Without shell integration: use command substitution
 cd $(stackit worktree open my-feature)
 ```
 

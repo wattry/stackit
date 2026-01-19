@@ -248,9 +248,10 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 ### Worktree Management
 | Command | Description |
 |:---|:---|
+| `stackit worktree create <name>` | Create a new worktree (use `--open` to auto-cd) |
 | `stackit worktree list` | List all managed worktrees |
 | `stackit worktree remove <stack>` | Remove a worktree and unregister it |
-| `stackit worktree open <stack>` | Print path to worktree (for `cd $(st worktree open foo)`) |
+| `stackit worktree open <stack>` | Open a worktree (auto-cd with shell integration, or print path for `cd $(...)`) |
 
 ### Stack Operations
 | Command | Description |
@@ -337,8 +338,12 @@ stackit create my-feature -m "feat: start new feature" -w
 # - A new branch 'my-feature' tracked by stackit
 # - A worktree at ../your-repo-stacks/my-feature/
 ```
-Navigate to the worktree with:
+Navigate to the worktree:
 ```bash
+# With shell integration: auto-changes directory
+stackit worktree open my-feature
+
+# Without shell integration: use command substitution
 cd $(stackit worktree open my-feature)
 ```
 Worktrees are automatically cleaned up during `stackit sync` when their stack is merged.
