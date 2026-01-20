@@ -1,6 +1,8 @@
 package stack
 
 import (
+	"fmt"
+
 	"stackit.dev/stackit/internal/actions/flatten"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
@@ -122,6 +124,23 @@ func (h *InteractiveFlattenHandler) OnStep(step flatten.Step, status flatten.Ste
 	if status == flatten.StatusStarted {
 		h.runner.Send(flattenComponent.PhaseStartMsg{Phase: phase})
 	}
+}
+
+// Complete sends completion message to the TUI
+func (h *InteractiveFlattenHandler) Complete(result flatten.Result) {
+	if h.runner == nil {
+		return
+	}
+
+	var summary string
+	if result.MovedCount == 0 {
+		summary = "All branches are already as close to trunk as possible."
+	} else {
+		summary = fmt.Sprintf("Flatten complete: %d branches moved, %d unchanged.",
+			result.MovedCount, result.UnchangedCount)
+	}
+
+	h.runner.Send(flattenComponent.CompleteMsg{Summary: summary})
 }
 
 // Cleanup restores the terminal
