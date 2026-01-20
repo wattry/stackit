@@ -296,8 +296,8 @@ func (m *HunkSelectorModel) View() string {
 	var sb strings.Builder
 
 	// Header
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	sb.WriteString(titleStyle.Render(m.renderHeader()))
+	headerStyles := style.DefaultHeaderStyles()
+	sb.WriteString(headerStyles.Title.Render(m.renderHeader()))
 	sb.WriteString("\n\n")
 
 	// Viewport with hunks
@@ -307,7 +307,7 @@ func (m *HunkSelectorModel) View() string {
 	// Help
 	sb.WriteString(m.help.View(m.keys))
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(sb.String())
+	return style.DefaultLayoutStyles().Container.Render(sb.String())
 }
 
 // renderHeader creates the header line with selection info
@@ -343,15 +343,17 @@ func (m *HunkSelectorModel) updateViewportContent() {
 	var sb strings.Builder
 
 	// Styles
-	fileStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	unselectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("243"))
-	cursorStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	removeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	selectionStyles := style.DefaultSelectionStyles()
+	headerStyles := style.DefaultHeaderStyles()
+	fileStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(style.ColorSecondary))
+	selectedStyle := selectionStyles.Selected
+	unselectedStyle := selectionStyles.Unselected
+	cursorStyle := headerStyles.Title
+	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(style.ColorSuccessAlt))
+	removeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(style.ColorErrorAlt))
 	contextStyle := style.DimStyle()
-	splittableStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	binaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("5")) // magenta for binary
+	splittableStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(style.ColorWarningAlt))
+	binaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(style.ColorMerged))
 
 	for _, fg := range m.fileGroups {
 		// File header

@@ -8,11 +8,11 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // Direction represents where to place a new branch
@@ -275,8 +275,8 @@ func (m *DirectionSelectModel) View() string {
 	var sb strings.Builder
 
 	// Title
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	sb.WriteString(titleStyle.Render("Where should the new branch be placed?"))
+	headerStyles := style.DefaultHeaderStyles()
+	sb.WriteString(headerStyles.Title.Render("Where should the new branch be placed?"))
 	sb.WriteString("\n\n")
 
 	// Direction options at the top
@@ -290,19 +290,19 @@ func (m *DirectionSelectModel) View() string {
 	// Help
 	sb.WriteString(m.help.View(m.keys))
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(sb.String())
+	return style.DefaultLayoutStyles().Container.Render(sb.String())
 }
 
 // renderOptions renders the direction selection options
 func (m *DirectionSelectModel) renderOptions() string {
 	var sb strings.Builder
 
-	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	selectionStyles := style.DefaultSelectionStyles()
+	normalStyle := style.SubtleStyle()
 
 	// Above option (shown first - visually at top of tree)
 	if m.direction == DirectionAbove {
-		sb.WriteString(selectedStyle.Render("▸ Above"))
+		sb.WriteString(selectionStyles.Highlighted.Render("▸ Above"))
 		sb.WriteString(normalStyle.Render(" - Insert as child of current"))
 	} else {
 		sb.WriteString(normalStyle.Render("  Above - Insert as child of current"))
@@ -311,7 +311,7 @@ func (m *DirectionSelectModel) renderOptions() string {
 
 	// Below option (default)
 	if m.direction == DirectionBelow {
-		sb.WriteString(selectedStyle.Render("▸ Below"))
+		sb.WriteString(selectionStyles.Highlighted.Render("▸ Below"))
 		sb.WriteString(normalStyle.Render(" - Insert between parent and current"))
 	} else {
 		sb.WriteString(normalStyle.Render("  Below - Insert between parent and current"))
@@ -355,7 +355,7 @@ func (m *DirectionSelectModel) renderStackTree() string {
 	lines := renderer.RenderStack(virtualTree.Trunk(), opts)
 
 	// Style the new branch line with green color
-	insertStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
+	insertStyle := style.InsertStyle()
 	for i, line := range lines {
 		if strings.Contains(line, newBranchPlaceholder) {
 			// Replace the placeholder with styled version

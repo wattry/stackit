@@ -18,6 +18,39 @@ const (
 	ThemeLight
 )
 
+// Color constants for consistent styling across TUI components.
+// Use these instead of magic color numbers.
+const (
+	// ColorPrimary is magenta, used for emphasis, titles, and active states
+	ColorPrimary = "205"
+	// ColorSuccess is green, used for done/success states
+	ColorSuccess = "42"
+	// ColorSuccessAlt is an alternate green for selected items
+	ColorSuccessAlt = "2"
+	// ColorError is red, used for error states
+	ColorError = "196"
+	// ColorErrorAlt is an alternate red for inline errors
+	ColorErrorAlt = "1"
+	// ColorWarning is orange, used for warning states
+	ColorWarning = "214"
+	// ColorWarningAlt is yellow for inline warnings
+	ColorWarningAlt = "3"
+	// ColorSecondary is blue, used for branch names and secondary emphasis
+	ColorSecondary = "12"
+	// ColorAccent is cyan, used for selection backgrounds
+	ColorAccent = "6"
+	// ColorInsert is bright green, used for new/inserted items
+	ColorInsert = "10"
+	// ColorPending is dark gray, used for pending/inactive states
+	ColorPending = "240"
+	// ColorDim is medium gray, used for de-emphasized text
+	ColorDimValue = "241"
+	// ColorSubtle is medium-dark gray, used for secondary text
+	ColorSubtleValue = "243"
+	// ColorMerged is magenta variant, used for merged PR states
+	ColorMerged = "5"
+)
+
 var (
 	detectedTheme Theme
 	themeOnce     sync.Once
@@ -89,28 +122,28 @@ var StackitColors = [][]int{
 // ColorRed colors text red
 func ColorRed(text string) string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("1")).
+		Foreground(lipgloss.Color(ColorErrorAlt)).
 		Render(text)
 }
 
 // ColorYellow colors text yellow
 func ColorYellow(text string) string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("3")).
+		Foreground(lipgloss.Color(ColorWarningAlt)).
 		Render(text)
 }
 
 // ColorCyan colors text cyan
 func ColorCyan(text string) string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("6")).
+		Foreground(lipgloss.Color(ColorAccent)).
 		Render(text)
 }
 
 // ColorGreen colors text green
 func ColorGreen(text string) string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("2")).
+		Foreground(lipgloss.Color(ColorSuccessAlt)).
 		Render(text)
 }
 
@@ -123,14 +156,14 @@ const (
 // Selection returns a style for selected items
 func Selection() lipgloss.Style {
 	return lipgloss.NewStyle().
-		Background(lipgloss.Color("6")). // Cyan background
-		Foreground(lipgloss.Color("0")). // Black foreground
+		Background(lipgloss.Color(ColorAccent)).
+		Foreground(lipgloss.Color("0")).
 		Bold(true)
 }
 
 // SelectionCursorStyle returns the style for the selection cursor
 func SelectionCursorStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("6")). // Cyan
+		Foreground(lipgloss.Color(ColorAccent)).
 		Bold(true)
 }
