@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -439,8 +438,8 @@ func (m *MoveModel) viewSelecting() string {
 	var sb strings.Builder
 
 	// Header
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	sb.WriteString(headerStyle.Render(fmt.Sprintf("Select new parent for '%s'", m.sourceBranch)))
+	headerStyles := style.DefaultHeaderStyles()
+	sb.WriteString(headerStyles.Title.Render(fmt.Sprintf("Select new parent for '%s'", m.sourceBranch)))
 	sb.WriteString("\n\n")
 
 	// Branch list with scroll
@@ -491,7 +490,7 @@ func (m *MoveModel) viewSelecting() string {
 	sb.WriteString(style.ColorDim("↑/k up • ↓/j down • enter select • esc cancel"))
 	sb.WriteString("\n")
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(sb.String())
+	return style.DefaultLayoutStyles().Container.Render(sb.String())
 }
 
 // renderValidationStatus renders the validation footer
@@ -514,8 +513,8 @@ func (m *MoveModel) renderValidationStatus() string {
 func (m *MoveModel) viewConfirming() string {
 	var sb strings.Builder
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	sb.WriteString(headerStyle.Render("Confirm Move"))
+	headerStyles := style.DefaultHeaderStyles()
+	sb.WriteString(headerStyles.Title.Render("Confirm Move"))
 	sb.WriteString("\n\n")
 
 	// Show what we're doing
@@ -541,7 +540,7 @@ func (m *MoveModel) viewConfirming() string {
 		sb.WriteString("\n")
 	}
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(sb.String())
+	return style.DefaultLayoutStyles().Container.Render(sb.String())
 }
 
 // Result returns the result of the move selection

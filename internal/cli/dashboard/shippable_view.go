@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/shippable"
+	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -36,7 +38,12 @@ func (m *shippableModel) renderMain() string {
 	// Calculate dimensions
 	headerHeight := 3
 	footerHeight := 4
-	contentHeight := m.Height - headerHeight - footerHeight
+	cartHeight := 0
+	if m.selectedCount() > 0 {
+		cartHeight = 8 // Fixed height for cart panel
+	}
+
+	contentHeight := m.Height - headerHeight - footerHeight - cartHeight
 	if contentHeight < 5 {
 		contentHeight = 5
 	}
@@ -50,10 +57,22 @@ func (m *shippableModel) renderMain() string {
 	rightPane := m.renderDetailsPanel(rightWidth, contentHeight)
 	footer := m.renderFooter()
 
-	// Combine panes
-	content := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
+	// Combine stack viewer panes (top row)
+	stackViewer := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
+	// Build final layout
+	var sections []string
+	sections = append(sections, header, stackViewer)
+
+	// Add cart panel if items selected (bottom row)
+	if m.selectedCount() > 0 {
+		cartPane := m.renderCartPanel(m.Width, cartHeight)
+		sections = append(sections, cartPane)
+	}
+
+	sections = append(sections, footer)
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 // renderHeader renders the dashboard header.
@@ -179,7 +198,7 @@ func (m *shippableModel) getStatusIcon(status shippable.Status) string {
 	}
 }
 
-// renderDetailsPanel renders the right-side details panel.
+// renderDetailsPanel renders the right-side details panel (always shows stack details).
 func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	paneStyle := lipgloss.NewStyle().
 		Padding(0, 1).
@@ -187,111 +206,236 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 		Height(height)
 
 	var sb strings.Builder
+	sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n")
+	sb.WriteString(strings.Repeat("─", width-4) + "\n")
 
-	// Selection summary
-	selectedCount := m.selectedCount()
-	if selectedCount > 0 {
-		sb.WriteString(paneHeaderStyle.Render("SELECTION") + "\n")
-		sb.WriteString(strings.Repeat("─", width-4) + "\n")
-		sb.WriteString(fmt.Sprintf("Selected: %d stacks\n\n", selectedCount))
-
-		for _, s := range m.selectedStacks() {
-			sb.WriteString(fmt.Sprintf("  %s (%d branches)\n", s.RootBranch(), s.BranchCount()))
-		}
-
-		sb.WriteString("\n")
-
-		// Combination status
-		if m.combination != nil {
-			if m.combination.Combinable {
-				sb.WriteString(style.ColorGreen("Combinable: Yes") + "\n")
-			} else {
-				sb.WriteString(style.ColorRed("Combinable: No") + "\n")
-				if len(m.combination.ConflictingStacks) > 0 {
-					sb.WriteString("Conflicts:\n")
-					for _, es := range m.combination.ConflictingStacks {
-						sb.WriteString(fmt.Sprintf("  - %s\n", es.Stack.RootBranch()))
-					}
-				}
-			}
-
-			if m.combination.LocalCIPassed != nil {
-				if *m.combination.LocalCIPassed {
-					sb.WriteString(style.ColorGreen("Local CI: Passed") + "\n")
-				} else {
-					sb.WriteString(style.ColorRed("Local CI: Failed") + "\n")
-				}
-			} else {
-				sb.WriteString(style.ColorDim("Local CI: Not run") + "\n")
-			}
-		}
-
-		sb.WriteString("\n" + strings.Repeat("─", width-4) + "\n")
-		sb.WriteString(style.ColorCyan("[S]") + " Ship selected\n")
-		sb.WriteString(style.ColorCyan("[A]") + " Analyze combination\n")
+	if m.focusedStack != nil {
+		sb.WriteString(m.renderStackDetails(m.focusedStack))
 	} else {
-		sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n")
-		sb.WriteString(strings.Repeat("─", width-4) + "\n")
-
-		if m.focusedStack != nil {
-			sb.WriteString(m.renderStackDetails(m.focusedStack))
-		} else {
-			sb.WriteString(commonStyles.Dim.Render("Select a stack to see details"))
-		}
+		sb.WriteString(commonStyles.Dim.Render("Select a stack to see details"))
 	}
 
 	return paneStyle.Render(sb.String())
 }
 
-// renderStackDetails renders detailed info about a stack.
+// renderCartPanel renders the bottom cart panel when stacks are selected.
+func (m *shippableModel) renderCartPanel(width, height int) string {
+	paneStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		Padding(0, 1).
+		Width(width).
+		Height(height)
+
+	selected := m.selectedStacks()
+	totalBranches := 0
+	for _, s := range selected {
+		totalBranches += s.BranchCount()
+	}
+
+	// Cart header with count badge
+	cartHeader := paneHeaderStyle.Render("SHIPPING")
+	countBadge := lipgloss.NewStyle().
+		Background(lipgloss.Color("6")).
+		Foreground(lipgloss.Color("0")).
+		Padding(0, 1).
+		Render(fmt.Sprintf("%d stacks", len(selected)))
+
+	// Build cart items inline
+	itemParts := make([]string, 0, len(selected))
+	for _, s := range selected {
+		statusIcon := m.getStatusIcon(s.Status)
+		itemParts = append(itemParts, fmt.Sprintf("%s %s", statusIcon, s.RootBranch()))
+	}
+	items := strings.Join(itemParts, "  •  ")
+
+	// Combination status (compact)
+	var analysisStatus string
+	if m.combination != nil {
+		if m.combination.Combinable {
+			analysisStatus = style.ColorGreen("✓ Compatible")
+		} else {
+			analysisStatus = style.ColorRed("✗ Conflicts")
+		}
+	} else {
+		analysisStatus = style.ColorDim("[a] analyze")
+	}
+
+	// Ship button
+	canShip := true
+	for _, s := range selected {
+		if !s.IsShippable() {
+			canShip = false
+			break
+		}
+	}
+
+	var shipAction string
+	if canShip {
+		shipAction = buttonPrimary.Render("[s] Ship")
+	} else {
+		shipAction = buttonDisabled.Render("[s] Ship") + " " + style.ColorDim("(not ready)")
+	}
+
+	// Build the panel content as a horizontal layout
+	content := fmt.Sprintf("%s %s    %s    %s (%d branches)    %s",
+		cartHeader, countBadge, items, analysisStatus, totalBranches, shipAction)
+
+	return paneStyle.Render(content)
+}
+
+// renderStackDetails renders detailed info about a stack with tree view.
 func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 	var sb strings.Builder
-	sb.WriteString(commonStyles.Bold.Render(stack.RootBranch()) + "\n\n")
 
-	// Status
-	sb.WriteString(labelStyle.Render("Status:") + " " + m.getStatusLabel(stack.Status) + "\n")
+	// Header with status badge
+	statusBadge := m.renderStatusBadge(stack.Status)
+	sb.WriteString(commonStyles.Bold.Render(stack.RootBranch()) + " " + statusBadge + "\n")
 
-	// Branch count
-	sb.WriteString(labelStyle.Render("Branches:") + " " + fmt.Sprintf("%d", stack.BranchCount()) + "\n")
+	// Quick stats row
+	statsRow := m.renderQuickStats(stack)
+	sb.WriteString(statsRow + "\n\n")
 
-	// Approval status
-	if stack.ApprovalOK {
-		sb.WriteString(labelStyle.Render("Approval:") + " " + style.ColorGreen("Approved") + "\n")
-	} else {
-		sb.WriteString(labelStyle.Render("Approval:") + " " + style.ColorYellow("Pending") + "\n")
+	// Stack tree visualization
+	sb.WriteString(style.ColorDim("Stack:") + "\n")
+	treeLines := m.renderStackTree(stack)
+	for _, line := range treeLines {
+		sb.WriteString(line + "\n")
 	}
 
-	// CI status
-	if stack.GitHubCIOK {
-		sb.WriteString(labelStyle.Render("GitHub CI:") + " " + style.ColorGreen("Passing") + "\n")
-	} else {
-		sb.WriteString(labelStyle.Render("GitHub CI:") + " " + style.ColorRed("Failing/Pending") + "\n")
-	}
-
-	// Blocking PRs
+	// Blocking PRs (if any)
 	if len(stack.BlockingPRs) > 0 {
-		sb.WriteString("\n" + commonStyles.Bold.Render("Blocking:") + "\n")
+		sb.WriteString("\n" + style.ColorYellow("Blocking:") + "\n")
 		for _, bp := range stack.BlockingPRs {
-			sb.WriteString(fmt.Sprintf("  %s: %s\n", bp.Branch, bp.Reason))
+			reason := m.formatBlockingReason(bp.Reason)
+			sb.WriteString(fmt.Sprintf("  %s %s\n", style.ColorDim("•"), bp.Branch))
+			sb.WriteString(fmt.Sprintf("    %s\n", reason))
 		}
 	}
 
 	return sb.String()
 }
 
-// getStatusLabel returns a styled label for a status.
-func (m *shippableModel) getStatusLabel(status shippable.Status) string {
+// renderStatusBadge returns a colored badge for the stack status.
+func (m *shippableModel) renderStatusBadge(status shippable.Status) string {
 	switch status {
 	case shippable.StatusShippable:
-		return style.ColorGreen("Shippable")
+		return badgeReady.Render("READY")
 	case shippable.StatusPending:
-		return style.ColorYellow("Pending")
+		return badgePending.Render("PENDING")
 	case shippable.StatusBlocked:
-		return style.ColorRed("Blocked")
+		return badgeBlocked.Render("BLOCKED")
 	case shippable.StatusIncomplete:
-		return style.ColorDim("Incomplete")
+		return badgeIncomplete.Render("INCOMPLETE")
 	default:
-		return "Unknown"
+		return ""
+	}
+}
+
+// renderQuickStats shows a compact row of key stats.
+func (m *shippableModel) renderQuickStats(stack *shippable.Stack) string {
+	var parts []string
+
+	// Branch count
+	parts = append(parts, fmt.Sprintf("%d branches", stack.BranchCount()))
+
+	// Approval status
+	if stack.ApprovalOK {
+		parts = append(parts, style.ColorGreen("✓ Approved"))
+	} else {
+		parts = append(parts, style.ColorYellow("○ Review needed"))
+	}
+
+	// CI status
+	if stack.GitHubCIOK {
+		parts = append(parts, style.ColorGreen("✓ CI"))
+	} else {
+		parts = append(parts, style.ColorRed("✗ CI"))
+	}
+
+	return style.ColorDim(strings.Join(parts, " • "))
+}
+
+// renderStackTree renders the stack as a tree visualization.
+func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
+	// Create a filter that only includes branches in this stack
+	stackBranches := make(map[string]bool)
+	for _, branch := range stack.Stack.AllBranches {
+		stackBranches[branch] = true
+	}
+
+	filter := func(branchName string) bool {
+		return stackBranches[branchName]
+	}
+
+	// Create tree renderer with filter
+	renderer := tui.NewStackTreeRendererWithFilter(m.engine, filter)
+
+	// Add annotations for each branch
+	for _, branchName := range stack.Stack.AllBranches {
+		branch := m.engine.GetBranch(branchName)
+		if branch.GetName() == "" {
+			continue
+		}
+		ann := tui.GetBranchAnnotation(m.engine, branch)
+
+		// Add blocking info as custom label
+		for _, bp := range stack.BlockingPRs {
+			if bp.Branch == branchName {
+				ann.CustomLabel = m.getBlockingIcon(bp.Reason)
+				break
+			}
+		}
+
+		renderer.SetAnnotation(branchName, ann)
+	}
+
+	// Render tree in compact mode
+	opts := tree.RenderOptions{
+		Mode:                tree.RenderModeCompact,
+		HideSummary:         false,
+		SkipSelectionPrefix: true,
+	}
+
+	return renderer.RenderStack(stack.RootBranch(), opts)
+}
+
+// getBlockingIcon returns an icon for a blocking reason.
+func (m *shippableModel) getBlockingIcon(reason shippable.BlockingReason) string {
+	switch reason {
+	case shippable.ReasonCIFailing:
+		return style.ColorRed("✗")
+	case shippable.ReasonCIPending:
+		return style.ColorYellow("⏳")
+	case shippable.ReasonChangesRequested:
+		return style.ColorRed("✗")
+	case shippable.ReasonReviewRequired:
+		return style.ColorYellow("○")
+	case shippable.ReasonDraft:
+		return style.ColorDim("Draft")
+	case shippable.ReasonNoPR:
+		return style.ColorDim("No PR")
+	default:
+		return ""
+	}
+}
+
+// formatBlockingReason returns a human-readable blocking reason.
+func (m *shippableModel) formatBlockingReason(reason shippable.BlockingReason) string {
+	switch reason {
+	case shippable.ReasonCIFailing:
+		return style.ColorRed("CI checks failing")
+	case shippable.ReasonCIPending:
+		return style.ColorYellow("CI checks pending")
+	case shippable.ReasonChangesRequested:
+		return style.ColorRed("Changes requested")
+	case shippable.ReasonReviewRequired:
+		return style.ColorYellow("Review required")
+	case shippable.ReasonDraft:
+		return style.ColorDim("PR is a draft")
+	case shippable.ReasonNoPR:
+		return style.ColorDim("No PR created")
+	default:
+		return string(reason)
 	}
 }
 
