@@ -427,6 +427,11 @@ func (h *InteractiveSubmitHandler) OnEvent(e submit.Event) {
 			}
 		}
 
+		// Set sequential mode if all PRs are being created (preserves PR number ordering)
+		if ev.IsSequential {
+			h.runner.Send(submitComponent.SetSequentialMsg{IsSequential: true})
+		}
+
 		h.runner.Send(submitComponent.GlobalMessageMsg("Submitting..."))
 
 	case submit.BranchProgressEvent:

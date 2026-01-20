@@ -205,8 +205,18 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 	}
 
+	// Check if this is a new stack (all creates) - use sequential submission
+	// to ensure PRs get sequential numbers in GitHub
+	allCreates := true
+	for _, info := range submissionInfos {
+		if info.Action != actionCreate {
+			allCreates = false
+			break
+		}
+	}
+
 	// Start submission phase with a worker pool to avoid spawning too many goroutines
-	handler.OnEvent(SubmissionStartEvent{Branches: branchInfos})
+	handler.OnEvent(SubmissionStartEvent{Branches: branchInfos, IsSequential: allCreates})
 
 	githubClient, err := getGitHubClient(ctx)
 	if err != nil {
@@ -219,16 +229,6 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	var errMu sync.Mutex
 
 	if len(submissionInfos) > 0 {
-		// Check if this is a new stack (all creates) - use sequential submission
-		// to ensure PRs get sequential numbers in GitHub
-		allCreates := true
-		for _, info := range submissionInfos {
-			if info.Action != actionCreate {
-				allCreates = false
-				break
-			}
-		}
-
 		if allCreates {
 			// Sequential submission for new stacks - ensures sequential PR numbers
 			for _, info := range submissionInfos {

@@ -22,6 +22,7 @@ type Model struct {
 	spinner        spinner.Model // lowercase for custom style
 	Styles         Styles
 	GlobalMessage  string
+	IsSequential   bool // Sequential submission mode for PR ordering
 }
 
 // ProgressUpdateMsg is sent to update the status of a specific branch submission
@@ -51,6 +52,11 @@ type GlobalMessageMsg string
 
 // ProgressCompleteMsg is sent when all submissions are finished
 type ProgressCompleteMsg struct{}
+
+// SetSequentialMsg indicates sequential submission mode for PR ordering
+type SetSequentialMsg struct {
+	IsSequential bool
+}
 
 // NewModel creates a new submit model
 func NewModel(items []Item) *Model {
@@ -87,6 +93,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case SetSequentialMsg:
+		m.IsSequential = msg.IsSequential
+		return m, nil
+
 	case StartSubmitMsg:
 		// Update status for items that are in msg.Items
 		for _, newItem := range msg.Items {
@@ -161,6 +171,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	var b strings.Builder
 
+	// Show sequential mode notice if applicable
+	if m.IsSequential && m.hasActiveSubmission() {
+		b.WriteString(m.Styles.DimStyle.Render("Creating PRs sequentially to preserve ordering..."))
+		b.WriteString("\n\n")
+	}
+
 	if m.Renderer != nil {
 		// Update annotations based on items
 		for _, item := range m.Items {
@@ -228,7 +244,7 @@ func (m *Model) View() string {
 			case StatusSubmitting:
 				icon = m.spinner.View()
 				action := "Creating"
-				if item.Action == "update" {
+				if item.Action == ActionUpdate {
 					action = "Updating"
 				}
 				status = m.Styles.SpinnerStyle.Render(action + "...")
@@ -264,9 +280,10 @@ func (m *Model) View() string {
 		completed := 0
 		failed := 0
 		for _, item := range m.Items {
-			if item.Status == StatusDone {
+			switch item.Status {
+			case StatusDone:
 				completed++
-			} else if item.Status == StatusError {
+			case StatusError:
 				failed++
 			}
 		}
@@ -278,4 +295,14 @@ func (m *Model) View() string {
 
 	b.WriteString("\n")
 	return b.String()
+}
+
+// hasActiveSubmission returns true if any item is currently being submitted
+func (m *Model) hasActiveSubmission() bool {
+	for _, item := range m.Items {
+		if item.Status == StatusSubmitting || item.Status == StatusSyncing {
+			return true
+		}
+	}
+	return false
 }

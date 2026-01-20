@@ -58,4 +58,6 @@ const (
 	StatusPending = "pending"
 	// SkipReasonNoChanges indicates the branch was skipped because it has no changes
 	SkipReasonNoChanges = "no changes"
+	// ActionUpdate indicates the branch will update an existing PR
+	ActionUpdate = "update"
 )
