@@ -724,3 +724,205 @@ func TestTransaction_MixedMetaAndLocalMeta(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, readLocalMeta2.Frozen)
 }
+
+func TestTransaction_DeleteMeta(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create and track a branch
+	s.CreateBranch("feature-1").Commit("change 1")
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-1", "main"))
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+		Git() git.Runner
+	})
+
+	// Verify metadata exists
+	meta, err := eng.Git().ReadMetadata("feature-1")
+	require.NoError(t, err)
+	assert.NotNil(t, meta.ParentBranchName)
+
+	// Delete metadata via transaction
+	tx := eng.BeginTx("delete metadata")
+	require.NoError(t, tx.DeleteMeta("feature-1"))
+	require.NoError(t, tx.Commit(context.Background()))
+
+	// Verify metadata is gone (ReadMetadata returns empty Meta for missing refs)
+	meta, err = eng.Git().ReadMetadata("feature-1")
+	require.NoError(t, err)
+	assert.Nil(t, meta.ParentBranchName) // Empty meta has nil parent
+}
+
+func TestTransaction_DeleteLocalMeta(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create and track a branch
+	s.CreateBranch("feature-1").Commit("change 1")
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-1", "main"))
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+		Git() git.Runner
+	})
+
+	// Write local metadata first
+	localMeta := &git.LocalMeta{Frozen: true}
+	require.NoError(t, eng.Git().WriteLocalMetadata("feature-1", localMeta))
+
+	// Verify it exists
+	readMeta, err := eng.Git().ReadLocalMetadata("feature-1")
+	require.NoError(t, err)
+	assert.True(t, readMeta.Frozen)
+
+	// Delete via transaction
+	tx := eng.BeginTx("delete local metadata")
+	require.NoError(t, tx.DeleteLocalMeta("feature-1"))
+	require.NoError(t, tx.Commit(context.Background()))
+
+	// Verify local metadata is gone
+	readMeta, err = eng.Git().ReadLocalMetadata("feature-1")
+	require.NoError(t, err)
+	assert.False(t, readMeta.Frozen) // Empty LocalMeta has Frozen=false
+}
+
+func TestTransaction_DeleteNonExistentMeta(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create a branch but don't track it (no metadata)
+	s.CreateBranch("feature-1").Commit("change 1")
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+	})
+
+	// Deleting non-existent metadata should succeed (no-op)
+	tx := eng.BeginTx("delete non-existent")
+	require.NoError(t, tx.DeleteMeta("feature-1"))
+	require.NoError(t, tx.Commit(context.Background()))
+}
+
+func TestTransaction_UpdateAfterDelete(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create and track a branch
+	s.CreateBranch("feature-1").Commit("change 1")
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-1", "main"))
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+		Git() git.Runner
+	})
+
+	// Stage delete then update - update should take precedence
+	tx := eng.BeginTx("update after delete")
+	require.NoError(t, tx.DeleteMeta("feature-1"))
+	newMeta := &git.Meta{LockReason: git.LockReasonUser}
+	require.NoError(t, tx.UpdateMeta("feature-1", newMeta))
+	require.NoError(t, tx.Commit(context.Background()))
+
+	// Verify update won (not deleted)
+	meta, err := eng.Git().ReadMetadata("feature-1")
+	require.NoError(t, err)
+	assert.Equal(t, git.LockReasonUser, meta.LockReason)
+}
+
+func TestTransaction_DeleteAfterUpdate(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create and track a branch
+	s.CreateBranch("feature-1").Commit("change 1")
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-1", "main"))
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+		Git() git.Runner
+	})
+
+	// Stage update then delete - delete should take precedence
+	tx := eng.BeginTx("delete after update")
+	newMeta := &git.Meta{LockReason: git.LockReasonUser}
+	require.NoError(t, tx.UpdateMeta("feature-1", newMeta))
+	require.NoError(t, tx.DeleteMeta("feature-1"))
+	require.NoError(t, tx.Commit(context.Background()))
+
+	// Verify delete won (metadata gone)
+	meta, err := eng.Git().ReadMetadata("feature-1")
+	require.NoError(t, err)
+	assert.Nil(t, meta.ParentBranchName) // Empty meta
+}
+
+func TestTransaction_MixedUpdatesAndDeletes(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create branches
+	s.CreateBranch("feature-1").Commit("change 1")
+	s.CreateBranch("feature-2").Commit("change 2")
+	s.CreateBranch("feature-3").Commit("change 3")
+
+	// Track all
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-1", "main"))
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-2", "feature-1"))
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-3", "feature-2"))
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+		Git() git.Runner
+	})
+
+	// Mixed transaction: update feature-1, delete feature-2, update feature-3
+	tx := eng.BeginTx("mixed operations")
+	require.NoError(t, tx.UpdateMeta("feature-1", &git.Meta{LockReason: git.LockReasonUser}))
+	require.NoError(t, tx.DeleteMeta("feature-2"))
+	scope := "test-scope"
+	require.NoError(t, tx.UpdateMeta("feature-3", &git.Meta{Scope: &scope}))
+	require.NoError(t, tx.Commit(context.Background()))
+
+	// Verify results
+	meta1, err := eng.Git().ReadMetadata("feature-1")
+	require.NoError(t, err)
+	assert.Equal(t, git.LockReasonUser, meta1.LockReason)
+
+	meta2, err := eng.Git().ReadMetadata("feature-2")
+	require.NoError(t, err)
+	assert.Nil(t, meta2.ParentBranchName) // Deleted
+
+	meta3, err := eng.Git().ReadMetadata("feature-3")
+	require.NoError(t, err)
+	require.NotNil(t, meta3.Scope)
+	assert.Equal(t, "test-scope", *meta3.Scope)
+}
+
+func TestTransaction_DeleteLocalMetaClearsFrozenState(t *testing.T) {
+	t.Parallel()
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create and track a branch
+	s.CreateBranch("feature-1").Commit("change 1")
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "feature-1", "main"))
+
+	// Freeze the branch
+	branch := s.Engine.GetBranch("feature-1")
+	_, err := s.Engine.SetFrozen(context.Background(), []engine.Branch{branch}, true)
+	require.NoError(t, err)
+
+	// Verify frozen in cache
+	assert.True(t, branch.IsFrozen())
+
+	eng := s.Engine.(interface {
+		BeginTx(message string) *engine.MetadataTx
+	})
+
+	// Delete local metadata via transaction
+	tx := eng.BeginTx("delete local metadata")
+	require.NoError(t, tx.DeleteLocalMeta("feature-1"))
+	require.NoError(t, tx.Commit(context.Background()))
+
+	// Verify frozen state is cleared in cache
+	assert.False(t, branch.IsFrozen())
+}

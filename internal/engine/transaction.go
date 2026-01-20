@@ -94,6 +94,8 @@ func (tx *MetadataTx) UpdateMeta(branch string, meta *git.Meta) error {
 		tx.originalMeta[branch] = tx.eng.git.GetMetadataRefSHA(branch)
 	}
 
+	// Remove from deletes if previously staged (update takes precedence over delete)
+	delete(tx.metaDeletes, branch)
 	tx.metaUpdates[branch] = meta
 	return nil
 }
@@ -115,6 +117,8 @@ func (tx *MetadataTx) UpdateLocalMeta(branch string, meta *git.LocalMeta) error 
 		tx.originalLocalMeta[branch] = tx.eng.git.GetLocalMetadataRefSHA(branch)
 	}
 
+	// Remove from deletes if previously staged (update takes precedence over delete)
+	delete(tx.localMetaDeletes, branch)
 	tx.localUpdates[branch] = meta
 	return nil
 }
@@ -240,6 +244,10 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	slices.Sort(metaDeleteBranches)
 
 	for _, branch := range metaDeleteBranches {
+		// Skip deletion if ref doesn't exist (empty OldSHA means no ref to delete)
+		if tx.originalMeta[branch] == "" {
+			continue
+		}
 		refUpdates = append(refUpdates, git.RefUpdate{
 			RefName:  git.MetadataRefName(branch),
 			OldSHA:   tx.originalMeta[branch], // CAS validation
@@ -255,6 +263,10 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	slices.Sort(localMetaDeleteBranches)
 
 	for _, branch := range localMetaDeleteBranches {
+		// Skip deletion if ref doesn't exist (empty OldSHA means no ref to delete)
+		if tx.originalLocalMeta[branch] == "" {
+			continue
+		}
 		refUpdates = append(refUpdates, git.RefUpdate{
 			RefName:  git.LocalMetadataRefName(branch),
 			OldSHA:   tx.originalLocalMeta[branch], // CAS validation
@@ -278,6 +290,12 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	// Remove deleted branches from cache
 	for _, branch := range metaDeleteBranches {
 		tx.eng.removeBranchFromState(branch)
+	}
+	// Clear frozen state for deleted local metadata
+	for _, branch := range localMetaDeleteBranches {
+		if state := tx.eng.branchState.GetByName(branch); state != nil {
+			state.Frozen = false
+		}
 	}
 	tx.eng.mu.Unlock()
 
