@@ -117,6 +117,12 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Select):
 		m.toggleSelection()
+		// Clear previous combination result when selection changes
+		m.combination = nil
+		// Auto-analyze if multiple stacks selected
+		if m.selectedCount() >= 2 {
+			return m.startCombinationAnalysis()
+		}
 		return m, nil
 
 	case key.Matches(msg, keys.Expand):
@@ -125,6 +131,12 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.SelectAll):
 		m.selectAllShippable()
+		// Clear previous combination result when selection changes
+		m.combination = nil
+		// Auto-analyze if multiple stacks selected
+		if m.selectedCount() >= 2 {
+			return m.startCombinationAnalysis()
+		}
 		return m, nil
 
 	case key.Matches(msg, keys.Ship):
