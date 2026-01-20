@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
@@ -25,36 +26,41 @@ const (
 	PhaseRestack  Phase = "restack"
 )
 
-// PhaseItem represents progress for a single phase
-type PhaseItem struct {
-	Phase   Phase
-	Status  core.Status
-	Message string
-	Details []string // Lines of detail output for this phase
-}
+var (
+	checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color(style.ColorSuccess)).SetString("✓")
+	warnMark  = lipgloss.NewStyle().Foreground(lipgloss.Color(style.ColorWarning)).SetString("⚠")
+)
 
 // Model is the bubbletea model for sync progress.
 // It embeds core.BaseModel for standard lifecycle handling.
+// Uses tea.Printf to print completed items above the active UI.
 type Model struct {
 	core.BaseModel // Embedded for ReadySignaler interface
-	Phases         []PhaseItem
 	CurrentPhase   Phase
+	CurrentDetail  string // Current operation being performed
 	TotalOps       int
 	CompletedOps   int
 	Progress       progress.Model
-	spinner        spinner.Model // Use local spinner for custom style
+	spinner        spinner.Model
 	Summary        string
 }
 
 // PhaseStartMsg indicates a phase has started
 type PhaseStartMsg struct {
+	Phase   Phase
+	Message string // Phase header message (e.g., "📥 Pulling from remote...")
+}
+
+// PhaseCompleteMsg indicates a phase has completed
+type PhaseCompleteMsg struct {
 	Phase Phase
 }
 
-// PhaseDetailMsg adds a detail line to a phase
+// PhaseDetailMsg adds a detail line to a phase (printed above TUI)
 type PhaseDetailMsg struct {
 	Phase   Phase
 	Message string
+	IsWarn  bool // If true, shows ⚠ instead of ✓
 }
 
 // ProgressTickMsg updates the progress bar
@@ -82,13 +88,6 @@ func NewModel(totalOps int) *Model {
 	s.Style = commonStyles.Spinner
 
 	m := &Model{
-		Phases: []PhaseItem{
-			{Phase: PhaseTrunk, Status: core.StatusPending, Message: "📥 Pulling from remote..."},
-			{Phase: PhaseBranches, Status: core.StatusPending, Message: "📥 Syncing stack branches..."},
-			{Phase: PhaseGitHub, Status: core.StatusPending, Message: "🔄 Fetching PR info from GitHub..."},
-			{Phase: PhaseClean, Status: core.StatusPending, Message: "🧹 Cleaning branches..."},
-			{Phase: PhaseRestack, Status: core.StatusPending, Message: "📚 Restacking branches..."},
-		},
 		TotalOps: totalOps,
 		Progress: p,
 		spinner:  s,
@@ -122,11 +121,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// BaseModel already set Width/Height, but we also need to update Progress.Width
-		newWidth := msg.Width - 10
-		if newWidth > 60 {
-			newWidth = 60
-		}
-		m.Progress.Width = newWidth
+		m.Progress.Width = min(msg.Width-10, 60)
 		return m, nil
 
 	case progress.FrameMsg:
@@ -135,24 +130,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case PhaseStartMsg:
+		// Print the phase header above the TUI
 		m.CurrentPhase = msg.Phase
-		for i := range m.Phases {
-			if m.Phases[i].Phase == msg.Phase {
-				m.Phases[i].Status = core.StatusActive
-			} else if m.Phases[i].Status == core.StatusActive {
-				m.Phases[i].Status = core.StatusDone
-			}
-		}
+		m.CurrentDetail = ""
+		return m, tea.Printf("%s", msg.Message)
+
+	case PhaseCompleteMsg:
+		// Phase completed - nothing to do, next phase will start
 		return m, nil
 
 	case PhaseDetailMsg:
-		for i := range m.Phases {
-			if m.Phases[i].Phase == msg.Phase {
-				m.Phases[i].Details = append(m.Phases[i].Details, msg.Message)
-				break
-			}
+		// Print completed item above the TUI (package-manager pattern)
+		m.CurrentDetail = msg.Message
+		mark := checkMark.String()
+		if msg.IsWarn {
+			mark = warnMark.String()
 		}
-		return m, nil
+		return m, tea.Printf("  %s %s", mark, msg.Message)
 
 	case ProgressTickMsg:
 		m.CompletedOps = msg.Completed
@@ -166,68 +160,69 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CompleteMsg:
 		m.Done = true
 		m.Summary = msg.Summary
-		// Mark all phases as done
-		for i := range m.Phases {
-			if m.Phases[i].Status == core.StatusActive {
-				m.Phases[i].Status = core.StatusDone
-			}
-		}
-		return m, tea.Quit
+		// Print summary and quit
+		return m, tea.Sequence(
+			tea.Printf("\n%s", msg.Summary),
+			tea.Quit,
+		)
 	}
 
 	return m, nil
 }
 
-// View renders the model
+// View renders the model - shows only the active progress (package-manager pattern)
+// Completed items are printed above via tea.Printf
 func (m *Model) View() string {
+	if m.Done {
+		// Summary already printed via tea.Printf in CompleteMsg
+		return ""
+	}
+
 	var b strings.Builder
 
-	// Get shared styles and icons
-	statusStyles := style.DefaultStatusStyles()
-	statusIcons := style.DefaultStatusIcons()
-	commonStyles := style.DefaultCommonStyles()
+	// Progress bar with count (single line, like package-manager)
+	n := m.TotalOps
+	w := lipgloss.Width(fmt.Sprintf("%d", n))
+	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.CompletedOps, w, n)
 
-	// Progress bar at top (only when active and not done)
-	if !m.Done && m.TotalOps > 0 {
-		b.WriteString(m.Progress.View())
-		b.WriteString(fmt.Sprintf(" %d/%d\n\n", m.CompletedOps, m.TotalOps))
-	}
+	spin := m.spinner.View() + " "
+	prog := m.Progress.View()
 
-	// Phase headers with their details
-	firstPhase := true
-	for _, phase := range m.Phases {
-		if phase.Status == core.StatusPending {
-			continue // Don't show pending phases
-		}
+	// Calculate available space for status text
+	cellsAvail := max(0, m.Width-lipgloss.Width(spin+prog+pkgCount))
 
-		// Add blank line between phases (not before first)
-		if !firstPhase {
-			b.WriteString("\n")
-		}
-		firstPhase = false
+	// Show current phase/operation
+	statusText := m.getStatusText()
+	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render(statusText)
 
-		// Phase header
-		icon := statusIcons.Done
-		phaseStyle := statusStyles.Done
-		if phase.Status == core.StatusActive {
-			icon = m.spinner.View()
-			phaseStyle = statusStyles.Active
-		}
+	// Fill remaining space
+	cellsRemaining := max(0, m.Width-lipgloss.Width(spin+info+prog+pkgCount))
+	gap := strings.Repeat(" ", cellsRemaining)
 
-		b.WriteString(fmt.Sprintf("%s %s\n", icon, phaseStyle.Render(phase.Message)))
-
-		// Phase details
-		for _, detail := range phase.Details {
-			b.WriteString(fmt.Sprintf("  %s\n", commonStyles.Subtle.Render(detail)))
-		}
-	}
-
-	// Summary
-	if m.Done && m.Summary != "" {
-		b.WriteString("\n")
-		b.WriteString(m.Summary)
-		b.WriteString("\n")
-	}
+	b.WriteString(spin + info + gap + prog + pkgCount)
 
 	return b.String()
+}
+
+// getStatusText returns the current status text to display
+func (m *Model) getStatusText() string {
+	commonStyles := style.DefaultCommonStyles()
+
+	switch m.CurrentPhase {
+	case PhaseTrunk:
+		return "Pulling from remote..."
+	case PhaseBranches:
+		return "Syncing branches..."
+	case PhaseGitHub:
+		return "Fetching PR info..."
+	case PhaseClean:
+		return "Cleaning branches..."
+	case PhaseRestack:
+		if m.CurrentDetail != "" {
+			return commonStyles.Dim.Render("Restacking...")
+		}
+		return "Restacking branches..."
+	default:
+		return "Syncing..."
+	}
 }

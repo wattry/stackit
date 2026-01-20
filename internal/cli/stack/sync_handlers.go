@@ -384,6 +384,15 @@ func (h *InteractiveSyncHandler) Start(totalOps int) {
 	h.logger.Debug("InteractiveSyncHandler.Start completed")
 }
 
+// phaseMessages maps phases to their display messages
+var phaseMessages = map[syncAction.Phase]string{
+	syncAction.PhaseTrunk:    "📥 Pulling from remote...",
+	syncAction.PhaseBranches: "📥 Syncing stack branches...",
+	syncAction.PhaseGitHub:   "🔄 Fetching PR info from GitHub...",
+	syncAction.PhaseClean:    "🧹 Cleaning branches...",
+	syncAction.PhaseRestack:  "📚 Restacking branches...",
+}
+
 // EmitEvent handles progress updates
 func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 	h.logger.Debug("InteractiveSyncHandler.EmitEvent", "phase", event.Phase, "type", event.Type, "branch", event.Branch)
@@ -396,17 +405,19 @@ func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 		h.currentPhase = event.Phase
 		h.logger.Debug("InteractiveSyncHandler.EmitEvent phase transition", "phase", event.Phase)
 		h.runner.Send(syncComponent.PhaseStartMsg{
-			Phase: syncComponent.Phase(event.Phase),
+			Phase:   syncComponent.Phase(event.Phase),
+			Message: phaseMessages[event.Phase],
 		})
 		return
 	}
 
-	// Build detail message
-	detail := h.formatEventDetail(event)
+	// Build detail message and determine status
+	detail, isWarn := h.formatEventDetail(event)
 	if detail != "" {
 		h.runner.Send(syncComponent.PhaseDetailMsg{
 			Phase:   syncComponent.Phase(event.Phase),
 			Message: detail,
+			IsWarn:  isWarn,
 		})
 	}
 
@@ -418,31 +429,31 @@ func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 	})
 }
 
-// formatEventDetail formats an event into a detail string
-func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) string {
+// formatEventDetail formats an event into a detail string with warning status
+func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) (detail string, isWarn bool) {
 	switch event.Phase {
 	case syncAction.PhaseTrunk:
 		if event.Type == syncAction.EventCompleted {
 			if event.NewRevision != "" {
-				return fmt.Sprintf("%s fast-forwarded to %s", event.Branch, event.NewRevision)
+				return fmt.Sprintf("%s fast-forwarded to %s", event.Branch, event.NewRevision), false
 			}
-			return fmt.Sprintf("%s is up to date", event.Branch)
+			return fmt.Sprintf("%s is up to date", event.Branch), false
 		}
 	case syncAction.PhaseBranches:
 		switch event.Type {
 		case syncAction.EventCompleted:
 			if event.NewRevision != "" {
-				return fmt.Sprintf("%s fast-forwarded to %s", event.Branch, event.NewRevision)
+				return fmt.Sprintf("%s fast-forwarded to %s", event.Branch, event.NewRevision), false
 			}
-			return fmt.Sprintf("%s is up to date", event.Branch)
+			return fmt.Sprintf("%s is up to date", event.Branch), false
 		case syncAction.EventSkipped:
 			if event.Conflict {
-				return fmt.Sprintf("⚠️ %s diverged from remote (skipping)", event.Branch)
+				return fmt.Sprintf("%s diverged from remote (skipping)", event.Branch), true
 			}
 		}
 	case syncAction.PhaseGitHub:
 		if event.Type == syncAction.EventCompleted && event.Message != "" {
-			return event.Message
+			return event.Message, false
 		}
 	case syncAction.PhaseClean:
 		if event.Type == syncAction.EventCompleted && event.Branch != "" {
@@ -450,11 +461,11 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 			if event.PRNumber != nil {
 				prInfo = fmt.Sprintf(" (PR #%d)", *event.PRNumber)
 			}
-			return fmt.Sprintf("Deleted %s%s %s", event.Branch, prInfo, event.Message)
+			return fmt.Sprintf("Deleted %s%s %s", event.Branch, prInfo, event.Message), false
 		}
 	case syncAction.PhaseRestack:
 		if event.Branch == "" {
-			return ""
+			return "", false
 		}
 		prInfo := ""
 		if event.PRNumber != nil {
@@ -471,7 +482,7 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 					msg += fmt.Sprintf(" on %s", event.Parent)
 				}
 				msg += fmt.Sprintf(" -> %s", event.NewRevision)
-				return msg
+				return msg, false
 			}
 			reason := common.ReasonNoRestackNeeded
 			if event.IsLocked() {
@@ -484,17 +495,17 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) strin
 				return fmt.Sprintf("%s%s does not need to be restacked on %s.",
 					displayName,
 					prInfo,
-					event.Parent)
+					event.Parent), false
 			}
-			return fmt.Sprintf("%s%s %s", displayName, prInfo, reason)
+			return fmt.Sprintf("%s%s %s", displayName, prInfo, reason), false
 		case syncAction.EventSkipped:
 			if event.Conflict {
-				return fmt.Sprintf("⚠️ Skipped %s%s (conflict)", displayName, prInfo)
+				return fmt.Sprintf("Skipped %s%s (conflict)", displayName, prInfo), true
 			}
-			return fmt.Sprintf("Skipped %s%s %s", displayName, prInfo, event.Message)
+			return fmt.Sprintf("Skipped %s%s %s", displayName, prInfo, event.Message), false
 		}
 	}
-	return ""
+	return "", false
 }
 
 // Complete is called when sync finishes
