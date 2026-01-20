@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/tui"
-	"stackit.dev/stackit/internal/tui/core"
 )
 
 func TestNewModel(t *testing.T) {
@@ -18,12 +17,7 @@ func TestNewModel(t *testing.T) {
 	assert.Equal(t, 10, model.TotalOps)
 	assert.Equal(t, 0, model.CompletedOps)
 	assert.False(t, model.Done)
-	assert.Equal(t, 5, len(model.Phases)) // trunk, branches, github, clean, restack
-
-	// All phases should be pending
-	for _, phase := range model.Phases {
-		assert.Equal(t, core.StatusPending, phase.Status)
-	}
+	assert.Equal(t, Phase(""), model.CurrentPhase)
 }
 
 func TestModel_Init(t *testing.T) {
@@ -51,20 +45,13 @@ func TestModel_Update_PhaseStartMsg(t *testing.T) {
 	model := NewModel(10)
 	model.Init()
 
-	// Start trunk phase
-	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk})
+	// Start trunk phase - returns a tea.Printf command
+	newModel, cmd := model.Update(PhaseStartMsg{Phase: PhaseTrunk, Message: "📥 Pulling from remote..."})
 	m := newModel.(*Model)
 
 	assert.Equal(t, PhaseTrunk, m.CurrentPhase)
-
-	// Find trunk phase and verify it's active
-	for _, phase := range m.Phases {
-		if phase.Phase == PhaseTrunk {
-			assert.Equal(t, core.StatusActive, phase.Status)
-		} else {
-			assert.Equal(t, core.StatusPending, phase.Status)
-		}
-	}
+	assert.Equal(t, "", m.CurrentDetail) // Detail cleared on phase start
+	assert.NotNil(t, cmd, "should return print command")
 }
 
 func TestModel_Update_PhaseTransition(t *testing.T) {
@@ -72,26 +59,14 @@ func TestModel_Update_PhaseTransition(t *testing.T) {
 	model.Init()
 
 	// Start trunk phase
-	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk})
+	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk, Message: "📥 Pulling..."})
 	m := newModel.(*Model)
 
-	// Start github phase - trunk should become done
-	newModel, _ = m.Update(PhaseStartMsg{Phase: PhaseGitHub})
+	// Start github phase
+	newModel, _ = m.Update(PhaseStartMsg{Phase: PhaseGitHub, Message: "🔄 Fetching..."})
 	m = newModel.(*Model)
 
 	assert.Equal(t, PhaseGitHub, m.CurrentPhase)
-
-	// Verify phase statuses
-	for _, phase := range m.Phases {
-		switch phase.Phase {
-		case PhaseTrunk:
-			assert.Equal(t, core.StatusDone, phase.Status, "trunk should be done")
-		case PhaseGitHub:
-			assert.Equal(t, core.StatusActive, phase.Status, "github should be active")
-		default:
-			assert.Equal(t, core.StatusPending, phase.Status, "%s should be pending", phase.Phase)
-		}
-	}
 }
 
 func TestModel_Update_PhaseDetailMsg(t *testing.T) {
@@ -99,23 +74,34 @@ func TestModel_Update_PhaseDetailMsg(t *testing.T) {
 	model.Init()
 
 	// Start trunk phase first
-	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk})
+	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk, Message: "📥 Pulling..."})
 	m := newModel.(*Model)
 
-	// Add a detail to trunk phase
-	newModel, _ = m.Update(PhaseDetailMsg{
+	// Add a detail to trunk phase - returns a tea.Printf command
+	newModel, cmd := m.Update(PhaseDetailMsg{
 		Phase:   PhaseTrunk,
 		Message: "main fast-forwarded to abc1234",
 	})
 	m = newModel.(*Model)
 
-	// Find trunk phase and verify detail was added
-	for _, phase := range m.Phases {
-		if phase.Phase == PhaseTrunk {
-			require.Len(t, phase.Details, 1)
-			assert.Equal(t, "main fast-forwarded to abc1234", phase.Details[0])
-		}
-	}
+	assert.Equal(t, "main fast-forwarded to abc1234", m.CurrentDetail)
+	assert.NotNil(t, cmd, "should return print command")
+}
+
+func TestModel_Update_PhaseDetailMsg_WithWarn(t *testing.T) {
+	model := NewModel(10)
+	model.Init()
+
+	// Add a detail with warning flag
+	newModel, cmd := model.Update(PhaseDetailMsg{
+		Phase:   PhaseTrunk,
+		Message: "branch diverged",
+		IsWarn:  true,
+	})
+	m := newModel.(*Model)
+
+	assert.Equal(t, "branch diverged", m.CurrentDetail)
+	assert.NotNil(t, cmd, "should return print command")
 }
 
 func TestModel_Update_ProgressTickMsg(t *testing.T) {
@@ -147,7 +133,7 @@ func TestModel_Update_CompleteMsg(t *testing.T) {
 	assert.True(t, m.Done)
 	assert.Equal(t, "All done!", m.Summary)
 
-	// Should return quit command
+	// Should return a sequence command (print + quit)
 	require.NotNil(t, cmd)
 }
 
@@ -208,7 +194,7 @@ func TestModel_View_InProgress(t *testing.T) {
 	model.Init()
 
 	// Start a phase
-	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk})
+	newModel, _ := model.Update(PhaseStartMsg{Phase: PhaseTrunk, Message: "📥 Pulling..."})
 	m := newModel.(*Model)
 
 	// Update progress
@@ -217,8 +203,10 @@ func TestModel_View_InProgress(t *testing.T) {
 
 	view := m.View()
 
-	// Should contain progress info
+	// Should contain progress info (package-manager style single line)
 	assert.Contains(t, view, "3/10")
+	// Should contain spinner
+	assert.NotEmpty(t, view)
 }
 
 func TestModel_View_Completed(t *testing.T) {
@@ -231,8 +219,8 @@ func TestModel_View_Completed(t *testing.T) {
 
 	view := m.View()
 
-	// Should contain summary
-	assert.Contains(t, view, "Everything synced!")
+	// View should be empty when done (summary printed via tea.Printf)
+	assert.Empty(t, view)
 }
 
 func TestModel_Update_SpinnerTickMsg(t *testing.T) {
@@ -252,7 +240,7 @@ func TestMessageRecorder_Usage(t *testing.T) {
 	recorder := tui.NewMessageRecorder()
 
 	// Record some messages
-	recorder.Record(PhaseStartMsg{Phase: PhaseTrunk})
+	recorder.Record(PhaseStartMsg{Phase: PhaseTrunk, Message: "📥 Pulling..."})
 	recorder.Record(PhaseDetailMsg{Phase: PhaseTrunk, Message: "test"})
 	recorder.Record(ProgressTickMsg{Completed: 1, Total: 5})
 
@@ -274,4 +262,28 @@ func TestMessageRecorder_Usage(t *testing.T) {
 	// Reset and verify
 	recorder.Reset()
 	assert.Equal(t, 0, recorder.Count())
+}
+
+func TestModel_GetStatusText(t *testing.T) {
+	tests := []struct {
+		name     string
+		phase    Phase
+		expected string
+	}{
+		{"trunk", PhaseTrunk, "Pulling from remote..."},
+		{"branches", PhaseBranches, "Syncing branches..."},
+		{"github", PhaseGitHub, "Fetching PR info..."},
+		{"clean", PhaseClean, "Cleaning branches..."},
+		{"restack", PhaseRestack, "Restacking branches..."},
+		{"unknown", Phase(""), "Syncing..."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := NewModel(10)
+			model.CurrentPhase = tt.phase
+			text := model.getStatusText()
+			assert.Equal(t, tt.expected, text)
+		})
+	}
 }
