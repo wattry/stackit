@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func TestPrInfoLockedPersistence(t *testing.T) {
 	branch := eng.GetBranch("feature")
 
 	// 1. Lock the branch
-	_, err := eng.SetLocked([]engine.Branch{branch}, engine.LockReasonUser)
+	_, err := eng.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonUser)
 	require.NoError(t, err)
 	require.True(t, branch.IsLocked())
 	require.Equal(t, string(engine.LockReasonUser), string(branch.GetLockReason()))
@@ -29,7 +30,7 @@ func TestPrInfoLockedPersistence(t *testing.T) {
 	// 2. Upsert PR info with lockReason="user"
 	prNumber := 123
 	prInfo := engine.NewPrInfo(&prNumber, "Title", "Body", "OPEN", "main", "http://url", false).WithLockReason(engine.LockReasonUser)
-	err = eng.UpsertPrInfo(branch, prInfo)
+	err = eng.UpsertPrInfo(context.Background(), branch, prInfo)
 	require.NoError(t, err)
 
 	// Simulate push by updating remote SHA

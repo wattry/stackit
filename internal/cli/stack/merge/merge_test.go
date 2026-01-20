@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -154,15 +155,15 @@ func TestFindBottomUnmergedPR(t *testing.T) {
 		branchB := s.Engine.GetBranch("branch-b")
 		branchC := s.Engine.GetBranch("branch-c")
 
-		err := s.Engine.UpsertPrInfo(branchA, testhelpers.NewTestPrInfo(101).
+		err := s.Engine.UpsertPrInfo(context.Background(), branchA, testhelpers.NewTestPrInfo(101).
 			WithURL("https://github.com/owner/repo/pull/101"))
 		require.NoError(t, err)
 
-		err = s.Engine.UpsertPrInfo(branchB, testhelpers.NewTestPrInfo(102).
+		err = s.Engine.UpsertPrInfo(context.Background(), branchB, testhelpers.NewTestPrInfo(102).
 			WithURL("https://github.com/owner/repo/pull/102"))
 		require.NoError(t, err)
 
-		err = s.Engine.UpsertPrInfo(branchC, testhelpers.NewTestPrInfo(103).
+		err = s.Engine.UpsertPrInfo(context.Background(), branchC, testhelpers.NewTestPrInfo(103).
 			WithURL("https://github.com/owner/repo/pull/103"))
 		require.NoError(t, err)
 
@@ -195,7 +196,7 @@ func TestFindBottomUnmergedPR(t *testing.T) {
 		branches := []string{"branch-a", "branch-b", "branch-c", "branch-d"}
 		for i, branchName := range branches {
 			branch := s.Engine.GetBranch(branchName)
-			err := s.Engine.UpsertPrInfo(branch, testhelpers.NewTestPrInfo(100+i+1).
+			err := s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfo(100+i+1).
 				WithURL("https://github.com/owner/repo/pull/"+branchName))
 			require.NoError(t, err)
 		}

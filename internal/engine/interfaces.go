@@ -115,11 +115,11 @@ type BranchTracking interface {
 	// a branch to a new parent but the commits belonging to the branch haven't changed.
 	// If oldDivergencePoint is empty, behaves identically to SetParent.
 	SetParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error
-	UpdateParentRevision(branchName string, parentRev string) error
-	SetScope(branch Branch, scope Scope) error
+	UpdateParentRevision(ctx context.Context, branchName string, parentRev string) error
+	SetScope(ctx context.Context, branch Branch, scope Scope) error
 	SetBranchType(branch Branch, branchType git.BranchType) error
-	SetLocked(branches []Branch, reason LockReason) (BatchLockResult, error)
-	SetFrozen(branches []Branch, frozen bool) (BatchFreezeResult, error)
+	SetLocked(ctx context.Context, branches []Branch, reason LockReason) (BatchLockResult, error)
+	SetFrozen(ctx context.Context, branches []Branch, frozen bool) (BatchFreezeResult, error)
 
 	// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
 	MarkNeedsPRBodyUpdate(branchName string) error

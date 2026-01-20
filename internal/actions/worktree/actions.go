@@ -277,7 +277,7 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	}
 
 	if opts.Scope != "" {
-		if err := eng.SetScope(anchorBranch, engine.NewScope(opts.Scope)); err != nil {
+		if err := eng.SetScope(ctx.Context, anchorBranch, engine.NewScope(opts.Scope)); err != nil {
 			cleanupAnchorBranch(ctx.Context, eng, anchorBranchName, out)
 			return nil, fmt.Errorf("failed to set scope: %w", err)
 		}

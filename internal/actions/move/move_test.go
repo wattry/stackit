@@ -1,6 +1,7 @@
 package move
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -349,7 +350,7 @@ func TestMoveAction(t *testing.T) {
 		branch2 := s.Engine.GetBranch("branch2")
 		prNumber := 123
 		prInfo := engine.NewPrInfo(&prNumber, "Test PR", "Test Body", "OPEN", "branch1", "https://github.com/owner/repo/pull/123", false)
-		err := s.Engine.UpsertPrInfo(branch2, prInfo)
+		err := s.Engine.UpsertPrInfo(context.Background(), branch2, prInfo)
 		require.NoError(t, err)
 
 		// Move branch2 to main

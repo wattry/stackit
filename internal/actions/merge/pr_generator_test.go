@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func TestPRContentGenerator_GenerateConsolidationPR(t *testing.T) {
 		s.WithStack(map[string]string{
 			"feature-a": "main",
 		})
-		_ = s.Engine.SetScope(s.Engine.GetBranch("feature-a"), engine.NewScope("PROJ-123"))
+		_ = s.Engine.SetScope(context.Background(), s.Engine.GetBranch("feature-a"), engine.NewScope("PROJ-123"))
 
 		gen := NewPRContentGenerator(s.Engine)
 		content := gen.GenerateConsolidationPR([]BranchMergeInfo{

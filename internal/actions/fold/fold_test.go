@@ -1,6 +1,7 @@
 package fold
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -369,9 +370,9 @@ func TestFoldAction(t *testing.T) {
 		// Set different scopes on the branches
 		branch1 := s.Engine.GetBranch("branch1")
 		branch2 := s.Engine.GetBranch("branch2")
-		err := s.Engine.SetScope(branch1, engine.NewScope("PROJ-123"))
+		err := s.Engine.SetScope(context.Background(), branch1, engine.NewScope("PROJ-123"))
 		require.NoError(t, err)
-		err = s.Engine.SetScope(branch2, engine.NewScope("PROJ-456"))
+		err = s.Engine.SetScope(context.Background(), branch2, engine.NewScope("PROJ-456"))
 		require.NoError(t, err)
 
 		// Switch to branch2 and try to fold
@@ -392,7 +393,7 @@ func TestFoldAction(t *testing.T) {
 
 		s.Checkout("branch2")
 		branch2 := s.Engine.GetBranch("branch2")
-		_, err := s.Engine.SetLocked([]engine.Branch{branch2}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{branch2}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		err = Action(s.Context, Options{Keep: false}, nil)
@@ -409,7 +410,7 @@ func TestFoldAction(t *testing.T) {
 
 		s.Checkout("branch2")
 		branch1 := s.Engine.GetBranch("branch1")
-		_, err := s.Engine.SetLocked([]engine.Branch{branch1}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{branch1}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		err = Action(s.Context, Options{Keep: false}, nil)
@@ -426,7 +427,7 @@ func TestFoldAction(t *testing.T) {
 
 		s.Checkout("branch2")
 		branch2 := s.Engine.GetBranch("branch2")
-		_, err := s.Engine.SetFrozen([]engine.Branch{branch2}, true)
+		_, err := s.Engine.SetFrozen(context.Background(), []engine.Branch{branch2}, true)
 		require.NoError(t, err)
 
 		err = Action(s.Context, Options{Keep: false}, nil)
@@ -471,7 +472,7 @@ func TestFoldAction(t *testing.T) {
 
 		s.Checkout("branch2")
 		branch2 := s.Engine.GetBranch("branch2")
-		_, err := s.Engine.SetLocked([]engine.Branch{branch2}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{branch2}, engine.LockReasonUser)
 		require.NoError(t, err)
 
 		// Dry-run should fail because branch is locked

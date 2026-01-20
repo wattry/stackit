@@ -40,7 +40,7 @@ func FreezeAction(ctx *app.Context, branchName string) error {
 	}
 
 	if len(branchesToFreeze) > 0 {
-		res, err := eng.SetFrozen(branchesToFreeze, true)
+		res, err := eng.SetFrozen(ctx, branchesToFreeze, true)
 		if err != nil {
 			for name, branchErr := range res.Errors {
 				out.Warn("Failed to freeze %s: %v", name, branchErr)

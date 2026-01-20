@@ -49,13 +49,14 @@ func (r *runner) VerifyRef(ctx context.Context, refName string) error {
 
 // RefUpdate represents a single reference update operation.
 type RefUpdate struct {
-	RefName string
-	NewSHA  string
-	OldSHA  string // Optional: for optimistic locking verification
+	RefName  string
+	NewSHA   string
+	OldSHA   string // Optional: for optimistic locking verification
+	IsDelete bool   // If true, this is a deletion instead of an update
 }
 
 // UpdateRefsBatch performs atomic updates of multiple references using git update-ref --stdin.
-// All updates succeed or all fail.
+// All updates succeed or all fail. Supports both updates and deletions via the IsDelete flag.
 func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -63,10 +64,15 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 
 	var stdin strings.Builder
 	for _, update := range updates {
-		if update.OldSHA != "" {
-			stdin.WriteString(fmt.Sprintf("update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA))
-		} else {
-			stdin.WriteString(fmt.Sprintf("update %s %s\n", update.RefName, update.NewSHA))
+		switch {
+		case update.IsDelete && update.OldSHA != "":
+			fmt.Fprintf(&stdin, "delete %s %s\n", update.RefName, update.OldSHA)
+		case update.IsDelete:
+			fmt.Fprintf(&stdin, "delete %s\n", update.RefName)
+		case update.OldSHA != "":
+			fmt.Fprintf(&stdin, "update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA)
+		default:
+			fmt.Fprintf(&stdin, "update %s %s\n", update.RefName, update.NewSHA)
 		}
 	}
 
@@ -78,6 +84,7 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 }
 
 // UpdateRefsBatchWithLog performs atomic updates with a reflog message.
+// Supports both updates and deletions via the IsDelete flag.
 func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate, reflogMessage string) error {
 	if len(updates) == 0 {
 		return nil
@@ -85,10 +92,15 @@ func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate
 
 	var stdin strings.Builder
 	for _, update := range updates {
-		if update.OldSHA != "" {
-			stdin.WriteString(fmt.Sprintf("update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA))
-		} else {
-			stdin.WriteString(fmt.Sprintf("update %s %s\n", update.RefName, update.NewSHA))
+		switch {
+		case update.IsDelete && update.OldSHA != "":
+			fmt.Fprintf(&stdin, "delete %s %s\n", update.RefName, update.OldSHA)
+		case update.IsDelete:
+			fmt.Fprintf(&stdin, "delete %s\n", update.RefName)
+		case update.OldSHA != "":
+			fmt.Fprintf(&stdin, "update %s %s %s\n", update.RefName, update.NewSHA, update.OldSHA)
+		default:
+			fmt.Fprintf(&stdin, "update %s %s\n", update.RefName, update.NewSHA)
 		}
 	}
 
@@ -155,8 +167,12 @@ func (r *runner) runGitInternal(ctx context.Context, input string, env []string,
 		cmd.Stdin = strings.NewReader(input)
 	}
 
+	// Prevent git from prompting via TTY (important when TUI has terminal in raw mode)
+	// GIT_TERMINAL_PROMPT=0 prevents git from trying to read credentials or confirmations
+	// from the terminal, which could cause hangs when a TUI is active.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Env = append(cmd.Env, env...)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -238,6 +254,11 @@ func (r *runner) RunGHCommandWithContext(ctx context.Context, args ...string) (s
 		wd, _ := os.Getwd()
 		cmd.Dir = wd
 	}
+
+	// Prevent gh from prompting via TTY (important when TUI has terminal in raw mode)
+	// GH_PROMPT_DISABLED=1 prevents gh from trying to prompt for authentication
+	// or confirmations, which could cause hangs when a TUI is active.
+	cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1")
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

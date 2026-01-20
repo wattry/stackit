@@ -142,7 +142,7 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 	}
 
 	// Save metadata to engine in case command fails
-	if err := pr.UpsertPrInfo(branch, engine.NewPrInfo(
+	if err := pr.UpsertPrInfo(ctx.Context, branch, engine.NewPrInfo(
 		nil,
 		metadata.Title,
 		metadata.Body,

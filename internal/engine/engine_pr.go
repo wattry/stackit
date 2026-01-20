@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"context"
+	"fmt"
+
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -57,57 +60,64 @@ func (e *engineImpl) getMergedDownstack(branch Branch) []git.MergedParent {
 	return e.GetMergedDownstack(branch)
 }
 
-// UpsertPrInfo updates or creates PR information for a branch
-func (e *engineImpl) UpsertPrInfo(branch Branch, prInfo *PrInfo) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+// UpsertPrInfo updates or creates PR information for a branch with retry logic
+// for concurrent modification resilience.
+func (e *engineImpl) UpsertPrInfo(ctx context.Context, branch Branch, prInfo *PrInfo) error {
+	branchName := branch.GetName()
 
-	meta, err := e.git.ReadMetadata(branch.GetName())
-	if err != nil {
-		meta = &git.Meta{}
-	}
+	return e.WithRetry(ctx, func() error {
+		// Read existing metadata (outside lock for performance)
+		meta, err := e.git.ReadMetadata(branchName)
+		if err != nil {
+			meta = &git.Meta{}
+		}
 
-	if prInfo == nil {
-		meta.PrInfo = nil
-		return e.git.WriteMetadata(branch.GetName(), meta)
-	}
+		if prInfo == nil {
+			meta.PrInfo = nil
+		} else {
+			if meta.PrInfo == nil {
+				meta.PrInfo = &git.PrInfoPersistence{}
+			}
 
-	if meta.PrInfo == nil {
-		meta.PrInfo = &git.PrInfoPersistence{}
-	}
+			// Update PR info fields
+			if prInfo.Number() != nil {
+				meta.PrInfo.Number = prInfo.Number()
+			}
+			if prInfo.Title() != "" {
+				title := prInfo.Title()
+				meta.PrInfo.Title = &title
+			}
+			if prInfo.Body() != "" {
+				body := prInfo.Body()
+				meta.PrInfo.Body = &body
+			}
+			isDraft := prInfo.IsDraft()
+			meta.PrInfo.IsDraft = &isDraft
+			if prInfo.State() != "" {
+				state := prInfo.State()
+				meta.PrInfo.State = &state
+			}
+			if prInfo.Base() != "" {
+				base := prInfo.Base()
+				meta.PrInfo.Base = &base
+			}
+			if prInfo.URL() != "" {
+				url := prInfo.URL()
+				meta.PrInfo.URL = &url
+			}
+			lr := prInfo.LockReason()
+			meta.PrInfo.LockReason = &lr
+			mergeBranch := prInfo.MergeBranch()
+			meta.PrInfo.MergeBranch = &mergeBranch
+		}
 
-	// Update PR info fields
-	if prInfo.Number() != nil {
-		meta.PrInfo.Number = prInfo.Number()
-	}
-	if prInfo.Title() != "" {
-		title := prInfo.Title()
-		meta.PrInfo.Title = &title
-	}
-	if prInfo.Body() != "" {
-		body := prInfo.Body()
-		meta.PrInfo.Body = &body
-	}
-	isDraft := prInfo.IsDraft()
-	meta.PrInfo.IsDraft = &isDraft
-	if prInfo.State() != "" {
-		state := prInfo.State()
-		meta.PrInfo.State = &state
-	}
-	if prInfo.Base() != "" {
-		base := prInfo.Base()
-		meta.PrInfo.Base = &base
-	}
-	if prInfo.URL() != "" {
-		url := prInfo.URL()
-		meta.PrInfo.URL = &url
-	}
-	lr := prInfo.LockReason()
-	meta.PrInfo.LockReason = &lr
-	mergeBranch := prInfo.MergeBranch()
-	meta.PrInfo.MergeBranch = &mergeBranch
-
-	return e.git.WriteMetadata(branch.GetName(), meta)
+		// Use transaction for atomic update
+		tx := e.BeginTx(fmt.Sprintf("upsert PR info: %s", branchName))
+		if err := tx.UpdateMeta(branchName, meta); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
 }
 
 // GetPRSubmissionStatus returns the submission status of a branch

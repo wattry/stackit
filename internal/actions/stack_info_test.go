@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -92,9 +93,9 @@ func TestStackInfoAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		branch1 := s.Engine.GetBranch("branch1")
-		_, err := s.Engine.SetLocked([]engine.Branch{branch1}, engine.LockReasonUser)
+		_, err := s.Engine.SetLocked(context.Background(), []engine.Branch{branch1}, engine.LockReasonUser)
 		require.NoError(t, err)
-		_, err = s.Engine.SetFrozen([]engine.Branch{branch1}, true)
+		_, err = s.Engine.SetFrozen(context.Background(), []engine.Branch{branch1}, true)
 		require.NoError(t, err)
 
 		err = StackInfoAction(s.Context, StackInfoOptions{JSON: true})
