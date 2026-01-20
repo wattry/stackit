@@ -29,11 +29,11 @@ type StatusIcons struct {
 // DefaultStatusStyles returns the standard status styles for stackit TUIs.
 func DefaultStatusStyles() StatusStyles {
 	return StatusStyles{
-		Pending: lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		Active:  lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
-		Done:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
+		Pending: lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPending)),
+		Active:  lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPrimary)),
+		Done:    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSuccess)),
+		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorError)),
+		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWarning)),
 	}
 }
 
@@ -72,6 +72,77 @@ func DefaultCommonStyles() CommonStyles {
 		Subtle:  SubtleStyle(),
 		Branch:  BranchStyle(false, false, false),
 		URL:     DimStyle(),
-		Spinner: lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
+		Spinner: lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPrimary)),
 	}
+}
+
+// HeaderStyles contains styles for titles and headers.
+type HeaderStyles struct {
+	// Title is bold magenta for primary headers
+	Title lipgloss.Style
+	// Subtitle is for secondary headers with top margin
+	Subtitle lipgloss.Style
+	// Help is gray for help text
+	Help lipgloss.Style
+}
+
+// DefaultHeaderStyles returns the standard header styles for stackit TUIs.
+func DefaultHeaderStyles() HeaderStyles {
+	return HeaderStyles{
+		Title:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorPrimary)),
+		Subtitle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorPrimary)).MarginTop(1),
+		Help:     lipgloss.NewStyle().Foreground(lipgloss.Color(ColorDimValue)),
+	}
+}
+
+// LayoutStyles contains styles for layout and spacing.
+type LayoutStyles struct {
+	// Container is the standard container with margins
+	Container lipgloss.Style
+	// Compact is minimal spacing
+	Compact lipgloss.Style
+	// Spacious is extra spacing
+	Spacious lipgloss.Style
+}
+
+// Standard margin values for consistent layout.
+const (
+	MarginVertical   = 1
+	MarginHorizontal = 2
+)
+
+// DefaultLayoutStyles returns the standard layout styles for stackit TUIs.
+func DefaultLayoutStyles() LayoutStyles {
+	return LayoutStyles{
+		Container: lipgloss.NewStyle().Margin(MarginVertical, MarginHorizontal),
+		Compact:   lipgloss.NewStyle().Margin(0, 1),
+		Spacious:  lipgloss.NewStyle().Margin(2, 3),
+	}
+}
+
+// SelectionStyles contains styles for selection UI elements.
+type SelectionStyles struct {
+	// Cursor is bold magenta for the selection indicator
+	Cursor lipgloss.Style
+	// Selected is green for currently selected items
+	Selected lipgloss.Style
+	// Unselected is gray for non-selected items
+	Unselected lipgloss.Style
+	// Highlighted is for items with cursor focus (different from selected)
+	Highlighted lipgloss.Style
+}
+
+// DefaultSelectionStyles returns the standard selection styles for stackit TUIs.
+func DefaultSelectionStyles() SelectionStyles {
+	return SelectionStyles{
+		Cursor:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorPrimary)),
+		Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSuccessAlt)),
+		Unselected:  lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtleValue)),
+		Highlighted: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorPrimary)),
+	}
+}
+
+// InsertStyle returns the style for insert/new item indicators.
+func InsertStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorInsert))
 }

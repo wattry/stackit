@@ -402,14 +402,16 @@ func (m selectionModel) View() string {
 		return ""
 	}
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	headerStyles := style.DefaultHeaderStyles()
+	selectionStyles := style.DefaultSelectionStyles()
+	layoutStyles := style.DefaultLayoutStyles()
 
 	var s strings.Builder
-	s.WriteString(titleStyle.Render(m.title) + "\n\n")
+	s.WriteString(headerStyles.Title.Render(m.title) + "\n\n")
 
 	for i, opt := range m.options {
 		if m.cursor == i {
-			s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> "+opt.Label) + "\n")
+			s.WriteString(selectionStyles.Highlighted.Render("> "+opt.Label) + "\n")
 		} else {
 			s.WriteString("  " + opt.Label + "\n")
 		}
@@ -417,7 +419,7 @@ func (m selectionModel) View() string {
 
 	s.WriteString("\n" + m.help.View(defaultSelectionKeys))
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(s.String())
+	return layoutStyles.Container.Render(s.String())
 }
 
 // NewSelectModel creates a tea.Model for a selection prompt (used by stories/demo)
@@ -437,6 +439,7 @@ func NewBranchSelectModel(message string, choices []BranchChoice, initialIndex i
 		items[i] = listItem{title: choice.Display, value: choice.Value}
 	}
 
+	headerStyles := style.DefaultHeaderStyles()
 	d := list.NewDefaultDelegate()
 	d.ShowDescription = false
 	d.SetHeight(1)
@@ -444,7 +447,7 @@ func NewBranchSelectModel(message string, choices []BranchChoice, initialIndex i
 	// Remove border and use consistent padding with arrow indicator
 	d.Styles.SelectedTitle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, false, false).
-		Foreground(lipgloss.Color("205")).
+		Foreground(lipgloss.Color(style.ColorPrimary)).
 		Bold(true).
 		PaddingLeft(2)
 	d.Styles.NormalTitle = lipgloss.NewStyle().
@@ -456,7 +459,7 @@ func NewBranchSelectModel(message string, choices []BranchChoice, initialIndex i
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)
 	l.SetFilteringEnabled(true)
-	l.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	l.Styles.Title = headerStyles.Title
 
 	if initialIndex >= 0 && initialIndex < len(choices) {
 		l.Select(initialIndex)
@@ -581,22 +584,22 @@ func (m multiSelectModel) View() string {
 		return ""
 	}
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	cursorStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	headerStyles := style.DefaultHeaderStyles()
+	selectionStyles := style.DefaultSelectionStyles()
+	layoutStyles := style.DefaultLayoutStyles()
 
 	var s strings.Builder
-	s.WriteString(titleStyle.Render(m.title) + "\n\n")
+	s.WriteString(headerStyles.Title.Render(m.title) + "\n\n")
 
 	for i, opt := range m.options {
 		checkbox := "[ ]"
 		if m.selected[i] {
-			checkbox = selectedStyle.Render("[x]")
+			checkbox = selectionStyles.Selected.Render("[x]")
 		}
 
 		line := fmt.Sprintf("%s %s", checkbox, opt)
 		if m.cursor == i {
-			s.WriteString(cursorStyle.Render("> "+line) + "\n")
+			s.WriteString(selectionStyles.Highlighted.Render("> "+line) + "\n")
 		} else {
 			s.WriteString("  " + line + "\n")
 		}
@@ -612,7 +615,7 @@ func (m multiSelectModel) View() string {
 	s.WriteString(fmt.Sprintf("\n%d of %d selected\n", count, len(m.options)))
 	s.WriteString("\n" + m.help.View(m.keys))
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(s.String())
+	return layoutStyles.Container.Render(s.String())
 }
 
 // PromptMultiSelect prompts the user to select multiple items from a list
@@ -674,6 +677,7 @@ func PromptBranchSelection(message string, choices []BranchChoice, initialIndex 
 	}
 
 	// Use a custom delegate that doesn't add padding/styling that might break tree visualization
+	headerStyles := style.DefaultHeaderStyles()
 	d := list.NewDefaultDelegate()
 	d.ShowDescription = false
 	d.SetHeight(1)
@@ -681,7 +685,7 @@ func PromptBranchSelection(message string, choices []BranchChoice, initialIndex 
 	// Remove border and use consistent padding with arrow indicator
 	d.Styles.SelectedTitle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, false, false).
-		Foreground(lipgloss.Color("205")).
+		Foreground(lipgloss.Color(style.ColorPrimary)).
 		Bold(true).
 		PaddingLeft(2)
 	d.Styles.NormalTitle = lipgloss.NewStyle().
@@ -693,7 +697,7 @@ func PromptBranchSelection(message string, choices []BranchChoice, initialIndex 
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)
 	l.SetFilteringEnabled(true)
-	l.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	l.Styles.Title = headerStyles.Title
 
 	if initialIndex >= 0 && initialIndex < len(choices) {
 		l.Select(initialIndex)

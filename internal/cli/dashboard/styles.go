@@ -6,6 +6,12 @@ import (
 	"stackit.dev/stackit/internal/tui/style"
 )
 
+// Color palette for visual hierarchy (following lipgloss best practices)
+var (
+	// Adaptive colors for light/dark mode support
+	accent = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+)
+
 // Centralized styles for the dashboard TUI.
 // These use the style package helpers for consistency with other TUIs.
 var (
@@ -24,10 +30,6 @@ var (
 	paneHeaderStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("6"))
-
-	labelStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Width(12)
 
 	selectedRowStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("236"))
@@ -55,4 +57,36 @@ var (
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
 			Padding(0, 1)
+
+	// Badge styles for status indicators
+	badgeReady = lipgloss.NewStyle().
+			Background(lipgloss.Color("2")).
+			Foreground(lipgloss.Color("0")).
+			Padding(0, 1)
+
+	badgePending = lipgloss.NewStyle().
+			Background(lipgloss.Color("3")).
+			Foreground(lipgloss.Color("0")).
+			Padding(0, 1)
+
+	badgeBlocked = lipgloss.NewStyle().
+			Background(lipgloss.Color("1")).
+			Foreground(lipgloss.Color("15")).
+			Padding(0, 1)
+
+	badgeIncomplete = lipgloss.NewStyle().
+			Background(lipgloss.Color("8")).
+			Foreground(lipgloss.Color("15")).
+			Padding(0, 1)
+
+	// Button styles
+	buttonPrimary = lipgloss.NewStyle().
+			Background(accent).
+			Foreground(lipgloss.Color("0")).
+			Padding(0, 2)
+
+	buttonDisabled = lipgloss.NewStyle().
+			Background(lipgloss.Color("8")).
+			Foreground(lipgloss.Color("7")).
+			Padding(0, 2)
 )
