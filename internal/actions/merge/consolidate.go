@@ -157,6 +157,11 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 		return "", fmt.Errorf("failed to create and checkout branch: %w", err)
 	}
 
+	// Mark as utility branch so it can be auto-deleted without confirmation during sync
+	if err := c.engine.SetBranchType(c.engine.GetBranch(branchName), git.BranchTypeUtility); err != nil {
+		splog.Debug("Failed to set branch type: %v", err)
+	}
+
 	// Reset to trunk since CreateAndCheckoutBranch creates from current HEAD
 	if err := c.engine.ResetHard(ctx, c.engine.Trunk().GetName()); err != nil {
 		return "", fmt.Errorf("failed to reset to trunk: %w", err)
