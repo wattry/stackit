@@ -45,6 +45,16 @@ Or use the shorthand alias:
 stackit ss  # Equivalent to: stackit submit --stack
 ```
 
+## Submission ordering
+
+When submitting PRs, stackit optimizes for both speed and PR number ordering:
+
+- **All new PRs**: When all branches in the submission need new PRs created, stackit submits them sequentially from bottom to top. This preserves PR number ordering so that PR #1 is the base of the stack.
+- **Updating existing PRs**: When updating PRs that already exist, stackit submits in parallel for faster completion.
+- **Mixed submissions**: If some PRs are new and some exist, the new ones are created sequentially while existing ones update in parallel.
+
+The submit TUI shows progress for each branch as they're processed, indicating whether each PR is being created or updated.
+
 ## PR descriptions
 
 Stackit generates PR descriptions that include:
