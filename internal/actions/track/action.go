@@ -1,23 +1,26 @@
-package actions
+package track
 
 import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
-// TrackOptions contains options for the track command
-type TrackOptions struct {
+// Options contains options for the track command
+type Options struct {
 	BranchName string
 	Force      bool
 	Parent     string
 }
 
-// TrackAction performs the track operation
-func TrackAction(ctx *app.Context, opts TrackOptions) error {
+// Action performs the track operation
+func Action(ctx *app.Context, opts Options, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	branchName := opts.BranchName
 
@@ -104,16 +107,16 @@ func TrackAction(ctx *app.Context, opts TrackOptions) error {
 	}
 
 	// Non-interactive mode requires --parent or --force
-	if !utils.IsInteractive() {
+	if !handler.IsInteractive() {
 		return fmt.Errorf("parent branch is required in non-interactive mode; use --parent or --force")
 	}
 
 	// Interactive mode: recursively track a stack
-	return trackBranchRecursively(ctx, branchName)
+	return trackBranchRecursively(ctx, branchName, handler)
 }
 
 // trackBranchRecursively interactively tracks a branch and its descendants
-func trackBranchRecursively(ctx *app.Context, branchName string) error {
+func trackBranchRecursively(ctx *app.Context, branchName string, handler Handler) error {
 	eng := ctx.Engine
 
 	// Check if branch is already tracked
@@ -129,10 +132,16 @@ func trackBranchRecursively(ctx *app.Context, branchName string) error {
 			parentBranch = ancestors[0]
 			ctx.Output.Info("Auto-detected parent %s for %s.", style.ColorBranchName(parentBranch, false), style.ColorBranchName(branchName, false))
 		} else {
-			// Select parent interactively
-			parentBranch, err = selectParentBranch(ctx, branchName)
+			// Select parent interactively via handler
+			parentBranch, err = handler.PromptSelectParent(ctx.Context, ctx.Engine, ctx.GitHubClient, ctx.Logger, branchName)
 			if err != nil {
 				return err
+			}
+
+			// Validate parent is tracked (or is trunk)
+			parentBranchObj := eng.GetBranch(parentBranch)
+			if !parentBranchObj.IsTrunk() && !parentBranchObj.IsTracked() {
+				return fmt.Errorf("parent branch %s must be tracked (or be trunk)", parentBranch)
 			}
 		}
 
@@ -174,58 +183,17 @@ func trackBranchRecursively(ctx *app.Context, branchName string) error {
 	// Recursively track children
 	for _, child := range untrackedChildren {
 		// Ask if user wants to track this child
-		shouldTrack, err := promptTrackChild(child, branchName)
+		shouldTrack, err := handler.PromptTrackChild(child, branchName)
 		if err != nil {
 			return err
 		}
 
 		if shouldTrack {
-			if err := trackBranchRecursively(ctx, child); err != nil {
+			if err := trackBranchRecursively(ctx, child, handler); err != nil {
 				return err
 			}
 		}
 	}
 
 	return nil
-}
-
-// selectParentBranch interactively selects a parent branch for tracking
-func selectParentBranch(ctx *app.Context, branchName string) (string, error) {
-	eng := ctx.Engine
-
-	// Show interactive selector
-	selected, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
-		Style:  "FULL",
-		Logger: ctx.Logger,
-		Exclude: map[string]bool{
-			branchName: true,
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	// Validate parent is tracked (or is trunk)
-	parentBranch := eng.GetBranch(selected)
-	if !parentBranch.IsTrunk() && !parentBranch.IsTracked() {
-		return "", fmt.Errorf("parent branch %s must be tracked (or be trunk)", selected)
-	}
-
-	return selected, nil
-}
-
-// promptTrackChild asks if user wants to track a child branch
-func promptTrackChild(childName, parentName string) (bool, error) {
-	message := fmt.Sprintf("Found untracked child branch %s of %s. Track it?", style.ColorBranchName(childName, false), style.ColorBranchName(parentName, false))
-	options := []tui.SelectOption{
-		{Label: "Yes", Value: yesResponse},
-		{Label: "No", Value: noResponse},
-	}
-
-	selected, err := tui.PromptSelect(message, options, 0)
-	if err != nil {
-		return false, err
-	}
-
-	return selected == yesResponse, nil
 }

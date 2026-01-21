@@ -1,22 +1,26 @@
-package actions
+package untrack
 
 import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
-// UntrackOptions contains options for the untrack command
-type UntrackOptions struct {
+// Options contains options for the untrack command
+type Options struct {
 	BranchName string
 	Force      bool
 }
 
-// UntrackAction performs the untrack operation
-func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
+// Action performs the untrack operation
+func Action(ctx *app.Context, opts Options, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	branchName := opts.BranchName
 
@@ -32,19 +36,12 @@ func UntrackAction(ctx *app.Context, opts UntrackOptions) error {
 
 	// If there are descendants and not forced, prompt for confirmation
 	if len(descendants) > 0 && !opts.Force {
-		message := fmt.Sprintf("Branch %s has %d tracked descendants. Untrack all of them?",
-			style.ColorBranchName(branchName, false), len(descendants))
-		options := []tui.SelectOption{
-			{Label: "Yes", Value: yesResponse},
-			{Label: "No", Value: noResponse},
-		}
-
-		selected, err := tui.PromptSelect(message, options, 0)
+		confirmed, err := handler.PromptConfirmUntrackDescendants(branchName, len(descendants))
 		if err != nil {
 			return err
 		}
 
-		if selected != yesResponse {
+		if !confirmed {
 			ctx.Output.Info("Untrack canceled.")
 			return nil
 		}

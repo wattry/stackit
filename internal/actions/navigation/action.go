@@ -1,4 +1,4 @@
-package actions
+package navigation
 
 import (
 	"fmt"
@@ -7,8 +7,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/tui"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // Direction represents the traversal direction
@@ -22,7 +20,12 @@ const (
 )
 
 // SwitchBranchAction switches to a branch based on the given direction
-func SwitchBranchAction(direction Direction, ctx *app.Context) error {
+func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	currentBranch := ctx.Engine.CurrentBranch()
 	if currentBranch == nil {
 		return errors.ErrNotOnBranch
@@ -39,7 +42,7 @@ func SwitchBranchAction(direction Direction, ctx *app.Context) error {
 	case DirectionBottom:
 		targetBranch = traverseDownward(currentBranch.GetName(), ctx)
 	case DirectionTop:
-		targetBranch, err = traverseUpward(currentBranch.GetName(), ctx, graph)
+		targetBranch, err = traverseUpward(currentBranch.GetName(), ctx, graph, handler)
 		if err != nil {
 			return err
 		}
@@ -89,7 +92,7 @@ func traverseDownward(currentBranch string, ctx *app.Context) string {
 }
 
 // traverseUpward walks up the children chain to find the tip branch
-func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackGraph) (string, error) {
+func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackGraph, handler Handler) (string, error) {
 	children := graph.ChildBranches(ctx.Engine.GetBranch(currentBranch))
 	if len(children) == 0 {
 		// No children, we're at the tip
@@ -103,41 +106,28 @@ func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackG
 		// Single child, follow it
 		nextBranch = children[0].GetName()
 	} else {
-		// Multiple children, prompt user
+		// Multiple children, use handler to select
 		childNames := make([]string, len(children))
 		for i, c := range children {
 			childNames[i] = c.GetName()
 		}
-		nextBranch, err = handleMultipleChildren(childNames)
+		nextBranch, err = handleMultipleChildren(childNames, handler)
 		if err != nil {
 			return "", err
 		}
 	}
 
 	ctx.Output.Info("⮑  %s", nextBranch)
-	return traverseUpward(nextBranch, ctx, graph)
+	return traverseUpward(nextBranch, ctx, graph, handler)
 }
 
 // handleMultipleChildren prompts the user to select a branch when multiple children exist
-func handleMultipleChildren(children []string) (string, error) {
-	if !utils.IsInteractive() {
+func handleMultipleChildren(children []string, handler Handler) (string, error) {
+	if !handler.IsInteractive() {
 		return "", fmt.Errorf("multiple branches found; cannot get top branch in non-interactive mode. Multiple choices available:\n%s", formatBranchList(children))
 	}
 
-	options := make([]tui.SelectOption, len(children))
-	for i, child := range children {
-		options[i] = tui.SelectOption{
-			Label: child,
-			Value: child,
-		}
-	}
-
-	selected, err := tui.PromptSelect("Multiple branches found at the same level. Select a branch to guide the navigation:", options, 0)
-	if err != nil {
-		return "", err
-	}
-
-	return selected, nil
+	return handler.PromptSelectBranch("Multiple branches found at the same level. Select a branch to guide the navigation:", children)
 }
 
 // formatBranchList formats a list of branches for error messages

@@ -1,20 +1,24 @@
-package actions
+package abort
 
 import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/tui"
 )
 
-// AbortOptions contains options for the abort command
-type AbortOptions struct {
+// Options contains options for the abort command
+type Options struct {
 	Force bool
 }
 
-// AbortAction cancels an in-progress operation
-func AbortAction(ctx *app.Context, opts AbortOptions) error {
+// Action cancels an in-progress operation
+func Action(ctx *app.Context, opts Options, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	out := ctx.Output
 
@@ -34,8 +38,7 @@ func AbortAction(ctx *app.Context, opts AbortOptions) error {
 
 	// Confirm unless force is used
 	if !opts.Force {
-		msg := "Are you sure you want to abort the current operation? This will roll back the repository to its previous state."
-		confirmed, err := tui.PromptConfirm(msg, false)
+		confirmed, err := handler.PromptConfirmAbort()
 		if err != nil {
 			return fmt.Errorf("failed to get confirmation: %w", err)
 		}
