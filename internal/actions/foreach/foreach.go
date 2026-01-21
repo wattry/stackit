@@ -218,6 +218,11 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 		numJobs = stdruntime.NumCPU()
 	}
 
+	// Prune stale worktree entries ONCE before starting parallel execution.
+	// This prevents "failed to read commondir" errors caused by incomplete cleanup
+	// from previous operations, without interfering with parallel worktree creation.
+	_ = ctx.Engine.PruneWorktrees(ctx.Context)
+
 	fullCommand := strings.Join(append([]string{opts.Command}, opts.Args...), " ")
 
 	type result struct {

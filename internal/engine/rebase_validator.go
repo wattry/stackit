@@ -180,6 +180,13 @@ func (e *engineImpl) ValidateRebasesParallel(ctx context.Context, specs []Rebase
 		return &RebaseValidation{Success: true, NewSHAs: map[string]string{}}, nil
 	}
 
+	// Prune stale worktree entries ONCE before starting parallel validation.
+	// This cleans up entries in .git/worktrees/ that may be left behind from
+	// incomplete cleanup after failed, canceled, or crashed operations.
+	// We do this before any parallel worktree creation to avoid race conditions
+	// where a prune call could interfere with a worktree being created by another goroutine.
+	_ = e.git.PruneWorktrees(ctx)
+
 	// Validate specs for duplicate branches (programming error, but check anyway)
 	seenBranches := make(map[string]bool)
 	for _, spec := range specs {

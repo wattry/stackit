@@ -163,6 +163,7 @@ type WorktreeOperations interface {
 	AddWorktree(ctx context.Context, path string, branch string, detach bool) error
 	RemoveWorktree(ctx context.Context, path string) error
 	CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (path string, cleanup func(), err error)
+	PruneWorktrees(ctx context.Context) error
 }
 
 // WorktreeInfo represents information about a stackit-managed worktree

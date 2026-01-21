@@ -75,7 +75,9 @@ func (r *runner) ListWorktrees(ctx context.Context) ([]string, error) {
 
 // PruneWorktrees removes stale worktree entries from .git/worktrees.
 // This cleans up worktree information for worktrees whose working directory
-// has been deleted or is otherwise unavailable.
+// has been deleted or is otherwise unavailable. This should be called before
+// creating new worktrees to prevent "failed to read commondir" errors caused
+// by incomplete cleanup from previous operations.
 func (r *runner) PruneWorktrees(ctx context.Context) error {
 	_, err := r.RunGitCommandWithContext(ctx, "worktree", "prune")
 	if err != nil {
