@@ -83,6 +83,25 @@ Check that stackit is installed correctly:
 stackit --version
 ```
 
+## Initialize your repository
+
+In your Git repository, run:
+
+```bash
+stackit init
+```
+
+This command:
+
+1. Detects your trunk branch (usually `main` or `master`)
+2. Prepares the repository for stacking
+3. Offers to install optional integrations:
+   - **GitHub Actions** — CI checks for branch locking
+   - **Pre-commit hooks** — Validate branch state before committing
+   - **AI agent files** — Integration files for Cursor and Claude Code
+
+You can skip the interactive prompts with `stackit init --skip-integrations` or install integrations later using the individual commands (`stackit github install`, `stackit precommit install`, `stackit agent install`).
+
 ## Next steps
 
 - [Create your first stack →](stack.md)

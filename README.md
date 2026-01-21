@@ -52,7 +52,7 @@ Stacks naturally form a tree structure—a single branch can have multiple child
 
 - 🌳 **Visual branch tree** — See your entire stack at a glance with `stackit log`
 - 🔄 **Automatic restacking** — Keep all branches up to date when you rebase or modify a parent
-- 📤 **Submit entire stacks** — Push all branches and create/update PRs in one command
+- 📤 **Submit entire stacks** — Push all branches and create/update PRs in one command with progress tracking
 - 🔀 **Smart merging** — Merge stacks bottom-up or squash top-down
 - 🔧 **Absorb changes** — Automatically amend changes to the right commit in your stack
 - 🧭 **Easy navigation** — Move `up`, `down`, `top`, or `bottom` of your stack
@@ -416,7 +416,7 @@ This allows teams to define shared settings that individual developers can overr
 | `navigation.when` | When to show navigation: always, never, or multiple (default: always) | `stackit config set navigation.when multiple` |
 | `navigation.marker` | Symbol marking current PR in stack (default: 👈, max 10 chars) | `stackit config set navigation.marker "<--"` |
 | `navigation.location` | Where navigation appears: body, comment, or none (default: body) | `stackit config set navigation.location comment` |
-| `navigation.showMerged` | Show merged branch history in navigation (default: false) | `stackit config set navigation.showMerged true` |
+| `navigation.showMerged` | Show previously merged branches in stack navigation for historical context (default: false) | `stackit config set navigation.showMerged true` |
 
 ### Interactive Configuration
 Use the interactive TUI to manage all settings:
@@ -481,7 +481,7 @@ navigation:
   when: always        # always, never, or multiple (only show when stack has multiple PRs)
   marker: "👈"        # Symbol marking the current PR (max 10 chars)
   location: body      # body, comment, or none (where navigation appears)
-  showMerged: false   # Show previously merged branch history
+  showMerged: false   # Show previously merged branches for historical context
 
 # Worktree hooks
 hooks:
