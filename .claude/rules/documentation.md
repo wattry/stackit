@@ -1,12 +1,27 @@
 # Documentation Rules
 
-## General
+## When to Update Docs
 
-- Consistency and clarity is more important than anything
-- Always consider if the work you are doing may require updating the readme or other documentation
+- New CLI commands → Add to README.md Command Reference
+- New workflows → Add examples to Common Workflows in README.md
+- Configuration changes → Update `docs/config.md`
+- TUI changes → Update `docs/tui.md`
 
-## CLI Commands
+## Command Help Text
 
-- New commands must be added to the Command Reference section in README.md
-- Add usage examples to the Common Workflows section when appropriate
-- Command help text (`Long` description) should include concrete examples
+The `Long` description in Cobra commands should include concrete examples:
+
+```go
+Long: `Syncs your stack with the remote repository.
+
+Examples:
+  stackit sync              # Sync current stack
+  stackit sync --all        # Sync all branches`,
+```
+
+## Technical Docs (`docs/`)
+
+- `docs/config.md` - Configuration keys, layered config, adding new keys
+- `docs/tui.md` - TUI patterns, styling, components
+
+Keep these up-to-date when modifying related systems.

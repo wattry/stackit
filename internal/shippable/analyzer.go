@@ -175,8 +175,9 @@ func (a *Analyzer) analyzeBranch(branchName string, statusMap map[string]*github
 		}
 	}
 
-	if status.ReviewDecision == github.ReviewDecisionReviewRequired || status.ReviewDecision == "" {
-		// Empty review decision means no reviews yet
+	// Only block if reviews are explicitly required by the repo settings
+	// Empty ReviewDecision means reviews are not required for this repo
+	if status.ReviewDecision == github.ReviewDecisionReviewRequired {
 		if !status.IsApproved() {
 			return &BlockingPR{
 				Branch:   branchName,

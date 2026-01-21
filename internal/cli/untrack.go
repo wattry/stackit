@@ -3,10 +3,12 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/untrack"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/cli/stack"
 	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // newUntrackCmd creates the untrack command
@@ -36,10 +38,11 @@ If the branch has children, they will also be untracked.`,
 				}
 
 				// Execute untrack action
-				return actions.UntrackAction(ctx, actions.UntrackOptions{
+				handler := stack.NewUntrackUI(ctx.Output, utils.IsInteractive())
+				return untrack.Action(ctx, untrack.Options{
 					BranchName: branchName,
 					Force:      force,
-				})
+				}, handler)
 			})
 		},
 	}

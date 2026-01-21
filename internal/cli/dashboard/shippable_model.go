@@ -4,14 +4,42 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
+	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/core"
 )
+
+const (
+	// autoRefreshInterval is the time between automatic refreshes
+	autoRefreshInterval = 30 * time.Second
+	// tickInterval is the interval for timer updates (for countdown display)
+	// Using 5s instead of 1s to reduce render frequency while still showing useful countdown
+	tickInterval = 5 * time.Second
+)
+
+// renderCache stores precomputed data to avoid expensive git operations in the render loop.
+// This cache is rebuilt only on refresh, not on every render.
+type renderCache struct {
+	// stackTitles maps stack root branch to the display title (computed from commit subject)
+	stackTitles map[string]string
+
+	// branchAnnotations maps branch name to its tree annotation
+	branchAnnotations map[string]tree.BranchAnnotation
+
+	// treeRenderer is the pre-built tree renderer, reused across renders
+	treeRenderer *tree.StackTreeRenderer
+
+	// Cached selection state to avoid recomputing
+	selectedCount  int
+	selectedStacks []shippable.Stack
+}
 
 // dashboardState represents the current UI state of the dashboard.
 type dashboardState int
@@ -22,6 +50,7 @@ const (
 	stateAnalyzing
 	stateConfirming
 	stateShipping
+	statePublishing
 	stateHelp
 )
 
@@ -51,6 +80,7 @@ type shippableModel struct {
 	selectedIndex int
 	expanded      map[string]bool  // Tracks which stacks are expanded
 	selected      map[string]bool  // Tracks which stacks are selected for shipping
+	locked        map[string]bool  // Tracks which stacks are locked (during publish/ship)
 	focusedStack  *shippable.Stack // Currently focused stack for detail view
 
 	// Status
@@ -58,11 +88,20 @@ type shippableModel struct {
 	statusMessage string
 	errorMessage  string
 
+	// Progress tracking
+	progress        progress.Model
+	progressStep    int
+	progressTotal   int
+	progressMessage string
+
 	// Confirmation action (used when state == stateConfirming)
 	confirmAction string
 
 	// Options
 	options ShippableOptions
+
+	// Render cache - rebuilt on refresh to avoid git operations in render loop
+	cache renderCache
 }
 
 // keyMap defines all keyboard shortcuts for the dashboard.
@@ -72,6 +111,7 @@ type keyMap struct {
 	Select    key.Binding
 	Expand    key.Binding
 	Ship      key.Binding
+	Publish   key.Binding
 	Analyze   key.Binding
 	Refresh   key.Binding
 	Help      key.Binding
@@ -83,11 +123,11 @@ type keyMap struct {
 
 var keys = keyMap{
 	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
+		key.WithKeys(core.KeyUp, "k"),
 		key.WithHelp("↑/k", "move up"),
 	),
 	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
+		key.WithKeys(core.KeyDown, "j"),
 		key.WithHelp("↓/j", "move down"),
 	),
 	Select: key.NewBinding(
@@ -95,12 +135,16 @@ var keys = keyMap{
 		key.WithHelp("space", "toggle selection"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys("enter"),
+		key.WithKeys(core.KeyEnter),
 		key.WithHelp("enter", "expand/collapse"),
 	),
 	Ship: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "ship selected"),
+	),
+	Publish: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "restack & submit all"),
 	),
 	Analyze: key.NewBinding(
 		key.WithKeys("a"),
@@ -115,15 +159,15 @@ var keys = keyMap{
 		key.WithHelp("?", "help"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
+		key.WithKeys(core.KeyQuit, core.KeyCtrlC),
 		key.WithHelp("q", "quit"),
 	),
 	Confirm: key.NewBinding(
-		key.WithKeys("enter", "y"),
+		key.WithKeys(core.KeyEnter, "y"),
 		key.WithHelp("enter/y", "confirm"),
 	),
 	Cancel: key.NewBinding(
-		key.WithKeys("esc", "n"),
+		key.WithKeys(core.KeyEsc, "n"),
 		key.WithHelp("esc/n", "cancel"),
 	),
 	SelectAll: key.NewBinding(
@@ -137,6 +181,13 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 	analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHubClient)
 	combiner := shippable.NewCombiner(ctx.Engine, cfg, ctx.Output)
 
+	// Create progress bar
+	p := progress.New(
+		progress.WithDefaultGradient(),
+		progress.WithWidth(40),
+		progress.WithoutPercentage(),
+	)
+
 	return &shippableModel{
 		ctx:      ctx,
 		engine:   ctx.Engine,
@@ -145,8 +196,10 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 		combiner: combiner,
 		expanded: make(map[string]bool),
 		selected: make(map[string]bool),
+		locked:   make(map[string]bool),
 		state:    stateLoading,
 		options:  opts,
+		progress: p,
 	}
 }
 
@@ -161,17 +214,6 @@ func (m *shippableModel) selectedStacks() []shippable.Stack {
 	return result
 }
 
-// selectedCount returns the number of selected stacks.
-func (m *shippableModel) selectedCount() int {
-	count := 0
-	for _, v := range m.selected {
-		if v {
-			count++
-		}
-	}
-	return count
-}
-
 // currentStack returns the currently focused stack, or nil if none.
 func (m *shippableModel) currentStack() *shippable.Stack {
 	if m.selectedIndex >= 0 && m.selectedIndex < len(m.stacks) {
@@ -180,14 +222,46 @@ func (m *shippableModel) currentStack() *shippable.Stack {
 	return nil
 }
 
+// isLocked returns true if the stack is currently locked (during publish/ship).
+func (m *shippableModel) isLocked(rootBranch string) bool {
+	return m.locked[rootBranch]
+}
+
+// lockAllStacks locks all stacks to prevent selection during operations.
+func (m *shippableModel) lockAllStacks() {
+	for _, s := range m.stacks {
+		m.locked[s.RootBranch()] = true
+	}
+}
+
+// unlockAllStacks unlocks all stacks after an operation completes.
+func (m *shippableModel) unlockAllStacks() {
+	m.locked = make(map[string]bool)
+}
+
 // toggleSelection toggles selection of the current stack.
+// Only shippable stacks (green check) can be selected.
+// Locked stacks cannot be selected.
 func (m *shippableModel) toggleSelection() {
 	stack := m.currentStack()
 	if stack == nil {
 		return
 	}
+
 	root := stack.RootBranch()
+
+	// Locked stacks cannot be selected
+	if m.isLocked(root) {
+		return
+	}
+
+	// Only allow selecting shippable stacks
+	if !stack.IsShippable() {
+		return
+	}
+
 	m.selected[root] = !m.selected[root]
+	m.updateSelectionCache()
 }
 
 // toggleExpand toggles expansion of the current stack.
@@ -200,24 +274,92 @@ func (m *shippableModel) toggleExpand() {
 	m.expanded[root] = !m.expanded[root]
 }
 
-// selectAllShippable selects all shippable stacks.
+// selectAllShippable selects all shippable stacks that are not locked.
 func (m *shippableModel) selectAllShippable() {
 	for _, s := range m.stacks {
-		if s.IsShippable() {
-			m.selected[s.RootBranch()] = true
+		root := s.RootBranch()
+		if s.IsShippable() && !m.isLocked(root) {
+			m.selected[root] = true
 		}
 	}
+	m.updateSelectionCache()
 }
 
 // clearSelection clears all selections.
 func (m *shippableModel) clearSelection() {
 	m.selected = make(map[string]bool)
+	m.updateSelectionCache()
+}
+
+// updateSelectionCache recalculates the cached selection state.
+// Call this whenever m.selected changes.
+func (m *shippableModel) updateSelectionCache() {
+	m.cache.selectedCount = 0
+	m.cache.selectedStacks = nil
+	for _, s := range m.stacks {
+		if m.selected[s.RootBranch()] {
+			m.cache.selectedCount++
+			m.cache.selectedStacks = append(m.cache.selectedStacks, s)
+		}
+	}
+}
+
+// rebuildCache rebuilds all cached render data.
+// Call this after stacks are updated (on refresh).
+func (m *shippableModel) rebuildCache() {
+	// Initialize maps
+	m.cache.stackTitles = make(map[string]string)
+	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
+
+	// Precompute titles and annotations for all stacks
+	for _, stack := range m.stacks {
+		rootBranch := stack.RootBranch()
+
+		// Compute display title from commit subject (this calls git log)
+		title := rootBranch // Default fallback
+		if branch := m.engine.GetBranch(rootBranch); branch.GetName() != "" {
+			if prTitle := branch.DefaultPRTitle(); prTitle != "" {
+				title = prTitle
+			}
+		}
+		m.cache.stackTitles[rootBranch] = title
+
+		// Compute annotations for all branches in the stack
+		for _, branchName := range stack.Stack.AllBranches {
+			branch := m.engine.GetBranch(branchName)
+			if branch.GetName() != "" {
+				ann := tui.GetBranchAnnotation(m.engine, branch)
+				m.cache.branchAnnotations[branchName] = ann
+			}
+		}
+	}
+
+	// Build a single tree renderer that can be reused
+	// This avoids rebuilding the stack graph on every render
+	m.cache.treeRenderer = tui.NewStackTreeRenderer(m.engine)
+
+	// Update selection cache
+	m.updateSelectionCache()
 }
 
 // Init initializes the model.
 func (m *shippableModel) Init() tea.Cmd {
 	m.SignalReady()
-	return tea.Batch(m.InitSpinner(), m.refresh())
+	return tea.Batch(m.InitSpinner(), m.refresh(), m.tick())
+}
+
+// tick returns a command that sends a tick message after the tick interval.
+func (m *shippableModel) tick() tea.Cmd {
+	return tea.Tick(tickInterval, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+// HandleSpinnerMsg handles spinner tick messages for loading animations.
+// Returns (handled, cmd) - if handled is true, the caller should return cmd.
+func (m *shippableModel) HandleSpinnerMsg(msg tea.Msg) (bool, tea.Cmd) {
+	// Use the BaseModel's spinner handling
+	return m.BaseModel.HandleCommonMsg(msg)
 }
 
 // Messages for async operations
@@ -236,4 +378,20 @@ type (
 		result *shippable.AnalysisResult
 		err    error
 	}
+
+	publishCompleteMsg struct {
+		restacked int
+		submitted int
+		err       error
+	}
+
+	// progressUpdateMsg updates the progress bar during async operations
+	progressUpdateMsg struct {
+		step    int
+		total   int
+		message string
+	}
+
+	// tickMsg is sent periodically for countdown updates and auto-refresh
+	tickMsg time.Time
 )

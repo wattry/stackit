@@ -3,10 +3,12 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/abort"
 	"stackit.dev/stackit/internal/actions/absorb"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/cli/stack"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // newAbortCmd creates the abort command
@@ -32,9 +34,10 @@ the operation will be rolled back.`,
 				}
 
 				// Otherwise use the standard abort action
-				return actions.AbortAction(ctx, actions.AbortOptions{
+				handler := stack.NewAbortUI(ctx.Output, utils.IsInteractive())
+				return abort.Action(ctx, abort.Options{
 					Force: force,
-				})
+				}, handler)
 			})
 		},
 	}

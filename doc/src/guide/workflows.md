@@ -133,6 +133,17 @@ These hooks run in the new worktree directory after it's created. See [Configura
 
 Worktrees are automatically cleaned up during $$stackit sync$$ when their stack is merged.
 
+### Creating worktrees from within worktrees
+
+You can create new worktrees even when you're already inside a managed worktree. Stackit automatically detects this context and creates the new worktree from the main repository.
+
+```bash
+# Inside an existing worktree (e.g., ../your-repo-stacks/feature-a/)
+stackit create another-feature -m "feat: another feature" -w
+```
+
+This creates a sibling worktree at `../your-repo-stacks/another-feature/` regardless of where you're currently working. The new branch is created from trunk, not from the current worktree's branch.
+
 ## Collaborating on stacks
 
 ### Fetching someone's stack

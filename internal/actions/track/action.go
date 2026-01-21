@@ -1,51 +1,44 @@
-package actions
+package track
 
 import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
-// TrackOptions contains options for the track command
-type TrackOptions struct {
+// Options contains options for the track command
+type Options struct {
 	BranchName string
 	Force      bool
 	Parent     string
 }
 
-// TrackAction performs the track operation
-func TrackAction(ctx *app.Context, opts TrackOptions) error {
+// Action performs the track operation
+func Action(ctx *app.Context, opts Options, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	branchName := opts.BranchName
 
 	// Handle --parent flag (single branch tracking)
 	if opts.Parent != "" {
 		parent := opts.Parent
-		// Validate parent exists (refresh branch list if needed)
-		allBranches := eng.AllBranches()
-		parentExists := false
-		for _, branch := range allBranches {
-			if branch.GetName() == parent {
-				parentExists = true
-				break
-			}
-		}
-		if !parentExists && parent != eng.Trunk().GetName() {
-			// Refresh branches list and check again
-			allBranches := eng.AllBranches()
-			parentExists = false
-			for _, b := range allBranches {
-				if b.GetName() == parent {
+		// Validate parent exists
+		parentExists := parent == eng.Trunk().GetName()
+		if !parentExists {
+			for _, branch := range eng.AllBranches() {
+				if branch.GetName() == parent {
 					parentExists = true
 					break
 				}
 			}
-			if !parentExists {
-				return fmt.Errorf("parent branch %s does not exist", parent)
-			}
+		}
+		if !parentExists {
+			return fmt.Errorf("parent branch %s does not exist", parent)
 		}
 
 		// Validate parent is tracked (or is trunk)
@@ -93,6 +86,9 @@ func TrackAction(ctx *app.Context, opts TrackOptions) error {
 		if err != nil {
 			return fmt.Errorf("failed to find tracked ancestor: %w", err)
 		}
+		if len(ancestors) == 0 {
+			return fmt.Errorf("no tracked ancestors found for branch %s", branchName)
+		}
 		parentBranch := ancestors[0]
 
 		if err := eng.TrackBranch(ctx.Context, branchName, parentBranch); err != nil {
@@ -104,16 +100,16 @@ func TrackAction(ctx *app.Context, opts TrackOptions) error {
 	}
 
 	// Non-interactive mode requires --parent or --force
-	if !utils.IsInteractive() {
+	if !handler.IsInteractive() {
 		return fmt.Errorf("parent branch is required in non-interactive mode; use --parent or --force")
 	}
 
 	// Interactive mode: recursively track a stack
-	return trackBranchRecursively(ctx, branchName)
+	return trackBranchRecursively(ctx, branchName, handler)
 }
 
 // trackBranchRecursively interactively tracks a branch and its descendants
-func trackBranchRecursively(ctx *app.Context, branchName string) error {
+func trackBranchRecursively(ctx *app.Context, branchName string, handler Handler) error {
 	eng := ctx.Engine
 
 	// Check if branch is already tracked
@@ -126,13 +122,37 @@ func trackBranchRecursively(ctx *app.Context, branchName string) error {
 		var parentBranch string
 		ancestors, err := eng.FindMostRecentTrackedAncestors(ctx.Context, branchName)
 		if err == nil && len(ancestors) == 1 && ancestors[0] != eng.Trunk().GetName() {
-			parentBranch = ancestors[0]
-			ctx.Output.Info("Auto-detected parent %s for %s.", style.ColorBranchName(parentBranch, false), style.ColorBranchName(branchName, false))
-		} else {
-			// Select parent interactively
-			parentBranch, err = selectParentBranch(ctx, branchName)
+			candidate := ancestors[0]
+			candidateBranch := eng.GetBranch(candidate)
+			// Skip worktree anchors for auto-detection
+			if !candidateBranch.IsWorktreeAnchor() {
+				parentBranch = candidate
+				ctx.Output.Info("Auto-detected parent %s for %s.", style.ColorBranchName(parentBranch, false), style.ColorBranchName(branchName, false))
+			}
+		}
+
+		// If auto-detection didn't find a valid parent, prompt interactively
+		if parentBranch == "" {
+			parentBranch, err = handler.PromptSelectParent(ctx.Context, ctx.Engine, ctx.GitHubClient, ctx.Logger, branchName)
 			if err != nil {
 				return err
+			}
+
+			// Handle user cancellation (empty parent)
+			if parentBranch == "" {
+				ctx.Output.Info("Track canceled.")
+				return nil
+			}
+
+			// Validate parent is tracked (or is trunk)
+			parentBranchObj := eng.GetBranch(parentBranch)
+			if !parentBranchObj.IsTrunk() && !parentBranchObj.IsTracked() {
+				return fmt.Errorf("parent branch %s must be tracked (or be trunk)", parentBranch)
+			}
+
+			// Prevent tracking with worktree anchor as parent
+			if parentBranchObj.IsWorktreeAnchor() {
+				return fmt.Errorf("parent branch %s is a worktree anchor; use 'stackit create' in the worktree instead", parentBranch)
 			}
 		}
 
@@ -174,58 +194,17 @@ func trackBranchRecursively(ctx *app.Context, branchName string) error {
 	// Recursively track children
 	for _, child := range untrackedChildren {
 		// Ask if user wants to track this child
-		shouldTrack, err := promptTrackChild(child, branchName)
+		shouldTrack, err := handler.PromptTrackChild(child, branchName)
 		if err != nil {
 			return err
 		}
 
 		if shouldTrack {
-			if err := trackBranchRecursively(ctx, child); err != nil {
+			if err := trackBranchRecursively(ctx, child, handler); err != nil {
 				return err
 			}
 		}
 	}
 
 	return nil
-}
-
-// selectParentBranch interactively selects a parent branch for tracking
-func selectParentBranch(ctx *app.Context, branchName string) (string, error) {
-	eng := ctx.Engine
-
-	// Show interactive selector
-	selected, err := tui.PromptLogSelect(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
-		Style:  "FULL",
-		Logger: ctx.Logger,
-		Exclude: map[string]bool{
-			branchName: true,
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	// Validate parent is tracked (or is trunk)
-	parentBranch := eng.GetBranch(selected)
-	if !parentBranch.IsTrunk() && !parentBranch.IsTracked() {
-		return "", fmt.Errorf("parent branch %s must be tracked (or be trunk)", selected)
-	}
-
-	return selected, nil
-}
-
-// promptTrackChild asks if user wants to track a child branch
-func promptTrackChild(childName, parentName string) (bool, error) {
-	message := fmt.Sprintf("Found untracked child branch %s of %s. Track it?", style.ColorBranchName(childName, false), style.ColorBranchName(parentName, false))
-	options := []tui.SelectOption{
-		{Label: "Yes", Value: yesResponse},
-		{Label: "No", Value: noResponse},
-	}
-
-	selected, err := tui.PromptSelect(message, options, 0)
-	if err != nil {
-		return false, err
-	}
-
-	return selected == yesResponse, nil
 }
