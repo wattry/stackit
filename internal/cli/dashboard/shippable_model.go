@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/app"
@@ -11,6 +12,13 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
 	"stackit.dev/stackit/internal/tui/core"
+)
+
+const (
+	// autoRefreshInterval is the time between automatic refreshes
+	autoRefreshInterval = 30 * time.Second
+	// tickInterval is the interval for timer updates (for countdown display)
+	tickInterval = 1 * time.Second
 )
 
 // dashboardState represents the current UI state of the dashboard.
@@ -22,6 +30,7 @@ const (
 	stateAnalyzing
 	stateConfirming
 	stateShipping
+	statePublishing
 	stateHelp
 )
 
@@ -58,6 +67,12 @@ type shippableModel struct {
 	statusMessage string
 	errorMessage  string
 
+	// Progress tracking
+	progress        progress.Model
+	progressStep    int
+	progressTotal   int
+	progressMessage string
+
 	// Confirmation action (used when state == stateConfirming)
 	confirmAction string
 
@@ -72,6 +87,7 @@ type keyMap struct {
 	Select    key.Binding
 	Expand    key.Binding
 	Ship      key.Binding
+	Publish   key.Binding
 	Analyze   key.Binding
 	Refresh   key.Binding
 	Help      key.Binding
@@ -101,6 +117,10 @@ var keys = keyMap{
 	Ship: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "ship selected"),
+	),
+	Publish: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "restack & submit all"),
 	),
 	Analyze: key.NewBinding(
 		key.WithKeys("a"),
@@ -137,6 +157,13 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 	analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHubClient)
 	combiner := shippable.NewCombiner(ctx.Engine, cfg, ctx.Output)
 
+	// Create progress bar
+	p := progress.New(
+		progress.WithDefaultGradient(),
+		progress.WithWidth(40),
+		progress.WithoutPercentage(),
+	)
+
 	return &shippableModel{
 		ctx:      ctx,
 		engine:   ctx.Engine,
@@ -147,6 +174,7 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 		selected: make(map[string]bool),
 		state:    stateLoading,
 		options:  opts,
+		progress: p,
 	}
 }
 
@@ -217,7 +245,21 @@ func (m *shippableModel) clearSelection() {
 // Init initializes the model.
 func (m *shippableModel) Init() tea.Cmd {
 	m.SignalReady()
-	return tea.Batch(m.InitSpinner(), m.refresh())
+	return tea.Batch(m.InitSpinner(), m.refresh(), m.tick())
+}
+
+// tick returns a command that sends a tick message after the tick interval.
+func (m *shippableModel) tick() tea.Cmd {
+	return tea.Tick(tickInterval, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+// HandleSpinnerMsg handles spinner tick messages for loading animations.
+// Returns (handled, cmd) - if handled is true, the caller should return cmd.
+func (m *shippableModel) HandleSpinnerMsg(msg tea.Msg) (bool, tea.Cmd) {
+	// Use the BaseModel's spinner handling
+	return m.BaseModel.HandleCommonMsg(msg)
 }
 
 // Messages for async operations
@@ -236,4 +278,20 @@ type (
 		result *shippable.AnalysisResult
 		err    error
 	}
+
+	publishCompleteMsg struct {
+		restacked int
+		submitted int
+		err       error
+	}
+
+	// progressUpdateMsg updates the progress bar during async operations
+	progressUpdateMsg struct {
+		step    int
+		total   int
+		message string
+	}
+
+	// tickMsg is sent every second for countdown updates and auto-refresh
+	tickMsg time.Time
 )

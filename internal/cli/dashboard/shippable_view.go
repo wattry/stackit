@@ -3,6 +3,7 @@ package dashboard
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -15,22 +16,14 @@ import (
 // View renders the dashboard.
 func (m *shippableModel) View() string {
 	switch m.state {
-	case stateLoading:
-		return m.renderLoading()
 	case stateHelp:
 		return m.renderHelp()
 	case stateConfirming:
 		return m.renderConfirmation()
 	default:
+		// All other states (including loading) show the main view
 		return m.renderMain()
 	}
-}
-
-// renderLoading shows the loading state.
-func (m *shippableModel) renderLoading() string {
-	return lipgloss.NewStyle().
-		Padding(2, 4).
-		Render("Loading shippable work...")
 }
 
 // renderMain renders the main dashboard view.
@@ -48,7 +41,7 @@ func (m *shippableModel) renderMain() string {
 		contentHeight = 5
 	}
 
-	leftWidth := m.Width * 2 / 3
+	leftWidth := m.Width / 2
 	rightWidth := m.Width - leftWidth
 
 	// Build sections
@@ -81,8 +74,14 @@ func (m *shippableModel) renderHeader() string {
 
 	var status string
 	switch {
-	case m.state == stateAnalyzing || m.state == stateShipping:
-		status = headerStatusStyle.Render("Analyzing...")
+	case m.state == stateLoading:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Loading...")
+	case m.state == stateAnalyzing:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Analyzing...")
+	case m.state == stateShipping:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Shipping...")
+	case m.state == statePublishing:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Publishing...")
 	case m.errorMessage != "":
 		status = errorTextStyle.Render(m.errorMessage)
 	case m.statusMessage != "":
@@ -106,14 +105,19 @@ func (m *shippableModel) renderStackList(width, height int) string {
 		Width(width).
 		Height(height)
 
-	if len(m.stacks) == 0 {
-		return paneStyle.Render(paneHeaderStyle.Render("STACKS") + "\n\n" +
-			commonStyles.Dim.Render("No stacks found. Create one with `stackit create`"))
-	}
-
 	var sb strings.Builder
 	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n")
-	sb.WriteString(strings.Repeat("─", width-4) + "\n")
+	sb.WriteString(strings.Repeat("─", max(width-4, 0)) + "\n")
+
+	// Show appropriate content based on state
+	if len(m.stacks) == 0 {
+		if m.state == stateLoading {
+			sb.WriteString(commonStyles.Dim.Render("Loading stacks..."))
+		} else {
+			sb.WriteString(commonStyles.Dim.Render("No stacks found. Create one with `stackit create`"))
+		}
+		return paneStyle.Render(sb.String())
+	}
 
 	for i, stack := range m.stacks {
 		line := m.renderStackLine(stack, i == m.selectedIndex)
@@ -144,8 +148,20 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, selected bool) s
 	// Status icon
 	statusIcon := m.getStatusIcon(stack.Status)
 
-	// Stack name and branch count
-	name := stack.RootBranch()
+	// Stack title: use commit subject instead of branch name
+	name := stack.RootBranch() // Default fallback
+	if branch := m.engine.GetBranch(stack.RootBranch()); branch.GetName() != "" {
+		if title := branch.DefaultPRTitle(); title != "" {
+			name = title
+		}
+	}
+
+	// Truncate long titles to prevent layout issues
+	maxNameLen := 50
+	if len(name) > maxNameLen {
+		name = name[:maxNameLen-3] + "..."
+	}
+
 	branchCount := fmt.Sprintf("(%d branches)", stack.BranchCount())
 
 	// Expand indicator
@@ -207,7 +223,7 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 
 	var sb strings.Builder
 	sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n")
-	sb.WriteString(strings.Repeat("─", width-4) + "\n")
+	sb.WriteString(strings.Repeat("─", max(width-4, 0)) + "\n")
 
 	if m.focusedStack != nil {
 		sb.WriteString(m.renderStackDetails(m.focusedStack))
@@ -287,9 +303,17 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 	var sb strings.Builder
 
-	// Header with status badge
+	// Header: show commit title with status badge, branch name dimmed below
 	statusBadge := m.renderStatusBadge(stack.Status)
-	sb.WriteString(commonStyles.Bold.Render(stack.RootBranch()) + " " + statusBadge + "\n")
+	branch := m.engine.GetBranch(stack.RootBranch())
+	title := stack.RootBranch() // Default to branch name
+	if branch.GetName() != "" {
+		if prTitle := branch.DefaultPRTitle(); prTitle != "" {
+			title = prTitle
+		}
+	}
+	sb.WriteString(commonStyles.Bold.Render(title) + " " + statusBadge + "\n")
+	sb.WriteString(style.ColorDim(stack.RootBranch()) + "\n")
 
 	// Quick stats row
 	statsRow := m.renderQuickStats(stack)
@@ -370,6 +394,13 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 	// Create tree renderer with filter
 	renderer := tui.NewStackTreeRendererWithFilter(m.engine, filter)
 
+	// Build a map of blocking PRs by branch for quick lookup
+	blockingByBranch := make(map[string]*shippable.BlockingPR)
+	for i := range stack.BlockingPRs {
+		bp := &stack.BlockingPRs[i]
+		blockingByBranch[bp.Branch] = bp
+	}
+
 	// Add annotations for each branch
 	for _, branchName := range stack.Stack.AllBranches {
 		branch := m.engine.GetBranch(branchName)
@@ -378,45 +409,39 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 		}
 		ann := tui.GetBranchAnnotation(m.engine, branch)
 
-		// Add blocking info as custom label
-		for _, bp := range stack.BlockingPRs {
-			if bp.Branch == branchName {
-				ann.CustomLabel = m.getBlockingIcon(bp.Reason)
-				break
+		// Add CI/review status from blocking PRs
+		if bp, blocked := blockingByBranch[branchName]; blocked {
+			switch bp.Reason {
+			case shippable.ReasonCIFailing:
+				ann.CheckStatus = tree.CheckStatusFailing
+			case shippable.ReasonCIPending:
+				ann.CheckStatus = tree.CheckStatusPending
+			case shippable.ReasonChangesRequested:
+				ann.ReviewStatus = "Changes Requested"
+			case shippable.ReasonReviewRequired:
+				ann.ReviewStatus = "In Review"
+			}
+		} else {
+			// If not blocked, mark as passing/approved based on stack status
+			if stack.GitHubCIOK && ann.CheckStatus == "" {
+				ann.CheckStatus = tree.CheckStatusPassing
+			}
+			if stack.ApprovalOK && ann.ReviewStatus == "" {
+				ann.ReviewStatus = "Approved"
 			}
 		}
 
 		renderer.SetAnnotation(branchName, ann)
 	}
 
-	// Render tree in compact mode
+	// Render tree in full mode to match st log full
 	opts := tree.RenderOptions{
-		Mode:                tree.RenderModeCompact,
+		Mode:                tree.RenderModeFull,
 		HideSummary:         false,
 		SkipSelectionPrefix: true,
 	}
 
 	return renderer.RenderStack(stack.RootBranch(), opts)
-}
-
-// getBlockingIcon returns an icon for a blocking reason.
-func (m *shippableModel) getBlockingIcon(reason shippable.BlockingReason) string {
-	switch reason {
-	case shippable.ReasonCIFailing:
-		return style.ColorRed("✗")
-	case shippable.ReasonCIPending:
-		return style.ColorYellow("⏳")
-	case shippable.ReasonChangesRequested:
-		return style.ColorRed("✗")
-	case shippable.ReasonReviewRequired:
-		return style.ColorYellow("○")
-	case shippable.ReasonDraft:
-		return style.ColorDim("Draft")
-	case shippable.ReasonNoPR:
-		return style.ColorDim("No PR")
-	default:
-		return ""
-	}
 }
 
 // formatBlockingReason returns a human-readable blocking reason.
@@ -439,20 +464,86 @@ func (m *shippableModel) formatBlockingReason(reason shippable.BlockingReason) s
 	}
 }
 
-// renderFooter renders the footer with keyboard shortcuts.
+// renderFooter renders the footer with keyboard shortcuts and refresh status.
 func (m *shippableModel) renderFooter() string {
+	// During async operations, show progress bar
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
+		return m.renderProgressFooter()
+	}
+
 	shortcuts := []string{
 		"[Space] Toggle",
 		"[Enter] Expand",
 		"[j/k] Navigate",
 		"[s] Ship",
+		"[p] Publish",
 		"[a] Analyze",
 		"[r] Refresh",
 		"[?] Help",
 		"[q] Quit",
 	}
+	shortcutsStr := strings.Join(shortcuts, "  ")
 
-	return footerStyle.Width(m.Width).Render(strings.Join(shortcuts, "  "))
+	// Build refresh status with countdown
+	var refreshStatus string
+	if !m.lastRefresh.IsZero() {
+		timeSinceRefresh := time.Since(m.lastRefresh)
+		timeUntilRefresh := autoRefreshInterval - timeSinceRefresh
+		if timeUntilRefresh < 0 {
+			timeUntilRefresh = 0
+		}
+		secondsUntil := int(timeUntilRefresh.Seconds())
+		refreshStatus = fmt.Sprintf("Next refresh in %ds", secondsUntil)
+	}
+
+	// Build footer: shortcuts on left, refresh status on right
+	if refreshStatus != "" {
+		gap := m.Width - lipgloss.Width(shortcutsStr) - lipgloss.Width(refreshStatus) - 4
+		if gap < 2 {
+			gap = 2
+		}
+		line := strings.Repeat(" ", gap)
+		return footerStyle.Width(m.Width).Render(shortcutsStr + line + style.ColorDim(refreshStatus))
+	}
+
+	return footerStyle.Width(m.Width).Render(shortcutsStr)
+}
+
+// renderProgressFooter renders the footer with a progress bar during async operations.
+func (m *shippableModel) renderProgressFooter() string {
+	var message string
+	switch m.state {
+	case stateLoading:
+		message = "Refreshing..."
+	case stateAnalyzing:
+		message = "Analyzing..."
+	case stateShipping:
+		message = "Shipping..."
+	case statePublishing:
+		message = "Publishing..."
+	}
+
+	if m.progressMessage != "" {
+		message = m.progressMessage
+	}
+
+	// Build progress line
+	var progressLine string
+	if m.progressTotal > 0 {
+		progressLine = fmt.Sprintf("%s %s (%d/%d)", message, m.progress.View(), m.progressStep, m.progressTotal)
+	} else {
+		// Show spinner for indeterminate progress
+		progressLine = fmt.Sprintf("%s %s", m.Spinner.View(), message)
+	}
+
+	quitHint := style.ColorDim("[q] Quit")
+	gap := m.Width - lipgloss.Width(progressLine) - lipgloss.Width(quitHint) - 4
+	if gap < 2 {
+		gap = 2
+	}
+	line := strings.Repeat(" ", gap)
+
+	return footerStyle.Width(m.Width).Render(progressLine + line + quitHint)
 }
 
 // renderHelp renders the help overlay.
@@ -470,6 +561,7 @@ func (m *shippableModel) renderHelp() string {
 
 	sb.WriteString(helpSectionStyle.Render("Actions") + "\n")
 	sb.WriteString(helpKeyStyle.Render("s") + helpDescStyle.Render("Ship selected stacks") + "\n")
+	sb.WriteString(helpKeyStyle.Render("p") + helpDescStyle.Render("Restack & submit all branches") + "\n")
 	sb.WriteString(helpKeyStyle.Render("a") + helpDescStyle.Render("Analyze combination") + "\n")
 	sb.WriteString(helpKeyStyle.Render("r") + helpDescStyle.Render("Refresh analysis") + "\n")
 
