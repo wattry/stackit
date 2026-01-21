@@ -63,6 +63,7 @@ nav:
     - Overview: cli/index.md
     - Command Reference: cli/reference.md
     - Configuration: cli/config.md
+    - Git Hooks: cli/hooks.md
   - Community: &community
     - Overview: community/index.md
     - FAQ: community/faq.md
@@ -96,6 +97,7 @@ plugins:
           - cli/index.md
           - cli/reference.md
           - cli/config.md
+          - cli/hooks.md
         Community:
           - community/index.md
           - community/faq.md
