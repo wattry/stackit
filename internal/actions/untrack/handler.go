@@ -17,9 +17,10 @@ type Handler interface {
 // NullHandler is a no-op handler for when nil is passed
 type NullHandler struct{}
 
-// PromptConfirmUntrackDescendants implements Handler. Returns true (auto-confirm) for null handler.
+// PromptConfirmUntrackDescendants implements Handler. Returns false (cancel) for null handler.
+// Use --force flag to untrack descendants without confirmation.
 func (h *NullHandler) PromptConfirmUntrackDescendants(_ string, _ int) (bool, error) {
-	return true, nil
+	return false, nil
 }
 
 // Cleanup implements Handler.
