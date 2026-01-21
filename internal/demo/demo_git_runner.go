@@ -437,6 +437,10 @@ func (d *demoGitRunner) ListWorktrees(_ context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
+func (d *demoGitRunner) PruneWorktrees(_ context.Context) error {
+	return nil
+}
+
 func (d *demoGitRunner) GetWorktreePathForBranch(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
