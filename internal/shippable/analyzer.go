@@ -122,6 +122,8 @@ func (a *Analyzer) analyzeStack(stack merge.MultiStackInfo, statusMap map[string
 				// Pending doesn't fail the check, but indicates status is pending
 			case ReasonNoPR, ReasonDraft:
 				// These affect overall status but not individual flags
+			case ReasonNotPushed:
+				// Branch not pushed - this blocks shipping
 			}
 		}
 	}
@@ -155,6 +157,18 @@ func (a *Analyzer) analyzeBranch(branchName string, statusMap map[string]*github
 			Branch:   branchName,
 			PRNumber: prNumber,
 			Reason:   ReasonDraft,
+		}
+	}
+
+	// Check if local branch matches remote
+	// This is critical for shipping: if local differs from remote, the octopus merge
+	// will use local SHAs but PRs track remote SHAs, so GitHub won't auto-close them
+	remoteStatus, err := a.eng.GetBranchRemoteStatus(branch)
+	if err == nil && !remoteStatus.Matches() {
+		return &BlockingPR{
+			Branch:   branchName,
+			PRNumber: prNumber,
+			Reason:   ReasonNotPushed,
 		}
 	}
 
@@ -217,9 +231,9 @@ func determineStatus(result Stack) Status {
 		}
 	}
 
-	// Check for blocked state (CI failing or changes requested)
+	// Check for blocked state (CI failing, changes requested, or not pushed)
 	for _, blocking := range result.BlockingPRs {
-		if blocking.Reason == ReasonCIFailing || blocking.Reason == ReasonChangesRequested {
+		if blocking.Reason == ReasonCIFailing || blocking.Reason == ReasonChangesRequested || blocking.Reason == ReasonNotPushed {
 			return StatusBlocked
 		}
 	}
@@ -271,6 +285,8 @@ func GetBlockingReasonDescription(reason BlockingReason) string {
 		return "No PR"
 	case ReasonReviewRequired:
 		return "Review required"
+	case ReasonNotPushed:
+		return "Not pushed"
 	default:
 		return "Unknown"
 	}

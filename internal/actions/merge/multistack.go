@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
+	"stackit.dev/stackit/internal/engine"
 )
 
 // ExecuteMultiStack performs the multi-stack merge operation.
@@ -47,6 +49,15 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 		out.Info("  - %s (%d branches)", stack.RootBranch, len(stack.AllBranches))
 	}
 
+	// 2.5. Validate that all branches match their remote
+	// This is critical: if branches differ from remote, the octopus merge uses local SHAs
+	// but PRs track remote SHAs, so GitHub won't auto-close individual PRs
+	out.Debug("multistack: validating branches match remote")
+	if err := validateBranchesMatchRemote(eng, stacks, out); err != nil {
+		out.Debug("multistack: branch validation failed: %v", err)
+		return nil, err
+	}
+
 	// 3. Execute in worktree to merge stacks
 	out.Debug("multistack: creating worktree executor")
 	executor := NewMultiStackWorktreeExecutor(eng, out)
@@ -82,6 +93,14 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 	result := &MultiStackResult{
 		IncludedStacks: worktreeResult.MergedStacks,
 		ExcludedStacks: worktreeResult.ConflictStacks,
+	}
+
+	// 4.5. Generate branch name early and lock individual PRs before CI validation
+	// This indicates the PRs are part of a consolidation in progress
+	branchName := GenerateMultiStackBranchName()
+	out.Debug("multistack: locking individual PRs before CI validation")
+	if err := lockAndNotifyMultiStackPRs(ctx, eng, result.IncludedStacks, branchName); err != nil {
+		out.Warn("Failed to lock individual PRs: %v", err)
 	}
 
 	// 5. Run CI validation if not skipped
@@ -139,7 +158,6 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 	// 6. Create consolidated PR
 	out.Debug("multistack: creating consolidated PR")
 	prCreator := NewMultiStackPRCreator(ctx, worktreeResult.WorktreeEngine, worktreeResult.WorktreePath)
-	branchName := GenerateMultiStackBranchName()
 
 	out.Info("Creating combined branch: %s", branchName)
 	out.Debug("multistack: creating and pushing branch")
@@ -195,4 +213,77 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 
 	out.Debug("multistack: completed successfully")
 	return result, nil
+}
+
+// validateBranchesMatchRemote checks that all branches in the stacks match their remote.
+// This is critical for shipping: if local differs from remote, the octopus merge
+// will use local SHAs but PRs track remote SHAs, so GitHub won't auto-close them.
+func validateBranchesMatchRemote(eng engine.Engine, stacks []MultiStackInfo, out interface{ Warn(string, ...any) }) error {
+	var mismatchedBranches []string
+
+	for _, stack := range stacks {
+		for _, branchName := range stack.AllBranches {
+			branch := eng.GetBranch(branchName)
+			status, err := eng.GetBranchRemoteStatus(branch)
+			if err != nil {
+				continue // Skip branches we can't check
+			}
+
+			if !status.Matches() {
+				mismatchedBranches = append(mismatchedBranches, branchName)
+			}
+		}
+	}
+
+	if len(mismatchedBranches) > 0 {
+		for _, branch := range mismatchedBranches {
+			out.Warn("Branch %s differs from remote", branch)
+		}
+		return fmt.Errorf("cannot ship: %d branch(es) differ from remote - push changes before shipping", len(mismatchedBranches))
+	}
+
+	return nil
+}
+
+// lockAndNotifyMultiStackPRs locks individual PRs and updates them with consolidation info.
+// This mirrors the behavior in consolidate.go's lockAndNotifyIndividualPRs.
+func lockAndNotifyMultiStackPRs(ctx *app.Context, eng engine.Engine, includedStacks []MultiStackInfo, consolidationBranch string) error {
+	out := ctx.Output
+	out.Info("🔒 Locking individual PRs and updating status...")
+
+	branchesToLock := []engine.Branch{}
+	branchNames := []string{}
+
+	for _, stack := range includedStacks {
+		for _, branchName := range stack.AllBranches {
+			branch := eng.GetBranch(branchName)
+			if !branch.IsLocked() {
+				branchesToLock = append(branchesToLock, branch)
+			}
+			branchNames = append(branchNames, branchName)
+		}
+	}
+
+	if len(branchesToLock) > 0 {
+		if _, err := eng.SetLocked(ctx, branchesToLock, engine.LockReasonConsolidating); err != nil {
+			return fmt.Errorf("failed to lock branches: %w", err)
+		}
+	}
+
+	// Update PR info with consolidation branch
+	for _, b := range branchesToLock {
+		prInfo, _ := b.GetPrInfo()
+		if prInfo != nil {
+			if err := eng.UpsertPrInfo(ctx.Context, b, prInfo.WithMergeBranch(consolidationBranch)); err != nil {
+				out.Debug("Failed to upsert PR info for %s: %v", b.GetName(), err)
+			}
+		}
+	}
+
+	// Sync PRs with updated metadata
+	if err := actions.PushMetadataAndSyncPRs(ctx, branchNames); err != nil {
+		out.Warn("Failed to sync individual PRs: %v", err)
+	}
+
+	return nil
 }
