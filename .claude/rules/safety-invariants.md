@@ -36,3 +36,49 @@ return originalErr
 - Users expect to be on a branch after any operation completes (success or failure)
 - Detached HEAD is confusing and requires manual recovery
 - Cancelled operations should have minimal side effects
+
+## Worktree Operations Must Use Detached HEAD
+
+**Temporary worktrees must NEVER check out shared branches (like trunk/main) directly.**
+
+This applies to: combination analysis, merge validation, CI validation, compatibility checks, and any exploratory operation that creates merge commits.
+
+### Why This Matters
+
+Git worktrees share refs with the parent repository. If a worktree checks out `main` and creates commits (especially merges), those commits update `refs/heads/main` globally, affecting the user's main workspace.
+
+### Implementation Pattern
+
+```go
+// WRONG - can modify shared branch refs
+session, _ := wtExecutor.CreateSession(ctx, opts)
+session.Engine.CheckoutBranch(ctx, trunk)  // Now on main!
+session.Engine.MergeMultiple(...)          // Updates refs/heads/main!
+
+// CORRECT - always stay detached
+session, _ := wtExecutor.CreateSession(ctx, opts)
+// Worktree is already at detached HEAD from CreateSession
+// If you need the latest trunk, use ResetHard (keeps HEAD detached):
+session.Engine.ResetHard(ctx, trunk.GetName())
+session.Engine.MergeMultiple(...)  // Creates commits at detached HEAD only
+```
+
+### When Checking Out Branches in Worktrees
+
+If you must checkout a branch in a worktree (e.g., for pushing), create a NEW branch first:
+
+```go
+// Create a new branch at current HEAD (safe - new ref)
+session.Engine.CreateBranch(ctx, "my-temp-branch", "HEAD")
+session.Engine.CheckoutBranch(ctx, tempBranch)
+session.Engine.PushBranch(ctx, tempBranch, remote, opts)
+```
+
+### What Can Go Wrong
+
+1. User is on a feature branch in main repo
+2. Worktree is created (detached at trunk)
+3. Worktree pulls trunk (updates refs/heads/main globally)
+4. Worktree checks out main (succeeds because main not checked out elsewhere)
+5. Worktree creates merge commits (on main!)
+6. User switches to main - sees unexpected merge commits
