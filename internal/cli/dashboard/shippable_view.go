@@ -37,9 +37,13 @@ func (m *shippableModel) renderMain() string {
 	footerHeight := lipgloss.Height(footer)
 
 	// Cart panel height (only if items selected)
+	// Height: 1 header + N stacks + 1 summary + 2 padding/border
 	cartHeight := 0
 	if m.cache.selectedCount > 0 {
-		cartHeight = 8 // Fixed height for cart panel
+		cartHeight = 4 + m.cache.selectedCount // Dynamic based on selection count
+		if cartHeight > 10 {
+			cartHeight = 10 // Cap at reasonable max
+		}
 	}
 
 	contentHeight := m.Height - headerHeight - footerHeight - cartHeight
@@ -117,6 +121,8 @@ func (m *shippableModel) renderStackList(width, height int) string {
 		} else {
 			sb.WriteString(commonStyles.Dim.Render("No stacks found. Create one with `stackit create`"))
 		}
+		// Add help hints at bottom even when empty
+		sb.WriteString("\n\n" + style.ColorDim("↑/↓ navigate"))
 		return paneStyle.Render(sb.String())
 	}
 
@@ -133,16 +139,30 @@ func (m *shippableModel) renderStackList(width, height int) string {
 		}
 	}
 
+	// Add contextual shortcuts at bottom of pane
+	sb.WriteString("\n" + style.ColorDim("↑/↓ navigate  space select  enter expand  A all"))
+
 	return paneStyle.Render(sb.String())
 }
 
 // renderStackLine renders a single stack in the list.
-func (m *shippableModel) renderStackLine(stack shippable.Stack, selected bool) string {
-	// Selection checkbox
+func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) string {
+	// Cursor indicator for focused row
+	cursor := "  "
+	if focused {
+		cursor = style.ColorCyan("▸ ")
+	}
+
+	root := stack.RootBranch()
+
+	// Selection checkbox - show lock icon if locked
 	var checkbox string
-	if m.selected[stack.RootBranch()] {
+	switch {
+	case m.isLocked(root):
+		checkbox = style.ColorYellow("[🔒]")
+	case m.selected[root]:
 		checkbox = style.ColorCyan("[x]")
-	} else {
+	default:
 		checkbox = "[ ]"
 	}
 
@@ -150,30 +170,50 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, selected bool) s
 	statusIcon := m.getStatusIcon(stack.Status)
 
 	// Stack title: use cached title (computed at refresh time)
-	name := m.cache.stackTitles[stack.RootBranch()]
+	name := m.cache.stackTitles[root]
 	if name == "" {
-		name = stack.RootBranch() // Fallback if cache not populated
+		name = root // Fallback if cache not populated
 	}
 
-	// Truncate long titles to prevent layout issues
-	maxNameLen := 50
+	// Only show branch count if more than 1 branch
+	branchCount := ""
+	if count := stack.BranchCount(); count > 1 {
+		branchCount = fmt.Sprintf("(%d branches)", count)
+	}
+
+	// Expand indicator (only show if stack has multiple branches)
+	expandIndicator := ""
+	if stack.BranchCount() > 1 {
+		expandIndicator = "▶"
+		if m.expanded[root] {
+			expandIndicator = "▼"
+		}
+	}
+
+	// Calculate max name length based on available pane width
+	// Account for: cursor(2) + checkbox(3) + space(1) + icon(2) + space(1) + branchCount + expandIndicator + padding(4)
+	paneWidth := m.Width / 2
+	overhead := 2 + 3 + 1 + 2 + 1 + len(branchCount) + len(expandIndicator) + 4
+	maxNameLen := paneWidth - overhead
+	if maxNameLen < 20 {
+		maxNameLen = 20 // Minimum readable length
+	}
+
+	// Truncate if needed
 	if len(name) > maxNameLen {
 		name = name[:maxNameLen-3] + "..."
 	}
 
-	branchCount := fmt.Sprintf("(%d branches)", stack.BranchCount())
-
-	// Expand indicator
-	expandIndicator := "▶"
-	if m.expanded[stack.RootBranch()] {
-		expandIndicator = "▼"
+	// Build line
+	var line string
+	if branchCount != "" {
+		line = fmt.Sprintf("%s%s %s %s %s %s", cursor, checkbox, statusIcon, name, branchCount, expandIndicator)
+	} else {
+		line = fmt.Sprintf("%s%s %s %s", cursor, checkbox, statusIcon, name)
 	}
 
-	// Build line
-	line := fmt.Sprintf("%s %s %s %s %s", checkbox, statusIcon, name, branchCount, expandIndicator)
-
-	// Highlight if selected
-	if selected {
+	// Highlight if focused
+	if focused {
 		line = selectedRowStyle.Render(line)
 	}
 
@@ -244,19 +284,16 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 		totalBranches += s.BranchCount()
 	}
 
-	// Cart header with count badge
+	var sb strings.Builder
+
+	// Header row: title, count badge, and actions
 	cartHeader := paneHeaderStyle.Render("SHIPPING")
 	countBadge := countBadgeStyle.Render(fmt.Sprintf("%d stacks", len(selected)))
 
-	// Build cart items inline
-	itemParts := make([]string, 0, len(selected))
-	for _, s := range selected {
-		statusIcon := m.getStatusIcon(s.Status)
-		itemParts = append(itemParts, fmt.Sprintf("%s %s", statusIcon, s.RootBranch()))
-	}
-	items := strings.Join(itemParts, "  •  ")
+	// Ship button (all selected stacks are shippable by design now)
+	shipAction := buttonPrimary.Render("[s] Ship")
 
-	// Combination status (compact)
+	// Combination status
 	var analysisStatus string
 	if m.combination != nil {
 		if m.combination.Combinable {
@@ -264,31 +301,42 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 		} else {
 			analysisStatus = style.ColorRed("✗ Conflicts")
 		}
-	} else {
-		analysisStatus = style.ColorDim("[a] analyze")
+	} else if len(selected) > 1 {
+		analysisStatus = style.ColorDim("[a] analyze compatibility")
 	}
 
-	// Ship button
-	canShip := true
+	// Header line
+	headerLine := fmt.Sprintf("%s %s  %s  %s", cartHeader, countBadge, shipAction, analysisStatus)
+	sb.WriteString(headerLine + "\n")
+
+	// Vertical list of selected stacks
 	for _, s := range selected {
-		if !s.IsShippable() {
-			canShip = false
-			break
+		statusIcon := m.getStatusIcon(s.Status)
+		// Use cached title
+		title := m.cache.stackTitles[s.RootBranch()]
+		if title == "" {
+			title = s.RootBranch()
 		}
+		// Truncate if needed
+		maxLen := width - 10
+		if maxLen > 60 {
+			maxLen = 60
+		}
+		if len(title) > maxLen {
+			title = title[:maxLen-3] + "..."
+		}
+
+		branchInfo := ""
+		if s.BranchCount() > 1 {
+			branchInfo = style.ColorDim(fmt.Sprintf(" (%d branches)", s.BranchCount()))
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s%s\n", statusIcon, title, branchInfo))
 	}
 
-	var shipAction string
-	if canShip {
-		shipAction = buttonPrimary.Render("[s] Ship")
-	} else {
-		shipAction = buttonDisabled.Render("[s] Ship") + " " + style.ColorDim("(not ready)")
-	}
+	// Summary line
+	sb.WriteString(style.ColorDim(fmt.Sprintf("  Total: %d branches", totalBranches)))
 
-	// Build the panel content as a horizontal layout
-	content := fmt.Sprintf("%s %s    %s    %s (%d branches)    %s",
-		cartHeader, countBadge, items, analysisStatus, totalBranches, shipAction)
-
-	return paneStyle.Render(content)
+	return paneStyle.Render(sb.String())
 }
 
 // renderStackDetails renders detailed info about a stack with tree view.
@@ -456,20 +504,16 @@ func (m *shippableModel) formatBlockingReason(reason shippable.BlockingReason) s
 	}
 }
 
-// renderFooter renders the footer with keyboard shortcuts and refresh status.
+// renderFooter renders the footer with global shortcuts and refresh status.
 func (m *shippableModel) renderFooter() string {
 	// During async operations, show progress bar
 	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
 		return m.renderProgressFooter()
 	}
 
+	// Global shortcuts only (pane-specific shortcuts shown in their panes)
 	shortcuts := []string{
-		"[Space] Toggle",
-		"[Enter] Expand",
-		"[j/k] Navigate",
-		"[s] Ship",
-		"[p] Publish",
-		"[a] Analyze",
+		"[p] Publish all",
 		"[r] Refresh",
 		"[?] Help",
 		"[q] Quit",
