@@ -40,7 +40,8 @@ var (
 			Foreground(lipgloss.Color(style.ColorAccent))
 
 	selectedRowStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(colorBackground))
+				Background(lipgloss.Color(colorBackground)).
+				Bold(true)
 
 	helpTitleStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -91,11 +92,6 @@ var (
 	buttonPrimary = lipgloss.NewStyle().
 			Background(lipgloss.Color(style.ColorSuccessAlt)).
 			Foreground(lipgloss.Color(colorBlack)).
-			Padding(0, 2)
-
-	buttonDisabled = lipgloss.NewStyle().
-			Background(lipgloss.Color(colorDarkGray)).
-			Foreground(lipgloss.Color(colorGray)).
 			Padding(0, 2)
 
 	// Pane styles (moved from inline)

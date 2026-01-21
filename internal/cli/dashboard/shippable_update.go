@@ -133,6 +133,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.progressStep = 0
 		m.progressTotal = 0
 		m.progressMessage = ""
+		m.unlockAllStacks()
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -186,13 +187,9 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Select):
 		m.toggleSelection()
-		// Clear previous combination result when selection changes
+		// Clear previous combination result and trigger background analysis
 		m.combination = nil
-		// Auto-analyze if multiple stacks selected
-		if m.selectedCount() >= 2 {
-			return m.startCombinationAnalysis()
-		}
-		return m, nil
+		return m, m.backgroundAnalyze()
 
 	case key.Matches(msg, keys.Expand):
 		m.toggleExpand()
@@ -200,13 +197,9 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.SelectAll):
 		m.selectAllShippable()
-		// Clear previous combination result when selection changes
+		// Clear previous combination result and trigger background analysis
 		m.combination = nil
-		// Auto-analyze if multiple stacks selected
-		if m.selectedCount() >= 2 {
-			return m.startCombinationAnalysis()
-		}
-		return m, nil
+		return m, m.backgroundAnalyze()
 
 	case key.Matches(msg, keys.Ship):
 		return m.startShip()
@@ -310,7 +303,7 @@ func (m *shippableModel) executeShip() (tea.Model, tea.Cmd) {
 	}
 }
 
-// startCombinationAnalysis checks if selected stacks can be combined.
+// startCombinationAnalysis checks if selected stacks can be combined (blocking UI).
 func (m *shippableModel) startCombinationAnalysis() (tea.Model, tea.Cmd) {
 	selected := m.selectedStacks()
 	if len(selected) == 0 {
@@ -329,10 +322,30 @@ func (m *shippableModel) startCombinationAnalysis() (tea.Model, tea.Cmd) {
 	}
 }
 
+// backgroundAnalyze runs combination analysis in the background without blocking UI.
+// Returns nil cmd if there are fewer than 2 stacks selected (nothing to analyze).
+func (m *shippableModel) backgroundAnalyze() tea.Cmd {
+	// Only analyze if we have 2+ selected stacks
+	if m.cache.selectedCount < 2 {
+		return nil
+	}
+
+	// Use cached selected stacks to avoid iterating again
+	selected := m.cache.selectedStacks
+
+	return func() tea.Msg {
+		result, err := m.combiner.CheckCombination(m.ctx.Context, selected, shippable.CheckCombinationOptions{
+			RunLocalCI: m.options.RunLocalCI,
+		})
+		return combinationCompleteMsg{result: result, err: err}
+	}
+}
+
 // startPublish initiates the restack + submit workflow for all branches.
 func (m *shippableModel) startPublish() (tea.Model, tea.Cmd) {
 	m.state = statePublishing
 	m.statusMessage = "Restacking and submitting..."
+	m.lockAllStacks()
 
 	return m, func() tea.Msg {
 		eng := m.engine

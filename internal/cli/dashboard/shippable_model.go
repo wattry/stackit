@@ -80,6 +80,7 @@ type shippableModel struct {
 	selectedIndex int
 	expanded      map[string]bool  // Tracks which stacks are expanded
 	selected      map[string]bool  // Tracks which stacks are selected for shipping
+	locked        map[string]bool  // Tracks which stacks are locked (during publish/ship)
 	focusedStack  *shippable.Stack // Currently focused stack for detail view
 
 	// Status
@@ -195,6 +196,7 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 		combiner: combiner,
 		expanded: make(map[string]bool),
 		selected: make(map[string]bool),
+		locked:   make(map[string]bool),
 		state:    stateLoading,
 		options:  opts,
 		progress: p,
@@ -212,17 +214,6 @@ func (m *shippableModel) selectedStacks() []shippable.Stack {
 	return result
 }
 
-// selectedCount returns the number of selected stacks.
-func (m *shippableModel) selectedCount() int {
-	count := 0
-	for _, v := range m.selected {
-		if v {
-			count++
-		}
-	}
-	return count
-}
-
 // currentStack returns the currently focused stack, or nil if none.
 func (m *shippableModel) currentStack() *shippable.Stack {
 	if m.selectedIndex >= 0 && m.selectedIndex < len(m.stacks) {
@@ -231,13 +222,44 @@ func (m *shippableModel) currentStack() *shippable.Stack {
 	return nil
 }
 
+// isLocked returns true if the stack is currently locked (during publish/ship).
+func (m *shippableModel) isLocked(rootBranch string) bool {
+	return m.locked[rootBranch]
+}
+
+// lockAllStacks locks all stacks to prevent selection during operations.
+func (m *shippableModel) lockAllStacks() {
+	for _, s := range m.stacks {
+		m.locked[s.RootBranch()] = true
+	}
+}
+
+// unlockAllStacks unlocks all stacks after an operation completes.
+func (m *shippableModel) unlockAllStacks() {
+	m.locked = make(map[string]bool)
+}
+
 // toggleSelection toggles selection of the current stack.
+// Only shippable stacks (green check) can be selected.
+// Locked stacks cannot be selected.
 func (m *shippableModel) toggleSelection() {
 	stack := m.currentStack()
 	if stack == nil {
 		return
 	}
+
 	root := stack.RootBranch()
+
+	// Locked stacks cannot be selected
+	if m.isLocked(root) {
+		return
+	}
+
+	// Only allow selecting shippable stacks
+	if !stack.IsShippable() {
+		return
+	}
+
 	m.selected[root] = !m.selected[root]
 	m.updateSelectionCache()
 }
@@ -252,11 +274,12 @@ func (m *shippableModel) toggleExpand() {
 	m.expanded[root] = !m.expanded[root]
 }
 
-// selectAllShippable selects all shippable stacks.
+// selectAllShippable selects all shippable stacks that are not locked.
 func (m *shippableModel) selectAllShippable() {
 	for _, s := range m.stacks {
-		if s.IsShippable() {
-			m.selected[s.RootBranch()] = true
+		root := s.RootBranch()
+		if s.IsShippable() && !m.isLocked(root) {
+			m.selected[root] = true
 		}
 	}
 	m.updateSelectionCache()
