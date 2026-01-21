@@ -199,11 +199,8 @@ func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.Restac
 		}
 
 		msg := fmt.Sprintf("%s%s %s", style.ColorBranchName(branch, isCurrent), prInfo, reason)
-		if reason == common.ReasonNoRestackNeeded && parent != "" {
-			msg = fmt.Sprintf("%s%s does not need to be restacked on %s.",
-				style.ColorBranchName(branch, isCurrent),
-				prInfo,
-				style.ColorBranchName(parent, false))
+		if reason == common.ReasonNoRestackNeeded {
+			msg = fmt.Sprintf("%s%s up to date", style.ColorBranchName(branch, isCurrent), prInfo)
 		}
 		h.Output.Info("  %s", msg)
 	case handlers.RestackConflict:

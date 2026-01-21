@@ -244,11 +244,8 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 			}
 
 			msg := fmt.Sprintf("%s%s %s", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo, reason)
-			if reason == common.ReasonNoRestackNeeded && event.Parent != "" {
-				msg = fmt.Sprintf("%s%s does not need to be restacked on %s.",
-					style.ColorBranchName(event.Branch, event.IsCurrent),
-					prInfo,
-					style.ColorBranchName(event.Parent, false))
+			if reason == common.ReasonNoRestackNeeded {
+				msg = fmt.Sprintf("%s%s up to date", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo)
 			}
 			h.Output.Info("  %s", msg)
 		}
@@ -491,11 +488,8 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) (deta
 				reason = common.ReasonFrozen
 			}
 
-			if reason == common.ReasonNoRestackNeeded && event.Parent != "" {
-				return fmt.Sprintf("%s%s does not need to be restacked on %s.",
-					displayName,
-					prInfo,
-					event.Parent), false
+			if reason == common.ReasonNoRestackNeeded {
+				return fmt.Sprintf("%s%s up to date", displayName, prInfo), false
 			}
 			return fmt.Sprintf("%s%s %s", displayName, prInfo, reason), false
 		case syncAction.EventSkipped:
@@ -606,11 +600,8 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 			reason = common.ReasonFrozen
 		}
 
-		if reason == common.ReasonNoRestackNeeded && parent != "" {
-			return fmt.Sprintf("%s%s does not need to be restacked on %s.",
-				displayName,
-				prInfo,
-				parent)
+		if reason == common.ReasonNoRestackNeeded {
+			return fmt.Sprintf("%s%s up to date", displayName, prInfo)
 		}
 		return fmt.Sprintf("%s%s %s", displayName, prInfo, reason)
 	case syncAction.RestackConflict:
