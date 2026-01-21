@@ -68,20 +68,19 @@ func TestTrackAction(t *testing.T) {
 		require.Contains(t, err.Error(), "must be tracked")
 	})
 
-	t.Run("track with --force returns error when no tracked ancestors exist", func(t *testing.T) {
+	t.Run("track with --force succeeds using trunk as ancestor", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit().
 			CreateBranchQuiet("feature")
 
-		// Untrack everything so there are no tracked ancestors
-		// (only trunk exists, and it's excluded by the FindMostRecentTrackedAncestors logic)
+		// With --force, auto-detects trunk as the ancestor
 		err := track.Action(s.Context, track.Options{
 			BranchName: "feature",
 			Force:      true,
 		}, nil)
-		// This should succeed because trunk is a valid ancestor
-		// Let's test a different scenario where we have a branch that's not an ancestor
 		require.NoError(t, err)
+		require.True(t, s.Engine.GetBranch("feature").IsTracked())
+		require.Equal(t, "main", s.Engine.GetBranch("feature").GetParent().GetName())
 	})
 
 	t.Run("non-interactive mode requires --parent or --force", func(t *testing.T) {
