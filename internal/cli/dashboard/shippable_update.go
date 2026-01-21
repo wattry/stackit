@@ -78,6 +78,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errorMessage = ""
 		m.analysis = msg.result
 		m.stacks = msg.result.Stacks
+		m.rebuildCache() // Precompute titles, annotations, and tree renderer
 		m.updateFocusedStack()
 		return m, nil
 
@@ -92,6 +93,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.analysis = msg.result
 		m.stacks = msg.result.Stacks
+		m.rebuildCache() // Precompute titles, annotations, and tree renderer
 		m.statusMessage = "Analysis complete"
 		return m, nil
 

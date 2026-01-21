@@ -28,11 +28,17 @@ func (m *shippableModel) View() string {
 
 // renderMain renders the main dashboard view.
 func (m *shippableModel) renderMain() string {
-	// Calculate dimensions
-	headerHeight := 3
-	footerHeight := 4
+	// Build sections first, then calculate heights dynamically
+	header := m.renderHeader()
+	footer := m.renderFooter()
+
+	// Calculate heights using lipgloss.Height() for accurate measurement
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+
+	// Cart panel height (only if items selected)
 	cartHeight := 0
-	if m.selectedCount() > 0 {
+	if m.cache.selectedCount > 0 {
 		cartHeight = 8 // Fixed height for cart panel
 	}
 
@@ -44,11 +50,9 @@ func (m *shippableModel) renderMain() string {
 	leftWidth := m.Width / 2
 	rightWidth := m.Width - leftWidth
 
-	// Build sections
-	header := m.renderHeader()
+	// Build panes with calculated dimensions
 	leftPane := m.renderStackList(leftWidth, contentHeight)
 	rightPane := m.renderDetailsPanel(rightWidth, contentHeight)
-	footer := m.renderFooter()
 
 	// Combine stack viewer panes (top row)
 	stackViewer := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
@@ -58,7 +62,7 @@ func (m *shippableModel) renderMain() string {
 	sections = append(sections, header, stackViewer)
 
 	// Add cart panel if items selected (bottom row)
-	if m.selectedCount() > 0 {
+	if m.cache.selectedCount > 0 {
 		cartPane := m.renderCartPanel(m.Width, cartHeight)
 		sections = append(sections, cartPane)
 	}
@@ -91,17 +95,14 @@ func (m *shippableModel) renderHeader() string {
 			m.analysis.TotalStacks(), m.analysis.ShippableCount))
 	}
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, false, true, false).
+	return headerBorderStyle.
 		Width(m.Width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Left, title, "  ", status))
 }
 
 // renderStackList renders the list of stacks.
 func (m *shippableModel) renderStackList(width, height int) string {
-	paneStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, true, false, false).
-		Padding(0, 1).
+	paneStyle := leftPaneStyle.
 		Width(width).
 		Height(height)
 
@@ -148,12 +149,10 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, selected bool) s
 	// Status icon
 	statusIcon := m.getStatusIcon(stack.Status)
 
-	// Stack title: use commit subject instead of branch name
-	name := stack.RootBranch() // Default fallback
-	if branch := m.engine.GetBranch(stack.RootBranch()); branch.GetName() != "" {
-		if title := branch.DefaultPRTitle(); title != "" {
-			name = title
-		}
+	// Stack title: use cached title (computed at refresh time)
+	name := m.cache.stackTitles[stack.RootBranch()]
+	if name == "" {
+		name = stack.RootBranch() // Fallback if cache not populated
 	}
 
 	// Truncate long titles to prevent layout issues
@@ -183,16 +182,15 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, selected bool) s
 
 // renderBranchLine renders a single branch within an expanded stack.
 func (m *shippableModel) renderBranchLine(branchName string) string {
-	branch := m.engine.GetBranch(branchName)
-	if branch.GetName() == "" {
+	// Use cached annotation for PR info
+	ann, hasCached := m.cache.branchAnnotations[branchName]
+	if !hasCached {
 		return style.ColorDim("├── " + branchName)
 	}
 
-	// Get PR info if available
-	prStatus, err := branch.GetPRSubmissionStatus()
 	var prInfo string
-	if err == nil && prStatus.PRNumber != nil && *prStatus.PRNumber > 0 {
-		prInfo = fmt.Sprintf(" #%d", *prStatus.PRNumber)
+	if ann.PRNumber != nil && *ann.PRNumber > 0 {
+		prInfo = fmt.Sprintf(" #%d", *ann.PRNumber)
 	}
 
 	return style.ColorDim("├── ") + branchName + style.ColorDim(prInfo)
@@ -216,8 +214,7 @@ func (m *shippableModel) getStatusIcon(status shippable.Status) string {
 
 // renderDetailsPanel renders the right-side details panel (always shows stack details).
 func (m *shippableModel) renderDetailsPanel(width, height int) string {
-	paneStyle := lipgloss.NewStyle().
-		Padding(0, 1).
+	paneStyle := rightPaneStyle.
 		Width(width).
 		Height(height)
 
@@ -236,13 +233,12 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 
 // renderCartPanel renders the bottom cart panel when stacks are selected.
 func (m *shippableModel) renderCartPanel(width, height int) string {
-	paneStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), true, false, false, false).
-		Padding(0, 1).
+	paneStyle := cartPaneStyle.
 		Width(width).
 		Height(height)
 
-	selected := m.selectedStacks()
+	// Use cached selected stacks
+	selected := m.cache.selectedStacks
 	totalBranches := 0
 	for _, s := range selected {
 		totalBranches += s.BranchCount()
@@ -250,11 +246,7 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 
 	// Cart header with count badge
 	cartHeader := paneHeaderStyle.Render("SHIPPING")
-	countBadge := lipgloss.NewStyle().
-		Background(lipgloss.Color("6")).
-		Foreground(lipgloss.Color("0")).
-		Padding(0, 1).
-		Render(fmt.Sprintf("%d stacks", len(selected)))
+	countBadge := countBadgeStyle.Render(fmt.Sprintf("%d stacks", len(selected)))
 
 	// Build cart items inline
 	itemParts := make([]string, 0, len(selected))
@@ -305,12 +297,10 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 
 	// Header: show commit title with status badge, branch name dimmed below
 	statusBadge := m.renderStatusBadge(stack.Status)
-	branch := m.engine.GetBranch(stack.RootBranch())
-	title := stack.RootBranch() // Default to branch name
-	if branch.GetName() != "" {
-		if prTitle := branch.DefaultPRTitle(); prTitle != "" {
-			title = prTitle
-		}
+	// Use cached title (computed at refresh time)
+	title := m.cache.stackTitles[stack.RootBranch()]
+	if title == "" {
+		title = stack.RootBranch() // Fallback if cache not populated
 	}
 	sb.WriteString(commonStyles.Bold.Render(title) + " " + statusBadge + "\n")
 	sb.WriteString(style.ColorDim(stack.RootBranch()) + "\n")
@@ -381,18 +371,20 @@ func (m *shippableModel) renderQuickStats(stack *shippable.Stack) string {
 
 // renderStackTree renders the stack as a tree visualization.
 func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
-	// Create a filter that only includes branches in this stack
-	stackBranches := make(map[string]bool)
-	for _, branch := range stack.Stack.AllBranches {
-		stackBranches[branch] = true
+	// Use cached tree renderer if available, otherwise create one
+	var renderer *tree.StackTreeRenderer
+	if m.cache.treeRenderer != nil {
+		renderer = m.cache.treeRenderer
+	} else {
+		// Fallback: create a filtered renderer (shouldn't happen after refresh)
+		stackBranches := make(map[string]bool)
+		for _, branch := range stack.Stack.AllBranches {
+			stackBranches[branch] = true
+		}
+		renderer = tui.NewStackTreeRendererWithFilter(m.engine, func(branchName string) bool {
+			return stackBranches[branchName]
+		})
 	}
-
-	filter := func(branchName string) bool {
-		return stackBranches[branchName]
-	}
-
-	// Create tree renderer with filter
-	renderer := tui.NewStackTreeRendererWithFilter(m.engine, filter)
 
 	// Build a map of blocking PRs by branch for quick lookup
 	blockingByBranch := make(map[string]*shippable.BlockingPR)
@@ -401,15 +393,15 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 		blockingByBranch[bp.Branch] = bp
 	}
 
-	// Add annotations for each branch
+	// Add annotations for each branch using cached data
 	for _, branchName := range stack.Stack.AllBranches {
-		branch := m.engine.GetBranch(branchName)
-		if branch.GetName() == "" {
+		// Start with cached annotation (computed at refresh time)
+		ann, hasCached := m.cache.branchAnnotations[branchName]
+		if !hasCached {
 			continue
 		}
-		ann := tui.GetBranchAnnotation(m.engine, branch)
 
-		// Add CI/review status from blocking PRs
+		// Overlay CI/review status from blocking PRs
 		if bp, blocked := blockingByBranch[branchName]; blocked {
 			switch bp.Reason {
 			case shippable.ReasonCIFailing:
@@ -571,12 +563,13 @@ func (m *shippableModel) renderHelp() string {
 
 	sb.WriteString("\n" + commonStyles.Dim.Render("Press any key to close"))
 
-	return lipgloss.NewStyle().Padding(2, 4).Render(sb.String())
+	return dialogStyle.Render(sb.String())
 }
 
 // renderConfirmation renders the ship confirmation dialog.
 func (m *shippableModel) renderConfirmation() string {
-	selected := m.selectedStacks()
+	// Use cached selected stacks
+	selected := m.cache.selectedStacks
 	totalBranches := 0
 	for _, s := range selected {
 		totalBranches += s.BranchCount()
@@ -600,5 +593,5 @@ func (m *shippableModel) renderConfirmation() string {
 	sb.WriteString("\n" + strings.Repeat("─", 40) + "\n")
 	sb.WriteString("[Enter/y] Confirm  [Esc/n] Cancel\n")
 
-	return lipgloss.NewStyle().Padding(2, 4).Render(sb.String())
+	return dialogStyle.Render(sb.String())
 }

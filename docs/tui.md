@@ -8,6 +8,77 @@
 - `internal/tui/components/tree/tree.go` - Stack tree renderer
 - `internal/tui/runner.go` - Runner, SafeCmd, Send utilities
 
+## Elm Architecture Foundation
+
+Bubble Tea implements The Elm Architecture (TEA), a functional pattern with three core components:
+
+- **Model**: Single source of truth for all application state
+- **Update**: Processes messages, returns `(Model, Cmd)` - state changes happen only here
+- **View**: Pure render function returning a string - no side effects
+
+This creates predictable, testable state management. All user interactions flow through typed messages, and the view is always a function of the current model state.
+
+## Performance Rules
+
+**Critical**: Bubble Tea can only process messages as fast as your `Update()` and `View()` methods execute. Violating these rules causes UI lag and message queue buildup.
+
+### Never Do Expensive Work in Update/View
+
+```go
+// BAD - blocks the event loop
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    result := fetchFromAPI()  // Blocks UI!
+    m.data = result
+    return m, nil
+}
+
+// GOOD - offload to tea.Cmd
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    return m, m.fetchData()
+}
+
+func (m Model) fetchData() tea.Cmd {
+    return func() tea.Msg {
+        result := fetchFromAPI()  // Runs in goroutine
+        return dataFetchedMsg{result}
+    }
+}
+```
+
+### Never Use Goroutines Directly
+
+Always wrap async operations in `tea.Cmd`. Direct goroutines bypass the event loop and cause race conditions.
+
+```go
+// BAD - race condition
+go func() {
+    m.data = fetchData()  // Modifies state outside event loop!
+}()
+
+// GOOD - use tea.Cmd
+return m, func() tea.Msg {
+    return dataMsg{fetchData()}
+}
+```
+
+## Message Ordering
+
+**Gotcha**: Commands execute concurrently, so their resulting messages arrive in unpredictable order. User input remains ordered (single routine).
+
+```go
+// These may complete in any order
+return m, tea.Batch(
+    fetchUserCmd,
+    fetchSettingsCmd,
+)
+
+// Use tea.Sequence when order matters
+return m, tea.Sequence(
+    validateCmd,
+    submitCmd,  // Only runs after validate completes
+)
+```
+
 ## Architecture
 
 ### Handler Pattern
@@ -229,3 +300,132 @@ For operations that might fail, run validation early and include results in the 
 ### Live Validation
 
 Pass `ValidateSelection` callback to `LogOptions`. The LogModel handles debouncing and displays results in the footer.
+
+### Hierarchical Model Design
+
+For complex applications, organize models as a tree where the root model routes messages to children:
+
+```go
+type RootModel struct {
+    core.BaseModel
+    activeView  viewType
+    listModel   *ListModel
+    detailModel *DetailModel
+}
+
+func (m *RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    // 1. Handle global keys directly
+    if key, ok := msg.(tea.KeyMsg); ok {
+        switch key.String() {
+        case core.KeyCtrlC:
+            return m, tea.Quit
+        }
+    }
+
+    // 2. Broadcast resize to all children
+    if _, ok := msg.(tea.WindowSizeMsg); ok {
+        m.listModel.Update(msg)
+        m.detailModel.Update(msg)
+    }
+
+    // 3. Route other messages to active child
+    switch m.activeView {
+    case viewList:
+        return m.updateList(msg)
+    case viewDetail:
+        return m.updateDetail(msg)
+    }
+    return m, nil
+}
+```
+
+### Receiver Type Considerations
+
+While Bubble Tea examples use value receivers (functional style), pointer receivers enable:
+- Persistent state changes in `Init()` and helper methods
+- Shared state between model and handler
+
+**Warning**: Avoid modifying model state outside the Update function - this creates race conditions.
+
+## Layout Best Practices
+
+### Dynamic Dimensions
+
+Use lipgloss's `Height()` and `Width()` methods instead of hardcoded offsets:
+
+```go
+// BAD - breaks when adding borders/padding
+contentHeight := m.Height - 5
+
+// GOOD - calculate from rendered components
+headerHeight := lipgloss.Height(headerView)
+footerHeight := lipgloss.Height(footerView)
+contentHeight := m.Height - headerHeight - footerHeight
+```
+
+### Layer-Based Rendering
+
+Render components in consistent layers:
+
+```go
+func (m Model) View() string {
+    header := m.renderHeader()
+    content := m.renderContent()
+    footer := m.renderFooter()
+
+    return lipgloss.JoinVertical(
+        lipgloss.Left,
+        header,
+        content,
+        footer,
+    )
+}
+```
+
+## Debugging
+
+### Message Inspection
+
+Dump messages to a file during development for visibility into message flow:
+
+```go
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    if os.Getenv("DEBUG_TUI") != "" {
+        f, _ := os.OpenFile("/tmp/tui-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+        fmt.Fprintf(f, "%T: %+v\n", msg, msg)
+        f.Close()
+    }
+    // ... rest of update
+}
+```
+
+Then tail in another terminal: `tail -f /tmp/tui-debug.log`
+
+### Testing with teatest
+
+Use Charm's teatest for end-to-end testing:
+
+```go
+func TestModel(t *testing.T) {
+    m := NewModel()
+    tm := teatest.NewTestModel(t, m)
+
+    tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+    tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("test")})
+
+    out := tm.FinalModel(t).(Model)
+    assert.Equal(t, "expected", out.value)
+}
+```
+
+## Terminal Recovery
+
+Panics in commands don't properly reset terminal state, leaving the terminal in raw mode. If this happens, run `reset` in the terminal to restore normal operation.
+
+Use `tui.SafeCmd` for panic recovery in commands:
+
+```go
+cmd := tui.SafeCmd("operation-name", logger, func() tea.Msg {
+    return riskyOperation()  // Panic is caught and logged
+})
+```
