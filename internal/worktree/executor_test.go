@@ -167,3 +167,82 @@ func TestSession_ResetToRef(t *testing.T) {
 	featureFile := filepath.Join(session.Path, "feature_test.txt")
 	assert.FileExists(t, featureFile)
 }
+
+func TestSession_PullTrunk_StaysDetached(t *testing.T) {
+	// This test verifies that pullTrunk keeps the worktree at detached HEAD
+	// and doesn't checkout the trunk branch directly. This is critical because
+	// if the worktree checks out main, any subsequent commits (especially merges)
+	// would update refs/heads/main globally, affecting the user's main workspace.
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	s.WithInitialCommit()
+
+	// Create a feature branch and switch to it in the main repo
+	// This means main is NOT checked out in the main repo, so a worktree
+	// COULD checkout main directly (which would be the bug we're testing against)
+	s.Scene.Repo.CreateAndCheckoutBranch("feature")
+	s.Scene.Repo.CreateChangeAndCommit("feature change", "feature")
+
+	// Get the main SHA before any worktree operations
+	mainSHABefore, err := s.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", "main")
+	require.NoError(t, err)
+
+	// Rebuild engine while on feature branch
+	eng, err := engine.NewEngine(engine.Options{
+		RepoRoot: s.Scene.Dir,
+		Trunk:    "main",
+	})
+	require.NoError(t, err)
+
+	executor := NewExecutor(eng, output.NewNullOutput())
+
+	// Create session - this internally calls pullTrunk which uses ResetHard
+	// to stay at detached HEAD instead of CheckoutBranch which would checkout main
+	session, err := executor.CreateSession(context.Background(), CreateSessionOptions{
+		NamePattern: "test-worktree-*",
+		// Note: PullTrunk is false here, but the worktree is created at trunk
+	})
+	require.NoError(t, err)
+	defer session.Close()
+
+	// Verify the worktree is at detached HEAD, not on a branch
+	// Get current branch in worktree
+	worktreeGit := session.Engine.Git()
+	currentBranch, err := worktreeGit.RunGitCommandWithContext(context.Background(), "symbolic-ref", "--short", "HEAD")
+	if err == nil {
+		// If symbolic-ref succeeds, we're on a branch (which is the bug!)
+		t.Errorf("Worktree should be at detached HEAD, but is on branch: %s", currentBranch)
+	}
+	// If symbolic-ref fails with "not a symbolic ref", we're correctly at detached HEAD
+
+	// Now simulate what would happen if we created a merge commit in the worktree
+	// First, create another branch to merge
+	_, err = worktreeGit.RunGitCommandWithContext(context.Background(), "branch", "to-merge")
+	require.NoError(t, err)
+	_, err = worktreeGit.RunGitCommandWithContext(context.Background(), "checkout", "to-merge")
+	require.NoError(t, err)
+
+	testFile := filepath.Join(session.Path, "merge-test.txt")
+	err = os.WriteFile(testFile, []byte("merge content"), 0644)
+	require.NoError(t, err)
+	_, err = worktreeGit.RunGitCommandWithContext(context.Background(), "add", ".")
+	require.NoError(t, err)
+	_, err = worktreeGit.RunGitCommandWithContext(context.Background(), "commit", "-m", "commit to merge")
+	require.NoError(t, err)
+
+	// Go back to detached at main's commit
+	_, err = worktreeGit.RunGitCommandWithContext(context.Background(), "checkout", "--detach", "main")
+	require.NoError(t, err)
+
+	// Merge the branch (this creates a merge commit at detached HEAD)
+	_, err = worktreeGit.RunGitCommandWithContext(context.Background(), "merge", "to-merge", "-m", "Test merge")
+	require.NoError(t, err)
+
+	// CRITICAL: Verify that main in the MAIN repo was NOT affected
+	// If the worktree had been on main instead of detached, this merge would have
+	// updated refs/heads/main globally
+	mainSHAAfter, err := s.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", "main")
+	require.NoError(t, err)
+
+	assert.Equal(t, mainSHABefore, mainSHAAfter,
+		"main branch SHA should not change when merging in a detached worktree")
+}

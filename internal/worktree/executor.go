@@ -118,10 +118,14 @@ func (s *Session) pullTrunk(ctx context.Context) error {
 		return fmt.Errorf("trunk could not be fast-forwarded (diverged from remote)")
 	}
 
-	// Ensure worktree is checked out at the updated trunk tip
+	// IMPORTANT: Use ResetHard instead of CheckoutBranch to stay at detached HEAD.
+	// CheckoutBranch would put us ON the trunk branch, and any subsequent commits
+	// (especially merges) would update refs/heads/main globally, affecting the
+	// user's main workspace. ResetHard updates the working tree to match trunk
+	// while keeping HEAD detached (since the worktree was created with --detach).
 	trunk := s.Engine.Trunk()
-	if err := s.Engine.CheckoutBranch(ctx, trunk); err != nil {
-		return fmt.Errorf("failed to checkout trunk in worktree: %w", err)
+	if err := s.Engine.ResetHard(ctx, trunk.GetName()); err != nil {
+		return fmt.Errorf("failed to reset to trunk in worktree: %w", err)
 	}
 
 	return nil
