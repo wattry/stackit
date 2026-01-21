@@ -31,8 +31,6 @@ func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) 
 		return errors.ErrNotOnBranch
 	}
 
-	ctx.Output.Info("%s", currentBranch.GetName())
-
 	var targetBranch string
 	var err error
 
