@@ -11,6 +11,8 @@ import (
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
+	"stackit.dev/stackit/internal/tui"
+	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/core"
 )
 
@@ -18,8 +20,26 @@ const (
 	// autoRefreshInterval is the time between automatic refreshes
 	autoRefreshInterval = 30 * time.Second
 	// tickInterval is the interval for timer updates (for countdown display)
-	tickInterval = 1 * time.Second
+	// Using 5s instead of 1s to reduce render frequency while still showing useful countdown
+	tickInterval = 5 * time.Second
 )
+
+// renderCache stores precomputed data to avoid expensive git operations in the render loop.
+// This cache is rebuilt only on refresh, not on every render.
+type renderCache struct {
+	// stackTitles maps stack root branch to the display title (computed from commit subject)
+	stackTitles map[string]string
+
+	// branchAnnotations maps branch name to its tree annotation
+	branchAnnotations map[string]tree.BranchAnnotation
+
+	// treeRenderer is the pre-built tree renderer, reused across renders
+	treeRenderer *tree.StackTreeRenderer
+
+	// Cached selection state to avoid recomputing
+	selectedCount  int
+	selectedStacks []shippable.Stack
+}
 
 // dashboardState represents the current UI state of the dashboard.
 type dashboardState int
@@ -78,6 +98,9 @@ type shippableModel struct {
 
 	// Options
 	options ShippableOptions
+
+	// Render cache - rebuilt on refresh to avoid git operations in render loop
+	cache renderCache
 }
 
 // keyMap defines all keyboard shortcuts for the dashboard.
@@ -99,11 +122,11 @@ type keyMap struct {
 
 var keys = keyMap{
 	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
+		key.WithKeys(core.KeyUp, "k"),
 		key.WithHelp("↑/k", "move up"),
 	),
 	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
+		key.WithKeys(core.KeyDown, "j"),
 		key.WithHelp("↓/j", "move down"),
 	),
 	Select: key.NewBinding(
@@ -111,7 +134,7 @@ var keys = keyMap{
 		key.WithHelp("space", "toggle selection"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys("enter"),
+		key.WithKeys(core.KeyEnter),
 		key.WithHelp("enter", "expand/collapse"),
 	),
 	Ship: key.NewBinding(
@@ -135,15 +158,15 @@ var keys = keyMap{
 		key.WithHelp("?", "help"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
+		key.WithKeys(core.KeyQuit, core.KeyCtrlC),
 		key.WithHelp("q", "quit"),
 	),
 	Confirm: key.NewBinding(
-		key.WithKeys("enter", "y"),
+		key.WithKeys(core.KeyEnter, "y"),
 		key.WithHelp("enter/y", "confirm"),
 	),
 	Cancel: key.NewBinding(
-		key.WithKeys("esc", "n"),
+		key.WithKeys(core.KeyEsc, "n"),
 		key.WithHelp("esc/n", "cancel"),
 	),
 	SelectAll: key.NewBinding(
@@ -216,6 +239,7 @@ func (m *shippableModel) toggleSelection() {
 	}
 	root := stack.RootBranch()
 	m.selected[root] = !m.selected[root]
+	m.updateSelectionCache()
 }
 
 // toggleExpand toggles expansion of the current stack.
@@ -235,11 +259,64 @@ func (m *shippableModel) selectAllShippable() {
 			m.selected[s.RootBranch()] = true
 		}
 	}
+	m.updateSelectionCache()
 }
 
 // clearSelection clears all selections.
 func (m *shippableModel) clearSelection() {
 	m.selected = make(map[string]bool)
+	m.updateSelectionCache()
+}
+
+// updateSelectionCache recalculates the cached selection state.
+// Call this whenever m.selected changes.
+func (m *shippableModel) updateSelectionCache() {
+	m.cache.selectedCount = 0
+	m.cache.selectedStacks = nil
+	for _, s := range m.stacks {
+		if m.selected[s.RootBranch()] {
+			m.cache.selectedCount++
+			m.cache.selectedStacks = append(m.cache.selectedStacks, s)
+		}
+	}
+}
+
+// rebuildCache rebuilds all cached render data.
+// Call this after stacks are updated (on refresh).
+func (m *shippableModel) rebuildCache() {
+	// Initialize maps
+	m.cache.stackTitles = make(map[string]string)
+	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
+
+	// Precompute titles and annotations for all stacks
+	for _, stack := range m.stacks {
+		rootBranch := stack.RootBranch()
+
+		// Compute display title from commit subject (this calls git log)
+		title := rootBranch // Default fallback
+		if branch := m.engine.GetBranch(rootBranch); branch.GetName() != "" {
+			if prTitle := branch.DefaultPRTitle(); prTitle != "" {
+				title = prTitle
+			}
+		}
+		m.cache.stackTitles[rootBranch] = title
+
+		// Compute annotations for all branches in the stack
+		for _, branchName := range stack.Stack.AllBranches {
+			branch := m.engine.GetBranch(branchName)
+			if branch.GetName() != "" {
+				ann := tui.GetBranchAnnotation(m.engine, branch)
+				m.cache.branchAnnotations[branchName] = ann
+			}
+		}
+	}
+
+	// Build a single tree renderer that can be reused
+	// This avoids rebuilding the stack graph on every render
+	m.cache.treeRenderer = tui.NewStackTreeRenderer(m.engine)
+
+	// Update selection cache
+	m.updateSelectionCache()
 }
 
 // Init initializes the model.
@@ -292,6 +369,6 @@ type (
 		message string
 	}
 
-	// tickMsg is sent every second for countdown updates and auto-refresh
+	// tickMsg is sent periodically for countdown updates and auto-refresh
 	tickMsg time.Time
 )
