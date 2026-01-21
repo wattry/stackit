@@ -209,7 +209,7 @@ func TestTrackIntegration(t *testing.T) {
 
 	t.Run("track branches after force push recovery", func(t *testing.T) {
 		t.Parallel()
-		shell := NewTestShellWithRemoteInProcess(t)
+		shell := NewTestShellInProcess(t, WithRemote())
 
 		// Set up a stack and push it
 		shell.Write("a.go", "package main").

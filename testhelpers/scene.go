@@ -39,6 +39,15 @@ func getMinimalTemplate(t *testing.T) string {
 			return
 		}
 
+		// Pre-bake stackit config files into the template
+		// This avoids writing them for every test repo clone
+		if err := writeStackitConfigs(dir); err != nil {
+			minimalTemplateMu.Lock()
+			minimalTemplateErr = fmt.Errorf("failed to write config files to template: %w", err)
+			minimalTemplateMu.Unlock()
+			return
+		}
+
 		minimalTemplateMu.Lock()
 		minimalTemplateDir = dir
 		minimalTemplateMu.Unlock()
@@ -134,6 +143,7 @@ func NewScene(t *testing.T, setup SceneSetup) *Scene {
 	var repo *GitRepo
 	var templateDir string
 	isBasicSetup := false
+	fromTemplate := true
 
 	// Determine which template to use
 	if setup != nil && fmt.Sprintf("%p", setup) == fmt.Sprintf("%p", BasicSceneSetup) {
@@ -163,11 +173,14 @@ func NewScene(t *testing.T, setup SceneSetup) *Scene {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	// Write default config files
-	if err := scene.writeDefaultConfigs(); err != nil {
-		_ = os.Chdir(oldDir)
-		_ = os.RemoveAll(tmpDir)
-		t.Fatalf("Failed to write config files: %v", err)
+	// Write default config files only if not from a template
+	// Templates already have config files pre-baked
+	if !fromTemplate {
+		if err := scene.writeDefaultConfigs(); err != nil {
+			_ = os.Chdir(oldDir)
+			_ = os.RemoveAll(tmpDir)
+			t.Fatalf("Failed to write config files: %v", err)
+		}
 	}
 
 	// Run custom setup if provided and not already covered by template
@@ -207,6 +220,7 @@ func NewSceneParallel(t *testing.T, setup SceneSetup) *Scene {
 	var repo *GitRepo
 	var templateDir string
 	isBasicSetup := false
+	fromTemplate := true
 
 	if setup != nil && fmt.Sprintf("%p", setup) == fmt.Sprintf("%p", BasicSceneSetup) {
 		templateDir = getBasicTemplate(t)
@@ -228,10 +242,13 @@ func NewSceneParallel(t *testing.T, setup SceneSetup) *Scene {
 		Repo: repo,
 	}
 
-	// Write default config files
-	if err := scene.writeDefaultConfigs(); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		t.Fatalf("Failed to write config files: %v", err)
+	// Write default config files only if not from a template
+	// Templates already have config files pre-baked
+	if !fromTemplate {
+		if err := scene.writeDefaultConfigs(); err != nil {
+			_ = os.RemoveAll(tmpDir)
+			t.Fatalf("Failed to write config files: %v", err)
+		}
 	}
 
 	// Run custom setup if provided and not already covered by template
@@ -252,10 +269,11 @@ func NewSceneParallel(t *testing.T, setup SceneSetup) *Scene {
 	return scene
 }
 
-// writeDefaultConfigs writes the default Stackit configuration files.
-func (s *Scene) writeDefaultConfigs() error {
+// writeStackitConfigs writes the default Stackit configuration files to a directory.
+// This is used both for templates and for non-template repos.
+func writeStackitConfigs(dir string) error {
 	// Write repo config (JSON format, matching cuteString output)
-	repoConfigPath := filepath.Join(s.Dir, ".git", ".stackit_config")
+	repoConfigPath := filepath.Join(dir, ".git", ".stackit_config")
 	repoConfig := `{
   "trunk": "main",
   "isGithubIntegrationEnabled": false
@@ -266,7 +284,7 @@ func (s *Scene) writeDefaultConfigs() error {
 	}
 
 	// Write user config (JSON format)
-	userConfigPath := filepath.Join(s.Dir, ".git", ".stackit_user_config")
+	userConfigPath := filepath.Join(dir, ".git", ".stackit_user_config")
 	userConfig := `{
   "tips": false
 }
@@ -276,6 +294,12 @@ func (s *Scene) writeDefaultConfigs() error {
 	}
 
 	return nil
+}
+
+// writeDefaultConfigs writes the default Stackit configuration files.
+// Deprecated: Use writeStackitConfigs directly for new code.
+func (s *Scene) writeDefaultConfigs() error {
+	return writeStackitConfigs(s.Dir)
 }
 
 // BasicSceneSetup is a setup function that creates a basic scene with a single commit.

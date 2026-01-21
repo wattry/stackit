@@ -16,10 +16,12 @@
 
 ## Testing
 
+See `testing.md` for comprehensive testing guidelines. Key points:
+
 - Table-driven tests for multiple cases
-- Integration tests in `internal/integration/` for CLI commands
-- Use `NewTestShellInProcess(t)` for faster integration tests
-- Don't add code after assertions that terminate
+- Integration tests in `internal/integration/` using `NewTestShellInProcess(t)`
+- Use `require` over `assert` for early failure
+- Always use `t.Parallel()` for parallel test execution
 
 ## TUI
 

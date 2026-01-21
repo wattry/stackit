@@ -63,7 +63,7 @@ func TestFrozenIntegration(t *testing.T) {
 
 	t.Run("locked and frozen branch shows combined error", func(t *testing.T) {
 		t.Parallel()
-		s := NewTestShellWithRemoteInProcess(t)
+		s := NewTestShellInProcess(t, WithRemote())
 
 		s.Run("create a -m 'feat a'")
 		s.Run("freeze a")
