@@ -3,9 +3,11 @@ package navigation
 import (
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/navigation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/cli/stack"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // NewTopCmd creates the top command
@@ -22,8 +24,8 @@ to follow.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				// Execute top action
-				return actions.SwitchBranchAction(actions.DirectionTop, ctx)
+				handler := stack.NewNavigationUI(ctx.Output, utils.IsInteractive())
+				return navigation.SwitchBranchAction(navigation.DirectionTop, ctx, handler)
 			})
 		},
 	}

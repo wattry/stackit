@@ -1,30 +1,76 @@
 package dashboard
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/submit"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
 )
 
 // Update handles all messages and updates the model.
 func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle window size messages (we don't use HandleCommonMsg because we have custom quit handling)
+	// Handle window size messages
 	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.Width = wsMsg.Width
 		m.Height = wsMsg.Height
+		// Also update progress bar width
+		m.progress.Width = min(wsMsg.Width-20, 60)
 		return m, nil
+	}
+
+	// Handle spinner ticks for loading animations
+	if handled, cmd := m.HandleSpinnerMsg(msg); handled {
+		return m, cmd
 	}
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 
+	case tickMsg:
+		// Check if auto-refresh is needed (only in main state, not during other operations)
+		if m.state == stateMain && !m.lastRefresh.IsZero() {
+			timeSinceRefresh := time.Since(m.lastRefresh)
+			if timeSinceRefresh >= autoRefreshInterval {
+				m.state = stateLoading
+				m.progressMessage = "Auto-refreshing..."
+				return m, tea.Batch(m.refresh(), m.tick())
+			}
+		}
+		// Continue ticking for countdown display
+		return m, m.tick()
+
+	case progress.FrameMsg:
+		// Update progress bar animation
+		progressModel, cmd := m.progress.Update(msg)
+		m.progress = progressModel.(progress.Model)
+		return m, cmd
+
+	case progressUpdateMsg:
+		// Update progress state
+		m.progressStep = msg.step
+		m.progressTotal = msg.total
+		m.progressMessage = msg.message
+		// Animate the progress bar
+		if msg.total > 0 {
+			percent := float64(msg.step) / float64(msg.total)
+			return m, m.progress.SetPercent(percent)
+		}
+		return m, nil
+
 	case refreshCompleteMsg:
 		m.state = stateMain
 		m.lastRefresh = time.Now()
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -32,22 +78,30 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errorMessage = ""
 		m.analysis = msg.result
 		m.stacks = msg.result.Stacks
+		m.rebuildCache() // Precompute titles, annotations, and tree renderer
 		m.updateFocusedStack()
 		return m, nil
 
 	case analysisCompleteMsg:
 		m.state = stateMain
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
 		}
 		m.analysis = msg.result
 		m.stacks = msg.result.Stacks
+		m.rebuildCache() // Precompute titles, annotations, and tree renderer
 		m.statusMessage = "Analysis complete"
 		return m, nil
 
 	case combinationCompleteMsg:
 		m.state = stateMain
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -62,6 +116,9 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case shipCompleteMsg:
 		m.state = stateMain
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
@@ -69,6 +126,19 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Ship successful
 		m.statusMessage = "Shipped! PR: " + msg.result.PRURL
 		m.clearSelection()
+		return m, m.refresh()
+
+	case publishCompleteMsg:
+		m.state = stateMain
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
+		m.unlockAllStacks()
+		if msg.err != nil {
+			m.errorMessage = msg.err.Error()
+			return m, nil
+		}
+		m.statusMessage = fmt.Sprintf("Published! Restacked %d, submitted %d branches", msg.restacked, msg.submitted)
 		return m, m.refresh()
 	}
 
@@ -88,8 +158,8 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// If loading, analyzing, or shipping, only allow quit
-	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping {
+	// If loading, analyzing, shipping, or publishing, only allow quit
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -117,13 +187,9 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Select):
 		m.toggleSelection()
-		// Clear previous combination result when selection changes
+		// Clear previous combination result and trigger background analysis
 		m.combination = nil
-		// Auto-analyze if multiple stacks selected
-		if m.selectedCount() >= 2 {
-			return m.startCombinationAnalysis()
-		}
-		return m, nil
+		return m, m.backgroundAnalyze()
 
 	case key.Matches(msg, keys.Expand):
 		m.toggleExpand()
@@ -131,16 +197,15 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.SelectAll):
 		m.selectAllShippable()
-		// Clear previous combination result when selection changes
+		// Clear previous combination result and trigger background analysis
 		m.combination = nil
-		// Auto-analyze if multiple stacks selected
-		if m.selectedCount() >= 2 {
-			return m.startCombinationAnalysis()
-		}
-		return m, nil
+		return m, m.backgroundAnalyze()
 
 	case key.Matches(msg, keys.Ship):
 		return m.startShip()
+
+	case key.Matches(msg, keys.Publish):
+		return m.startPublish()
 
 	case key.Matches(msg, keys.Analyze):
 		return m.startCombinationAnalysis()
@@ -238,7 +303,7 @@ func (m *shippableModel) executeShip() (tea.Model, tea.Cmd) {
 	}
 }
 
-// startCombinationAnalysis checks if selected stacks can be combined.
+// startCombinationAnalysis checks if selected stacks can be combined (blocking UI).
 func (m *shippableModel) startCombinationAnalysis() (tea.Model, tea.Cmd) {
 	selected := m.selectedStacks()
 	if len(selected) == 0 {
@@ -255,4 +320,84 @@ func (m *shippableModel) startCombinationAnalysis() (tea.Model, tea.Cmd) {
 		})
 		return combinationCompleteMsg{result: result, err: err}
 	}
+}
+
+// backgroundAnalyze runs combination analysis in the background without blocking UI.
+// Returns nil cmd if there are fewer than 2 stacks selected (nothing to analyze).
+func (m *shippableModel) backgroundAnalyze() tea.Cmd {
+	// Only analyze if we have 2+ selected stacks
+	if m.cache.selectedCount < 2 {
+		return nil
+	}
+
+	// Use cached selected stacks to avoid iterating again
+	selected := m.cache.selectedStacks
+
+	return func() tea.Msg {
+		result, err := m.combiner.CheckCombination(m.ctx.Context, selected, shippable.CheckCombinationOptions{
+			RunLocalCI: m.options.RunLocalCI,
+		})
+		return combinationCompleteMsg{result: result, err: err}
+	}
+}
+
+// startPublish initiates the restack + submit workflow for all branches.
+func (m *shippableModel) startPublish() (tea.Model, tea.Cmd) {
+	m.state = statePublishing
+	m.statusMessage = "Restacking and submitting..."
+	m.lockAllStacks()
+
+	return m, func() tea.Msg {
+		eng := m.engine
+		ctx := m.ctx
+
+		// Get all branches that need restacking
+		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		allBranches := graph.Range(eng.Trunk(), engine.StackRange{RecursiveChildren: true})
+
+		// Restack all branches
+		sortedBranches := eng.SortBranchesTopologically(allBranches)
+		restacked := 0
+
+		if len(sortedBranches) > 0 {
+			err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(_ string, result engine.RestackResult, _ string, _ bool, _ engine.LockReason, _ bool, _ bool, _ bool, _, _ string) {
+				if result == engine.RestackDone {
+					restacked++
+				}
+			}, false)
+			if err != nil {
+				return publishCompleteMsg{err: err}
+			}
+		}
+
+		// Submit all branches
+		opts := submit.Options{
+			Branch:     eng.CurrentBranch().GetName(),
+			StackRange: submit.StackRangeFull(),
+			Confirm:    true, // Skip confirmation
+		}
+
+		submitted := 0
+		handler := &publishSubmitHandler{onSubmit: func() { submitted++ }}
+		if err := submit.Action(ctx, opts, handler); err != nil {
+			return publishCompleteMsg{restacked: restacked, err: err}
+		}
+
+		return publishCompleteMsg{restacked: restacked, submitted: submitted}
+	}
+}
+
+// publishSubmitHandler is a minimal handler for submit events during publish.
+type publishSubmitHandler struct {
+	onSubmit func()
+}
+
+func (h *publishSubmitHandler) OnEvent(event submit.Event) {
+	if e, ok := event.(submit.BranchProgressEvent); ok && e.Status == submit.StatusDone {
+		h.onSubmit()
+	}
+}
+
+func (h *publishSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+	return defaultYes, nil
 }

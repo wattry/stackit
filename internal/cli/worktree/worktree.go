@@ -64,8 +64,9 @@ In interactive mode, you will be prompted to open the worktree if --open is not 
 				}
 
 				// Determine if we should open the worktree
+				// Only prompt if shell integration is available (otherwise cd can't work)
 				shouldOpen := open
-				if !shouldOpen && tui.IsTTY() {
+				if !shouldOpen && tui.IsTTY() && common.HasShellIntegration() {
 					// Prompt in interactive mode
 					confirmed, promptErr := tui.PromptConfirm("Change to worktree directory now?", true)
 					if promptErr == nil && confirmed {
@@ -73,15 +74,11 @@ In interactive mode, you will be prompted to open the worktree if --open is not 
 					}
 				}
 
-				if shouldOpen && result.Path != "" {
-					if common.HasShellIntegration() {
-						ctx.Output.DirectiveCD(result.Path)
-					} else {
-						ctx.Output.Tip("cd %s", result.Path)
-					}
+				if shouldOpen && result.Path != "" && common.HasShellIntegration() {
+					ctx.Output.DirectiveCD(result.Path)
 				} else if result.Path != "" {
-					// User declined or non-interactive without --open
-					ctx.Output.Tip("Open with: cd $(stackit worktree open %s)", result.Name)
+					// User declined, non-interactive, or no shell integration
+					ctx.Output.Tip("cd %s", result.Path)
 				}
 
 				return nil

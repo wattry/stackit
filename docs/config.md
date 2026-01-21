@@ -1,6 +1,21 @@
 # Configuration System
 
-This document describes how Stackit stores and manages configuration for technical contributors.
+## Quick Reference
+
+**Key files:**
+- `internal/config/config_git.go` - High-level typed interface (`GitConfig`)
+- `internal/config/keys.go` - Key constants and defaults
+- `internal/config/project_config.go` - Team config (`.stackit.yaml`)
+- `internal/git/config.go` - Low-level git config access (`ConfigStore`)
+
+**Adding a new config key:**
+1. Add constant to `keys.go`: `const KeyFoo = "stackit.foo"`
+2. Add getter/setter to `config_git.go`
+3. If interface method needed, add to `interface.go`
+
+**Priority:** Personal git config > `.stackit.yaml` > defaults
+
+---
 
 ## Overview
 
