@@ -620,6 +620,12 @@ func (m multiSelectModel) View() string {
 
 // PromptMultiSelect prompts the user to select multiple items from a list
 func PromptMultiSelect(title string, options []string) ([]string, error) {
+	return PromptMultiSelectWithDefaults(title, options, nil)
+}
+
+// PromptMultiSelectWithDefaults prompts the user to select multiple items from a list
+// with optional pre-selected items. If preSelected is nil, nothing is selected by default.
+func PromptMultiSelectWithDefaults(title string, options []string, preSelected []bool) ([]string, error) {
 	if err := CheckInteractiveAllowed(); err != nil {
 		return nil, err
 	}
@@ -628,10 +634,17 @@ func PromptMultiSelect(title string, options []string) ([]string, error) {
 		return nil, fmt.Errorf("no options provided")
 	}
 
+	selected := make(map[int]bool)
+	for i, sel := range preSelected {
+		if i < len(options) {
+			selected[i] = sel
+		}
+	}
+
 	m := multiSelectModel{
 		title:    title,
 		options:  options,
-		selected: make(map[int]bool),
+		selected: selected,
 		cursor:   0,
 		help:     help.New(),
 		keys:     defaultMultiSelectKeys,

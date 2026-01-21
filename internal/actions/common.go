@@ -222,24 +222,15 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 				switch {
 				case !branch.CanModify():
 					if branch.IsLocked() {
-						ctx.Output.Info("Did not restack branch %s because it is locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
+						ctx.Output.Info("%s locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
 					} else {
-						ctx.Output.Info("Did not restack branch %s because it is frozen.", style.ColorBranchName(branchName, branchName == currentBranchName))
+						ctx.Output.Info("%s frozen", style.ColorBranchName(branchName, branchName == currentBranchName))
 					}
 				case branch.IsTrunk():
-					ctx.Output.Info("%s does not need to be restacked.", style.ColorBranchName(branchName, false))
+					ctx.Output.Info("%s up to date", style.ColorBranchName(branchName, false))
 				default:
-					parent := branch.GetParent()
-					parentName := ""
-					if parent == nil {
-						parentName = ctx.Engine.Trunk().GetName()
-					} else {
-						parentName = parent.GetName()
-					}
 					isCurrent := branchName == currentBranchName
-					ctx.Output.Info("%s does not need to be restacked on %s.",
-						style.ColorBranchName(branchName, isCurrent),
-						style.ColorBranchName(parentName, false))
+					ctx.Output.Info("%s up to date", style.ColorBranchName(branchName, isCurrent))
 				}
 			}
 		}
@@ -497,7 +488,7 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 		)
 		if meta.PrInfo.State != nil {
 			if *meta.PrInfo.State == prStateClosed {
-				return true, fmt.Sprintf("%s is closed on GitHub", branchName)
+				return true, "closed on GitHub"
 			}
 			if *meta.PrInfo.State == prStateMerged {
 				base := ""
@@ -507,7 +498,7 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 				if base == "" {
 					base = eng.Trunk().GetName()
 				}
-				return true, fmt.Sprintf("%s is merged into %s", branchName, base)
+				return true, fmt.Sprintf("merged into %s", base)
 			}
 		}
 	}
@@ -515,7 +506,7 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 	// 2. Check if merged into trunk
 	trunkName := eng.Trunk().GetName()
 	if mergedBranches != nil && mergedBranches[branchName] {
-		return true, fmt.Sprintf("%s is merged into %s", branchName, trunkName)
+		return true, fmt.Sprintf("merged into %s", trunkName)
 	}
 
 	// 3. Check if empty
@@ -544,7 +535,7 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 		if err == nil && empty { // IsDiffEmpty returns true if no diff
 			// Only delete empty branches if they have a PR
 			if meta != nil && meta.PrInfo != nil && meta.PrInfo.Number != nil && *meta.PrInfo.Number != 0 {
-				return true, fmt.Sprintf("%s is empty", branchName)
+				return true, "empty"
 			}
 		}
 	}

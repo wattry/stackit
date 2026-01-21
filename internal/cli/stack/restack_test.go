@@ -157,7 +157,7 @@ func TestRestackCommand(t *testing.T) {
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-  feature (current) does not need to be restacked on main.
+  feature (current) up to date
 
 ✨ All branches are up to date!
 `)
@@ -198,8 +198,8 @@ func TestRestackCommand(t *testing.T) {
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-  branch1 does not need to be restacked on main.
-  branch2 (current) does not need to be restacked on branch1.
+  branch1 up to date
+  branch2 (current) up to date
 
 ✨ All branches are up to date!
 `)
@@ -244,8 +244,8 @@ func TestRestackCommand(t *testing.T) {
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-  branch1 (current) does not need to be restacked on main.
-  branch2 does not need to be restacked on branch1.
+  branch1 (current) up to date
+  branch2 up to date
 
 ✨ All branches are up to date!
 `)
@@ -281,7 +281,7 @@ func TestRestackCommand(t *testing.T) {
 
 		normalized := testhelpers.NormalizeOutput(string(output))
 		expected := testhelpers.NormalizeOutput(`
-  branch1 does not need to be restacked on main.
+  branch1 up to date
 
 ✨ All branches are up to date!
 `)

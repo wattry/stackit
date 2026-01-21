@@ -244,11 +244,8 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 			}
 
 			msg := fmt.Sprintf("%s%s %s", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo, reason)
-			if reason == common.ReasonNoRestackNeeded && event.Parent != "" {
-				msg = fmt.Sprintf("%s%s does not need to be restacked on %s.",
-					style.ColorBranchName(event.Branch, event.IsCurrent),
-					prInfo,
-					style.ColorBranchName(event.Parent, false))
+			if reason == common.ReasonNoRestackNeeded {
+				msg = fmt.Sprintf("%s%s up to date", style.ColorBranchName(event.Branch, event.IsCurrent), prInfo)
 			}
 			h.Output.Info("  %s", msg)
 		}
@@ -491,11 +488,8 @@ func (h *InteractiveSyncHandler) formatEventDetail(event syncAction.Event) (deta
 				reason = common.ReasonFrozen
 			}
 
-			if reason == common.ReasonNoRestackNeeded && event.Parent != "" {
-				return fmt.Sprintf("%s%s does not need to be restacked on %s.",
-					displayName,
-					prInfo,
-					event.Parent), false
+			if reason == common.ReasonNoRestackNeeded {
+				return fmt.Sprintf("%s%s up to date", displayName, prInfo), false
 			}
 			return fmt.Sprintf("%s%s %s", displayName, prInfo, reason), false
 		case syncAction.EventSkipped:
@@ -606,11 +600,8 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 			reason = common.ReasonFrozen
 		}
 
-		if reason == common.ReasonNoRestackNeeded && parent != "" {
-			return fmt.Sprintf("%s%s does not need to be restacked on %s.",
-				displayName,
-				prInfo,
-				parent)
+		if reason == common.ReasonNoRestackNeeded {
+			return fmt.Sprintf("%s%s up to date", displayName, prInfo)
 		}
 		return fmt.Sprintf("%s%s %s", displayName, prInfo, reason)
 	case syncAction.RestackConflict:
@@ -705,10 +696,6 @@ func (h *InteractiveSyncHandler) PromptBranchDeletions(branches map[string]strin
 		return confirmed, nil
 	}
 
-	h.output.Newline()
-	h.output.Info("The following branches are candidates for deletion:")
-	h.output.Newline()
-
 	// Sort branch names for consistent ordering
 	names := make([]string, 0, len(branches))
 	for name := range branches {
@@ -723,22 +710,29 @@ func (h *InteractiveSyncHandler) PromptBranchDeletions(branches map[string]strin
 		}
 	}
 
-	// Display all branches with their reasons first
-	for _, name := range names {
+	// Build options for multi-select with branch name and reason
+	options := make([]string, len(names))
+	preSelected := make([]bool, len(names))
+	for i, name := range names {
 		reason := branches[name]
-		h.output.Info("  %s: %s", style.ColorBranchName(name, false), style.ColorDim(reason))
+		options[i] = fmt.Sprintf("%s (%s)", style.ColorBranchName(name, false), style.ColorDim(reason))
+		preSelected[i] = true // Pre-select all for deletion
 	}
-	h.output.Newline()
 
-	// Prompt for each branch
-	for _, name := range names {
-		reason := branches[name]
-		prompt := fmt.Sprintf("Delete %s (%s)?", style.ColorBranchName(name, false), reason)
-		shouldDelete, err := tui.PromptConfirm(prompt, true)
-		if err != nil {
-			return confirmed, err
-		}
-		confirmed[name] = shouldDelete
+	h.output.Newline()
+	selected, err := tui.PromptMultiSelectWithDefaults("Select branches to delete:", options, preSelected)
+	if err != nil {
+		return confirmed, err
+	}
+
+	// Map selected options back to branch names
+	selectedSet := make(map[string]bool)
+	for _, opt := range selected {
+		selectedSet[opt] = true
+	}
+
+	for i, name := range names {
+		confirmed[name] = selectedSet[options[i]]
 	}
 
 	return confirmed, nil

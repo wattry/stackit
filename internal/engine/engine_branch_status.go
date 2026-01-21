@@ -276,21 +276,21 @@ func (e *engineImpl) GetDeletionStatus(ctx context.Context, branchName string) (
 			prStateMerged = "MERGED"
 		)
 		if prInfo.State() == prStateClosed {
-			return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("%s is closed on GitHub", branchName)}, nil
+			return DeletionStatus{SafeToDelete: true, Reason: "closed on GitHub"}, nil
 		}
 		if prInfo.State() == prStateMerged {
 			base := prInfo.Base()
 			if base == "" {
 				base = e.Trunk().GetName()
 			}
-			return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("%s is merged into %s", branchName, base)}, nil
+			return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", base)}, nil
 		}
 	}
 
 	// Check if merged into trunk
 	merged, err := e.IsMergedIntoTrunk(ctx, branchName)
 	if err == nil && merged {
-		return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("%s is merged into %s", branchName, e.Trunk().GetName())}, nil
+		return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", e.Trunk().GetName())}, nil
 	}
 
 	// Check if empty
@@ -298,7 +298,7 @@ func (e *engineImpl) GetDeletionStatus(ctx context.Context, branchName string) (
 	if err == nil && empty {
 		// Only delete empty branches if they have a PR
 		if prInfo != nil && prInfo.Number() != nil {
-			return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("%s is empty", branchName)}, nil
+			return DeletionStatus{SafeToDelete: true, Reason: "empty"}, nil
 		}
 	}
 
