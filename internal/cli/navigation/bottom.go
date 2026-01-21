@@ -3,9 +3,11 @@ package navigation
 import (
 	"github.com/spf13/cobra"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/navigation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/cli/stack"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // NewBottomCmd creates the bottom command
@@ -20,8 +22,8 @@ it reaches the first branch that has trunk as its parent (or trunk itself).`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				// Execute bottom action
-				return actions.SwitchBranchAction(actions.DirectionBottom, ctx)
+				handler := stack.NewNavigationUI(ctx.Output, utils.IsInteractive())
+				return navigation.SwitchBranchAction(navigation.DirectionBottom, ctx, handler)
 			})
 		},
 	}

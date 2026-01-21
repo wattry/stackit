@@ -8,9 +8,3 @@ type CommitSHA string
 
 // PRNumber is a type alias for a GitHub pull request number
 type PRNumber int
-
-const (
-	yesResponse = "yes"
-	noResponse  = "no"
-	unknown     = "unknown"
-)

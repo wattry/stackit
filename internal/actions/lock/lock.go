@@ -3,19 +3,21 @@ package lock
 
 import (
 	"fmt"
-	"strings"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/submit"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/output"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
 // Action locks the specified branch and all branches downstack of it
-func Action(ctx *app.Context, branchName string) error {
+func Action(ctx *app.Context, branchName string, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	out := ctx.Output
 
@@ -53,20 +55,20 @@ func Action(ctx *app.Context, branchName string) error {
 		}
 	}
 
-	if len(unpushedBranches) > 0 && ctx.Interactive {
+	if len(unpushedBranches) > 0 && handler.IsInteractive() {
 		out.Warn("The following branches have unpushed commits:")
 		for _, b := range unpushedBranches {
 			out.Warn("  - %s", b)
 		}
-		confirm, err := tui.PromptConfirm("Would you like to submit these changes before locking?", true)
+		confirm, err := handler.PromptSubmitBeforeLock(unpushedBranches)
 		if err == nil && confirm {
 			submitOpts := submit.Options{
 				Branch:     branchName,
 				StackRange: submit.StackRangeDownstack(),
 				Confirm:    false,
 			}
-			handler := &lockSubmitHandler{splog: out}
-			if err := submit.Action(ctx, submitOpts, handler); err != nil {
+			submitHandler := handler.GetSubmitHandler()
+			if err := submit.Action(ctx, submitOpts, submitHandler); err != nil {
 				return fmt.Errorf("failed to submit before locking: %w", err)
 			}
 		}
@@ -110,7 +112,12 @@ func Action(ctx *app.Context, branchName string) error {
 }
 
 // Unlock unlocks the specified branch and all branches upstack of it
-func Unlock(ctx *app.Context, branchName string) error {
+func Unlock(ctx *app.Context, branchName string, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	out := ctx.Output
 
@@ -140,19 +147,14 @@ func Unlock(ctx *app.Context, branchName string) error {
 		}
 	}
 
-	if len(lockedDownstack) > 0 && ctx.Interactive {
-		var prompt string
-		if len(lockedDownstack) == 1 {
-			prompt = fmt.Sprintf("Would you like to also unlock the downstack branch %s?", style.ColorBranchName(lockedDownstack[0].GetName(), false))
-		} else {
-			names := make([]string, len(lockedDownstack))
-			for i, b := range lockedDownstack {
-				names[i] = b.GetName()
-			}
-			prompt = fmt.Sprintf("Would you like to also unlock %d downstack branches (%s)?", len(lockedDownstack), strings.Join(names, ", "))
+	if len(lockedDownstack) > 0 && handler.IsInteractive() {
+		// Collect branch names for the prompt
+		lockedNames := make([]string, len(lockedDownstack))
+		for i, b := range lockedDownstack {
+			lockedNames[i] = b.GetName()
 		}
 
-		confirm, err := tui.PromptConfirm(prompt, true)
+		confirm, err := handler.PromptUnlockDownstack(lockedNames)
 		if err == nil && confirm {
 			branches = append(branches, lockedDownstack...)
 		}
@@ -193,22 +195,4 @@ func Unlock(ctx *app.Context, branchName string) error {
 	}
 
 	return nil
-}
-
-type lockSubmitHandler struct {
-	splog output.Output
-}
-
-func (h *lockSubmitHandler) OnEvent(e submit.Event) {
-	if ev, ok := e.(submit.BranchProgressEvent); ok {
-		if ev.Status == submit.StatusDone {
-			h.splog.Info("  ✓ %s submitted → %s", ev.BranchName, ev.URL)
-		} else if ev.Status == submit.StatusError {
-			h.splog.Warn("  ✗ %s failed: %v", ev.BranchName, ev.Error)
-		}
-	}
-}
-
-func (h *lockSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
-	return defaultYes, nil
 }

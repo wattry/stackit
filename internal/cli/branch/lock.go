@@ -8,6 +8,7 @@ import (
 	"stackit.dev/stackit/internal/actions/lock"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // NewLockCmd creates the lock command
@@ -41,7 +42,8 @@ This operation can be undone with 'st unlock'.`,
 					branchName = current.GetName()
 				}
 
-				return lock.Action(ctx, branchName)
+				handler := NewLockUI(ctx.Output, utils.IsInteractive())
+				return lock.Action(ctx, branchName, handler)
 			})
 		},
 	}
@@ -76,7 +78,8 @@ to enable modifications.`,
 					branchName = current.GetName()
 				}
 
-				return lock.Unlock(ctx, branchName)
+				handler := NewLockUI(ctx.Output, utils.IsInteractive())
+				return lock.Unlock(ctx, branchName, handler)
 			})
 		},
 	}

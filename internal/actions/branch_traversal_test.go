@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/navigation"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -22,7 +22,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch2")
 
 		// Traverse downward should go to branch1 (first branch from trunk)
-		err := actions.SwitchBranchAction(actions.DirectionBottom, s.Context)
+		err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should be on branch1
@@ -42,7 +42,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		// Traverse upward should go to branch2 (top of stack)
-		err := actions.SwitchBranchAction(actions.DirectionTop, s.Context)
+		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should be on branch2
@@ -57,7 +57,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		// Detach HEAD
 		s.RunGit("checkout", "HEAD~0").Rebuild()
 
-		err := actions.SwitchBranchAction(actions.DirectionBottom, s.Context)
+		err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
 		require.Error(t, err)
 	})
 
@@ -71,7 +71,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		// Already on branch1 (bottom of stack)
-		err := actions.SwitchBranchAction(actions.DirectionBottom, s.Context)
+		err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should still be on branch1
@@ -90,7 +90,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		// Already at top
-		err := actions.SwitchBranchAction(actions.DirectionTop, s.Context)
+		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should still be on branch1

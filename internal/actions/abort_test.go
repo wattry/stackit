@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/abort"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
@@ -18,7 +18,7 @@ func TestAbortAction(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit()
 
-		err := actions.AbortAction(s.Context, actions.AbortOptions{})
+		err := abort.Action(s.Context, abort.Options{}, nil)
 		require.NoError(t, err)
 	})
 
@@ -47,7 +47,7 @@ func TestAbortAction(t *testing.T) {
 		require.NoError(t, err)
 
 		// Run abort
-		err = actions.AbortAction(s.Context, actions.AbortOptions{Force: true})
+		err = abort.Action(s.Context, abort.Options{Force: true}, nil)
 		require.NoError(t, err)
 
 		// Verify continuation state is gone

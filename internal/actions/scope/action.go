@@ -1,25 +1,29 @@
-package actions
+package scope
 
 import (
 	"fmt"
 	"strings"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
-// ScopeOptions contains options for the scope command
-type ScopeOptions struct {
+// Options contains options for the scope command
+type Options struct {
 	Scope string
 	Unset bool
 	Show  bool
 }
 
-// ScopeAction implements the stackit scope command
-func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
+// Action implements the stackit scope command
+func Action(ctx *app.Context, opts Options, handler Handler) error {
+	if handler == nil {
+		handler = &NullHandler{}
+	}
+	defer handler.Cleanup()
+
 	eng := ctx.Engine
 	out := ctx.Output
 
@@ -65,7 +69,7 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 		out.Info("Unset explicit scope for branch %s. It will now inherit from its parent.", style.ColorBranchName(currentBranch, false))
 
 		// Push metadata changes to remote and update PRs to trigger CI re-evaluation
-		if err := PushMetadataAndSyncPRs(ctx, []string{currentBranch}); err != nil {
+		if err := actions.PushMetadataAndSyncPRs(ctx, []string{currentBranch}); err != nil {
 			out.Debug("Failed to push metadata changes: %v", err)
 		}
 		return nil
@@ -94,9 +98,9 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 	} else {
 		out.Info("Set scope for branch %s to: %s", style.ColorBranchName(currentBranch, false), style.ColorDim(opts.Scope))
 
-		// Rename prompt
-		if oldScope.IsDefined() && !oldScope.Equal(newScope) && utils.IsInteractive() && strings.Contains(currentBranch, oldScope.String()) {
-			confirmed, err := tui.PromptConfirm(fmt.Sprintf("Branch name contains '%s', but its scope is now '%s'. Would you like to rename the branch?", oldScope.String(), opts.Scope), true)
+		// Rename prompt - only if scope changed and branch name contains old scope
+		if oldScope.IsDefined() && !oldScope.Equal(newScope) && strings.Contains(currentBranch, oldScope.String()) {
+			confirmed, err := handler.PromptConfirmRename(currentBranch, oldScope.String(), opts.Scope)
 			if err == nil && confirmed {
 				newName := strings.Replace(currentBranch, oldScope.String(), opts.Scope, 1)
 				if err := eng.RenameBranch(ctx.Context, eng.GetBranch(currentBranch), eng.GetBranch(newName)); err != nil {
@@ -109,7 +113,7 @@ func ScopeAction(ctx *app.Context, opts ScopeOptions) error {
 	}
 
 	// Push metadata changes to remote and update PRs to trigger CI re-evaluation
-	if err := PushMetadataAndSyncPRs(ctx, []string{currentBranch}); err != nil {
+	if err := actions.PushMetadataAndSyncPRs(ctx, []string{currentBranch}); err != nil {
 		out.Debug("Failed to push metadata changes: %v", err)
 	}
 
