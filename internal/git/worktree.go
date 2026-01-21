@@ -73,6 +73,17 @@ func (r *runner) ListWorktrees(ctx context.Context) ([]string, error) {
 	return worktrees, nil
 }
 
+// PruneWorktrees removes stale worktree entries from .git/worktrees.
+// This cleans up worktree information for worktrees whose working directory
+// has been deleted or is otherwise unavailable.
+func (r *runner) PruneWorktrees(ctx context.Context) error {
+	_, err := r.RunGitCommandWithContext(ctx, "worktree", "prune")
+	if err != nil {
+		return fmt.Errorf("failed to prune worktrees: %w", err)
+	}
+	return nil
+}
+
 // ReadWorktreeMeta reads worktree metadata for a stack root from local git refs
 func (r *runner) ReadWorktreeMeta(stackRoot string) (*WorktreeMeta, error) {
 	refName := fmt.Sprintf("%s%s", WorktreeRefPrefix, stackRoot)

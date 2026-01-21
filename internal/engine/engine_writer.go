@@ -723,6 +723,11 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 // If shallow is true, uses --no-checkout to create a worktree without checking out files to the working tree.
 // This is faster for validation-only operations that don't need actual files.
 func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, shallow bool) (string, func(), error) {
+	// Prune stale worktree entries before creating new ones.
+	// This cleans up entries in .git/worktrees/ that may be left behind from
+	// incomplete cleanup after failed or canceled operations.
+	_ = e.git.PruneWorktrees(ctx)
+
 	tmpDir, err := os.MkdirTemp("", prefix)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
