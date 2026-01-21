@@ -27,28 +27,18 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Handle --parent flag (single branch tracking)
 	if opts.Parent != "" {
 		parent := opts.Parent
-		// Validate parent exists (refresh branch list if needed)
-		allBranches := eng.AllBranches()
-		parentExists := false
-		for _, branch := range allBranches {
-			if branch.GetName() == parent {
-				parentExists = true
-				break
-			}
-		}
-		if !parentExists && parent != eng.Trunk().GetName() {
-			// Refresh branches list and check again
-			allBranches := eng.AllBranches()
-			parentExists = false
-			for _, b := range allBranches {
-				if b.GetName() == parent {
+		// Validate parent exists
+		parentExists := parent == eng.Trunk().GetName()
+		if !parentExists {
+			for _, branch := range eng.AllBranches() {
+				if branch.GetName() == parent {
 					parentExists = true
 					break
 				}
 			}
-			if !parentExists {
-				return fmt.Errorf("parent branch %s does not exist", parent)
-			}
+		}
+		if !parentExists {
+			return fmt.Errorf("parent branch %s does not exist", parent)
 		}
 
 		// Validate parent is tracked (or is trunk)
@@ -96,6 +86,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		if err != nil {
 			return fmt.Errorf("failed to find tracked ancestor: %w", err)
 		}
+		if len(ancestors) == 0 {
+			return fmt.Errorf("no tracked ancestors found for branch %s", branchName)
+		}
 		parentBranch := ancestors[0]
 
 		if err := eng.TrackBranch(ctx.Context, branchName, parentBranch); err != nil {
@@ -129,19 +122,37 @@ func trackBranchRecursively(ctx *app.Context, branchName string, handler Handler
 		var parentBranch string
 		ancestors, err := eng.FindMostRecentTrackedAncestors(ctx.Context, branchName)
 		if err == nil && len(ancestors) == 1 && ancestors[0] != eng.Trunk().GetName() {
-			parentBranch = ancestors[0]
-			ctx.Output.Info("Auto-detected parent %s for %s.", style.ColorBranchName(parentBranch, false), style.ColorBranchName(branchName, false))
-		} else {
-			// Select parent interactively via handler
+			candidate := ancestors[0]
+			candidateBranch := eng.GetBranch(candidate)
+			// Skip worktree anchors for auto-detection
+			if !candidateBranch.IsWorktreeAnchor() {
+				parentBranch = candidate
+				ctx.Output.Info("Auto-detected parent %s for %s.", style.ColorBranchName(parentBranch, false), style.ColorBranchName(branchName, false))
+			}
+		}
+
+		// If auto-detection didn't find a valid parent, prompt interactively
+		if parentBranch == "" {
 			parentBranch, err = handler.PromptSelectParent(ctx.Context, ctx.Engine, ctx.GitHubClient, ctx.Logger, branchName)
 			if err != nil {
 				return err
+			}
+
+			// Handle user cancellation (empty parent)
+			if parentBranch == "" {
+				ctx.Output.Info("Track canceled.")
+				return nil
 			}
 
 			// Validate parent is tracked (or is trunk)
 			parentBranchObj := eng.GetBranch(parentBranch)
 			if !parentBranchObj.IsTrunk() && !parentBranchObj.IsTracked() {
 				return fmt.Errorf("parent branch %s must be tracked (or be trunk)", parentBranch)
+			}
+
+			// Prevent tracking with worktree anchor as parent
+			if parentBranchObj.IsWorktreeAnchor() {
+				return fmt.Errorf("parent branch %s is a worktree anchor; use 'stackit create' in the worktree instead", parentBranch)
 			}
 		}
 
