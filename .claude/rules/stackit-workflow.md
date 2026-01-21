@@ -1,45 +1,43 @@
 # Stackit Workflow Rules
 
-## MANDATORY: Use Stackit for All Branch/Commit Operations
+This project uses stackit for stacked changes. **NEVER use raw git commands for branch/commit operations.**
 
-This project uses stackit for stacked changes. You MUST use stackit commands, NEVER raw git commands.
+## Forbidden → Required
 
-## Forbidden Commands
+| Never Use | Use Instead |
+|-----------|-------------|
+| `git commit -m "..."` | `command stackit create -m "..."` |
+| `git checkout -b` | `command stackit create -m "..."` |
+| `gh pr create` | `command stackit submit` |
+| `git rebase` | `command stackit restack` |
 
-NEVER use these commands:
-- `git commit` - Use `stackit create` instead
-- `git checkout -b` - Use `stackit create` instead
-- `gh pr create` - Use `stackit submit` instead
-- `git rebase` - Use `stackit restack` instead
+**Exception:** `git commit` is allowed when adding commits to an existing stacked branch.
 
 ## Required Workflow
 
-When creating a new stacked change:
-
-1. **Make code changes first**
-2. **Stage changes**: `git add -A`
-3. **Create stacked branch with commit**: `stackit create -m "type: description"`
-
 ```bash
-# CORRECT workflow:
+# 1. Make changes
+# 2. Stage changes FIRST (required!)
 git add -A
-stackit create -m "feat: add new feature"
-
-# WRONG - never do this:
-stackit create -m "feat: add new feature"  # Creates empty branch!
-git commit -m "feat: add new feature"       # Bypasses stackit!
+# 3. Create stacked branch with commit
+command stackit create -m "feat: description"
+# 4. Submit when ready
+command stackit submit
 ```
 
-## Why This Matters
+**Critical:** `stackit create` requires staged changes. Without staged changes, it creates an empty branch.
 
-- `stackit create` expects staged changes and creates the branch + commit together
-- Running `stackit create` without staged changes creates an empty branch
-- Using `git commit` after that bypasses stackit's metadata tracking
-- This breaks the stack structure and PR relationships
+## Skills (Preferred)
 
-## Skills to Use
+Use skills instead of manual commands:
 
-Prefer using skills over manual commands:
-- `/stack-create` - Handles the workflow correctly
-- `/stack-submit` - Submit PRs for the stack
-- `/stack-status` - Check stack health before operations
+| Skill | Purpose |
+|-------|---------|
+| `/stack-create` | Create stacked branch (handles workflow correctly) |
+| `/stack-submit` | Submit PRs for the stack |
+| `/stack-status` | Check stack health |
+| `/stack-fix` | Diagnose and fix issues |
+| `/stack-sync` | Sync with trunk, cleanup merged branches |
+| `/stack-restack` | Rebase all branches in stack |
+
+Run `/stackit` for the full guide.

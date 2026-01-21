@@ -1,5 +1,23 @@
 # TUI Development Guide
 
+## Quick Reference
+
+**Creating a new TUI:**
+1. Embed `core.BaseModel` in your model
+2. Call `m.SignalReady()` in `Init()`
+3. Call `m.HandleCommonMsg(msg)` in `Update()`
+4. Use `style.Default*Styles()` for styling
+5. Use `tree.NewRenderer()` for branch trees
+
+**Handler pattern:**
+- Interface in `internal/actions/<action>/handler.go`
+- Implementation in `internal/cli/stack/<action>_handlers.go`
+- Two implementations: `SimpleHandler` (text) + `InteractiveHandler` (TUI)
+
+**Key constants:** `core.KeyCtrlC`, `core.KeyEnter`, `core.KeyEsc`, `core.KeyQuit`
+
+---
+
 ## Key Files
 
 - `internal/tui/core/base_model.go` - BaseModel, ReadySignaler, key constants
