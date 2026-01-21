@@ -37,6 +37,8 @@ const (
 	ReasonNoPR BlockingReason = "no_pr"
 	// ReasonReviewRequired indicates the PR needs review approval.
 	ReasonReviewRequired BlockingReason = "review_required"
+	// ReasonNotPushed indicates the local branch differs from remote.
+	ReasonNotPushed BlockingReason = "not_pushed"
 )
 
 // BlockingPR describes a PR that is blocking a stack from being shippable.
