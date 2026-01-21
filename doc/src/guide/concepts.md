@@ -140,6 +140,9 @@ stackit unlock <branch>
 
 Both prevent operations like $$stackit modify$$, $$stackit squash$$, $$stackit absorb$$, and $$stackit restack$$.
 
+!!! tip "Git hooks"
+    Install [Git hooks](../cli/hooks.md) to prevent commits and pushes to locked branches at the Git level.
+
 ## Worktrees
 
 **Worktrees** let you work on multiple stacks simultaneously in separate directories.

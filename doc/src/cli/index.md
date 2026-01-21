@@ -26,6 +26,14 @@ Complete command-line reference for stackit.
 
     [Configure stackit →](config.md)
 
+-   :material-hook:{ .lg .middle } **Git Hooks**
+
+    ---
+
+    Prevent commits and pushes to locked branches.
+
+    [Setup hooks →](hooks.md)
+
 </div>
 
 ## Command categories
@@ -68,6 +76,15 @@ Work on multiple stacks simultaneously.
 - `stackit worktree create` - Create a standalone worktree
 - `stackit worktree list` - List all worktrees
 - `stackit worktree open` - Open worktree (auto-cd with shell integration)
+
+### Git hooks
+
+Enforce branch restrictions locally.
+
+- `stackit precommit install` - Prevent commits to locked branches
+- `stackit prepush install` - Prevent pushes to locked branches
+
+See [Git Hooks](hooks.md) for details.
 
 ## Global flags
 
