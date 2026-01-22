@@ -15,6 +15,11 @@ const (
 	// SectionEnd marks the end of the stackit-generated section in PR body.
 	SectionEnd = "<!-- STACKIT-SECTION-END -->"
 
+	// LockSectionStart marks the beginning of the lock status section in PR body.
+	LockSectionStart = "<!-- STACKIT-LOCK-START -->"
+	// LockSectionEnd marks the end of the lock status section in PR body.
+	LockSectionEnd = "<!-- STACKIT-LOCK-END -->"
+
 	// CommentMarker is used to identify stackit-generated navigation comments.
 	CommentMarker = "<!-- STACKIT-NAV-COMMENT -->"
 
@@ -108,16 +113,10 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 		fmt.Fprintf(&tree, "**Scope**: %s\n\n", scope.String())
 	}
 
-	// Add lock message if branch is locked
+	// Note: Lock message is now handled independently via CreateLockSection()
+	// to ensure it's shown even when navigation is hidden
+
 	branchObj := eng.GetBranch(branch)
-	if branchObj.IsLocked() {
-		reason := branchObj.GetLockReason()
-		if reason == git.LockReasonUser {
-			tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
-		} else {
-			fmt.Fprintf(&tree, "> 🔒 This PR has been locked (%s). To unlock it, run `st unlock`.\n\n", reason)
-		}
-	}
 
 	// Add notice if present in PrInfo
 	// Error is intentionally ignored: if PR info cannot be retrieved, we simply skip
@@ -223,6 +222,77 @@ func StripFooter(body string) string {
 	return body
 }
 
+// CreateLockSection creates an independent lock status section for the PR body.
+// Returns empty string if the branch is not locked.
+// This section is independent of navigation settings and appears at the TOP of the PR body.
+func CreateLockSection(branch string, eng engine.BranchReader) string {
+	branchObj := eng.GetBranch(branch)
+	if !branchObj.IsLocked() {
+		return ""
+	}
+
+	reason := branchObj.GetLockReason()
+	var message string
+	if reason == git.LockReasonUser {
+		message = "> 🔒 This PR has been locked. To unlock it, run `st unlock`."
+	} else {
+		message = fmt.Sprintf("> 🔒 This PR has been locked (%s). To unlock it, run `st unlock`.", reason)
+	}
+
+	return LockSectionStart + "\n" + message + "\n" + LockSectionEnd
+}
+
+// UpdatePRBodyLockSection adds, updates, or removes the lock section at the TOP of a PR body.
+// If lockSection is empty, any existing lock section is removed.
+// The lock section always appears at the very top of the body.
+func UpdatePRBodyLockSection(existingBody, lockSection string) string {
+	// First strip any existing lock section
+	body := StripLockSection(existingBody)
+
+	// If no lock section to add, return the stripped body
+	if lockSection == "" {
+		return body
+	}
+
+	// Add lock section at the TOP
+	if body == "" {
+		return lockSection
+	}
+
+	return lockSection + "\n\n" + body
+}
+
+// StripLockSection removes the lock status section from a PR body.
+func StripLockSection(body string) string {
+	if body == "" || !strings.Contains(body, LockSectionStart) {
+		return body
+	}
+
+	startIdx := strings.Index(body, LockSectionStart)
+	endIdx := strings.Index(body, LockSectionEnd)
+	if endIdx < 0 {
+		return body
+	}
+
+	// Remove the lock section and any trailing newlines
+	before := body[:startIdx]
+	after := body[endIdx+len(LockSectionEnd):]
+
+	// Trim leading newlines from the part after the section
+	after = strings.TrimPrefix(after, "\n")
+	after = strings.TrimPrefix(after, "\n")
+
+	// Combine, trimming any trailing newlines from before
+	result := strings.TrimRight(before, "\n")
+	if result == "" {
+		return strings.TrimLeft(after, "\n")
+	}
+	if after == "" {
+		return result
+	}
+	return result + "\n" + after
+}
+
 // CreateNavigationComment creates the content for a navigation comment.
 // This uses the same content as the body footer but with a comment marker.
 func CreateNavigationComment(branch string, eng engine.BranchReader, opts NavigationOptions) string {
@@ -245,16 +315,10 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 		fmt.Fprintf(&tree, "**Scope**: %s\n\n", scope.String())
 	}
 
-	// Add lock message if branch is locked
+	// Note: Lock message is now handled independently via CreateLockSection()
+	// to ensure it's shown even when navigation is hidden
+
 	branchObj := eng.GetBranch(branch)
-	if branchObj.IsLocked() {
-		reason := branchObj.GetLockReason()
-		if reason == git.LockReasonUser {
-			tree.WriteString("> 🔒 This PR has been locked. To unlock it, run `st unlock`.\n\n")
-		} else {
-			fmt.Fprintf(&tree, "> 🔒 This PR has been locked (%s). To unlock it, run `st unlock`.\n\n", reason)
-		}
-	}
 
 	// Add notice if present in PrInfo
 	prInfo, _ := branchObj.GetPrInfo()

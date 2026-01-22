@@ -54,14 +54,18 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 		navOpts.ShowMerged = ctx.Config.NavigationShowMerged()
 	}
 
-	// Only update body if location is "body"
-	var updatedBody string
+	// 1. Always handle lock section independently of navigation settings
+	// This ensures lock status is shown even when navigation is hidden (single-branch stack with when=multiple)
+	lockSection := pr.CreateLockSection(name, ctx.Engine)
+	updatedBody := pr.UpdatePRBodyLockSection(currentBody, lockSection)
+
+	// 2. Then handle navigation footer based on settings
 	if navOpts.Location == config.NavigationLocationBody {
 		footer := pr.CreatePRBodyFooterWithOptions(name, ctx.Engine, navOpts)
-		updatedBody = pr.UpdatePRBodyFooter(currentBody, footer)
+		updatedBody = pr.UpdatePRBodyFooter(updatedBody, footer)
 	} else {
 		// For comment/none location, strip any existing footer from body
-		updatedBody = pr.StripFooter(currentBody)
+		updatedBody = pr.StripFooter(updatedBody)
 	}
 
 	// 3. Apply updates if needed (Option 2)
