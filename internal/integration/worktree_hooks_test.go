@@ -39,7 +39,7 @@ func addApprovedHook(t *testing.T, dir string, hook string) {
 
 func TestWorktreePostCreateHooks(t *testing.T) {
 	t.Run("filters empty hooks from config", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// Create .stackit.yaml with empty hooks mixed in
 		writeProjectConfig(t, sh.Dir(), `hooks:
@@ -67,7 +67,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 	})
 
 	t.Run("runs approved hooks after worktree creation", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// Create .stackit.yaml with a hook that creates a marker file
 		// This needs to be committed to main FIRST so it's available in the main repo
@@ -96,7 +96,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 	})
 
 	t.Run("runs multiple hooks in order", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// Create .stackit.yaml with multiple hooks
 		// Commit to main first so it's available when hooks run
@@ -127,7 +127,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 	})
 
 	t.Run("skips unapproved hooks", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// Create .stackit.yaml with a hook
 		// Commit to main first
@@ -153,7 +153,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 	})
 
 	t.Run("no hooks configured does nothing", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// No .stackit.yaml file - should work fine without hooks
 
@@ -168,7 +168,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 	})
 
 	t.Run("hooks run for worktree create command", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// Create .stackit.yaml with a hook
 		// Commit to main first
@@ -195,7 +195,7 @@ func TestWorktreePostCreateHooks(t *testing.T) {
 	})
 
 	t.Run("hook failure does not prevent worktree creation", func(t *testing.T) {
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t)
 
 		// Create .stackit.yaml with a failing hook followed by a successful one
 		writeProjectConfig(t, sh.Dir(), `hooks:

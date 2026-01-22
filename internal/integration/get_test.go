@@ -9,7 +9,7 @@ func TestGetCommand(t *testing.T) {
 
 	t.Run("basic get from remote", func(t *testing.T) {
 		t.Parallel()
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create a branch on remote
 		sh.Log("Creating feature branch on remote...")
@@ -36,7 +36,7 @@ func TestGetCommand(t *testing.T) {
 
 	t.Run("get with force flag", func(t *testing.T) {
 		t.Parallel()
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create branch on remote and track it
 		sh.Log("Creating feature branch on remote...")

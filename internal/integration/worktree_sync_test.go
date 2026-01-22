@@ -16,7 +16,7 @@ func TestWorktreeWorkingDirAfterRestack(t *testing.T) {
 		// 5. But Worktree W's working directory is NOT updated
 		// 6. Result: git shows staged changes that "revert" the new content
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create a branch with worktree
 		sh.Log("Creating branch with worktree...")
@@ -73,7 +73,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// 4. Run sync from main repo
 		// 5. Expect Stack B to be restacked without unexpected conflicts
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// === Setup: Create two stacks, each in their own worktree ===
 
@@ -158,7 +158,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// Test that a deep stack in a worktree can be restacked from the main repo
 		// when main advances.
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create a deep stack in a worktree: main -> a -> b -> c -> d
 		sh.Log("Creating deep stack in worktree...")
@@ -207,7 +207,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// Test that sync works correctly when run from within a worktree
 		// (the opposite direction of the main bug)
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create a stack in a worktree
 		sh.Log("Creating stack in worktree...")
@@ -254,7 +254,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// - Worktree should NOT be deleted (B and C still exist)
 		// - Worktree should have B checked out after sync
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create stack A -> B -> C in a worktree
 		sh.Log("Creating stack A -> B -> C in worktree...")
@@ -330,7 +330,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// - Sync should complete without error
 		// - The worktree's stack should be skipped
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create a stack with worktree
 		sh.Log("Creating stack with worktree...")
@@ -389,7 +389,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// - Dirty worktree stack should be skipped
 		// - Sync should complete without error
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create Stack A (will be clean)
 		sh.Log("Creating Stack A with worktree (clean)...")
@@ -467,7 +467,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// - Worktree should survive and track the currently checked-out branch
 		// - Both B and C should still be accessible from the worktree
 
-		sh := NewTestShellWithRemoteInProcess(t)
+		sh := NewTestShellInProcess(t, WithRemote())
 
 		// Create forked stack in a worktree
 		sh.Log("Creating forked stack A -> B, A -> C in worktree...")

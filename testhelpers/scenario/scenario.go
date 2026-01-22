@@ -421,3 +421,51 @@ func (s *Scenario) ExpectBranch(expected string) *Scenario {
 	require.Equal(s.T, expected, actual)
 	return s
 }
+
+// =============================================================================
+// Stack Fixtures - Common stack patterns for tests
+// =============================================================================
+
+// WithLinearStack3 creates a linear stack: main -> a -> b -> c
+// This is a convenience wrapper for WithLinearStack("a", "b", "c").
+func (s *Scenario) WithLinearStack3() *Scenario {
+	return s.WithLinearStack("a", "b", "c")
+}
+
+// WithLinearStack creates a linear stack with the given branch names.
+// Each branch is created as a child of the previous one, starting from trunk.
+// Example: WithLinearStack("a", "b", "c") creates: main -> a -> b -> c
+func (s *Scenario) WithLinearStack(names ...string) *Scenario {
+	s.T.Helper()
+	if len(names) == 0 {
+		return s
+	}
+
+	// Ensure we have an initial commit on trunk
+	trunk := s.Engine.Trunk().GetName()
+	messages, _ := s.Scene.Repo.ListCurrentBranchCommitMessages()
+	if len(messages) == 0 {
+		s.WithInitialCommit()
+	}
+
+	// Build the stack structure
+	structure := make(map[string]string)
+	parent := trunk
+	for _, name := range names {
+		structure[name] = parent
+		parent = name
+	}
+
+	return s.WithStack(structure)
+}
+
+// WithDiamondStack creates a diamond-shaped stack: main -> parent -> [child1, child2]
+// This is useful for testing operations with parallel branches.
+func (s *Scenario) WithDiamondStack() *Scenario {
+	s.T.Helper()
+	return s.WithStack(map[string]string{
+		"parent": s.Engine.Trunk().GetName(),
+		"child1": "parent",
+		"child2": "parent",
+	})
+}

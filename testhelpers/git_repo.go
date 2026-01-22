@@ -10,6 +10,46 @@ import (
 
 const textFileName = "test.txt"
 
+// copyDir recursively copies a directory tree from src to dst.
+// dst must not exist - it will be created.
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Calculate destination path
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		// Copy file
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = srcFile.Close() }()
+
+		dstFile, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+
+		_, copyErr := srcFile.WriteTo(dstFile)
+		closeErr := dstFile.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
+}
+
 // GitRepo represents a Git repository for testing purposes.
 // This is the Go equivalent of the TypeScript GitRepo class.
 type GitRepo struct {
@@ -58,6 +98,9 @@ func newGitRepoInternal(dir string, options *gitRepoOptions) (*GitRepo, error) {
 		return repo, nil
 	}
 
+	// Track whether we're cloning from a template (which already has git config)
+	fromTemplate := false
+
 	switch {
 	case options.repoURL != "":
 		// Clone repository
@@ -66,18 +109,12 @@ func newGitRepoInternal(dir string, options *gitRepoOptions) (*GitRepo, error) {
 			return nil, fmt.Errorf("failed to clone repo: %w", err)
 		}
 	case options.templatePath != "":
-		// Clone from template using --local for speed.
-		// Use --no-hardlinks to avoid potential issues with concurrent access or cross-filesystem clones.
-		cmd := exec.Command("git", "clone", "--local", "--no-hardlinks", options.templatePath, dir)
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("failed to clone from template: %w\nOutput: %s", err, string(output))
+		fromTemplate = true
+		// Use filesystem copy instead of git clone - this is faster and preserves
+		// all files including custom ones like .stackit_config in .git/
+		if err := copyDir(options.templatePath, dir); err != nil {
+			return nil, fmt.Errorf("failed to copy from template: %w", err)
 		}
-
-		// Remove the 'origin' remote that git clone automatically creates
-		// as it points to the template directory and will interfere with tests
-		// that want to set up their own remotes.
-		_ = repo.runGitCommand("remote", "remove", "origin")
 	default:
 		// Initialize new repository with optimized config
 		// Use git -c flags to avoid reading global config and set local configs
@@ -89,11 +126,14 @@ func newGitRepoInternal(dir string, options *gitRepoOptions) (*GitRepo, error) {
 	}
 
 	// Configure Git user (required for commits)
-	if err := repo.runGitCommand("config", "user.name", "Test User"); err != nil {
-		return nil, err
-	}
-	if err := repo.runGitCommand("config", "user.email", "test@example.com"); err != nil {
-		return nil, err
+	// Skip for template clones - the template already has these configured
+	if !fromTemplate {
+		if err := repo.runGitCommand("config", "user.name", "Test User"); err != nil {
+			return nil, err
+		}
+		if err := repo.runGitCommand("config", "user.email", "test@example.com"); err != nil {
+			return nil, err
+		}
 	}
 
 	return repo, nil

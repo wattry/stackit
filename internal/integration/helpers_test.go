@@ -16,6 +16,28 @@ import (
 	"stackit.dev/stackit/testhelpers/scenario"
 )
 
+// =============================================================================
+// TestShell Options - Builder Pattern for Test Configuration
+// =============================================================================
+
+// TestShellOptions configures how a TestShell is created.
+type TestShellOptions struct {
+	withRemote bool
+}
+
+// TestShellOption is a functional option for configuring TestShell creation.
+type TestShellOption func(*TestShellOptions)
+
+// WithRemote configures the TestShell to include a local bare repository
+// as "origin" remote. Use this for tests that need push/pull/fetch/sync.
+// Without this option, no remote is set up, which is faster for tests
+// that only need local operations.
+func WithRemote() TestShellOption {
+	return func(opts *TestShellOptions) {
+		opts.withRemote = true
+	}
+}
+
 func init() {
 	scenario.SetGlobalInProcessRunner(func(workDir string, args ...string) (string, error) {
 		runner := inprocess.NewInProcessCLI()
@@ -50,8 +72,33 @@ func NewTestShell(t *testing.T, binaryPath string) *TestShell {
 // NewTestShellInProcess creates a shell-like test environment that uses in-process
 // CLI execution for faster tests. This avoids the overhead of spawning a new process
 // for each command (~8ms per command savings).
-func NewTestShellInProcess(t *testing.T) *TestShell {
+//
+// Options:
+//   - WithRemote(): Set up a local bare repository as "origin" for tests needing
+//     push/pull/fetch/sync operations. Without this, no remote is configured.
+//
+// Usage:
+//
+//	sh := NewTestShellInProcess(t)              // No remote (fast)
+//	sh := NewTestShellInProcess(t, WithRemote()) // With remote
+func NewTestShellInProcess(t *testing.T, opts ...TestShellOption) *TestShell {
 	t.Helper()
+
+	// Apply options
+	options := &TestShellOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// If remote is requested, delegate to the with-remote implementation
+	if options.withRemote {
+		sh := newTestShellWithRemote(t, "", inprocess.NewInProcessCLI())
+		// Force non-interactive mode for in-process execution
+		utils.SetInteractive(false)
+		sh.Run("init").Run("config tips false")
+		return sh
+	}
+
 	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
 		return s.Repo.CreateChangeAndCommit("initial", "init")
 	})
@@ -73,17 +120,6 @@ func NewTestShellInProcess(t *testing.T) *TestShell {
 func NewTestShellWithRemote(t *testing.T, binaryPath string) *TestShell {
 	t.Helper()
 	return newTestShellWithRemote(t, binaryPath, nil)
-}
-
-// NewTestShellWithRemoteInProcess creates a shell-like test environment with a local bare repo
-// as "origin", using in-process CLI execution for faster tests.
-func NewTestShellWithRemoteInProcess(t *testing.T) *TestShell {
-	t.Helper()
-	sh := newTestShellWithRemote(t, "", inprocess.NewInProcessCLI())
-	// Force non-interactive mode for in-process execution
-	utils.SetInteractive(false)
-	sh.Run("init").Run("config tips false")
-	return sh
 }
 
 // newTestShellWithRemote is the shared implementation for creating shells with remotes.
@@ -413,6 +449,48 @@ func countNonEmptyLines(s string) int {
 		}
 	}
 	return count
+}
+
+// =============================================================================
+// Stack Fixtures - Common stack patterns for tests
+// =============================================================================
+
+// CreateLinearStack3 creates a linear stack via stackit create: main -> a -> b -> c
+// This is a convenience wrapper for CreateLinearStack("a", "b", "c").
+// Returns the TestShell for method chaining.
+func (s *TestShell) CreateLinearStack3() *TestShell {
+	return s.CreateLinearStack("a", "b", "c")
+}
+
+// CreateLinearStack creates a linear stack with the given branch names using stackit create.
+// Each branch is created as a child of the previous one, starting from the current branch.
+// Example: CreateLinearStack("a", "b", "c") creates: current -> a -> b -> c
+// Returns the TestShell on the last created branch.
+func (s *TestShell) CreateLinearStack(names ...string) *TestShell {
+	s.t.Helper()
+	for _, name := range names {
+		s.Write(name+".txt", "content for "+name).
+			Run("create " + name + " -m 'Add " + name + "'")
+	}
+	return s
+}
+
+// CreateDiamondStack creates a diamond-shaped stack: main -> parent -> [child1, child2]
+// This is useful for testing operations with parallel branches.
+// Returns the TestShell on child2.
+func (s *TestShell) CreateDiamondStack() *TestShell {
+	s.t.Helper()
+	// Create parent
+	s.Write("parent.txt", "parent content").
+		Run("create parent -m 'Add parent'")
+	// Create first child
+	s.Write("child1.txt", "child1 content").
+		Run("create child1 -m 'Add child1'")
+	// Go back to parent and create second child
+	s.Checkout("parent").
+		Write("child2.txt", "child2 content").
+		Run("create child2 -m 'Add child2'")
+	return s
 }
 
 // =============================================================================
