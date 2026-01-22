@@ -714,6 +714,13 @@ func (e *engineImpl) RemoveWorktree(ctx context.Context, path string) error {
 	return e.git.RemoveWorktree(ctx, path)
 }
 
+// PruneWorktrees removes stale worktree entries from .git/worktrees.
+// This cleans up worktree information for worktrees whose working directory
+// has been deleted or is otherwise unavailable.
+func (e *engineImpl) PruneWorktrees(ctx context.Context) error {
+	return e.git.PruneWorktrees(ctx)
+}
+
 // CreateTemporaryWorktree creates a temporary directory and adds a detached worktree
 func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (string, func(), error) {
 	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, false)
@@ -722,6 +729,9 @@ func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string,
 // CreateTemporaryWorktreeWithOptions creates a temporary directory and adds a detached worktree with options.
 // If shallow is true, uses --no-checkout to create a worktree without checking out files to the working tree.
 // This is faster for validation-only operations that don't need actual files.
+//
+// Note: Callers that create multiple worktrees in parallel (like ValidateRebasesParallel) should call
+// PruneWorktrees() once before starting parallel worktree creation to avoid race conditions.
 func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, shallow bool) (string, func(), error) {
 	// Prune stale worktree entries before creating new ones.
 	// This cleans up entries in .git/worktrees/ that may be left behind from
