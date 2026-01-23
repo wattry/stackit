@@ -27,6 +27,9 @@ type PullRequestInfo struct {
 	Draft   bool
 	Base    string
 	Head    string
+	// Warnings contains non-fatal issues that occurred during PR creation/update
+	// (e.g., failed to add labels or assignees)
+	Warnings []string
 }
 
 // CheckDetail represents the status of an individual CI check
@@ -71,7 +74,8 @@ type Client interface {
 	CreatePullRequest(ctx context.Context, owner, repo string, opts CreatePROptions) (*PullRequestInfo, error)
 
 	// UpdatePullRequest updates an existing pull request
-	UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts UpdatePROptions) error
+	// Returns warnings (non-fatal issues like failed label/assignee additions) and error
+	UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts UpdatePROptions) (warnings []string, err error)
 
 	// GetPullRequestByBranch gets a pull request for a branch
 	GetPullRequestByBranch(ctx context.Context, owner, repo, branchName string) (*PullRequestInfo, error)

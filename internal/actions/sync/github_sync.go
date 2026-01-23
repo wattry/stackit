@@ -189,7 +189,7 @@ func PushParentsToGitHub(ctx *app.Context, result *GitHubSyncResult, dirtyAnchor
 				Base: &localParentName,
 			}
 
-			if err := githubClient.UpdatePullRequest(gctx, result.RepoOwner, result.RepoName, prInfo.Number, updateOpts); err != nil {
+			if _, err := githubClient.UpdatePullRequest(gctx, result.RepoOwner, result.RepoName, prInfo.Number, updateOpts); err != nil {
 				out.Debug("Failed to update PR base for %s: %v", branch.GetName(), err)
 				continue
 			}

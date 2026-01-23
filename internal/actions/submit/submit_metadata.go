@@ -12,11 +12,6 @@ import (
 	"stackit.dev/stackit/internal/tui"
 )
 
-// joinStrings joins a slice of strings with a separator
-func joinStrings(strs []string, sep string) string {
-	return strings.Join(strs, sep)
-}
-
 // GetPRTitle gets the PR title, prompting if needed
 func GetPRTitle(branch engine.Branch, editInline bool, existingTitle string, scope engine.Scope) (string, error) {
 	title := pr.GenerateTitle(branch, existingTitle, scope)
@@ -150,7 +145,7 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 
 	// Merge config reviewers if no reviewers from flag
 	if len(metadata.Reviewers) == 0 && len(metadata.TeamReviewers) == 0 && len(opts.ConfigReviewers) > 0 {
-		reviewers, teamReviewers := github.ParseReviewers(joinStrings(opts.ConfigReviewers, ","))
+		reviewers, teamReviewers := github.ParseReviewers(strings.Join(opts.ConfigReviewers, ","))
 		metadata.Reviewers = reviewers
 		metadata.TeamReviewers = teamReviewers
 	}

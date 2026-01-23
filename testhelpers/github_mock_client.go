@@ -56,7 +56,7 @@ func (c *MockGitHubClient) CreatePullRequest(ctx context.Context, owner, repo st
 }
 
 // UpdatePullRequest updates an existing pull request
-func (c *MockGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts githubpkg.UpdatePROptions) error {
+func (c *MockGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts githubpkg.UpdatePROptions) ([]string, error) {
 	update := &github.PullRequest{}
 
 	if opts.Title != nil {
@@ -72,7 +72,7 @@ func (c *MockGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo st
 	}
 
 	_, _, err := c.client.PullRequests.Edit(ctx, owner, repo, prNumber, update)
-	return err
+	return nil, err
 }
 
 // GetPullRequestByBranch gets a pull request for a branch

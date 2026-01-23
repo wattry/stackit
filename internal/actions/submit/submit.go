@@ -67,6 +67,8 @@ type Options struct {
 	TargetTrunk          string
 	IgnoreOutOfSyncTrunk bool
 	SubmitFooter         bool // Whether to include PR footer (from config)
+	NoLabels             bool // Skip applying default labels from config
+	NoAssignees          bool // Skip applying default assignees from config
 
 	// Config-driven options (these are merged with flags)
 	ConfigDraft     bool     // Default draft mode from config
@@ -418,6 +420,11 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 		return "", fmt.Errorf("failed to create PR for %s: %w", submissionInfo.BranchName, err)
 	}
 
+	// Log any warnings from PR creation (e.g., failed to add labels/assignees)
+	for _, warning := range prResult.Warnings {
+		ctx.Output.Warn("%s: %s", submissionInfo.BranchName, warning)
+	}
+
 	// Update PR info
 	prNumber := prResult.Number
 	prURL := prResult.HTMLURL
@@ -454,6 +461,8 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		Title:           &submissionInfo.Metadata.Title,
 		Reviewers:       submissionInfo.Metadata.Reviewers,
 		TeamReviewers:   submissionInfo.Metadata.TeamReviewers,
+		Labels:          submissionInfo.Metadata.Labels,
+		Assignees:       submissionInfo.Metadata.Assignees,
 		MergeWhenReady:  &opts.MergeWhenReady,
 		RerequestReview: opts.RerequestReview,
 	}
@@ -494,8 +503,14 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		}
 	}
 
-	if err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts); err != nil {
+	updateWarnings, err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts)
+	if err != nil {
 		return "", fmt.Errorf("failed to update PR for %s: %w", submissionInfo.BranchName, err)
+	}
+
+	// Log any warnings from PR update (e.g., failed to add labels/assignees)
+	for _, warning := range updateWarnings {
+		ctx.Output.Warn("%s: %s", submissionInfo.BranchName, warning)
 	}
 
 	// Get PR URL

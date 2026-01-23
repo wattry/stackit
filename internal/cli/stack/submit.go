@@ -47,6 +47,8 @@ type submitFlags struct {
 	targetTrunk          string
 	ignoreOutOfSyncTrunk bool
 	cli                  bool
+	noLabels             bool
+	noAssignees          bool
 }
 
 func addSubmitFlags(cmd *cobra.Command, f *submitFlags) {
@@ -76,6 +78,8 @@ func addSubmitFlags(cmd *cobra.Command, f *submitFlags) {
 	cmd.Flags().StringVarP(&f.targetTrunk, "target-trunk", "t", "", "Which trunk to open PRs against on remote.")
 	cmd.Flags().BoolVar(&f.ignoreOutOfSyncTrunk, "ignore-out-of-sync-trunk", false, "Perform the submit operation even if the trunk branch is out of sync with its upstream branch.")
 	cmd.Flags().BoolVar(&f.cli, "cli", false, "Edit PR metadata via the CLI instead of on web.")
+	cmd.Flags().BoolVar(&f.noLabels, "no-labels", false, "Don't apply default labels from config.")
+	cmd.Flags().BoolVar(&f.noAssignees, "no-assignees", false, "Don't apply default assignees from config.")
 }
 
 func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
@@ -89,6 +93,16 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 		if f.stack {
 			stackRange = submit.StackRangeFull()
 		}
+		// Get config labels/assignees, respecting --no-labels and --no-assignees flags
+		var configLabels []string
+		var configAssignees []string
+		if !f.noLabels {
+			configLabels = cfg.SubmitLabels()
+		}
+		if !f.noAssignees {
+			configAssignees = cfg.SubmitAssignees()
+		}
+
 		opts := submit.Options{
 			Branch:               f.branch,
 			StackRange:           stackRange,
@@ -116,12 +130,14 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 			TargetTrunk:          f.targetTrunk,
 			IgnoreOutOfSyncTrunk: f.ignoreOutOfSyncTrunk,
 			SubmitFooter:         submitFooter,
+			NoLabels:             f.noLabels,
+			NoAssignees:          f.noAssignees,
 			// Config-driven options
 			ConfigDraft:     cfg.SubmitDraft(),
 			ConfigWeb:       cfg.SubmitWeb(),
-			ConfigLabels:    cfg.SubmitLabels(),
+			ConfigLabels:    configLabels,
 			ConfigReviewers: cfg.SubmitReviewers(),
-			ConfigAssignees: cfg.SubmitAssignees(),
+			ConfigAssignees: configAssignees,
 		}
 
 		// Create runner (manages terminal state) and handler (processes events)
