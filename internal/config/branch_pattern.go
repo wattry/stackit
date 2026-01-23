@@ -45,6 +45,11 @@ func (p BranchPattern) IsValid() bool {
 	return strings.Contains(string(p), "{message}")
 }
 
+// ContainsScope returns true if the pattern contains the {scope} placeholder
+func (p BranchPattern) ContainsScope() bool {
+	return strings.Contains(p.String(), "{scope}")
+}
+
 // WithDefault returns the pattern, or the default if empty
 func (p BranchPattern) WithDefault() BranchPattern {
 	if p == "" {

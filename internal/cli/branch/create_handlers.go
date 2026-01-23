@@ -1,11 +1,14 @@
 package branch
 
 import (
+	"fmt"
+
 	"stackit.dev/stackit/internal/actions/create"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // NewCreateUI creates a runner and handler pair for create operations.
@@ -13,8 +16,9 @@ import (
 // Caller must defer runner.Cleanup() to restore terminal on exit.
 // Currently returns nil runner as there's no TUI component yet.
 func NewCreateUI(out output.Output, _ output.Logger) (*tui.Runner, create.Handler) {
-	// TODO: Add interactive TUI handler when needed
-	// For now, use simple handler for both TTY and non-TTY
+	if utils.IsInteractive() {
+		return nil, NewInteractiveCreateHandler(out)
+	}
 	return nil, NewSimpleCreateHandler(out)
 }
 
@@ -72,8 +76,39 @@ func (h *SimpleCreateHandler) PromptStageChanges() (bool, error) {
 	return false, nil
 }
 
+// PromptScope returns empty string for simple handler (non-interactive)
+func (h *SimpleCreateHandler) PromptScope(_ string) (string, error) {
+	return "", nil
+}
+
 func (h *SimpleCreateHandler) printStepCompleted(_ create.Step, _ string) {
 	// Most steps are silent - output is handled in Complete
 	// Only show certain steps for verbose feedback
 	// Worktree creation is shown by the action itself
+}
+
+// InteractiveCreateHandler provides interactive prompts for create operations
+type InteractiveCreateHandler struct {
+	*SimpleCreateHandler
+}
+
+// NewInteractiveCreateHandler creates a new InteractiveCreateHandler
+func NewInteractiveCreateHandler(out output.Output) *InteractiveCreateHandler {
+	return &InteractiveCreateHandler{
+		SimpleCreateHandler: NewSimpleCreateHandler(out),
+	}
+}
+
+// IsInteractive returns true for interactive handler
+func (h *InteractiveCreateHandler) IsInteractive() bool { return true }
+
+// PromptStageChanges prompts user to stage unstaged changes
+func (h *InteractiveCreateHandler) PromptStageChanges() (bool, error) {
+	return tui.PromptConfirm("Stage all unstaged changes?", true)
+}
+
+// PromptScope prompts user for a scope value when pattern contains {scope}
+func (h *InteractiveCreateHandler) PromptScope(patternHint string) (string, error) {
+	prompt := fmt.Sprintf("Branch pattern uses {scope}: %s\nEnter scope (or Enter to skip):", patternHint)
+	return tui.PromptTextInput(prompt, "")
 }
