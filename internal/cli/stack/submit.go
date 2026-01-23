@@ -116,6 +116,12 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 			TargetTrunk:          f.targetTrunk,
 			IgnoreOutOfSyncTrunk: f.ignoreOutOfSyncTrunk,
 			SubmitFooter:         submitFooter,
+			// Config-driven options
+			ConfigDraft:     cfg.SubmitDraft(),
+			ConfigWeb:       cfg.SubmitWeb(),
+			ConfigLabels:    cfg.SubmitLabels(),
+			ConfigReviewers: cfg.SubmitReviewers(),
+			ConfigAssignees: cfg.SubmitAssignees(),
 		}
 
 		// Create runner (manages terminal state) and handler (processes events)

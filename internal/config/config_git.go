@@ -582,6 +582,203 @@ func (c *GitConfig) SetNavigationShowMerged(show bool) error {
 	return c.store.SetBool(KeyNavigationShowMerged, show)
 }
 
+// SubmitDraft returns whether to create PRs as drafts by default.
+// Priority: personal git config > team project config > default.
+func (c *GitConfig) SubmitDraft() bool {
+	// Check personal git config first
+	if c.store.Exists(KeySubmitDraft) {
+		return c.store.GetBoolWithDefault(KeySubmitDraft, DefaultSubmitDraft)
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasSubmitDraft() {
+		return c.project.GetSubmitDraft()
+	}
+	// Return default
+	return DefaultSubmitDraft
+}
+
+// SetSubmitDraft sets whether to create PRs as drafts by default.
+func (c *GitConfig) SetSubmitDraft(draft bool) error {
+	return c.store.SetBool(KeySubmitDraft, draft)
+}
+
+// SubmitWeb returns when to open PRs in browser.
+// Priority: personal git config > team project config > default.
+func (c *GitConfig) SubmitWeb() string {
+	// Check personal git config first
+	web, _ := c.store.Get(KeySubmitWeb)
+	if web != "" {
+		if !slices.Contains(ValidSubmitWeb, web) {
+			return DefaultSubmitWeb
+		}
+		return web
+	}
+	// Fall back to team project config
+	if c.project != nil && c.project.HasSubmitWeb() {
+		return c.project.Submit.Web
+	}
+	// Return default
+	return DefaultSubmitWeb
+}
+
+// SetSubmitWeb sets when to open PRs in browser.
+func (c *GitConfig) SetSubmitWeb(web string) error {
+	if !slices.Contains(ValidSubmitWeb, web) {
+		return fmt.Errorf("invalid submit.web: %s (must be one of: %s)", web, strings.Join(ValidSubmitWeb, ", "))
+	}
+	return c.store.Set(KeySubmitWeb, web)
+}
+
+// SubmitLabels returns the default labels for PRs.
+// Merges labels from git config and project config (deduplicated).
+func (c *GitConfig) SubmitLabels() []string {
+	labels := []string{}
+
+	// Add labels from git config
+	gitLabels, _ := c.store.GetAll(KeySubmitLabels)
+	for _, l := range gitLabels {
+		if !slices.Contains(labels, l) {
+			labels = append(labels, l)
+		}
+	}
+
+	// Add labels from project config
+	if c.project != nil && c.project.HasSubmitLabels() {
+		for _, l := range c.project.Submit.Labels {
+			if !slices.Contains(labels, l) {
+				labels = append(labels, l)
+			}
+		}
+	}
+
+	return labels
+}
+
+// SetSubmitLabels sets the default labels for PRs.
+// This replaces all existing labels.
+func (c *GitConfig) SetSubmitLabels(labels []string) error {
+	// Clear existing labels
+	if err := c.store.Unset(KeySubmitLabels); err != nil {
+		return err
+	}
+	// Add new labels
+	for _, label := range labels {
+		if err := c.store.Add(KeySubmitLabels, label); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddSubmitLabel adds a label to the default labels.
+func (c *GitConfig) AddSubmitLabel(label string) error {
+	currentLabels, _ := c.store.GetAll(KeySubmitLabels)
+	if slices.Contains(currentLabels, label) {
+		return nil // Already exists
+	}
+	return c.store.Add(KeySubmitLabels, label)
+}
+
+// SubmitReviewers returns the default reviewers for PRs.
+// Merges reviewers from git config and project config (deduplicated).
+func (c *GitConfig) SubmitReviewers() []string {
+	reviewers := []string{}
+
+	// Add reviewers from git config
+	gitReviewers, _ := c.store.GetAll(KeySubmitReviewers)
+	for _, r := range gitReviewers {
+		if !slices.Contains(reviewers, r) {
+			reviewers = append(reviewers, r)
+		}
+	}
+
+	// Add reviewers from project config
+	if c.project != nil && c.project.HasSubmitReviewers() {
+		for _, r := range c.project.Submit.Reviewers {
+			if !slices.Contains(reviewers, r) {
+				reviewers = append(reviewers, r)
+			}
+		}
+	}
+
+	return reviewers
+}
+
+// SetSubmitReviewers sets the default reviewers for PRs.
+// This replaces all existing reviewers.
+func (c *GitConfig) SetSubmitReviewers(reviewers []string) error {
+	// Clear existing reviewers
+	if err := c.store.Unset(KeySubmitReviewers); err != nil {
+		return err
+	}
+	// Add new reviewers
+	for _, reviewer := range reviewers {
+		if err := c.store.Add(KeySubmitReviewers, reviewer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddSubmitReviewer adds a reviewer to the default reviewers.
+func (c *GitConfig) AddSubmitReviewer(reviewer string) error {
+	currentReviewers, _ := c.store.GetAll(KeySubmitReviewers)
+	if slices.Contains(currentReviewers, reviewer) {
+		return nil // Already exists
+	}
+	return c.store.Add(KeySubmitReviewers, reviewer)
+}
+
+// SubmitAssignees returns the default assignees for PRs.
+// Merges assignees from git config and project config (deduplicated).
+func (c *GitConfig) SubmitAssignees() []string {
+	assignees := []string{}
+
+	// Add assignees from git config
+	gitAssignees, _ := c.store.GetAll(KeySubmitAssignees)
+	for _, a := range gitAssignees {
+		if !slices.Contains(assignees, a) {
+			assignees = append(assignees, a)
+		}
+	}
+
+	// Add assignees from project config
+	if c.project != nil && c.project.HasSubmitAssignees() {
+		for _, a := range c.project.Submit.Assignees {
+			if !slices.Contains(assignees, a) {
+				assignees = append(assignees, a)
+			}
+		}
+	}
+
+	return assignees
+}
+
+// SetSubmitAssignees sets the default assignees for PRs.
+// This replaces all existing assignees.
+func (c *GitConfig) SetSubmitAssignees(assignees []string) error {
+	// Clear existing assignees
+	if err := c.store.Unset(KeySubmitAssignees); err != nil {
+		return err
+	}
+	// Add new assignees
+	for _, assignee := range assignees {
+		if err := c.store.Add(KeySubmitAssignees, assignee); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddSubmitAssignee adds an assignee to the default assignees.
+func (c *GitConfig) AddSubmitAssignee(assignee string) error {
+	currentAssignees, _ := c.store.GetAll(KeySubmitAssignees)
+	if slices.Contains(currentAssignees, assignee) {
+		return nil // Already exists
+	}
+	return c.store.Add(KeySubmitAssignees, assignee)
+}
+
 // Deprecated methods for backwards compatibility during migration.
 
 // CombineCICommand returns the CI command (deprecated, use CICommand).
@@ -687,6 +884,31 @@ func (c *GitConfig) UnsetNavigationShowMerged() error {
 	return c.store.Unset(KeyNavigationShowMerged)
 }
 
+// UnsetSubmitDraft removes the personal submit.draft setting, reverting to project/default.
+func (c *GitConfig) UnsetSubmitDraft() error {
+	return c.store.Unset(KeySubmitDraft)
+}
+
+// UnsetSubmitWeb removes the personal submit.web setting, reverting to project/default.
+func (c *GitConfig) UnsetSubmitWeb() error {
+	return c.store.Unset(KeySubmitWeb)
+}
+
+// UnsetSubmitLabels removes all personal submit.labels, reverting to project/default.
+func (c *GitConfig) UnsetSubmitLabels() error {
+	return c.store.Unset(KeySubmitLabels)
+}
+
+// UnsetSubmitReviewers removes all personal submit.reviewers, reverting to project/default.
+func (c *GitConfig) UnsetSubmitReviewers() error {
+	return c.store.Unset(KeySubmitReviewers)
+}
+
+// UnsetSubmitAssignees removes all personal submit.assignees, reverting to project/default.
+func (c *GitConfig) UnsetSubmitAssignees() error {
+	return c.store.Unset(KeySubmitAssignees)
+}
+
 // ResetAllPersonal removes all personal configuration overrides, reverting to team/default values.
 // This clears all stackit.* keys from the local git config.
 func (c *GitConfig) ResetAllPersonal() error {
@@ -695,6 +917,11 @@ func (c *GitConfig) ResetAllPersonal() error {
 		KeyTrunks,
 		KeyBranchPattern,
 		KeySubmitFooter,
+		KeySubmitDraft,
+		KeySubmitWeb,
+		KeySubmitLabels,
+		KeySubmitReviewers,
+		KeySubmitAssignees,
 		KeyUndoDepth,
 		KeyWorktreeBasePath,
 		KeyWorktreeAutoClean,

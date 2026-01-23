@@ -21,7 +21,12 @@ type BranchConfig struct {
 
 // SubmitConfig contains PR submission configuration
 type SubmitConfig struct {
-	Footer *bool `yaml:"footer,omitempty"` // Pointer to distinguish unset from false
+	Footer    *bool    `yaml:"footer,omitempty"`    // Pointer to distinguish unset from false
+	Draft     *bool    `yaml:"draft,omitempty"`     // Pointer to distinguish unset from false
+	Web       string   `yaml:"web,omitempty"`       // "always", "created", "never"
+	Labels    []string `yaml:"labels,omitempty"`    // Default labels for PRs
+	Reviewers []string `yaml:"reviewers,omitempty"` // Default reviewers for PRs
+	Assignees []string `yaml:"assignees,omitempty"` // Default assignees for PRs
 }
 
 // MergeConfig contains merge method configuration
@@ -170,6 +175,39 @@ func (c *ProjectConfig) GetSubmitFooter() bool {
 	return *c.Submit.Footer
 }
 
+// HasSubmitDraft returns true if the submit draft setting is configured
+func (c *ProjectConfig) HasSubmitDraft() bool {
+	return c.Submit.Draft != nil
+}
+
+// GetSubmitDraft returns the submit draft value (caller should check HasSubmitDraft first)
+func (c *ProjectConfig) GetSubmitDraft() bool {
+	if c.Submit.Draft == nil {
+		return false // Default
+	}
+	return *c.Submit.Draft
+}
+
+// HasSubmitWeb returns true if the submit web setting is configured
+func (c *ProjectConfig) HasSubmitWeb() bool {
+	return c.Submit.Web != ""
+}
+
+// HasSubmitLabels returns true if default labels are configured
+func (c *ProjectConfig) HasSubmitLabels() bool {
+	return len(c.Submit.Labels) > 0
+}
+
+// HasSubmitReviewers returns true if default reviewers are configured
+func (c *ProjectConfig) HasSubmitReviewers() bool {
+	return len(c.Submit.Reviewers) > 0
+}
+
+// HasSubmitAssignees returns true if default assignees are configured
+func (c *ProjectConfig) HasSubmitAssignees() bool {
+	return len(c.Submit.Assignees) > 0
+}
+
 // HasMergeMethod returns true if a merge method is configured
 func (c *ProjectConfig) HasMergeMethod() bool {
 	return c.Merge.Method != ""
@@ -272,6 +310,13 @@ func (c *ProjectConfig) Validate() error {
 	if c.HasMergeMethod() {
 		if !slices.Contains(ValidMergeMethods, c.Merge.Method) {
 			return fmt.Errorf("invalid merge.method in %s: %q (must be one of: %s)", ProjectConfigFileName, c.Merge.Method, strings.Join(ValidMergeMethods, ", "))
+		}
+	}
+
+	// Validate submit.web if set
+	if c.HasSubmitWeb() {
+		if !slices.Contains(ValidSubmitWeb, c.Submit.Web) {
+			return fmt.Errorf("invalid submit.web in %s: %q (must be one of: %s)", ProjectConfigFileName, c.Submit.Web, strings.Join(ValidSubmitWeb, ", "))
 		}
 	}
 

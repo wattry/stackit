@@ -26,6 +26,8 @@ type CreatePROptions struct {
 	Draft         bool
 	Reviewers     []string
 	TeamReviewers []string
+	Labels        []string
+	Assignees     []string
 }
 
 // UpdatePROptions contains options for updating a pull request
@@ -64,6 +66,16 @@ func CreatePullRequest(ctx context.Context, client *github.Client, owner, repo s
 			Reviewers:     opts.Reviewers,
 			TeamReviewers: opts.TeamReviewers,
 		})
+	}
+
+	// Add labels if specified
+	if len(opts.Labels) > 0 {
+		_, _, _ = client.Issues.AddLabelsToIssue(ctx, owner, repo, *createdPR.Number, opts.Labels)
+	}
+
+	// Add assignees if specified
+	if len(opts.Assignees) > 0 {
+		_, _, _ = client.Issues.AddAssignees(ctx, owner, repo, *createdPR.Number, opts.Assignees)
 	}
 
 	return createdPR, nil

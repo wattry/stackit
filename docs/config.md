@@ -54,6 +54,11 @@ git config --local --add stackit.trunks develop
 | `stackit.trunks` | string[] | `[]` | Additional trunk branches |
 | `stackit.branch.pattern` | string | `{username}/{date}/{message}` | Branch naming template |
 | `stackit.submit.footer` | bool | `true` | Include PR footer in descriptions |
+| `stackit.submit.draft` | bool | `false` | Create PRs as drafts by default |
+| `stackit.submit.web` | string | `never` | When to open PRs in browser (always/created/never) |
+| `stackit.submit.labels` | string[] | `[]` | Default labels for PRs |
+| `stackit.submit.reviewers` | string[] | `[]` | Default reviewers for PRs |
+| `stackit.submit.assignees` | string[] | `[]` | Default assignees for PRs |
 | `stackit.undo.depth` | int | `10` | Max undo snapshots to retain |
 | `stackit.worktree.basePath` | string | `""` | Base directory for worktrees |
 | `stackit.worktree.autoClean` | bool | `true` | Auto-clean worktrees during sync |
@@ -161,6 +166,15 @@ branch:
 # PR submission settings
 submit:
   footer: true  # Include stackit footer in PR descriptions
+  draft: false  # Create PRs as drafts by default
+  web: never    # Open PRs in browser: always, created, or never
+  labels:       # Default labels for PRs
+    - needs-review
+  reviewers:    # Default reviewers for PRs
+    - teammate1
+    - teammate2
+  assignees:    # Default assignees for PRs
+    - self
 
 # Merge method preference
 merge:
@@ -201,6 +215,11 @@ The table below shows all options available in `.stackit.yaml`. The "Team Fallba
 | `trunks` | string[] | `[]` | Additional trunk branches (merged with git config) | Yes (additive) |
 | `branch.pattern` | string | `{username}/{date}/{message}` | Branch naming template | Yes |
 | `submit.footer` | bool | `true` | Include PR footer | Yes |
+| `submit.draft` | bool | `false` | Create PRs as drafts by default | Yes |
+| `submit.web` | string | `never` | Open PRs in browser (always/created/never) | Yes |
+| `submit.labels` | string[] | `[]` | Default labels for PRs | Yes (additive) |
+| `submit.reviewers` | string[] | `[]` | Default reviewers for PRs | Yes (additive) |
+| `submit.assignees` | string[] | `[]` | Default assignees for PRs | Yes (additive) |
 | `merge.method` | string | `""` | Merge strategy (squash/merge/rebase) | Yes |
 | `ci.command` | string | `""` | CI validation command | Yes |
 | `ci.timeout` | int | `600` | CI timeout in seconds | Yes |
