@@ -20,6 +20,7 @@ type Logger interface {
 	Info(msg string, args ...any)
 	Warn(msg string, args ...any)
 	Error(msg string, args ...any)
+	Trace(op string, durationMicros int64, success bool, err error, attrs ...slog.Attr)
 	Close() error
 }
 
@@ -96,6 +97,26 @@ func (l *FileLogger) Error(msg string, args ...any) {
 	l.logger.Log(context.Background(), slog.LevelError, fmt.Sprintf(msg, args...))
 }
 
+// Trace logs a structured operation trace at DEBUG level.
+// This is optimized to minimize allocations by using slog's native attribute handling.
+func (l *FileLogger) Trace(op string, durationMicros int64, success bool, err error, attrs ...slog.Attr) {
+	// Build base attributes - pre-allocate slice to avoid growth
+	baseAttrs := make([]slog.Attr, 0, 4+len(attrs))
+	baseAttrs = append(baseAttrs,
+		slog.Int64("ts", time.Now().UnixMicro()),
+		slog.String("op", op),
+		slog.Int64("dur_us", durationMicros),
+		slog.Bool("ok", success),
+	)
+	baseAttrs = append(baseAttrs, attrs...)
+
+	if err != nil {
+		baseAttrs = append(baseAttrs, slog.String("err", err.Error()))
+	}
+
+	l.logger.LogAttrs(context.Background(), slog.LevelDebug, "[st-trace]", baseAttrs...)
+}
+
 // Close closes the log file.
 func (l *FileLogger) Close() error {
 	if l.logWriter != nil {
@@ -123,6 +144,9 @@ func (l *NullLogger) Warn(_ string, _ ...any) {}
 
 // Error discards the message.
 func (l *NullLogger) Error(_ string, _ ...any) {}
+
+// Trace discards the trace.
+func (l *NullLogger) Trace(_ string, _ int64, _ bool, _ error, _ ...slog.Attr) {}
 
 // Close does nothing and returns nil.
 func (l *NullLogger) Close() error { return nil }
