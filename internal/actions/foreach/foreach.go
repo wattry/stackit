@@ -355,8 +355,9 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 		err        error
 	}{branchName: branch.GetName()}
 
-	// Create a temporary directory for the worktree
-	worktreePath, cleanup, err := appCtx.Engine.CreateTemporaryWorktree(ctx, branch.GetName(), "stackit-foreach-*")
+	// Create a temporary directory for the worktree.
+	// Use SkipPrune variant since foreachParallel already pruned once before parallel execution.
+	worktreePath, cleanup, err := appCtx.Engine.CreateTemporaryWorktreeSkipPrune(ctx, branch.GetName(), "stackit-foreach-*")
 	if err != nil {
 		res.err = err
 		return res
