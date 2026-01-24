@@ -66,19 +66,42 @@ func (c *StackitGitHubClient) CreatePullRequest(ctx context.Context, owner, repo
 		return nil, fmt.Errorf("failed to create pull request: %w", err)
 	}
 
+	result := ToPullRequestInfo(createdPR)
+	var warnings []string
+
 	// Add reviewers if specified
 	if len(opts.Reviewers) > 0 || len(opts.TeamReviewers) > 0 {
-		_, _, _ = c.client.PullRequests.RequestReviewers(ctx, owner, repo, *createdPR.Number, github.ReviewersRequest{
+		_, _, err := c.client.PullRequests.RequestReviewers(ctx, owner, repo, *createdPR.Number, github.ReviewersRequest{
 			Reviewers:     opts.Reviewers,
 			TeamReviewers: opts.TeamReviewers,
 		})
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to add reviewers: %v", err))
+		}
 	}
 
-	return ToPullRequestInfo(createdPR), nil
+	// Add labels if specified
+	if len(opts.Labels) > 0 {
+		_, _, err := c.client.Issues.AddLabelsToIssue(ctx, owner, repo, *createdPR.Number, opts.Labels)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to add labels: %v", err))
+		}
+	}
+
+	// Add assignees if specified
+	if len(opts.Assignees) > 0 {
+		_, _, err := c.client.Issues.AddAssignees(ctx, owner, repo, *createdPR.Number, opts.Assignees)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to add assignees: %v", err))
+		}
+	}
+
+	result.Warnings = warnings
+	return result, nil
 }
 
 // UpdatePullRequest updates an existing pull request
-func (c *StackitGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts UpdatePROptions) error {
+func (c *StackitGitHubClient) UpdatePullRequest(ctx context.Context, owner, repo string, prNumber int, opts UpdatePROptions) ([]string, error) {
 	return UpdatePullRequest(ctx, c.client, c.runner, owner, repo, prNumber, opts)
 }
 

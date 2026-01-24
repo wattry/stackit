@@ -23,6 +23,15 @@ internal/
 - `docs/config.md` - Configuration system, keys, layered config
 - `docs/tui.md` - TUI patterns, BaseModel, styling, components
 
+## Common Development Tasks
+
+| Task | Guide |
+|------|-------|
+| Add a new config option | See "Adding New Configuration" in `docs/config.md` |
+| Add submit command config | See "Submit Command Config Flow" in `docs/config.md` |
+| Add a new CLI command | Follow patterns in `internal/cli/` |
+| Add TUI component | See `docs/tui.md` |
+
 ## CLI Tools
 
 Use these tools instead of standard alternatives for better performance:

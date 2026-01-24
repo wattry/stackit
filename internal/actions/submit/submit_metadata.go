@@ -3,6 +3,7 @@ package submit
 
 import (
 	"fmt"
+	"strings"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
@@ -120,7 +121,8 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 	case opts.Publish:
 		metadata.IsDraft = false
 	case prInfo == nil:
-		metadata.IsDraft = false
+		// For new PRs, use config draft setting as default
+		metadata.IsDraft = opts.ConfigDraft
 	default:
 		metadata.IsDraft = prInfo.IsDraft()
 	}
@@ -140,6 +142,19 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 		metadata.Reviewers = reviewers
 		metadata.TeamReviewers = teamReviewers
 	}
+
+	// Merge config reviewers if no reviewers from flag
+	if len(metadata.Reviewers) == 0 && len(metadata.TeamReviewers) == 0 && len(opts.ConfigReviewers) > 0 {
+		reviewers, teamReviewers := github.ParseReviewers(strings.Join(opts.ConfigReviewers, ","))
+		metadata.Reviewers = reviewers
+		metadata.TeamReviewers = teamReviewers
+	}
+
+	// Set labels from config
+	metadata.Labels = opts.ConfigLabels
+
+	// Set assignees from config
+	metadata.Assignees = opts.ConfigAssignees
 
 	// Save metadata to engine in case command fails
 	if err := pr.UpsertPrInfo(ctx.Context, branch, engine.NewPrInfo(
@@ -169,6 +184,11 @@ type MetadataOptions struct {
 	Publish           bool
 	Reviewers         string
 	ReviewersPrompt   bool
+	// Config-driven options
+	ConfigDraft     bool     // Default draft mode from config (used for new PRs)
+	ConfigReviewers []string // Default reviewers from config
+	ConfigLabels    []string // Default labels from config
+	ConfigAssignees []string // Default assignees from config
 }
 
 // PRMetadata contains PR metadata
@@ -178,6 +198,8 @@ type PRMetadata struct {
 	IsDraft       bool
 	Reviewers     []string
 	TeamReviewers []string
+	Labels        []string // Labels to apply to the PR
+	Assignees     []string // Assignees to apply to the PR
 }
 
 // Helper to get string value from prInfo

@@ -1104,3 +1104,359 @@ trunks:
 		require.Equal(t, "develop", cfg.Trunk())
 	})
 }
+
+func TestGitConfigSubmitDraft(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns default when not set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.False(t, cfg.SubmitDraft())
+	})
+
+	t.Run("sets and gets submit draft", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetSubmitDraft(true)
+		require.NoError(t, err)
+		require.True(t, cfg.SubmitDraft())
+
+		// Reload to verify persistence
+		cfg2, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+		require.True(t, cfg2.SubmitDraft())
+	})
+
+	t.Run("unsets submit draft", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetSubmitDraft(true)
+		require.NoError(t, err)
+
+		err = cfg.UnsetSubmitDraft()
+		require.NoError(t, err)
+
+		require.False(t, cfg.SubmitDraft())
+	})
+}
+
+func TestGitConfigSubmitWeb(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns default when not set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.Equal(t, "never", cfg.SubmitWeb())
+	})
+
+	t.Run("sets valid values", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		for _, value := range []string{"always", "created", "never"} {
+			err = cfg.SetSubmitWeb(value)
+			require.NoError(t, err)
+			require.Equal(t, value, cfg.SubmitWeb())
+		}
+	})
+
+	t.Run("rejects invalid value", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.SetSubmitWeb("invalid")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid submit.web")
+	})
+}
+
+func TestGitConfigSubmitLabels(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.Empty(t, cfg.SubmitLabels())
+	})
+
+	t.Run("adds labels", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitLabel("needs-review")
+		require.NoError(t, err)
+		err = cfg.AddSubmitLabel("bug")
+		require.NoError(t, err)
+
+		labels := cfg.SubmitLabels()
+		require.Contains(t, labels, "needs-review")
+		require.Contains(t, labels, "bug")
+	})
+
+	t.Run("prevents duplicate labels", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitLabel("needs-review")
+		require.NoError(t, err)
+		err = cfg.AddSubmitLabel("needs-review") // Add again
+		require.NoError(t, err)
+
+		labels := cfg.SubmitLabels()
+		// Count occurrences of "needs-review"
+		count := 0
+		for _, l := range labels {
+			if l == "needs-review" {
+				count++
+			}
+		}
+		require.Equal(t, 1, count, "Should not have duplicate labels")
+	})
+
+	t.Run("unsets labels", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitLabel("needs-review")
+		require.NoError(t, err)
+
+		err = cfg.UnsetSubmitLabels()
+		require.NoError(t, err)
+
+		require.Empty(t, cfg.SubmitLabels())
+	})
+}
+
+func TestGitConfigSubmitReviewers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.Empty(t, cfg.SubmitReviewers())
+	})
+
+	t.Run("adds reviewers", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitReviewer("alice")
+		require.NoError(t, err)
+		err = cfg.AddSubmitReviewer("org/team")
+		require.NoError(t, err)
+
+		reviewers := cfg.SubmitReviewers()
+		require.Contains(t, reviewers, "alice")
+		require.Contains(t, reviewers, "org/team")
+	})
+
+	t.Run("prevents duplicate reviewers", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitReviewer("alice")
+		require.NoError(t, err)
+		err = cfg.AddSubmitReviewer("alice") // Add again
+		require.NoError(t, err)
+
+		reviewers := cfg.SubmitReviewers()
+		count := 0
+		for _, r := range reviewers {
+			if r == "alice" {
+				count++
+			}
+		}
+		require.Equal(t, 1, count, "Should not have duplicate reviewers")
+	})
+}
+
+func TestGitConfigSubmitAssignees(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		require.Empty(t, cfg.SubmitAssignees())
+	})
+
+	t.Run("adds assignees", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitAssignee("alice")
+		require.NoError(t, err)
+		err = cfg.AddSubmitAssignee("bob")
+		require.NoError(t, err)
+
+		assignees := cfg.SubmitAssignees()
+		require.Contains(t, assignees, "alice")
+		require.Contains(t, assignees, "bob")
+	})
+
+	t.Run("prevents duplicate assignees", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+
+		cfg, err := LoadGitConfig(scene.Dir)
+		require.NoError(t, err)
+
+		err = cfg.AddSubmitAssignee("alice")
+		require.NoError(t, err)
+		err = cfg.AddSubmitAssignee("alice") // Add again
+		require.NoError(t, err)
+
+		assignees := cfg.SubmitAssignees()
+		count := 0
+		for _, a := range assignees {
+			if a == "alice" {
+				count++
+			}
+		}
+		require.Equal(t, 1, count, "Should not have duplicate assignees")
+	})
+}
+
+func TestGitConfigSubmitWithProjectConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("draft falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with draft enabled
+		projectConfig := `submit:
+  draft: true
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.True(t, cfg.SubmitDraft())
+
+		// Override with personal setting
+		err = cfg.SetSubmitDraft(false)
+		require.NoError(t, err)
+		require.False(t, cfg.SubmitDraft())
+
+		// Unset personal setting
+		err = cfg.UnsetSubmitDraft()
+		require.NoError(t, err)
+
+		// Should revert to project config
+		require.True(t, cfg.SubmitDraft())
+	})
+
+	t.Run("labels merge git and project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with labels
+		projectConfig := `submit:
+  labels:
+    - team-label
+    - priority-high
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Add personal labels
+		err = cfg.AddSubmitLabel("my-label")
+		require.NoError(t, err)
+
+		labels := cfg.SubmitLabels()
+		require.Contains(t, labels, "my-label")
+		require.Contains(t, labels, "team-label")
+		require.Contains(t, labels, "priority-high")
+	})
+
+	t.Run("web falls back to project config", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, nil)
+		removeDefaultConfig(t, scene.Dir)
+
+		// Create project config with web setting
+		projectConfig := `submit:
+  web: always
+`
+		err := os.WriteFile(filepath.Join(scene.Dir, ProjectConfigFileName), []byte(projectConfig), 0600)
+		require.NoError(t, err)
+
+		cfg, err := LoadGitConfigWithProject(scene.Dir)
+		require.NoError(t, err)
+
+		// Should use project config value
+		require.Equal(t, "always", cfg.SubmitWeb())
+
+		// Override with personal setting
+		err = cfg.SetSubmitWeb("never")
+		require.NoError(t, err)
+		require.Equal(t, "never", cfg.SubmitWeb())
+
+		// Unset personal setting
+		err = cfg.UnsetSubmitWeb()
+		require.NoError(t, err)
+
+		// Should revert to project config
+		require.Equal(t, "always", cfg.SubmitWeb())
+	})
+}

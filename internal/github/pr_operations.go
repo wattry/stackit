@@ -26,6 +26,8 @@ type CreatePROptions struct {
 	Draft         bool
 	Reviewers     []string
 	TeamReviewers []string
+	Labels        []string
+	Assignees     []string
 }
 
 // UpdatePROptions contains options for updating a pull request
@@ -36,6 +38,8 @@ type UpdatePROptions struct {
 	Draft           *bool
 	Reviewers       []string
 	TeamReviewers   []string
+	Labels          []string
+	Assignees       []string
 	MergeWhenReady  *bool
 	RerequestReview bool
 }
@@ -66,11 +70,24 @@ func CreatePullRequest(ctx context.Context, client *github.Client, owner, repo s
 		})
 	}
 
+	// Add labels if specified
+	if len(opts.Labels) > 0 {
+		_, _, _ = client.Issues.AddLabelsToIssue(ctx, owner, repo, *createdPR.Number, opts.Labels)
+	}
+
+	// Add assignees if specified
+	if len(opts.Assignees) > 0 {
+		_, _, _ = client.Issues.AddAssignees(ctx, owner, repo, *createdPR.Number, opts.Assignees)
+	}
+
 	return createdPR, nil
 }
 
 // UpdatePullRequest updates an existing pull request
-func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Runner, owner, repo string, prNumber int, opts UpdatePROptions) error {
+// Returns warnings (non-fatal issues like failed label/assignee additions) and error
+func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Runner, owner, repo string, prNumber int, opts UpdatePROptions) ([]string, error) {
+	var warnings []string
+
 	// Handle draft status changes separately using GraphQL API, as the REST API
 	// doesn't support updating draft status. We need to use GraphQL mutation
 	// markPullRequestReadyForReview or convertPullRequestToDraft.
@@ -85,11 +102,11 @@ func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Ru
 			if currentDraft != desiredDraft {
 				// Get the PR's Node ID (required for GraphQL)
 				if pr.NodeID == nil {
-					return fmt.Errorf("PR %d does not have a Node ID", prNumber)
+					return nil, fmt.Errorf("PR %d does not have a Node ID", prNumber)
 				}
 
 				if err := updatePRDraftStatus(ctx, runner, *pr.NodeID, desiredDraft); err != nil {
-					return fmt.Errorf("failed to update draft status for PR %d: %w", prNumber, err)
+					return nil, fmt.Errorf("failed to update draft status for PR %d: %w", prNumber, err)
 				}
 			}
 		}
@@ -114,15 +131,34 @@ func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Ru
 	_, _, err := client.PullRequests.Edit(ctx, owner, repo, prNumber, update)
 
 	if err != nil {
-		return fmt.Errorf("failed to update pull request: %w", err)
+		return nil, fmt.Errorf("failed to update pull request: %w", err)
 	}
 
 	// Update reviewers if specified
 	if len(opts.Reviewers) > 0 || len(opts.TeamReviewers) > 0 {
-		_, _, _ = client.PullRequests.RequestReviewers(ctx, owner, repo, prNumber, github.ReviewersRequest{
+		_, _, err := client.PullRequests.RequestReviewers(ctx, owner, repo, prNumber, github.ReviewersRequest{
 			Reviewers:     opts.Reviewers,
 			TeamReviewers: opts.TeamReviewers,
 		})
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to add reviewers: %v", err))
+		}
+	}
+
+	// Add labels if specified
+	if len(opts.Labels) > 0 {
+		_, _, err := client.Issues.AddLabelsToIssue(ctx, owner, repo, prNumber, opts.Labels)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to add labels: %v", err))
+		}
+	}
+
+	// Add assignees if specified
+	if len(opts.Assignees) > 0 {
+		_, _, err := client.Issues.AddAssignees(ctx, owner, repo, prNumber, opts.Assignees)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to add assignees: %v", err))
+		}
 	}
 
 	// Rerequest review if specified
@@ -155,7 +191,7 @@ func UpdatePullRequest(ctx context.Context, client *github.Client, runner git.Ru
 	// Merge when ready (this is typically handled via GitHub's auto-merge feature)
 	// For now, we'll skip this as it requires additional API calls and permissions
 
-	return nil
+	return warnings, nil
 }
 
 // GetPullRequestByBranch gets a pull request for a branch

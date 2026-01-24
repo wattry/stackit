@@ -117,7 +117,7 @@ func (c *PRCleaner) CleanupBranches(ctx context.Context, branchNames []string) P
 		newBody := existingPR.Body + footer
 		updateOpts := github.UpdatePROptions{Body: &newBody}
 
-		if err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, prNumber, updateOpts); err != nil {
+		if _, err := githubClient.UpdatePullRequest(ctx, repoOwner, repoName, prNumber, updateOpts); err != nil {
 			out.Debug("Failed to update PR #%d body: %v", prNumber, err)
 		} else {
 			out.Debug("Updated PR #%d with consolidation footer", prNumber)

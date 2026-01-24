@@ -67,6 +67,15 @@ type Options struct {
 	TargetTrunk          string
 	IgnoreOutOfSyncTrunk bool
 	SubmitFooter         bool // Whether to include PR footer (from config)
+	NoLabels             bool // Skip applying default labels from config
+	NoAssignees          bool // Skip applying default assignees from config
+
+	// Config-driven options (these are merged with flags)
+	ConfigDraft     bool     // Default draft mode from config
+	ConfigWeb       string   // When to open browser from config (always/created/never)
+	ConfigLabels    []string // Default labels from config
+	ConfigReviewers []string // Default reviewers from config
+	ConfigAssignees []string // Default assignees from config
 }
 
 // Info contains information about a branch to submit
@@ -325,8 +334,24 @@ func submitBranch(ctx *app.Context, info Info, opts Options, handler Handler, re
 		URL:        prURL,
 	})
 
-	// Open in browser if requested
-	if opts.View && prURL != "" {
+	// Open in browser if requested (via flag or config)
+	shouldOpenBrowser := false
+	if prURL != "" {
+		// Explicit flags take precedence
+		if opts.View || opts.Web {
+			shouldOpenBrowser = true
+		} else {
+			// Check config setting
+			switch opts.ConfigWeb {
+			case "always":
+				shouldOpenBrowser = true
+			case "created":
+				shouldOpenBrowser = info.Action == actionCreate
+			}
+		}
+	}
+
+	if shouldOpenBrowser {
 		if err := utils.OpenBrowser(prURL); err != nil {
 			ctx.Output.Debug("Failed to open browser: %v", err)
 		}
@@ -387,10 +412,17 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 		Draft:         submissionInfo.Metadata.IsDraft,
 		Reviewers:     submissionInfo.Metadata.Reviewers,
 		TeamReviewers: submissionInfo.Metadata.TeamReviewers,
+		Labels:        submissionInfo.Metadata.Labels,
+		Assignees:     submissionInfo.Metadata.Assignees,
 	}
 	prResult, err := ctx.GitHubClient.CreatePullRequest(ctx.Context, repoOwner, repoName, createOpts)
 	if err != nil {
 		return "", fmt.Errorf("failed to create PR for %s: %w", submissionInfo.BranchName, err)
+	}
+
+	// Log any warnings from PR creation (e.g., failed to add labels/assignees)
+	for _, warning := range prResult.Warnings {
+		ctx.Output.Warn("%s: %s", submissionInfo.BranchName, warning)
 	}
 
 	// Update PR info
@@ -429,6 +461,8 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		Title:           &submissionInfo.Metadata.Title,
 		Reviewers:       submissionInfo.Metadata.Reviewers,
 		TeamReviewers:   submissionInfo.Metadata.TeamReviewers,
+		Labels:          submissionInfo.Metadata.Labels,
+		Assignees:       submissionInfo.Metadata.Assignees,
 		MergeWhenReady:  &opts.MergeWhenReady,
 		RerequestReview: opts.RerequestReview,
 	}
@@ -469,8 +503,14 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		}
 	}
 
-	if err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts); err != nil {
+	updateWarnings, err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts)
+	if err != nil {
 		return "", fmt.Errorf("failed to update PR for %s: %w", submissionInfo.BranchName, err)
+	}
+
+	// Log any warnings from PR update (e.g., failed to add labels/assignees)
+	for _, warning := range updateWarnings {
+		ctx.Output.Warn("%s: %s", submissionInfo.BranchName, warning)
 	}
 
 	// Get PR URL
