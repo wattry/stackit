@@ -7,6 +7,29 @@
 - Remove unused parameters entirely (don't use `_`)
 - `switch` over if-else chains with 3+ conditions
 - For boolean conditions: `switch { case cond1: ... case cond2: ... }`
+- Use typed constants (enums) instead of boolean parameters for clarity at call sites
+
+## Boolean Parameters
+
+Avoid boolean parameters that are unclear at call sites. Use typed constants instead:
+
+```go
+// BAD - unclear what false, true means
+CreateWorktree(ctx, branch, prefix, false, true)
+
+// GOOD - self-documenting
+CreateWorktree(ctx, branch, prefix, WorktreeCheckoutFull, WorktreePruneSkip)
+```
+
+Define typed constants:
+```go
+type WorktreeCheckoutMode int
+
+const (
+    WorktreeCheckoutFull WorktreeCheckoutMode = iota
+    WorktreeCheckoutShallow
+)
+```
 
 ## Error Handling
 

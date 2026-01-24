@@ -327,7 +327,8 @@ func (e *engineImpl) validateSingleSpec(
 	rebasedBySHA *sync.Map,
 ) validationResult {
 	// Create temporary worktree for this validation
-	worktreePath, cleanup, err := e.CreateTemporaryWorktree(ctx, "HEAD", "stackit-validate-*")
+	// Use WorktreePruneSkip since ValidateRebasesParallel already prunes once before parallel execution
+	worktreePath, cleanup, err := e.CreateTemporaryWorktreeWithOptions(ctx, "HEAD", "stackit-validate-*", WorktreeCheckoutFull, WorktreePruneSkip)
 	if err != nil {
 		return validationResult{
 			spec:         spec,

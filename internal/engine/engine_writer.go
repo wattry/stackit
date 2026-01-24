@@ -16,6 +16,28 @@ import (
 // timeNow is a variable for time.Now to allow mocking in tests
 var timeNow = time.Now
 
+// WorktreeCheckoutMode specifies how files are checked out in a worktree.
+type WorktreeCheckoutMode int
+
+const (
+	// WorktreeCheckoutFull checks out all files (default behavior).
+	WorktreeCheckoutFull WorktreeCheckoutMode = iota
+	// WorktreeCheckoutShallow creates a worktree without checking out files.
+	// This is faster for validation-only operations that don't need actual files.
+	WorktreeCheckoutShallow
+)
+
+// WorktreePruneMode specifies whether to prune stale worktrees before creation.
+type WorktreePruneMode int
+
+const (
+	// WorktreePruneAuto prunes stale worktrees before creating a new one (default).
+	WorktreePruneAuto WorktreePruneMode = iota
+	// WorktreePruneSkip skips pruning. Use when the caller has already pruned
+	// (e.g., parallel worktree creation).
+	WorktreePruneSkip
+)
+
 // CreateBranch creates a new branch at the given start point
 func (e *engineImpl) CreateBranch(ctx context.Context, branchName string, startPoint string) error {
 	return e.git.CreateBranch(ctx, branchName, startPoint)
@@ -723,20 +745,36 @@ func (e *engineImpl) PruneWorktrees(ctx context.Context) error {
 
 // CreateTemporaryWorktree creates a temporary directory and adds a detached worktree
 func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (string, func(), error) {
-	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, false)
+	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, WorktreeCheckoutFull, WorktreePruneAuto)
+}
+
+// CreateTemporaryWorktreeSkipPrune is like CreateTemporaryWorktree but skips the automatic
+// PruneWorktrees() call. Use this when creating multiple worktrees in parallel after
+// manually calling PruneWorktrees() once, to avoid race conditions.
+func (e *engineImpl) CreateTemporaryWorktreeSkipPrune(ctx context.Context, branch string, prefix string) (string, func(), error) {
+	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, WorktreeCheckoutFull, WorktreePruneSkip)
 }
 
 // CreateTemporaryWorktreeWithOptions creates a temporary directory and adds a detached worktree with options.
-// If shallow is true, uses --no-checkout to create a worktree without checking out files to the working tree.
-// This is faster for validation-only operations that don't need actual files.
+//
+// checkout controls whether files are checked out:
+//   - WorktreeCheckoutFull: checks out all files (default behavior)
+//   - WorktreeCheckoutShallow: creates worktree without checking out files (faster for validation)
+//
+// prune controls whether stale worktrees are pruned before creation:
+//   - WorktreePruneAuto: prunes stale worktrees first (default behavior)
+//   - WorktreePruneSkip: skips pruning (use when caller has already pruned for parallel creation)
 //
 // Note: Callers that create multiple worktrees in parallel (like ValidateRebasesParallel) should call
-// PruneWorktrees() once before starting parallel worktree creation to avoid race conditions.
-func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, shallow bool) (string, func(), error) {
+// PruneWorktrees() once before starting parallel worktree creation and pass WorktreePruneSkip to avoid race conditions.
+func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, checkout WorktreeCheckoutMode, prune WorktreePruneMode) (string, func(), error) {
 	// Prune stale worktree entries before creating new ones.
 	// This cleans up entries in .git/worktrees/ that may be left behind from
 	// incomplete cleanup after failed or canceled operations.
-	_ = e.git.PruneWorktrees(ctx)
+	// Skip if caller has already pruned (e.g., parallel worktree creation).
+	if prune == WorktreePruneAuto {
+		_ = e.git.PruneWorktrees(ctx)
+	}
 
 	tmpDir, err := os.MkdirTemp("", prefix)
 	if err != nil {
@@ -748,9 +786,30 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 	// intermittent failures when stale entries remained after incomplete cleanup.
 	worktreePath := filepath.Join(tmpDir, filepath.Base(tmpDir))
 
-	if err := e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, shallow); err != nil {
+	// Retry worktree creation with exponential backoff to handle transient failures
+	// that can occur when multiple goroutines create worktrees concurrently.
+	// Git's worktree operations can race on .git/worktrees/ directory access.
+	const maxRetries = 3
+	var lastErr error
+	for attempt := range maxRetries {
+		err := e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, checkout == WorktreeCheckoutShallow)
+		if err == nil {
+			break
+		}
+		lastErr = err
+		// Only retry on transient errors (race conditions on .git/worktrees/).
+		// Permanent errors (branch not found, permission denied, etc.) should fail immediately.
+		if attempt < maxRetries-1 && isTransientWorktreeError(err) {
+			// Exponential backoff: 10ms, 20ms
+			time.Sleep(time.Duration(10<<attempt) * time.Millisecond)
+			continue
+		}
+		break
+	}
+
+	if lastErr != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", nil, fmt.Errorf("failed to add worktree: %w", err)
+		return "", nil, fmt.Errorf("failed to add worktree: %w", lastErr)
 	}
 
 	cleanup := func() {
@@ -760,6 +819,33 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 	}
 
 	return worktreePath, cleanup, nil
+}
+
+// isTransientWorktreeError returns true if the error is likely a transient race condition
+// that may succeed on retry. These typically occur when multiple goroutines create worktrees
+// concurrently and race on .git/worktrees/ directory access.
+func isTransientWorktreeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Transient errors from git worktree operations during concurrent access:
+	// - "commondir" errors: stale entries in .git/worktrees/ that haven't been pruned yet
+	// - "lock" errors: another process is modifying .git/worktrees/
+	// - "busy" errors: resource temporarily unavailable
+	transientIndicators := []string{
+		"commondir",
+		"lock",
+		"busy",
+		"text file busy",
+		"resource temporarily unavailable",
+	}
+	for _, indicator := range transientIndicators {
+		if strings.Contains(strings.ToLower(errStr), indicator) {
+			return true
+		}
+	}
+	return false
 }
 
 // RegisterWorktree registers a worktree for a stack root in local git refs
