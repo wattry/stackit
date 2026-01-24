@@ -723,20 +723,25 @@ func (e *engineImpl) PruneWorktrees(ctx context.Context) error {
 
 // CreateTemporaryWorktree creates a temporary directory and adds a detached worktree
 func (e *engineImpl) CreateTemporaryWorktree(ctx context.Context, branch string, prefix string) (string, func(), error) {
-	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, false)
+	return e.CreateTemporaryWorktreeWithOptions(ctx, branch, prefix, false, false)
 }
 
 // CreateTemporaryWorktreeWithOptions creates a temporary directory and adds a detached worktree with options.
 // If shallow is true, uses --no-checkout to create a worktree without checking out files to the working tree.
 // This is faster for validation-only operations that don't need actual files.
+// If skipPrune is true, skips the PruneWorktrees() call - use this when the caller has already pruned
+// (e.g., ValidateRebasesParallel prunes once before parallel worktree creation).
 //
 // Note: Callers that create multiple worktrees in parallel (like ValidateRebasesParallel) should call
-// PruneWorktrees() once before starting parallel worktree creation to avoid race conditions.
-func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, shallow bool) (string, func(), error) {
+// PruneWorktrees() once before starting parallel worktree creation and pass skipPrune=true to avoid race conditions.
+func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, shallow bool, skipPrune bool) (string, func(), error) {
 	// Prune stale worktree entries before creating new ones.
 	// This cleans up entries in .git/worktrees/ that may be left behind from
 	// incomplete cleanup after failed or canceled operations.
-	_ = e.git.PruneWorktrees(ctx)
+	// Skip if caller has already pruned (e.g., parallel worktree creation).
+	if !skipPrune {
+		_ = e.git.PruneWorktrees(ctx)
+	}
 
 	tmpDir, err := os.MkdirTemp("", prefix)
 	if err != nil {
@@ -748,9 +753,28 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 	// intermittent failures when stale entries remained after incomplete cleanup.
 	worktreePath := filepath.Join(tmpDir, filepath.Base(tmpDir))
 
-	if err := e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, shallow); err != nil {
+	// Retry worktree creation with exponential backoff to handle transient failures
+	// that can occur when multiple goroutines create worktrees concurrently.
+	// Git's worktree operations can race on .git/worktrees/ directory access.
+	const maxRetries = 3
+	var lastErr error
+	for attempt := range maxRetries {
+		if err := e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, shallow); err != nil {
+			lastErr = err
+			if attempt < maxRetries-1 {
+				// Exponential backoff: 10ms, 20ms, 40ms
+				time.Sleep(time.Duration(10<<attempt) * time.Millisecond)
+				continue
+			}
+		} else {
+			lastErr = nil
+			break
+		}
+	}
+
+	if lastErr != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", nil, fmt.Errorf("failed to add worktree: %w", err)
+		return "", nil, fmt.Errorf("failed to add worktree: %w", lastErr)
 	}
 
 	cleanup := func() {
