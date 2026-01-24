@@ -32,7 +32,7 @@ func NewNextCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		dryRun bool
 		yes    bool
 		force  bool
-		noWait bool
+		wait   bool
 		method string
 	)
 
@@ -41,13 +41,12 @@ func NewNextCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		Short: "Merge the next (bottom-most) unmerged PR in the stack",
 		Long: `Merge the bottom-most unmerged PR in the stack using GitHub automerge.
 
-After the PR is merged, the command will:
+After enabling automerge, the command returns immediately (fire-and-forget).
+
+Use --wait to block until the PR is merged, then automatically:
 1. Pull the latest trunk
 2. Restack the remaining branches in the stack
-3. Stop (run again to merge the next PR)
-
-By default, the command waits for the PR to be merged. Use --no-wait to return
-immediately after enabling automerge.`,
+3. Stop (run again to merge the next PR)`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
@@ -55,7 +54,7 @@ immediately after enabling automerge.`,
 					dryRun: dryRun,
 					yes:    yes,
 					force:  force,
-					noWait: noWait,
+					wait:   wait,
 					method: method,
 				}, postMergeHandler)
 			})
@@ -65,7 +64,7 @@ immediately after enabling automerge.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
-	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Don't wait for merge, return after enabling automerge")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for merge to complete (default: fire-and-forget)")
 	cmd.Flags().StringVar(&method, "method", "", "Merge method (squash, merge, rebase). Uses config merge.method if not specified")
 
 	return cmd
@@ -75,7 +74,7 @@ type mergeNextOptions struct {
 	dryRun bool
 	yes    bool
 	force  bool
-	noWait bool
+	wait   bool
 	method string
 }
 
@@ -181,31 +180,31 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 	}
 	out.Success("Automerge enabled on PR #%d", bottomPR.PRNumber)
 
-	// If --no-wait, return immediately
-	if opts.noWait {
-		out.Info("PR will be merged automatically when CI passes and requirements are met.")
-		out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
-		return nil
+	// If --wait, wait for merge and perform cleanup
+	if opts.wait {
+		out.Info("Waiting for PR #%d to be merged...", bottomPR.PRNumber)
+		if err := github.WaitForPRMerge(ctx.Context, eng.Git(), prInfo.NodeID, DefaultMergeTimeout, DefaultMergePollInterval); err != nil {
+			return fmt.Errorf("failed waiting for merge: %w", err)
+		}
+		out.Success("PR #%d merged successfully!", bottomPR.PRNumber)
+
+		// Perform post-merge cleanup
+		out.Newline()
+		out.Info("Performing post-merge cleanup...")
+
+		// Use post-merge handler for cleanup (checkout trunk, sync, restack)
+		if postMergeHandler != nil {
+			return postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk)
+		}
+
+		// Fallback: manual cleanup if no handler
+		return performPostMergeCleanup(ctx, bottomPR.BranchName, upstackBranches)
 	}
 
-	// Wait for merge
-	out.Info("Waiting for PR #%d to be merged...", bottomPR.PRNumber)
-	if err := github.WaitForPRMerge(ctx.Context, eng.Git(), prInfo.NodeID, DefaultMergeTimeout, DefaultMergePollInterval); err != nil {
-		return fmt.Errorf("failed waiting for merge: %w", err)
-	}
-	out.Success("PR #%d merged successfully!", bottomPR.PRNumber)
-
-	// Perform post-merge cleanup
-	out.Newline()
-	out.Info("Performing post-merge cleanup...")
-
-	// Use post-merge handler for cleanup (checkout trunk, sync, restack)
-	if postMergeHandler != nil {
-		return postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk)
-	}
-
-	// Fallback: manual cleanup if no handler
-	return performPostMergeCleanup(ctx, bottomPR.BranchName, upstackBranches)
+	// Fire-and-forget: return immediately after enabling automerge
+	out.Info("PR will be merged automatically when CI passes and requirements are met.")
+	out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
+	return nil
 }
 
 // findBottomUnmergedPR finds the bottom-most unmerged PR in the current stack.

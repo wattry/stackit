@@ -40,8 +40,8 @@ func TestNewMergeCmd(t *testing.T) {
 		forceFlag := cmd.Flags().Lookup("force")
 		require.NotNil(t, forceFlag)
 
-		noWaitFlag := cmd.Flags().Lookup("no-wait")
-		require.NotNil(t, noWaitFlag)
+		waitFlag := cmd.Flags().Lookup("wait")
+		require.NotNil(t, waitFlag)
 	})
 }
 
@@ -60,8 +60,8 @@ func TestNewNextCmd(t *testing.T) {
 		forceFlag := cmd.Flags().Lookup("force")
 		require.NotNil(t, forceFlag)
 
-		noWaitFlag := cmd.Flags().Lookup("no-wait")
-		require.NotNil(t, noWaitFlag)
+		waitFlag := cmd.Flags().Lookup("wait")
+		require.NotNil(t, waitFlag)
 	})
 }
 
@@ -80,8 +80,8 @@ func TestNewSquashCmd(t *testing.T) {
 		forceFlag := cmd.Flags().Lookup("force")
 		require.NotNil(t, forceFlag)
 
-		noWaitFlag := cmd.Flags().Lookup("no-wait")
-		require.NotNil(t, noWaitFlag)
+		waitFlag := cmd.Flags().Lookup("wait")
+		require.NotNil(t, waitFlag)
 
 		scopeFlag := cmd.Flags().Lookup("scope")
 		require.NotNil(t, scopeFlag)

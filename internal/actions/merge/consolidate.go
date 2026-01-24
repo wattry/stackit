@@ -102,8 +102,19 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 
 		splog.Info("🎉 Stack consolidation merge completed successfully!")
 	} else {
-		splog.Info("🎉 Consolidation PR created: %s", pr.HTMLURL)
-		splog.Info("   Individual PRs have been locked. Merge the consolidation PR manually to complete.")
+		// Fire-and-forget: enable auto-merge and return
+		mergeMethod, err := GetMergeMethod(c.ctx, c.ctx.GitHubClient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get merge method: %w", err)
+		}
+		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, mergeMethod); err != nil {
+			splog.Warn("Could not enable automerge: %v", err)
+			splog.Tip("Enable automerge manually on the PR: %s", pr.HTMLURL)
+		} else {
+			splog.Success("Automerge enabled on PR #%d", pr.Number)
+		}
+		splog.Info("Individual PRs have been locked. The consolidation PR will merge when CI passes.")
+		splog.Tip("Run 'stackit sync --restack' after the PR merges to update your stack.")
 	}
 
 	result := &ConsolidationResult{
