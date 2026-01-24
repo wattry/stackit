@@ -23,7 +23,7 @@ func NewSquashCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		dryRun      bool
 		yes         bool
 		force       bool
-		noWait      bool
+		wait        bool
 		scope       string
 		stacks      []string
 		skipLocalCI bool
@@ -35,15 +35,13 @@ func NewSquashCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		Long: `Consolidate all branches in the stack into a single PR for atomic merging.
 
 This creates a new "consolidation" branch that contains all the commits from the stack,
-opens a PR for it, and uses GitHub's automerge to merge it when ready.
+opens a PR for it, and enables GitHub's automerge.
 
-After the PR is merged, the command will:
+By default, the command returns immediately after enabling automerge (fire-and-forget).
+Use --wait to block until the PR is merged, then automatically:
 1. Pull the latest trunk
 2. Delete the merged branches
 3. Restack any remaining upstack branches
-
-By default, the command waits for the PR to be merged. Use --no-wait to return
-immediately after enabling automerge.
 
 Use --scope to consolidate all branches within a specific scope.
 Use --stacks to combine multiple independent stacks into a single PR.`,
@@ -55,7 +53,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 					return runMultiStackSquash(ctx, squashMultiStackOptions{
 						stacks:      stacks,
 						skipLocalCI: skipLocalCI,
-						noWait:      noWait,
+						wait:        wait,
 						yes:         yes,
 					})
 				}
@@ -64,7 +62,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 					dryRun: dryRun,
 					yes:    yes,
 					force:  force,
-					noWait: noWait,
+					wait:   wait,
 					scope:  scope,
 				}, postMergeHandler)
 			})
@@ -74,7 +72,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
-	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Don't wait for merge, return after enabling automerge")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for merge to complete (default: fire-and-forget)")
 	cmd.Flags().StringVar(&scope, "scope", "", "Consolidate all branches within the specified scope")
 	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Combine multiple stacks (comma-separated stack roots)")
 	cmd.Flags().BoolVar(&skipLocalCI, "skip-local-ci", false, "Skip local CI validation for multi-stack merge")
@@ -86,14 +84,14 @@ type mergeSquashOptions struct {
 	dryRun bool
 	yes    bool
 	force  bool
-	noWait bool
+	wait   bool
 	scope  string
 }
 
 type squashMultiStackOptions struct {
 	stacks      []string
 	skipLocalCI bool
-	noWait      bool
+	wait        bool
 	yes         bool
 }
 
@@ -105,7 +103,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 		Strategy: mergeAction.StrategySquash,
 		Force:    opts.force,
 		Scope:    opts.scope,
-		Wait:     !opts.noWait,
+		Wait:     opts.wait,
 	})
 	if err != nil {
 		return err
@@ -154,7 +152,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 		Confirm:        false, // Already confirmed
 		Strategy:       mergeAction.StrategySquash,
 		Force:          opts.force,
-		Wait:           !opts.noWait,
+		Wait:           opts.wait,
 		Scope:          opts.scope,
 		Plan:           plan,
 		UndoStackDepth: undoStackDepth,
@@ -166,7 +164,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 	}
 
 	// If waiting, use post-merge handler for cleanup
-	if !opts.noWait && postMergeHandler != nil {
+	if opts.wait && postMergeHandler != nil {
 		return postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk)
 	}
 
@@ -225,7 +223,7 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 	result, err := mergeAction.ExecuteMultiStack(ctx, mergeAction.MultiStackOptions{
 		SelectedStacks: opts.stacks,
 		SkipLocalCI:    opts.skipLocalCI,
-		Wait:           !opts.noWait,
+		Wait:           opts.wait,
 	})
 	if err != nil {
 		return err
@@ -240,8 +238,8 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 		out.Warn("  Excluded: %d stacks", len(result.ExcludedStacks))
 	}
 
-	// If --no-wait was used, enable automerge and return immediately
-	if opts.noWait {
+	// Fire-and-forget (default): enable automerge and return immediately
+	if !opts.wait {
 		prNodeID, err := getPRNodeID(ctx, result.PRNumber)
 		if err != nil {
 			out.Warn("Could not enable automerge: %v", err)
@@ -257,7 +255,7 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 		out.Newline()
 		out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
 	}
-	// When Wait=true (default), ExecuteMultiStack already waits for CI and merges the PR
+	// When Wait=true (opt-in), ExecuteMultiStack already waited for CI and merged the PR
 
 	return nil
 }

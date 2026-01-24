@@ -398,8 +398,8 @@ func (h *InteractiveMergeEventHandler) PromptStrategy(plan *mergeAction.Plan, re
 		strategy = mergeAction.StrategyBottomUp
 	case "squash":
 		strategy = mergeAction.StrategySquash
-		// Prompt for wait if squashing
-		wait, err = tui.PromptConfirm("Wait for CI and automatically merge the squash PR?", false)
+		// Prompt for wait if squashing (default is fire-and-forget)
+		wait, err = tui.PromptConfirm("Wait for merge to complete? (default: fire-and-forget)", false)
 		if err != nil {
 			return mergeAction.StrategyChoice{}, fmt.Errorf("wait selection canceled: %w", err)
 		}

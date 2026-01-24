@@ -22,7 +22,7 @@ func NewMergeCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 	var (
 		dryRun bool
 		force  bool
-		noWait bool
+		wait   bool
 	)
 
 	cmd := &cobra.Command{
@@ -63,7 +63,7 @@ Examples:
 				err := mergeAction.RunWizard(ctx, interactiveHandler, mergeAction.WizardOptions{
 					DryRun: dryRun,
 					Force:  force,
-					Wait:   !noWait,
+					Wait:   wait,
 				})
 
 				// Handle post-merge follow-up action
@@ -81,7 +81,7 @@ Examples:
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
-	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Don't wait for merge, return after enabling automerge")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for merge to complete (default: fire-and-forget)")
 
 	// Add subcommands
 	cmd.AddCommand(NewNextCmd(postMergeHandler))

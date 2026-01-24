@@ -235,7 +235,7 @@ func TestMergeCommand(t *testing.T) {
 
 		sh.OutputContains("bottom-most").
 			OutputContains("--dry-run").
-			OutputContains("--no-wait")
+			OutputContains("--wait")
 	})
 
 	t.Run("squash subcommand is accessible", func(t *testing.T) {
