@@ -66,7 +66,7 @@ func (c *GitHubClient) CreatePullRequest(_ context.Context, owner, repo string, 
 }
 
 // UpdatePullRequest simulates updating a pull request
-func (c *GitHubClient) UpdatePullRequest(_ context.Context, _, _ string, prNumber int, opts github.UpdatePROptions) error {
+func (c *GitHubClient) UpdatePullRequest(_ context.Context, _, _ string, prNumber int, opts github.UpdatePROptions) ([]string, error) {
 	simulateDelay(delayShort)
 
 	// Find the PR by number
@@ -84,11 +84,11 @@ func (c *GitHubClient) UpdatePullRequest(_ context.Context, _, _ string, prNumbe
 			if opts.Draft != nil {
 				pr.Draft = *opts.Draft
 			}
-			return nil
+			return nil, nil
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 // GetPullRequestByBranch returns a simulated PR for a branch

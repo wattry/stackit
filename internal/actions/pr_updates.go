@@ -88,10 +88,13 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 		}
 
 		ctx.Output.Debug("Updating PR #%d for %s: titleChanged=%v, bodyChanged=%v", prNumber, name, updatedTitle != currentTitle, shouldUpdateBody)
-		err = ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, prNumber, updateOpts)
+		warnings, err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, prNumber, updateOpts)
 		if err != nil {
 			ctx.Output.Debug("Failed to update PR #%d for %s: %v", prNumber, name, err)
 			return
+		}
+		for _, w := range warnings {
+			ctx.Output.Debug("PR #%d update warning: %s", prNumber, w)
 		}
 	} else {
 		ctx.Output.Debug("PR #%d for %s already up to date", prNumber, name)

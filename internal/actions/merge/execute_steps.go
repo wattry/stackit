@@ -181,7 +181,7 @@ func updatePRBaseBranchFromContext(ctx context.Context, githubClient github.Clie
 		Base: &newBase,
 	}
 
-	if err := githubClient.UpdatePullRequest(ctx, owner, repo, pr.Number, updateOpts); err != nil {
+	if _, err := githubClient.UpdatePullRequest(ctx, owner, repo, pr.Number, updateOpts); err != nil {
 		return fmt.Errorf("failed to update PR base: %w", err)
 	}
 

@@ -179,8 +179,7 @@ func (r *runner) runGitInternal(ctx context.Context, input string, env []string,
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return "", NewCommandError("git", args, stdout.String(), stderr.String(), err)
 	}
 
@@ -224,8 +223,7 @@ func (r *runner) runGitStreaming(ctx context.Context, args ...string) (string, e
 		cmd.Stderr = &stderrBuf
 	}
 
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return "", NewCommandError("git", args, stdoutBuf.String(), stderrBuf.String(), err)
 	}
 

@@ -37,6 +37,16 @@ const (
 	KeyNavigationLocation = "stackit.navigation.location"
 	// KeyNavigationShowMerged controls whether to show merged branch history.
 	KeyNavigationShowMerged = "stackit.navigation.showMerged"
+	// KeySubmitDraft controls whether to create PRs as drafts by default.
+	KeySubmitDraft = "stackit.submit.draft"
+	// KeySubmitWeb controls when to open PRs in browser (always/created/never).
+	KeySubmitWeb = "stackit.submit.web"
+	// KeySubmitLabels stores default labels for PRs (multi-value).
+	KeySubmitLabels = "stackit.submit.labels"
+	// KeySubmitReviewers stores default reviewers for PRs (multi-value).
+	KeySubmitReviewers = "stackit.submit.reviewers"
+	// KeySubmitAssignees stores default assignees for PRs (multi-value).
+	KeySubmitAssignees = "stackit.submit.assignees"
 )
 
 // Default values for configuration.
@@ -63,6 +73,10 @@ const (
 	DefaultNavigationLocation = "body"
 	// DefaultNavigationShowMerged is whether to show merged history by default.
 	DefaultNavigationShowMerged = true
+	// DefaultSubmitDraft is whether to create PRs as drafts by default.
+	DefaultSubmitDraft = false
+	// DefaultSubmitWeb is when to open PRs in browser by default.
+	DefaultSubmitWeb = "never"
 )
 
 // ValidMergeMethods contains the allowed merge method values.
@@ -84,3 +98,13 @@ const (
 // ValidNavigationLocation contains the allowed navigation location values.
 // "none" is an alias for disabling navigation (equivalent to when=never).
 var ValidNavigationLocation = []string{NavigationLocationBody, NavigationLocationComment, NavigationLocationNone}
+
+// Submit web constants.
+const (
+	SubmitWebAlways  = "always"
+	SubmitWebCreated = "created"
+	SubmitWebNever   = "never"
+)
+
+// ValidSubmitWeb contains the allowed submit.web values.
+var ValidSubmitWeb = []string{SubmitWebAlways, SubmitWebCreated, SubmitWebNever}

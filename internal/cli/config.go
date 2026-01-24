@@ -26,6 +26,17 @@ const (
 	keyTrunksClear          = "trunks.clear"
 	keyBranchPattern        = "branch.pattern"
 	keySubmitFooter         = "submit.footer"
+	keySubmitDraft          = "submit.draft"
+	keySubmitWeb            = "submit.web"
+	keySubmitLabels         = "submit.labels"
+	keySubmitLabelsAdd      = "submit.labels.add"
+	keySubmitLabelsClear    = "submit.labels.clear"
+	keySubmitReviewers      = "submit.reviewers"
+	keySubmitReviewersAdd   = "submit.reviewers.add"
+	keySubmitReviewersClear = "submit.reviewers.clear"
+	keySubmitAssignees      = "submit.assignees"
+	keySubmitAssigneesAdd   = "submit.assignees.add"
+	keySubmitAssigneesClear = "submit.assignees.clear"
 	keyMergeMethod          = "merge.method"
 	keyWorktreeBasePath     = "worktree.basePath"
 	keyWorktreeAutoClean    = "worktree.autoClean"
@@ -134,6 +145,31 @@ func newConfigGetCmd() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.BranchNamePattern())
 			case keySubmitFooter:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.SubmitFooter())
+			case keySubmitDraft:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.SubmitDraft())
+			case keySubmitWeb:
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.SubmitWeb())
+			case keySubmitLabels:
+				labels := cfg.SubmitLabels()
+				if len(labels) > 0 {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), strings.Join(labels, ", "))
+				} else {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), valueNotSet)
+				}
+			case keySubmitReviewers:
+				reviewers := cfg.SubmitReviewers()
+				if len(reviewers) > 0 {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), strings.Join(reviewers, ", "))
+				} else {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), valueNotSet)
+				}
+			case keySubmitAssignees:
+				assignees := cfg.SubmitAssignees()
+				if len(assignees) > 0 {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), strings.Join(assignees, ", "))
+				} else {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), valueNotSet)
+				}
 			case keyMergeMethod:
 				method := cfg.MergeMethod()
 				if method == "" {
@@ -245,6 +281,50 @@ func newConfigSetCmd() *cobra.Command {
 					return fmt.Errorf("failed to set %s: %w", keySubmitFooter, err)
 				}
 				splog.Info("Set %s to: %v", keySubmitFooter, enabled)
+			case keySubmitDraft:
+				enabled, err := strconv.ParseBool(value)
+				if err != nil {
+					return fmt.Errorf("invalid value for %s: %s (must be 'true' or 'false')", keySubmitDraft, value)
+				}
+				if err := cfg.SetSubmitDraft(enabled); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keySubmitDraft, err)
+				}
+				splog.Info("Set %s to: %v", keySubmitDraft, enabled)
+			case keySubmitWeb:
+				if err := cfg.SetSubmitWeb(value); err != nil {
+					return fmt.Errorf("failed to set %s: %w", keySubmitWeb, err)
+				}
+				splog.Info("Set %s to: %s", keySubmitWeb, value)
+			case keySubmitLabelsAdd:
+				if err := cfg.AddSubmitLabel(value); err != nil {
+					return fmt.Errorf("failed to add label: %w", err)
+				}
+				splog.Info("Added '%s' to default labels", value)
+			case keySubmitLabelsClear:
+				if err := cfg.UnsetSubmitLabels(); err != nil {
+					return fmt.Errorf("failed to clear labels: %w", err)
+				}
+				splog.Info("Cleared all personal default labels")
+			case keySubmitReviewersAdd:
+				if err := cfg.AddSubmitReviewer(value); err != nil {
+					return fmt.Errorf("failed to add reviewer: %w", err)
+				}
+				splog.Info("Added '%s' to default reviewers", value)
+			case keySubmitReviewersClear:
+				if err := cfg.UnsetSubmitReviewers(); err != nil {
+					return fmt.Errorf("failed to clear reviewers: %w", err)
+				}
+				splog.Info("Cleared all personal default reviewers")
+			case keySubmitAssigneesAdd:
+				if err := cfg.AddSubmitAssignee(value); err != nil {
+					return fmt.Errorf("failed to add assignee: %w", err)
+				}
+				splog.Info("Added '%s' to default assignees", value)
+			case keySubmitAssigneesClear:
+				if err := cfg.UnsetSubmitAssignees(); err != nil {
+					return fmt.Errorf("failed to clear assignees: %w", err)
+				}
+				splog.Info("Cleared all personal default assignees")
 			case keyMergeMethod:
 				if err := cfg.SetMergeMethod(value); err != nil {
 					return fmt.Errorf("failed to set %s: %w", keyMergeMethod, err)
@@ -387,6 +467,46 @@ Examples:
 					return fmt.Errorf("failed to unset %s: %w", keySubmitFooter, err)
 				}
 				splog.Info("Unset %s (now using: %v)", keySubmitFooter, cfg.SubmitFooter())
+			case keySubmitDraft:
+				if err := cfg.UnsetSubmitDraft(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySubmitDraft, err)
+				}
+				splog.Info("Unset %s (now using: %v)", keySubmitDraft, cfg.SubmitDraft())
+			case keySubmitWeb:
+				if err := cfg.UnsetSubmitWeb(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySubmitWeb, err)
+				}
+				splog.Info("Unset %s (now using: %s)", keySubmitWeb, cfg.SubmitWeb())
+			case keySubmitLabels:
+				if err := cfg.UnsetSubmitLabels(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySubmitLabels, err)
+				}
+				labels := cfg.SubmitLabels()
+				if len(labels) > 0 {
+					splog.Info("Unset %s (now using: %s)", keySubmitLabels, strings.Join(labels, ", "))
+				} else {
+					splog.Info("Unset %s (now using: %s)", keySubmitLabels, valueNotSet)
+				}
+			case keySubmitReviewers:
+				if err := cfg.UnsetSubmitReviewers(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySubmitReviewers, err)
+				}
+				reviewers := cfg.SubmitReviewers()
+				if len(reviewers) > 0 {
+					splog.Info("Unset %s (now using: %s)", keySubmitReviewers, strings.Join(reviewers, ", "))
+				} else {
+					splog.Info("Unset %s (now using: %s)", keySubmitReviewers, valueNotSet)
+				}
+			case keySubmitAssignees:
+				if err := cfg.UnsetSubmitAssignees(); err != nil {
+					return fmt.Errorf("failed to unset %s: %w", keySubmitAssignees, err)
+				}
+				assignees := cfg.SubmitAssignees()
+				if len(assignees) > 0 {
+					splog.Info("Unset %s (now using: %s)", keySubmitAssignees, strings.Join(assignees, ", "))
+				} else {
+					splog.Info("Unset %s (now using: %s)", keySubmitAssignees, valueNotSet)
+				}
 			case keyMergeMethod:
 				if err := cfg.UnsetMergeMethod(); err != nil {
 					return fmt.Errorf("failed to unset %s: %w", keyMergeMethod, err)
@@ -654,6 +774,68 @@ func showConfigWithSources(repoRoot string, w io.Writer) error {
 	// submit.footer
 	footerSource := getBoolSource(config.KeySubmitFooter, projectCfg != nil && projectCfg.HasSubmitFooter())
 	formatLine("submit.footer", strconv.FormatBool(cfg.SubmitFooter()), footerSource)
+
+	// submit.draft
+	draftSource := getBoolSource(config.KeySubmitDraft, projectCfg != nil && projectCfg.HasSubmitDraft())
+	formatLine("submit.draft", strconv.FormatBool(cfg.SubmitDraft()), draftSource)
+
+	// submit.web
+	webSource := getStringSource(config.KeySubmitWeb, projectCfg != nil && projectCfg.HasSubmitWeb())
+	formatLine("submit.web", cfg.SubmitWeb(), webSource)
+
+	// submit.labels
+	labels := cfg.SubmitLabels()
+	labelsValue := valueNotSet
+	if len(labels) > 0 {
+		labelsValue = strings.Join(labels, ", ")
+	}
+	labelsFromGit, _ := store.GetAll(config.KeySubmitLabels)
+	var labelsSource configSource
+	switch {
+	case len(labelsFromGit) > 0:
+		labelsSource = sourcePersonal
+	case projectCfg != nil && projectCfg.HasSubmitLabels():
+		labelsSource = sourceTeam
+	default:
+		labelsSource = sourceDefault
+	}
+	formatLine("submit.labels", labelsValue, labelsSource)
+
+	// submit.reviewers
+	reviewers := cfg.SubmitReviewers()
+	reviewersValue := valueNotSet
+	if len(reviewers) > 0 {
+		reviewersValue = strings.Join(reviewers, ", ")
+	}
+	reviewersFromGit, _ := store.GetAll(config.KeySubmitReviewers)
+	var reviewersSource configSource
+	switch {
+	case len(reviewersFromGit) > 0:
+		reviewersSource = sourcePersonal
+	case projectCfg != nil && projectCfg.HasSubmitReviewers():
+		reviewersSource = sourceTeam
+	default:
+		reviewersSource = sourceDefault
+	}
+	formatLine("submit.reviewers", reviewersValue, reviewersSource)
+
+	// submit.assignees
+	assignees := cfg.SubmitAssignees()
+	assigneesValue := valueNotSet
+	if len(assignees) > 0 {
+		assigneesValue = strings.Join(assignees, ", ")
+	}
+	assigneesFromGit, _ := store.GetAll(config.KeySubmitAssignees)
+	var assigneesSource configSource
+	switch {
+	case len(assigneesFromGit) > 0:
+		assigneesSource = sourcePersonal
+	case projectCfg != nil && projectCfg.HasSubmitAssignees():
+		assigneesSource = sourceTeam
+	default:
+		assigneesSource = sourceDefault
+	}
+	formatLine("submit.assignees", assigneesValue, assigneesSource)
 
 	// merge.method
 	mergeMethod := cfg.MergeMethod()

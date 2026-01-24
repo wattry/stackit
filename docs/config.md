@@ -54,6 +54,11 @@ git config --local --add stackit.trunks develop
 | `stackit.trunks` | string[] | `[]` | Additional trunk branches |
 | `stackit.branch.pattern` | string | `{username}/{date}/{message}` | Branch naming template |
 | `stackit.submit.footer` | bool | `true` | Include PR footer in descriptions |
+| `stackit.submit.draft` | bool | `false` | Create PRs as drafts by default |
+| `stackit.submit.web` | string | `never` | When to open PRs in browser (always/created/never) |
+| `stackit.submit.labels` | string[] | `[]` | Default labels for PRs |
+| `stackit.submit.reviewers` | string[] | `[]` | Default reviewers for PRs |
+| `stackit.submit.assignees` | string[] | `[]` | Default assignees for PRs |
 | `stackit.undo.depth` | int | `10` | Max undo snapshots to retain |
 | `stackit.worktree.basePath` | string | `""` | Base directory for worktrees |
 | `stackit.worktree.autoClean` | bool | `true` | Auto-clean worktrees during sync |
@@ -161,6 +166,15 @@ branch:
 # PR submission settings
 submit:
   footer: true  # Include stackit footer in PR descriptions
+  draft: false  # Create PRs as drafts by default
+  web: never    # Open PRs in browser: always, created, or never
+  labels:       # Default labels for PRs
+    - needs-review
+  reviewers:    # Default reviewers for PRs
+    - teammate1
+    - teammate2
+  assignees:    # Default assignees for PRs
+    - octocat
 
 # Merge method preference
 merge:
@@ -201,6 +215,11 @@ The table below shows all options available in `.stackit.yaml`. The "Team Fallba
 | `trunks` | string[] | `[]` | Additional trunk branches (merged with git config) | Yes (additive) |
 | `branch.pattern` | string | `{username}/{date}/{message}` | Branch naming template | Yes |
 | `submit.footer` | bool | `true` | Include PR footer | Yes |
+| `submit.draft` | bool | `false` | Create PRs as drafts by default | Yes |
+| `submit.web` | string | `never` | Open PRs in browser (always/created/never) | Yes |
+| `submit.labels` | string[] | `[]` | Default labels for PRs | Yes (additive) |
+| `submit.reviewers` | string[] | `[]` | Default reviewers for PRs | Yes (additive) |
+| `submit.assignees` | string[] | `[]` | Default assignees for PRs | Yes (additive) |
 | `merge.method` | string | `""` | Merge strategy (squash/merge/rebase) | Yes |
 | `ci.command` | string | `""` | CI validation command | Yes |
 | `ci.timeout` | int | `600` | CI timeout in seconds | Yes |
@@ -348,31 +367,204 @@ stackit config reset
 
 ## Adding New Configuration
 
-To add a new configuration key:
+Adding a new config key requires updates to multiple files. The pattern differs based on the value type.
 
-1. Add the key constant to `internal/config/keys.go`
-2. Add getter/setter methods to `GitConfig` in `internal/config/config_git.go`
-3. If part of the interface, add to `Configurer` in `internal/config/interface.go`
-4. Update the CLI if it should be user-configurable via `stackit config`
+### Checklist
 
-Example:
+1. **`internal/config/keys.go`**
+   - Add key constant: `const KeyMyNewSetting = "stackit.my.newSetting"`
+   - Add default constant: `const DefaultMyNewSetting = "value"`
+   - For enum types, add validation slice: `var ValidMyNewSetting = []string{"opt1", "opt2"}`
 
+2. **`internal/config/config_git.go`**
+   - Add getter method with layered fallback (personal > team > default)
+   - Add setter method with validation
+   - Add `Unset*` method to remove personal override
+   - Add key to `ResetAllPersonal()` slice
+
+3. **`internal/config/project_config.go`** (for team config support)
+   - Add field to appropriate config struct (e.g., `SubmitConfig`)
+   - Add `Has*` method to check if set
+   - Add `Get*` method for pointer types (bool)
+   - Add validation in `Validate()` if needed
+
+4. **`internal/cli/config.go`** (for CLI support)
+   - Add key constant (e.g., `keyMyNewSetting = "my.newSetting"`)
+   - Add case in `newConfigGetCmd()` switch
+   - Add case in `newConfigSetCmd()` switch
+   - Add case in `newConfigUnsetCmd()` switch
+   - Add entry in `showConfigWithSources()`
+
+### Patterns by Type
+
+**Boolean config:**
 ```go
 // keys.go
-const KeyMyNewSetting = "stackit.my.newSetting"
-const DefaultMyNewSetting = "default-value"
+const KeyMyBool = "stackit.my.bool"
+const DefaultMyBool = false
 
 // config_git.go
-func (c *GitConfig) MyNewSetting() string {
-    if val := c.store.Get(KeyMyNewSetting); val != "" {
-        return val
+func (c *GitConfig) MyBool() bool {
+    if c.store.Exists(KeyMyBool) {
+        return c.store.GetBoolWithDefault(KeyMyBool, DefaultMyBool)
     }
-    return DefaultMyNewSetting
+    if c.project != nil && c.project.HasMyBool() {
+        return c.project.GetMyBool()
+    }
+    return DefaultMyBool
 }
 
-func (c *GitConfig) SetMyNewSetting(value string) error {
-    return c.store.Set(KeyMyNewSetting, value)
+// project_config.go - use pointer to distinguish unset from false
+type MyConfig struct {
+    MyBool *bool `yaml:"myBool,omitempty"`
 }
+func (c *ProjectConfig) HasMyBool() bool { return c.My.MyBool != nil }
+func (c *ProjectConfig) GetMyBool() bool { return *c.My.MyBool }
+```
+
+**String enum config:**
+```go
+// keys.go
+const KeyMyEnum = "stackit.my.enum"
+const DefaultMyEnum = "option1"
+var ValidMyEnum = []string{"option1", "option2", "option3"}
+
+// config_git.go
+func (c *GitConfig) MyEnum() string {
+    val, _ := c.store.Get(KeyMyEnum)
+    if val != "" {
+        if !slices.Contains(ValidMyEnum, val) {
+            return DefaultMyEnum
+        }
+        return val
+    }
+    if c.project != nil && c.project.HasMyEnum() {
+        return c.project.My.Enum
+    }
+    return DefaultMyEnum
+}
+
+func (c *GitConfig) SetMyEnum(val string) error {
+    if !slices.Contains(ValidMyEnum, val) {
+        return fmt.Errorf("invalid value: %s (must be one of: %s)", val, strings.Join(ValidMyEnum, ", "))
+    }
+    return c.store.Set(KeyMyEnum, val)
+}
+```
+
+**Multi-value (array) config:**
+```go
+// keys.go
+const KeyMyList = "stackit.my.list"
+
+// config_git.go - arrays are merged from git config and project config
+func (c *GitConfig) MyList() []string {
+    items := []string{}
+    gitItems, _ := c.store.GetAll(KeyMyList)
+    for _, item := range gitItems {
+        if !slices.Contains(items, item) {
+            items = append(items, item)
+        }
+    }
+    if c.project != nil && c.project.HasMyList() {
+        for _, item := range c.project.My.List {
+            if !slices.Contains(items, item) {
+                items = append(items, item)
+            }
+        }
+    }
+    return items
+}
+
+func (c *GitConfig) AddMyListItem(item string) error {
+    return c.store.Add(KeyMyList, item)
+}
+
+// cli/config.go - use .add and .clear suffixes for multi-value keys
+const (
+    keyMyList      = "my.list"
+    keyMyListAdd   = "my.list.add"
+    keyMyListClear = "my.list.clear"
+)
+```
+
+### CLI Config Pattern
+
+For each key in `internal/cli/config.go`:
+
+```go
+// Get command
+case keyMyNewSetting:
+    _, _ = fmt.Fprintln(cmd.OutOrStdout(), cfg.MyNewSetting())
+
+// Set command
+case keyMyNewSetting:
+    if err := cfg.SetMyNewSetting(value); err != nil {
+        return fmt.Errorf("failed to set %s: %w", keyMyNewSetting, err)
+    }
+    splog.Info("Set %s to: %s", keyMyNewSetting, value)
+
+// Unset command
+case keyMyNewSetting:
+    if err := cfg.UnsetMyNewSetting(); err != nil {
+        return fmt.Errorf("failed to unset %s: %w", keyMyNewSetting, err)
+    }
+    splog.Info("Unset %s (now using: %s)", keyMyNewSetting, cfg.MyNewSetting())
+
+// Show command - determine source
+source := getStringSource(config.KeyMyNewSetting, projectCfg != nil && projectCfg.HasMyNewSetting())
+formatLine("my.newSetting", cfg.MyNewSetting(), source)
+```
+
+## Submit Command Config Flow
+
+When adding config options that affect PR submission, values flow through multiple layers:
+
+```
+cli/stack/submit.go          → Loads config, builds submit.Options
+  ↓
+actions/submit/submit.go     → submit.Options struct (add ConfigXxx fields)
+  ↓
+actions/submit/planning.go   → Passes to MetadataOptions
+  ↓
+actions/submit/submit_metadata.go → MetadataOptions → PRMetadata
+  ↓
+github/pr_operations.go      → CreatePROptions/UpdatePROptions → GitHub API
+```
+
+**Key files for submit config:**
+- `internal/cli/stack/submit.go` - Load config, populate `submit.Options`
+- `internal/actions/submit/submit.go` - `Options` struct with `ConfigXxx` fields
+- `internal/actions/submit/planning.go` - Pass config to `MetadataOptions`
+- `internal/actions/submit/submit_metadata.go` - `MetadataOptions`, `PRMetadata` structs
+- `internal/github/pr_operations.go` - `CreatePROptions` for GitHub API
+
+**Pattern for submit config:**
+```go
+// 1. submit.go Options struct
+type Options struct {
+    // ... flags ...
+    ConfigMyOption string // Config-driven option
+}
+
+// 2. cli/stack/submit.go - load and pass config
+opts := submit.Options{
+    // ... flags ...
+    ConfigMyOption: cfg.MyOption(),
+}
+
+// 3. submit_metadata.go MetadataOptions
+type MetadataOptions struct {
+    // ...
+    ConfigMyOption string
+}
+
+// 4. planning.go - pass to metadata
+metadataOpts := MetadataOptions{
+    ConfigMyOption: opts.ConfigMyOption,
+}
+
+// 5. Use in PreparePRMetadata or submitBranch
 ```
 
 ## Design Principles

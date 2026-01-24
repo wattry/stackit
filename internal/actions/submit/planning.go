@@ -82,6 +82,11 @@ func prepareBranchesForSubmit(ctx *app.Context, branches []engine.Branch, opts O
 			Publish:           opts.Publish,
 			Reviewers:         opts.Reviewers,
 			ReviewersPrompt:   opts.Reviewers == "" && opts.Edit,
+			// Config-driven options
+			ConfigDraft:     opts.ConfigDraft,
+			ConfigReviewers: opts.ConfigReviewers,
+			ConfigLabels:    opts.ConfigLabels,
+			ConfigAssignees: opts.ConfigAssignees,
 		}
 
 		metadata, err := PreparePRMetadata(branch, metadataOpts, ctx)
