@@ -21,6 +21,61 @@ func (h *noopHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
 
+func TestScopeRequiredInPattern(t *testing.T) {
+	t.Parallel()
+
+	t.Run("errors in non-interactive mode when pattern has scope but no scope provided", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Set a pattern that requires scope
+		sh.Run("config set branch.pattern \"{scope}/{message}\"")
+
+		// Create a file to have something to commit
+		sh.Write("test.txt", "content")
+
+		// Try to create a branch without providing scope - should error
+		sh.RunExpectError("create -m 'test feature'").
+			OutputContains("branch pattern contains {scope} but no scope provided")
+	})
+
+	t.Run("succeeds when pattern has scope and scope is provided via flag", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Set a pattern that requires scope
+		sh.Run("config set branch.pattern \"{scope}/{message}\"")
+
+		// Create a file to have something to commit
+		sh.Write("test.txt", "content")
+
+		// Create a branch with scope flag - should succeed
+		sh.Run("create -m 'test feature' --scope JIRA-123").
+			OutputContains("Created branch")
+
+		// Verify the branch name contains the scope
+		sh.OnBranch("JIRA-123/test-feature")
+	})
+
+	t.Run("succeeds when scope is inherited from parent", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Set a pattern that requires scope
+		sh.Run("config set branch.pattern \"{scope}/{message}\"")
+
+		// Create parent branch with scope
+		sh.Write("parent.txt", "parent content")
+		sh.Run("create -m 'parent' --scope PROJ-100")
+		sh.OnBranch("PROJ-100/parent")
+
+		// Create child branch - should inherit scope from parent
+		sh.Write("child.txt", "child content")
+		sh.Run("create -m 'child feature'")
+		sh.OnBranch("PROJ-100/child-feature")
+	})
+}
+
 func TestScopeSubmitSyncFlow(t *testing.T) {
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 

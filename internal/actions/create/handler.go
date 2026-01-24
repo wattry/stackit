@@ -53,6 +53,10 @@ type Handler interface {
 
 	// PromptStageChanges prompts user to stage unstaged changes
 	PromptStageChanges() (bool, error)
+
+	// PromptScope prompts user for a scope value when pattern contains {scope}
+	// The patternHint shows the current branch pattern to the user
+	PromptScope(patternHint string) (string, error)
 }
 
 // NullHandler is a no-op handler for when nil is passed
@@ -75,3 +79,6 @@ func (h *NullHandler) IsInteractive() bool { return false }
 
 // PromptStageChanges implements Handler.
 func (h *NullHandler) PromptStageChanges() (bool, error) { return false, nil }
+
+// PromptScope implements Handler.
+func (h *NullHandler) PromptScope(_ string) (string, error) { return "", nil }

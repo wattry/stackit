@@ -131,6 +131,23 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		parentScope := eng.GetScope(eng.GetBranch(currentBranch))
 		scopeToUse = parentScope.String()
 	}
+
+	// Check if pattern needs scope and we don't have one
+	if opts.BranchPattern.ContainsScope() && scopeToUse == "" {
+		if handler.IsInteractive() {
+			promptedScope, err := handler.PromptScope(opts.BranchPattern.String())
+			if err != nil {
+				return Result{}, err
+			}
+			if promptedScope != "" {
+				scopeToUse = promptedScope
+				opts.Scope = promptedScope // Ensure it gets set in metadata
+			}
+		} else {
+			return Result{}, fmt.Errorf("branch pattern contains {scope} but no scope provided; use --scope to set one")
+		}
+	}
+
 	branch, err := determineBranch(ctx, &opts, commitMessage, scopeToUse)
 	if err != nil {
 		return Result{}, err
