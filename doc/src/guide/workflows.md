@@ -95,6 +95,9 @@ This command:
 
 ## Working on multiple stacks in parallel
 
+!!! tip "Dedicated Worktrees Guide"
+    For comprehensive worktree documentation including shell integration, configuration, and best practices, see the [Worktrees Guide](worktrees.md).
+
 To work on separate features simultaneously, each in their own directory:
 
 ```bash
@@ -129,7 +132,7 @@ hooks:
     - cp .env.example .env
 ```
 
-These hooks run in the new worktree directory after it's created. See [Configuration](../cli/config.md#project-configuration-stackityaml) for more details.
+These hooks run in the new worktree directory after it's created. See [Configuration](../cli/config.md#team-configuration-stackityaml) for more details.
 
 Worktrees are automatically cleaned up during $$stackit sync$$ when their stack is merged.
 
@@ -145,6 +148,9 @@ stackit create another-feature -m "feat: another feature" -w
 This creates a sibling worktree at `../your-repo-stacks/another-feature/` regardless of where you're currently working. The new branch is created from trunk, not from the current worktree's branch.
 
 ## Collaborating on stacks
+
+!!! tip "Team Workflows Guide"
+    For comprehensive team collaboration features including freeze vs lock, shared configuration, and CI integration, see the [Team Workflows Guide](team-workflows.md).
 
 ### Fetching someone's stack
 
@@ -237,5 +243,7 @@ By default, this runs on all upstack branches (from current to top). Use `--down
 
 ## Next steps
 
+- [Worktrees Guide →](worktrees.md)
+- [Team Workflows →](team-workflows.md)
 - [Setup Claude integration →](claude-integration.md)
 - [Troubleshooting →](troubleshooting.md)

@@ -26,6 +26,22 @@ This guide covers everything you need to know to work effectively with stackit.
 
     [View workflows →](workflows.md)
 
+-   :material-folder-multiple:{ .lg .middle } **Worktrees**
+
+    ---
+
+    Work on multiple stacks in parallel, each in its own directory.
+
+    [Learn worktrees →](worktrees.md)
+
+-   :material-account-group:{ .lg .middle } **Team Workflows**
+
+    ---
+
+    Share configuration, protect branches, and collaborate on stacks with your team.
+
+    [Team workflows →](team-workflows.md)
+
 -   :material-robot:{ .lg .middle } **Claude Integration**
 
     ---
