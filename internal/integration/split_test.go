@@ -894,7 +894,138 @@ just some random text
 			OutputNotContains("file2_modified")
 	})
 
-	// NOTE: New file creation and file deletion patches are not currently supported
-	// due to limitations in git apply --cached and git stash push --staged.
-	// The --patch flag only supports modifications to existing files.
+	t.Run("split by hunk with patch includes new files - above direction", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+		tmpDir := t.TempDir()
+
+		// Setup: create a base with existing file
+		// Write("existing", ...) creates existing_test.txt
+		sh.Write("existing", "original content").
+			Run("create setup -m 'Setup'")
+
+		// Feature: modify existing file and add new file
+		// Write("newfile", ...) creates newfile_test.txt
+		sh.Write("existing", "modified content").
+			Write("newfile", "new file content").
+			Run("create feature -m 'Add changes'")
+
+		// Create patch that extracts only the new file
+		patchContent := `diff --git a/newfile_test.txt b/newfile_test.txt
+new file mode 100644
+--- /dev/null
++++ b/newfile_test.txt
+@@ -0,0 +1 @@
++new file content
+`
+		patchFile := filepath.Join(tmpDir, "extract.patch")
+		require.NoError(t, os.WriteFile(patchFile, []byte(patchContent), 0o644))
+
+		// Extract the new file to a child branch
+		sh.Run("split --patch " + patchFile + " --above --name child -m 'Extract new file'")
+
+		// Verify child has the new file
+		sh.Checkout("child").
+			Git("show HEAD:newfile_test.txt").
+			OutputContains("new file content")
+
+		// Verify feature keeps the existing file modification but not the new file
+		sh.Checkout("feature").
+			Git("show HEAD:existing_test.txt").
+			OutputContains("modified content")
+		// The new file should not be in feature's commit
+		sh.Git("show HEAD -- newfile_test.txt").
+			OutputNotContains("new file content")
+	})
+
+	t.Run("split by hunk with patch includes deleted files - above direction", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+		tmpDir := t.TempDir()
+
+		// Setup: create files that will be modified and deleted
+		// Write("tokeep", ...) creates tokeep_test.txt
+		// Write("todelete", ...) creates todelete_test.txt
+		// Add trailing newline to match patch format
+		sh.Write("tokeep", "keep this\n").
+			Write("todelete", "will be deleted\n").
+			Run("create setup -m 'Setup with files'")
+
+		// Feature: modify one file and delete another
+		sh.Write("tokeep", "modified content\n").
+			Git("rm todelete_test.txt").
+			Run("create feature -m 'Modify and delete'")
+
+		// Create patch that extracts only the deletion
+		patchContent := `diff --git a/todelete_test.txt b/todelete_test.txt
+deleted file mode 100644
+--- a/todelete_test.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-will be deleted
+`
+		patchFile := filepath.Join(tmpDir, "extract.patch")
+		require.NoError(t, os.WriteFile(patchFile, []byte(patchContent), 0o644))
+
+		// Extract the deletion to a child branch
+		sh.Run("split --patch " + patchFile + " --above --name child -m 'Extract deletion'")
+
+		// Verify child has the deletion (file was deleted in this commit)
+		sh.Checkout("child").
+			Git("show HEAD -- todelete_test.txt").
+			OutputContains("deleted file mode")
+
+		// Verify feature still has the file (deletion was extracted)
+		sh.Checkout("feature").
+			Git("show HEAD:todelete_test.txt").
+			OutputContains("will be deleted")
+
+		// Verify feature keeps the modification
+		sh.Git("show HEAD:tokeep_test.txt").
+			OutputContains("modified content")
+	})
+
+	t.Run("split by hunk with patch includes new files - below direction", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+		tmpDir := t.TempDir()
+
+		// Setup: create a base with existing file
+		// Write("existing", ...) creates existing_test.txt
+		sh.Write("existing", "original content").
+			Run("create setup -m 'Setup'")
+
+		// Feature: modify existing file and add new file
+		// Write("newfile", ...) creates newfile_test.txt
+		sh.Write("existing", "modified content").
+			Write("newfile", "new file content").
+			Run("create feature -m 'Add changes'")
+
+		// Create patch that extracts only the new file to the parent
+		patchContent := `diff --git a/newfile_test.txt b/newfile_test.txt
+new file mode 100644
+--- /dev/null
++++ b/newfile_test.txt
+@@ -0,0 +1 @@
++new file content
+`
+		patchFile := filepath.Join(tmpDir, "extract.patch")
+		require.NoError(t, os.WriteFile(patchFile, []byte(patchContent), 0o644))
+
+		// Extract the new file to a parent branch (--below creates parent)
+		sh.Run("split --patch " + patchFile + " --below --name parent -m 'New file only'")
+
+		// Verify parent has the new file
+		sh.Checkout("parent").
+			Git("show HEAD:newfile_test.txt").
+			OutputContains("new file content")
+
+		// Verify feature keeps the existing file modification but not the new file
+		sh.Checkout("feature").
+			Git("show HEAD:existing_test.txt").
+			OutputContains("modified content")
+		// New file should not be in feature's commit
+		sh.Git("show HEAD -- newfile_test.txt").
+			OutputNotContains("new file content")
+	})
 }

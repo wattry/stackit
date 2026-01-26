@@ -8,14 +8,17 @@ import (
 
 // Hunk represents a single hunk of changes in a diff
 type Hunk struct {
-	File      string // File path
-	OldStart  int    // Line number in old file (1-indexed)
-	OldCount  int    // Number of lines in old file
-	NewStart  int    // Line number in new file (1-indexed)
-	NewCount  int    // Number of lines in new file
-	Content   string // The actual diff content (including header)
-	IndexLine string // The index line from the diff (e.g., "index abc123..def456 100644") for --3way merging
-	Binary    bool   // True if this represents a binary file change
+	File          string // File path
+	OldStart      int    // Line number in old file (1-indexed)
+	OldCount      int    // Number of lines in old file
+	NewStart      int    // Line number in new file (1-indexed)
+	NewCount      int    // Number of lines in new file
+	Content       string // The actual diff content (including header)
+	IndexLine     string // The index line from the diff (e.g., "index abc123..def456 100644") for --3way merging
+	Binary        bool   // True if this represents a binary file change
+	IsNewFile     bool   // True if this hunk is for a newly created file
+	IsDeletedFile bool   // True if this hunk is for a deleted file
+	FileMode      string // File mode (e.g., "100644", "100755") for new/deleted files
 }
 
 // ParseDiffOutput parses a diff output into structured hunks
@@ -34,6 +37,9 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 	var currentHunk *Hunk
 	var currentFile string
 	var currentIndexLine string
+	var currentIsNewFile bool
+	var currentIsDeletedFile bool
+	var currentFileMode string
 	var hunkLines []string
 
 	for _, line := range lines {
@@ -57,8 +63,27 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 					currentFile = strings.TrimPrefix(bPath, "b/")
 				}
 			}
-			// Reset index line for new file
+			// Reset state for new file diff
 			currentIndexLine = ""
+			currentIsNewFile = false
+			currentIsDeletedFile = false
+			currentFileMode = ""
+			continue
+		}
+
+		// Detect new file mode (e.g., "new file mode 100644")
+		// This line appears between "diff --git" and "index" for new files
+		if strings.HasPrefix(line, "new file mode ") {
+			currentFileMode = strings.TrimPrefix(line, "new file mode ")
+			currentIsNewFile = true
+			continue
+		}
+
+		// Detect deleted file mode (e.g., "deleted file mode 100644")
+		// This line appears between "diff --git" and "index" for deleted files
+		if strings.HasPrefix(line, "deleted file mode ") {
+			currentFileMode = strings.TrimPrefix(line, "deleted file mode ")
+			currentIsDeletedFile = true
 			continue
 		}
 
@@ -110,12 +135,15 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 			}
 
 			currentHunk = &Hunk{
-				File:      currentFile,
-				OldStart:  oldStart,
-				OldCount:  oldCount,
-				NewStart:  newStart,
-				NewCount:  newCount,
-				IndexLine: currentIndexLine,
+				File:          currentFile,
+				OldStart:      oldStart,
+				OldCount:      oldCount,
+				NewStart:      newStart,
+				NewCount:      newCount,
+				IndexLine:     currentIndexLine,
+				IsNewFile:     currentIsNewFile,
+				IsDeletedFile: currentIsDeletedFile,
+				FileMode:      currentFileMode,
 			}
 			hunkLines = []string{line}
 			continue
@@ -157,6 +185,9 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 	// Separate binary and text hunks, group by file
 	fileHunks := make(map[string][]Hunk)
 	fileBinary := make(map[string]bool)
+	fileNewFile := make(map[string]bool)
+	fileDeletedFile := make(map[string]bool)
+	fileMode := make(map[string]string)
 	fileOrder := make([]string, 0)
 	for _, h := range hunks {
 		if _, exists := fileHunks[h.File]; !exists {
@@ -166,6 +197,14 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 		if h.Binary {
 			fileBinary[h.File] = true
 		}
+		if h.IsNewFile {
+			fileNewFile[h.File] = true
+			fileMode[h.File] = h.FileMode
+		}
+		if h.IsDeletedFile {
+			fileDeletedFile[h.File] = true
+			fileMode[h.File] = h.FileMode
+		}
 	}
 
 	var sb strings.Builder
@@ -173,9 +212,29 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 	// Build patch for each file
 	for _, file := range fileOrder {
 		hunksForFile := fileHunks[file]
+		isNewFile := fileNewFile[file]
+		isDeletedFile := fileDeletedFile[file]
 
 		// Write diff header
 		sb.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", file, file))
+
+		// Add new file mode line if this is a new file
+		if isNewFile {
+			mode := fileMode[file]
+			if mode == "" {
+				mode = "100644" // default mode for regular files
+			}
+			sb.WriteString(fmt.Sprintf("new file mode %s\n", mode))
+		}
+
+		// Add deleted file mode line if this is a deleted file
+		if isDeletedFile {
+			mode := fileMode[file]
+			if mode == "" {
+				mode = "100644" // default mode for regular files
+			}
+			sb.WriteString(fmt.Sprintf("deleted file mode %s\n", mode))
+		}
 
 		// Add index line if available (needed for --3way)
 		if hunksForFile[0].IndexLine != "" {
@@ -194,8 +253,21 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
-		sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+		// Handle ---/+++ lines based on file type
+		switch {
+		case isNewFile:
+			// New files use /dev/null as the old file path
+			sb.WriteString("--- /dev/null\n")
+			sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+		case isDeletedFile:
+			// Deleted files use /dev/null as the new file path
+			sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
+			sb.WriteString("+++ /dev/null\n")
+		default:
+			// Modified files use normal paths
+			sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
+			sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+		}
 
 		// Write each hunk
 		for _, h := range hunksForFile {
@@ -208,6 +280,33 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 	}
 
 	return sb.String()
+}
+
+// GenerateNewFileHunk creates a synthetic hunk for an untracked file.
+// This allows new files to be included in hunk-based splitting.
+func GenerateNewFileHunk(filePath string, content []byte) Hunk {
+	lines := strings.Split(string(content), "\n")
+	// Remove trailing empty line if present (file ends with newline)
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+	for _, line := range lines {
+		sb.WriteString("+" + line + "\n")
+	}
+
+	return Hunk{
+		File:      filePath,
+		OldStart:  0,
+		OldCount:  0,
+		NewStart:  1,
+		NewCount:  len(lines),
+		Content:   sb.String(),
+		IsNewFile: true,
+		FileMode:  "100644",
+	}
 }
 
 // CountHunkLines returns the number of added and removed lines in a hunk

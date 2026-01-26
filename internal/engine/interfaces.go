@@ -81,7 +81,9 @@ type GitDiffer interface {
 type WorkingTree interface {
 	HasStagedChanges(ctx context.Context) (bool, error)
 	HasUnstagedChanges(ctx context.Context) (bool, error)
+	HasUntrackedFiles(ctx context.Context) (bool, error)
 	GetUnstagedDiff(ctx context.Context, files ...string) (string, error)
+	GetUntrackedFileHunks(ctx context.Context) ([]git.Hunk, error)
 	GetPendingChanges(ctx context.Context) ([]PendingChange, error)
 	GetCommitTemplate(ctx context.Context) (string, error)
 	GetUnmergedFiles(ctx context.Context) ([]string, error)

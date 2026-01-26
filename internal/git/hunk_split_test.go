@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const testNewFileName = "newfile.go"
+
 func TestCanSplitHunk(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -585,4 +587,583 @@ func TestCanSplitHunk_NoNewlineAtEnd(t *testing.T) {
 	if CanSplitHunk(hunk) {
 		t.Error("Hunk with single change block should not be splittable")
 	}
+}
+
+func TestParseDiffOutput_NewFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		diff          string
+		expectedCount int
+		validateHunks func(t *testing.T, hunks []Hunk)
+	}{
+		{
+			name: "new file with mode 100644",
+			diff: `diff --git a/newfile.go b/newfile.go
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/newfile.go
+@@ -0,0 +1,3 @@
++package main
++
++func main() {}`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != testNewFileName {
+					t.Errorf("Expected file '%s', got '%s'", testNewFileName, hunks[0].File)
+				}
+				if !hunks[0].IsNewFile {
+					t.Error("Expected IsNewFile to be true")
+				}
+				if hunks[0].FileMode != "100644" {
+					t.Errorf("Expected FileMode '100644', got '%s'", hunks[0].FileMode)
+				}
+			},
+		},
+		{
+			name: "new file with executable mode",
+			diff: `diff --git a/script.sh b/script.sh
+new file mode 100755
+index 0000000..def5678
+--- /dev/null
++++ b/script.sh
+@@ -0,0 +1,2 @@
++#!/bin/bash
++echo "hello"`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if !hunks[0].IsNewFile {
+					t.Error("Expected IsNewFile to be true")
+				}
+				if hunks[0].FileMode != "100755" {
+					t.Errorf("Expected FileMode '100755', got '%s'", hunks[0].FileMode)
+				}
+			},
+		},
+		{
+			name: "mixed new and modified files",
+			diff: `diff --git a/newfile.go b/newfile.go
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/newfile.go
+@@ -0,0 +1,1 @@
++package main
+diff --git a/existing.go b/existing.go
+index abc123..def456 100644
+--- a/existing.go
++++ b/existing.go
+@@ -1,3 +1,4 @@
+ package main
++// added comment
+ func main() {}`,
+			expectedCount: 2,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				// First hunk should be new file
+				if hunks[0].File != testNewFileName {
+					t.Errorf("First hunk file should be '%s', got '%s'", testNewFileName, hunks[0].File)
+				}
+				if !hunks[0].IsNewFile {
+					t.Error("First hunk should be a new file")
+				}
+				// Second hunk should be modified file
+				if hunks[1].File != "existing.go" {
+					t.Errorf("Second hunk file should be 'existing.go', got '%s'", hunks[1].File)
+				}
+				if hunks[1].IsNewFile {
+					t.Error("Second hunk should not be a new file")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			hunks, err := ParseDiffOutput(tt.diff)
+			if err != nil {
+				t.Fatalf("ParseDiffOutput() error = %v", err)
+			}
+			if len(hunks) != tt.expectedCount {
+				t.Errorf("ParseDiffOutput() returned %d hunks, expected %d", len(hunks), tt.expectedCount)
+			}
+			if tt.validateHunks != nil {
+				tt.validateHunks(t, hunks)
+			}
+		})
+	}
+}
+
+func TestBuildPatchFromHunks_NewFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("new file patch has correct format", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:      "newfile.go",
+				IsNewFile: true,
+				FileMode:  "100644",
+				IndexLine: "index 0000000..abc1234 100644",
+				Content:   "@@ -0,0 +1,3 @@\n+package main\n+\n+func main() {}",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		// Should contain diff header
+		if !strings.Contains(patch, "diff --git a/newfile.go b/newfile.go") {
+			t.Error("Patch should contain diff header")
+		}
+
+		// Should contain new file mode
+		if !strings.Contains(patch, "new file mode 100644") {
+			t.Error("Patch should contain 'new file mode 100644'")
+		}
+
+		// Should have --- /dev/null (not --- a/newfile.go)
+		if !strings.Contains(patch, "--- /dev/null") {
+			t.Error("New file patch should have '--- /dev/null'")
+		}
+		if strings.Contains(patch, "--- a/newfile.go") {
+			t.Error("New file patch should NOT have '--- a/newfile.go'")
+		}
+
+		// Should have +++ b/newfile.go
+		if !strings.Contains(patch, "+++ b/newfile.go") {
+			t.Error("Patch should contain '+++ b/newfile.go'")
+		}
+	})
+
+	t.Run("executable new file uses correct mode", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:      "script.sh",
+				IsNewFile: true,
+				FileMode:  "100755",
+				Content:   "@@ -0,0 +1,1 @@\n+#!/bin/bash",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		if !strings.Contains(patch, "new file mode 100755") {
+			t.Error("Patch should contain 'new file mode 100755'")
+		}
+	})
+
+	t.Run("new file without mode defaults to 100644", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:      "newfile.go",
+				IsNewFile: true,
+				FileMode:  "", // empty mode
+				Content:   "@@ -0,0 +1,1 @@\n+content",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		if !strings.Contains(patch, "new file mode 100644") {
+			t.Error("Patch should default to 'new file mode 100644'")
+		}
+	})
+
+	t.Run("mixed new and modified files", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:      "newfile.go",
+				IsNewFile: true,
+				FileMode:  "100644",
+				Content:   "@@ -0,0 +1,1 @@\n+new content",
+			},
+			{
+				File:      "existing.go",
+				IsNewFile: false,
+				Content:   "@@ -1,1 +1,2 @@\n line1\n+added",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		// New file should have /dev/null
+		if !strings.Contains(patch, "--- /dev/null") {
+			t.Error("New file should have '--- /dev/null'")
+		}
+
+		// Existing file should have normal --- a/ format
+		if !strings.Contains(patch, "--- a/existing.go") {
+			t.Error("Existing file should have '--- a/existing.go'")
+		}
+	})
+}
+
+func TestExtractContentFromHunk(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		hunk     Hunk
+		expected string
+	}{
+		{
+			name: "simple new file",
+			hunk: Hunk{
+				Content: "@@ -0,0 +1,3 @@\n+line1\n+line2\n+line3",
+			},
+			expected: "line1\nline2\nline3\n",
+		},
+		{
+			name: "new file with empty lines",
+			hunk: Hunk{
+				Content: "@@ -0,0 +1,4 @@\n+package main\n+\n+func main() {\n+}",
+			},
+			expected: "package main\n\nfunc main() {\n}\n",
+		},
+		{
+			name: "skips hunk header",
+			hunk: Hunk{
+				Content: "@@ -0,0 +1,1 @@ context info\n+single line",
+			},
+			expected: "single line\n",
+		},
+		{
+			name: "handles empty content",
+			hunk: Hunk{
+				Content: "@@ -0,0 +0,0 @@",
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := extractContentFromHunk(tt.hunk)
+			if result != tt.expected {
+				t.Errorf("extractContentFromHunk() = %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateNewFileHunk(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		filePath       string
+		content        []byte
+		expectedFile   string
+		expectedLines  int
+		expectedHeader string
+	}{
+		{
+			name:           "simple file",
+			filePath:       "newfile.go",
+			content:        []byte("package main\n\nfunc main() {\n}\n"),
+			expectedFile:   "newfile.go",
+			expectedLines:  4,
+			expectedHeader: "@@ -0,0 +1,4 @@",
+		},
+		{
+			name:           "single line without trailing newline",
+			filePath:       "single.txt",
+			content:        []byte("hello"),
+			expectedFile:   "single.txt",
+			expectedLines:  1,
+			expectedHeader: "@@ -0,0 +1,1 @@",
+		},
+		{
+			name:           "single line with trailing newline",
+			filePath:       "single.txt",
+			content:        []byte("hello\n"),
+			expectedFile:   "single.txt",
+			expectedLines:  1,
+			expectedHeader: "@@ -0,0 +1,1 @@",
+		},
+		{
+			name:           "nested path",
+			filePath:       "path/to/file.txt",
+			content:        []byte("content\n"),
+			expectedFile:   "path/to/file.txt",
+			expectedLines:  1,
+			expectedHeader: "@@ -0,0 +1,1 @@",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			hunk := GenerateNewFileHunk(tt.filePath, tt.content)
+
+			if hunk.File != tt.expectedFile {
+				t.Errorf("File = %q, expected %q", hunk.File, tt.expectedFile)
+			}
+			if !hunk.IsNewFile {
+				t.Error("IsNewFile should be true")
+			}
+			if hunk.FileMode != "100644" {
+				t.Errorf("FileMode = %q, expected %q", hunk.FileMode, "100644")
+			}
+			if hunk.OldStart != 0 || hunk.OldCount != 0 {
+				t.Errorf("Old start/count = %d/%d, expected 0/0", hunk.OldStart, hunk.OldCount)
+			}
+			if hunk.NewStart != 1 {
+				t.Errorf("NewStart = %d, expected 1", hunk.NewStart)
+			}
+			if hunk.NewCount != tt.expectedLines {
+				t.Errorf("NewCount = %d, expected %d", hunk.NewCount, tt.expectedLines)
+			}
+			if !strings.Contains(hunk.Content, tt.expectedHeader) {
+				t.Errorf("Content should contain %q, got %q", tt.expectedHeader, hunk.Content)
+			}
+		})
+	}
+}
+
+func TestParseDiffOutput_DeletedFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		diff          string
+		expectedCount int
+		validateHunks func(t *testing.T, hunks []Hunk)
+	}{
+		{
+			name: "deleted file with mode 100644",
+			diff: `diff --git a/deleted.go b/deleted.go
+deleted file mode 100644
+index abc1234..0000000
+--- a/deleted.go
++++ /dev/null
+@@ -1,3 +0,0 @@
+-package main
+-
+-func deleted() {}`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != "deleted.go" {
+					t.Errorf("Expected file 'deleted.go', got '%s'", hunks[0].File)
+				}
+				if !hunks[0].IsDeletedFile {
+					t.Error("Expected IsDeletedFile to be true")
+				}
+				if hunks[0].FileMode != "100644" {
+					t.Errorf("Expected FileMode '100644', got '%s'", hunks[0].FileMode)
+				}
+			},
+		},
+		{
+			name: "deleted executable file",
+			diff: `diff --git a/script.sh b/script.sh
+deleted file mode 100755
+index def5678..0000000
+--- a/script.sh
++++ /dev/null
+@@ -1,2 +0,0 @@
+-#!/bin/bash
+-echo "hello"`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if !hunks[0].IsDeletedFile {
+					t.Error("Expected IsDeletedFile to be true")
+				}
+				if hunks[0].FileMode != "100755" {
+					t.Errorf("Expected FileMode '100755', got '%s'", hunks[0].FileMode)
+				}
+			},
+		},
+		{
+			name: "mixed new, deleted, and modified files",
+			diff: `diff --git a/newfile.go b/newfile.go
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/newfile.go
+@@ -0,0 +1,1 @@
++package main
+diff --git a/deleted.go b/deleted.go
+deleted file mode 100644
+index def5678..0000000
+--- a/deleted.go
++++ /dev/null
+@@ -1,1 +0,0 @@
+-old content
+diff --git a/modified.go b/modified.go
+index abc123..def456 100644
+--- a/modified.go
++++ b/modified.go
+@@ -1,3 +1,4 @@
+ package main
++// added comment
+ func main() {}`,
+			expectedCount: 3,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				// First hunk should be new file
+				if hunks[0].File != testNewFileName {
+					t.Errorf("First hunk file should be '%s', got '%s'", testNewFileName, hunks[0].File)
+				}
+				if !hunks[0].IsNewFile {
+					t.Error("First hunk should be a new file")
+				}
+				// Second hunk should be deleted file
+				if hunks[1].File != "deleted.go" {
+					t.Errorf("Second hunk file should be 'deleted.go', got '%s'", hunks[1].File)
+				}
+				if !hunks[1].IsDeletedFile {
+					t.Error("Second hunk should be a deleted file")
+				}
+				// Third hunk should be modified file
+				if hunks[2].File != "modified.go" {
+					t.Errorf("Third hunk file should be 'modified.go', got '%s'", hunks[2].File)
+				}
+				if hunks[2].IsNewFile || hunks[2].IsDeletedFile {
+					t.Error("Third hunk should be a modified file (not new or deleted)")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			hunks, err := ParseDiffOutput(tt.diff)
+			if err != nil {
+				t.Fatalf("ParseDiffOutput() error = %v", err)
+			}
+			if len(hunks) != tt.expectedCount {
+				t.Errorf("ParseDiffOutput() returned %d hunks, expected %d", len(hunks), tt.expectedCount)
+			}
+			if tt.validateHunks != nil {
+				tt.validateHunks(t, hunks)
+			}
+		})
+	}
+}
+
+func TestBuildPatchFromHunks_DeletedFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("deleted file patch has correct format", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:          "deleted.go",
+				IsDeletedFile: true,
+				FileMode:      "100644",
+				IndexLine:     "index abc1234..0000000 100644",
+				Content:       "@@ -1,3 +0,0 @@\n-package main\n-\n-func deleted() {}",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		// Should contain diff header
+		if !strings.Contains(patch, "diff --git a/deleted.go b/deleted.go") {
+			t.Error("Patch should contain diff header")
+		}
+
+		// Should contain deleted file mode
+		if !strings.Contains(patch, "deleted file mode 100644") {
+			t.Error("Patch should contain 'deleted file mode 100644'")
+		}
+
+		// Should have --- a/deleted.go (not /dev/null)
+		if !strings.Contains(patch, "--- a/deleted.go") {
+			t.Error("Deleted file patch should have '--- a/deleted.go'")
+		}
+
+		// Should have +++ /dev/null (not +++ b/deleted.go)
+		if !strings.Contains(patch, "+++ /dev/null") {
+			t.Error("Deleted file patch should have '+++ /dev/null'")
+		}
+		if strings.Contains(patch, "+++ b/deleted.go") {
+			t.Error("Deleted file patch should NOT have '+++ b/deleted.go'")
+		}
+	})
+
+	t.Run("executable deleted file uses correct mode", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:          "script.sh",
+				IsDeletedFile: true,
+				FileMode:      "100755",
+				Content:       "@@ -1,1 +0,0 @@\n-#!/bin/bash",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		if !strings.Contains(patch, "deleted file mode 100755") {
+			t.Error("Patch should contain 'deleted file mode 100755'")
+		}
+	})
+
+	t.Run("deleted file without mode defaults to 100644", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:          "deleted.go",
+				IsDeletedFile: true,
+				FileMode:      "", // empty mode
+				Content:       "@@ -1,1 +0,0 @@\n-content",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		if !strings.Contains(patch, "deleted file mode 100644") {
+			t.Error("Patch should default to 'deleted file mode 100644'")
+		}
+	})
+
+	t.Run("mixed new, deleted, and modified files", func(t *testing.T) {
+		t.Parallel()
+		hunks := []Hunk{
+			{
+				File:      "newfile.go",
+				IsNewFile: true,
+				FileMode:  "100644",
+				Content:   "@@ -0,0 +1,1 @@\n+new content",
+			},
+			{
+				File:          "deleted.go",
+				IsDeletedFile: true,
+				FileMode:      "100644",
+				Content:       "@@ -1,1 +0,0 @@\n-old content",
+			},
+			{
+				File:    "modified.go",
+				Content: "@@ -1,1 +1,2 @@\n line1\n+added",
+			},
+		}
+
+		patch := BuildPatchFromHunks(hunks)
+
+		// New file should have /dev/null as old
+		if !strings.Contains(patch, "--- /dev/null") {
+			t.Error("New file should have '--- /dev/null'")
+		}
+
+		// Deleted file should have /dev/null as new
+		if !strings.Contains(patch, "+++ /dev/null") {
+			t.Error("Deleted file should have '+++ /dev/null'")
+		}
+
+		// Modified file should have normal paths
+		if !strings.Contains(patch, "--- a/modified.go") {
+			t.Error("Modified file should have '--- a/modified.go'")
+		}
+		if !strings.Contains(patch, "+++ b/modified.go") {
+			t.Error("Modified file should have '+++ b/modified.go'")
+		}
+	})
 }

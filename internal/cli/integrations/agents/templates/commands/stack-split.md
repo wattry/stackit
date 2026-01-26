@@ -409,6 +409,23 @@ new file mode 100644
 +}
 ```
 
+## Mode Selection Guide
+
+| Scenario | Use Mode |
+|----------|----------|
+| Split hunks within files | `--patch` or `--by-hunk` |
+| Extract entire files | `--by-file` |
+| Extract specific commits | `--by-commit` |
+| Interactive hunk selection | `--by-hunk` (default) |
+
+**Key differences:**
+- `--patch`: Non-interactive, uses a patch file you provide
+- `--by-hunk`: Interactive TUI for selecting hunks
+- `--by-file`: Extracts entire files (not individual hunks within files)
+- `--by-commit`: Splits at commit boundaries
+
+**Note:** `--by-file` extracts entire files to the new branch, not just the changes to those files. Use `--patch` or `--by-hunk` for hunk-level splitting.
+
 ## Do NOT
 - Proceed if there are uncommitted changes in the working directory
 - Create branches without user approval of the plan

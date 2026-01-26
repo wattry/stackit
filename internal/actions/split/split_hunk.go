@@ -134,6 +134,14 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			return fmt.Errorf("failed to parse diff: %w", err)
 		}
 
+		// Also get hunks for untracked (new) files
+		untrackedHunks, err := eng.GetUntrackedFileHunks(gitCtx)
+		if err != nil {
+			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+			return fmt.Errorf("failed to get untracked file hunks: %w", err)
+		}
+		hunks = append(hunks, untrackedHunks...)
+
 		if len(hunks) == 0 {
 			// No hunks to stage - break out of loop
 			break
@@ -392,13 +400,18 @@ func splitByHunkBelowWithPatch(ctx *app.Context, branchToSplit engine.Branch, en
 		return fmt.Errorf("no changes staged from patch file %q", opts.patchFile)
 	}
 
-	// Check if there are unstaged changes (to keep on branchToSplit)
+	// Check if there are unstaged changes or untracked files (to keep on branchToSplit)
 	hasUnstaged, err := eng.HasUnstagedChanges(gitCtx)
 	if err != nil {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to check unstaged changes: %w", err)
 	}
-	if !hasUnstaged {
+	hasUntracked, err := eng.HasUntrackedFiles(gitCtx)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to check untracked files: %w", err)
+	}
+	if !hasUnstaged && !hasUntracked {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("all changes were staged from patch - nothing would remain on %s", branchToSplit.GetName())
 	}
@@ -564,6 +577,14 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		return fmt.Errorf("failed to parse diff: %w", err)
 	}
 
+	// Also get hunks for untracked (new) files
+	untrackedHunks, err := eng.GetUntrackedFileHunks(gitCtx)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to get untracked file hunks: %w", err)
+	}
+	hunks = append(hunks, untrackedHunks...)
+
 	if len(hunks) == 0 {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("no changes to extract")
@@ -631,13 +652,18 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		return fmt.Errorf("no changes staged to extract")
 	}
 
-	// Check if there are unstaged changes (to keep on current)
+	// Check if there are unstaged changes or untracked files (to keep on current)
 	hasUnstaged, err := eng.HasUnstagedChanges(gitCtx)
 	if err != nil {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("failed to check unstaged changes: %w", err)
 	}
-	if !hasUnstaged {
+	hasUntracked, err := eng.HasUntrackedFiles(gitCtx)
+	if err != nil {
+		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
+		return fmt.Errorf("failed to check untracked files: %w", err)
+	}
+	if !hasUnstaged && !hasUntracked {
 		_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 		return fmt.Errorf("all changes were staged - nothing would remain on %s", branchToSplit.GetName())
 	}
