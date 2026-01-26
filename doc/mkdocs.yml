@@ -112,6 +112,7 @@ plugins:
 hooks:
   - hooks/replace.py
   - hooks/cliref.py
+  - hooks/configref.py
 
 markdown_extensions:
   - admonition
