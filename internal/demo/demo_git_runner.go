@@ -405,6 +405,10 @@ func (d *demoGitRunner) GetUnstagedDiff(_ context.Context, _ ...string) (string,
 	return "", nil
 }
 
+func (d *demoGitRunner) GetDiffBetween(_ context.Context, _, _ string, _ ...string) (string, error) {
+	return "", nil
+}
+
 func (d *demoGitRunner) GetDiffNumstat(_, _ string) (string, error) {
 	return "1\t1\ttest.txt", nil
 }

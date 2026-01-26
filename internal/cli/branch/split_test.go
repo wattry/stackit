@@ -346,8 +346,8 @@ func TestSplitCommand(t *testing.T) {
 		cmd := exec.Command(binaryPath, "split", "--by-file", "nonexistent.txt", "--no-interactive")
 		cmd.Dir = scene.Dir
 		output, err := cmd.CombinedOutput()
-		// Git checkout will fail if file doesn't exist, which is expected
+		// Split should fail if file doesn't exist
 		require.Error(t, err, "split should fail with non-existent file")
-		require.Contains(t, string(output), "error", "should show error for non-existent file")
+		require.Contains(t, string(output), "no changes found", "should show error for non-existent file")
 	})
 }

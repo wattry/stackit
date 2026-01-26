@@ -167,10 +167,11 @@ func TestSplitWorkflow(t *testing.T) {
 		sh.Run("split --by-file extract_test.txt")
 
 		// split creates:
-		// - feature_split: 1 commit (extract files from feature)
-		// - feature: 2 commits (original commit + removal commit)
+		// - feature_split: 1 commit (extracted file changes)
+		// - feature: 1 commit (remaining file changes)
+		// Note: The new hunk-based approach doesn't need a removal commit
 		sh.CommitCount("main", "feature_split", 1)
-		sh.CommitCount("feature_split", "feature", 2) // original + removal commit
+		sh.CommitCount("feature_split", "feature", 1)
 	})
 
 	t.Run("split --by-commit accepts the flag and shows interactive prompt", func(t *testing.T) {
@@ -479,6 +480,113 @@ func verifyFilesNotExist(t *testing.T, sh *TestShell, filenames []string) {
 		require.False(t, strings.Contains(outputStr, filename),
 			"expected file %s to NOT exist on current branch", filename)
 	}
+}
+
+// =============================================================================
+// Split by File - Hunk-Based Extraction Tests
+//
+// These tests verify that --by-file extracts CHANGES to files, not whole files.
+// This is the correct semantic for modified files.
+// =============================================================================
+
+func TestSplitByFileExtractsChanges(t *testing.T) {
+	t.Parallel()
+
+	t.Run("by-file extracts changes not whole file for modified files", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: create a file with existing content
+		sh.Write("base", "line1\nline2\nline3\n").
+			Run("create setup -m 'Setup file with content'")
+
+		// Feature: modify the existing file and add a new file
+		sh.Write("base", "line1\nmodified line2\nline3\n").
+			Write("newfile", "new content").
+			Run("create feature -m 'Modify existing and add new'")
+
+		// Split out only the base file changes
+		sh.Run("split --by-file base_test.txt")
+
+		// Verify branches exist
+		sh.HasBranches("main", "setup", "feature", "feature_split")
+
+		// Verify feature_split has the base file changes
+		sh.Checkout("feature_split").
+			Git("show HEAD:base_test.txt").
+			OutputContains("modified line2")
+
+		// Verify feature still has the new file but NOT the base file modification
+		sh.Checkout("feature").
+			Git("show HEAD:newfile_test.txt").
+			OutputContains("new content")
+		// The base file on feature should be inherited from feature_split
+		// but feature's commit diff should NOT include base_test.txt changes
+		sh.Git("show HEAD --stat").
+			OutputContains("newfile_test.txt").
+			OutputNotContains("base_test.txt")
+	})
+
+	t.Run("by-file extracts whole file for new files", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: create a base branch
+		sh.Write("existing", "existing content").
+			Run("create setup -m 'Setup'")
+
+		// Feature: add two new files
+		sh.Write("file1", "file1 content").
+			Write("file2", "file2 content").
+			Run("create feature -m 'Add two files'")
+
+		// Split out file1 only
+		sh.Run("split --by-file file1_test.txt")
+
+		// Verify feature_split has file1
+		sh.Checkout("feature_split").
+			Git("show HEAD:file1_test.txt").
+			OutputContains("file1 content")
+
+		// Verify feature_split does NOT have file2
+		sh.Git("ls-tree HEAD --name-only").
+			OutputNotContains("file2_test.txt")
+
+		// Verify feature has file2
+		sh.Checkout("feature").
+			Git("show HEAD:file2_test.txt").
+			OutputContains("file2 content")
+	})
+
+	t.Run("by-file with mixed new and modified files", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: create a base file
+		sh.Write("existing", "original\n").
+			Run("create setup -m 'Setup'")
+
+		// Feature: modify existing and add new file
+		sh.Write("existing", "modified\n").
+			Write("newfile", "new content").
+			Run("create feature -m 'Modify and add'")
+
+		// Split out the new file (leave modification on feature)
+		sh.Run("split --by-file newfile_test.txt")
+
+		// feature_split should have the new file
+		sh.Checkout("feature_split").
+			Git("show HEAD:newfile_test.txt").
+			OutputContains("new content")
+		// feature_split should NOT have the existing file modification
+		sh.Git("show HEAD:existing_test.txt").
+			OutputContains("original") // inherits from setup
+
+		// feature should have the modification
+		sh.Checkout("feature").
+			Git("show HEAD:existing_test.txt").
+			OutputContains("modified")
+	})
 }
 
 // =============================================================================
@@ -1027,5 +1135,196 @@ new file mode 100644
 		// New file should not be in feature's commit
 		sh.Git("show HEAD -- newfile_test.txt").
 			OutputNotContains("new file content")
+	})
+}
+
+// =============================================================================
+// Split Edge Case Tests
+//
+// These tests cover edge cases and error handling for split operations.
+// =============================================================================
+
+func TestSplitEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	t.Run("by-file works with multi-commit branch", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup
+		sh.Write("base", "base content").
+			Run("create setup -m 'Setup'")
+
+		// Create feature with first commit
+		sh.Write("file1", "v1").
+			Run("create feature -m 'Add file1'")
+
+		// Add more commits to same branch
+		sh.Commit("file2", "Add file2")
+		sh.Write("file1", "v2").
+			Git("add file1_test.txt").
+			Git("commit -m 'Update file1 v2'")
+
+		// Verify feature has multiple commits
+		sh.CommitCount("setup", "feature", 3)
+
+		// Split out file1 (should include changes from all commits)
+		sh.Run("split --by-file file1_test.txt")
+
+		// feature_split should have file1 with v2 content
+		sh.Checkout("feature_split").
+			Git("show HEAD:file1_test.txt").
+			OutputContains("v2")
+
+		// feature should have file2 but not file1 changes
+		sh.Checkout("feature").
+			Git("show HEAD --stat").
+			OutputContains("file2_test.txt").
+			OutputNotContains("file1_test.txt")
+	})
+
+	t.Run("by-file with deleted file", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup with two files (add trailing newlines to match patch format)
+		sh.Write("keep", "keep content\n").
+			Write("todelete", "will be deleted\n").
+			Run("create setup -m 'Setup with files'")
+
+		// Feature: modify one, delete another
+		sh.Write("keep", "modified keep\n").
+			Git("rm todelete_test.txt").
+			Run("create feature -m 'Modify and delete'")
+
+		// Split out the deletion
+		sh.Run("split --by-file todelete_test.txt")
+
+		// feature_split should NOT have todelete_test.txt (it was deleted)
+		sh.Checkout("feature_split").
+			Git("ls-tree HEAD --name-only").
+			OutputNotContains("todelete_test.txt")
+
+		// feature should still have keep modifications
+		sh.Checkout("feature").
+			Git("show HEAD:keep_test.txt").
+			OutputContains("modified keep")
+	})
+
+	t.Run("split creates snapshot for undo recovery", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content1").
+			Write("file2", "content2").
+			Run("create feature -m 'Add files'")
+
+		// Verify initial state
+		sh.HasBranches("main", "feature")
+
+		// Successful split should create snapshot
+		sh.Run("split --by-file file1_test.txt")
+
+		// Verify split happened
+		sh.HasBranches("main", "feature", "feature_split")
+
+		// Verify we can undo using the snapshot
+		sh.UndoLatest()
+
+		// Should be back on original feature with both files
+		sh.OnBranch("feature")
+
+		// Split branch should be removed
+		sh.HasBranches("main", "feature")
+
+		// Verify both files exist in the tree
+		verifyFilesExist(t, sh, []string{"file1_test.txt", "file2_test.txt"})
+	})
+
+	t.Run("by-file with special characters in filename", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("normal", "normal content").
+			Run("create setup -m 'Setup'")
+
+		// Create files with special characters (dashes and underscores)
+		sh.Write("file-with-dashes", "dashes content").
+			Write("file_with_underscores", "underscores content").
+			Run("create feature -m 'Add files with special chars'")
+
+		// Split one of them
+		sh.Run("split --by-file file-with-dashes_test.txt")
+
+		sh.Checkout("feature_split").
+			Git("show HEAD:file-with-dashes_test.txt").
+			OutputContains("dashes content")
+
+		// feature should have the other file
+		sh.Checkout("feature").
+			Git("show HEAD:file_with_underscores_test.txt").
+			OutputContains("underscores content")
+	})
+
+	t.Run("sibling mode extracts changes not whole files", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup with existing file
+		sh.Write("existing", "original line1\noriginal line2\n").
+			Run("create setup -m 'Setup'")
+
+		// Feature modifies existing and adds new
+		sh.Write("existing", "modified line1\noriginal line2\n").
+			Write("newfile", "new content").
+			Run("create feature -m 'Modify and add'")
+
+		// Split with sibling - extracts the change to new sibling
+		sh.Run("split --by-file existing_test.txt --as-sibling")
+
+		// feature_split should have the modification
+		sh.Checkout("feature_split").
+			Git("show HEAD:existing_test.txt").
+			OutputContains("modified line1")
+
+		// feature should be UNCHANGED (sibling mode)
+		sh.Checkout("feature").
+			Git("show HEAD:existing_test.txt").
+			OutputContains("modified line1")
+		// Also verify newfile is still there
+		sh.Git("show HEAD:newfile_test.txt").
+			OutputContains("new content")
+	})
+
+	t.Run("split returns to original branch on error", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup with a single file
+		sh.Write("onlyfile", "content").
+			Run("create feature -m 'Add file'")
+
+		// Trying to split the only file should fail
+		sh.RunExpectError("split --by-file onlyfile_test.txt").
+			OutputContains("nothing would remain")
+
+		// Should still be on feature branch (safety invariant)
+		sh.OnBranch("feature")
+	})
+
+	t.Run("split fails gracefully with nonexistent file", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file1", "content1").
+			Write("file2", "content2").
+			Run("create feature -m 'Add files'")
+
+		// Trying to split a file that doesn't exist
+		sh.RunExpectError("split --by-file nonexistent.txt").
+			OutputContains("no changes found")
+
+		// Should still be on feature branch
+		sh.OnBranch("feature")
 	})
 }

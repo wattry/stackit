@@ -118,29 +118,8 @@ func (r *runner) StageHunks(ctx context.Context, hunks []Hunk) error {
 
 	// Handle new files: extract content and write to disk, then stage with git add
 	for _, h := range newFileHunks {
-		content := extractContentFromHunk(h)
-		filePath := filepath.Join(r.repoRoot, h.File)
-
-		// Create parent directories if they don't exist
-		if dir := filepath.Dir(filePath); dir != "." {
-			if err := os.MkdirAll(dir, 0o750); err != nil {
-				return fmt.Errorf("failed to create directory for new file %s: %w", h.File, err)
-			}
-		}
-
-		// Determine file mode (default to 0644 for regular files)
-		fileMode := os.FileMode(0o644)
-		if h.FileMode == "100755" {
-			fileMode = 0o755
-		}
-
-		if err := os.WriteFile(filePath, []byte(content), fileMode); err != nil {
-			return fmt.Errorf("failed to write new file %s: %w", h.File, err)
-		}
-
-		// Stage the new file
-		if _, err := r.RunGitCommandWithContext(ctx, "add", h.File); err != nil {
-			return fmt.Errorf("failed to stage new file %s: %w", h.File, err)
+		if err := r.stageNewFileHunk(ctx, h); err != nil {
+			return err
 		}
 	}
 
@@ -155,6 +134,27 @@ func (r *runner) StageHunks(ctx context.Context, hunks []Hunk) error {
 				// Try without --3way as a fallback (some git versions have issues with --3way)
 				_, fallbackErr := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached")
 				if fallbackErr != nil {
+					// Check if any files are misdetected new files and handle them
+					rescuedHunks, remainingHunks := r.rescueMisdetectedNewFiles(ctx, modHunks)
+					if len(rescuedHunks) > 0 {
+						// Stage the rescued new files
+						for _, h := range rescuedHunks {
+							if err := r.stageNewFileHunk(ctx, h); err != nil {
+								return fmt.Errorf("failed to stage misdetected new file %s: %w", h.File, err)
+							}
+						}
+						// Try to apply remaining modifications if any
+						if len(remainingHunks) > 0 {
+							remainingPatch := BuildPatchFromHunks(remainingHunks)
+							if remainingPatch != "" {
+								_, retryErr := r.runGitInternal(ctx, remainingPatch, nil, true, "apply", "--cached")
+								if retryErr != nil {
+									return fmt.Errorf("failed to apply patch after rescuing new files: %w", retryErr)
+								}
+							}
+						}
+						return nil
+					}
 					return fmt.Errorf("failed to apply patch: %w (note: --3way also failed)", fallbackErr)
 				}
 			}
@@ -164,13 +164,103 @@ func (r *runner) StageHunks(ctx context.Context, hunks []Hunk) error {
 	return nil
 }
 
+// stageNewFileHunk handles staging a single new file hunk by writing content to disk and staging it.
+func (r *runner) stageNewFileHunk(ctx context.Context, h Hunk) error {
+	content := extractContentFromHunk(h)
+	filePath := filepath.Join(r.repoRoot, h.File)
+
+	// Create parent directories if they don't exist
+	if dir := filepath.Dir(filePath); dir != "." {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return fmt.Errorf("failed to create directory for new file %s: %w", h.File, err)
+		}
+	}
+
+	// Handle symlinks specially (FileMode 120000)
+	if h.FileMode == "120000" {
+		// For symlinks, the content is the target path
+		target := strings.TrimSpace(content)
+		if err := os.Symlink(target, filePath); err != nil {
+			return fmt.Errorf("failed to create symlink %s: %w", h.File, err)
+		}
+	} else {
+		// Regular file - determine mode (default to 0644)
+		fileMode := os.FileMode(0o644)
+		if h.FileMode == "100755" {
+			fileMode = 0o755
+		}
+
+		if err := os.WriteFile(filePath, []byte(content), fileMode); err != nil {
+			return fmt.Errorf("failed to write new file %s: %w", h.File, err)
+		}
+	}
+
+	// Stage the new file
+	if _, err := r.RunGitCommandWithContext(ctx, "add", h.File); err != nil {
+		return fmt.Errorf("failed to stage new file %s: %w", h.File, err)
+	}
+	return nil
+}
+
+// rescueMisdetectedNewFiles checks if any modification hunks are actually for new files
+// that weren't properly detected. Returns hunks that should be treated as new files
+// and the remaining modification hunks.
+func (r *runner) rescueMisdetectedNewFiles(ctx context.Context, modHunks []Hunk) (newFiles, remaining []Hunk) {
+	// Group hunks by file to check each file once
+	fileHunks := make(map[string][]Hunk)
+	for _, h := range modHunks {
+		fileHunks[h.File] = append(fileHunks[h.File], h)
+	}
+
+	for file, hunks := range fileHunks {
+		// Check if file exists in working tree but not in index
+		// This indicates a new file that wasn't properly detected
+		existsInIndex, err := r.fileExistsInIndex(ctx, file)
+		if err != nil {
+			// On error, keep as modification to preserve original behavior
+			remaining = append(remaining, hunks...)
+			continue
+		}
+
+		if !existsInIndex {
+			// File doesn't exist in index - treat as new file
+			for _, h := range hunks {
+				h.IsNewFile = true
+				newFiles = append(newFiles, h)
+			}
+		} else {
+			remaining = append(remaining, hunks...)
+		}
+	}
+	return newFiles, remaining
+}
+
+// fileExistsInIndex checks if a file exists in the git index.
+func (r *runner) fileExistsInIndex(ctx context.Context, file string) (bool, error) {
+	// Use ls-files without --error-unmatch and check output instead.
+	// This is more robust across git versions and locales than parsing error messages.
+	output, err := r.RunGitCommandWithContext(ctx, "ls-files", "--", file)
+	if err != nil {
+		return false, fmt.Errorf("failed to check index for %s: %w", file, err)
+	}
+	// If file is in index, ls-files outputs the filename
+	return strings.TrimSpace(output) != "", nil
+}
+
 // extractContentFromHunk extracts the file content from a new file hunk.
 // It parses the unified diff format and returns only the added lines (without the + prefix).
+// Respects the "\ No newline at end of file" marker to preserve files without trailing newlines.
 func extractContentFromHunk(h Hunk) string {
 	var lines []string
+	hasNoNewlineMarker := false
 	for _, line := range strings.Split(h.Content, "\n") {
 		// Skip the hunk header line (@@ ... @@)
 		if strings.HasPrefix(line, "@@") {
+			continue
+		}
+		// Check for the "no newline at end of file" marker
+		if line == "\\ No newline at end of file" {
+			hasNoNewlineMarker = true
 			continue
 		}
 		// Include lines that start with + (but not the +++ header)
@@ -179,8 +269,8 @@ func extractContentFromHunk(h Hunk) string {
 		}
 	}
 	result := strings.Join(lines, "\n")
-	// Ensure file ends with newline if there was content
-	if len(lines) > 0 && !strings.HasSuffix(result, "\n") {
+	// Add trailing newline only if the original file had one (no marker present)
+	if len(lines) > 0 && !hasNoNewlineMarker {
 		result += "\n"
 	}
 	return result
