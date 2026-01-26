@@ -6,6 +6,7 @@ import (
 )
 
 const testNewFileName = "newfile.go"
+const testDeletedFileName = "deleted.go"
 
 func TestCanSplitHunk(t *testing.T) {
 	tests := []struct {
@@ -623,6 +624,27 @@ index 0000000..abc1234
 			},
 		},
 		{
+			name: "new file detected via /dev/null without new file mode header",
+			// Some git diff formats (like git diff branch..branch) may not include
+			// the "new file mode" line but will still have "--- /dev/null"
+			diff: `diff --git a/newfile.go b/newfile.go
+index 0000000..abc1234
+--- /dev/null
++++ b/newfile.go
+@@ -0,0 +1,2 @@
++package main
++func main() {}`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != testNewFileName {
+					t.Errorf("Expected file '%s', got '%s'", testNewFileName, hunks[0].File)
+				}
+				if !hunks[0].IsNewFile {
+					t.Error("Expected IsNewFile to be true (fallback detection via --- /dev/null)")
+				}
+			},
+		},
+		{
 			name: "new file with executable mode",
 			diff: `diff --git a/script.sh b/script.sh
 new file mode 100755
@@ -839,6 +861,20 @@ func TestExtractContentFromHunk(t *testing.T) {
 			},
 			expected: "",
 		},
+		{
+			name: "respects no newline at end of file marker",
+			hunk: Hunk{
+				Content: "@@ -0,0 +1,1 @@\n+no trailing newline\n\\ No newline at end of file",
+			},
+			expected: "no trailing newline",
+		},
+		{
+			name: "multi-line file without trailing newline",
+			hunk: Hunk{
+				Content: "@@ -0,0 +1,3 @@\n+line1\n+line2\n+line3\n\\ No newline at end of file",
+			},
+			expected: "line1\nline2\nline3",
+		},
 	}
 
 	for _, tt := range tests {
@@ -949,7 +985,7 @@ index abc1234..0000000
 -func deleted() {}`,
 			expectedCount: 1,
 			validateHunks: func(t *testing.T, hunks []Hunk) {
-				if hunks[0].File != "deleted.go" {
+				if hunks[0].File != testDeletedFileName {
 					t.Errorf("Expected file 'deleted.go', got '%s'", hunks[0].File)
 				}
 				if !hunks[0].IsDeletedFile {
@@ -957,6 +993,27 @@ index abc1234..0000000
 				}
 				if hunks[0].FileMode != "100644" {
 					t.Errorf("Expected FileMode '100644', got '%s'", hunks[0].FileMode)
+				}
+			},
+		},
+		{
+			name: "deleted file detected via /dev/null without deleted file mode header",
+			// Some git diff formats may not include the "deleted file mode" line
+			// but will still have "+++ /dev/null"
+			diff: `diff --git a/deleted.go b/deleted.go
+index abc1234..0000000
+--- a/deleted.go
++++ /dev/null
+@@ -1,2 +0,0 @@
+-package main
+-func deleted() {}`,
+			expectedCount: 1,
+			validateHunks: func(t *testing.T, hunks []Hunk) {
+				if hunks[0].File != testDeletedFileName {
+					t.Errorf("Expected file 'deleted.go', got '%s'", hunks[0].File)
+				}
+				if !hunks[0].IsDeletedFile {
+					t.Error("Expected IsDeletedFile to be true (fallback detection via +++ /dev/null)")
 				}
 			},
 		},
@@ -1014,7 +1071,7 @@ index abc123..def456 100644
 					t.Error("First hunk should be a new file")
 				}
 				// Second hunk should be deleted file
-				if hunks[1].File != "deleted.go" {
+				if hunks[1].File != testDeletedFileName {
 					t.Errorf("Second hunk file should be 'deleted.go', got '%s'", hunks[1].File)
 				}
 				if !hunks[1].IsDeletedFile {

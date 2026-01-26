@@ -151,6 +151,12 @@ func (e *engineImpl) ShowDiff(ctx context.Context, left, right string, stat bool
 	return e.git.ShowDiff(ctx, left, right, stat)
 }
 
+// GetDiffBetween returns the raw diff between two refs, suitable for parsing.
+// Unlike ShowDiff, this returns uncolored output.
+func (e *engineImpl) GetDiffBetween(ctx context.Context, base, head string, files ...string) (string, error) {
+	return e.git.GetDiffBetween(ctx, base, head, files...)
+}
+
 // ShowCommits returns commit log with optional patches/stat
 func (e *engineImpl) ShowCommits(ctx context.Context, base, head string, patch, stat bool) (string, error) {
 	return e.git.ShowCommits(ctx, base, head, patch, stat)

@@ -78,3 +78,14 @@ func (r *runner) GetUnstagedDiff(ctx context.Context, files ...string) (string, 
 	}
 	return r.RunGitCommandRawWithContext(ctx, args...)
 }
+
+// GetDiffBetween returns the raw diff between two refs.
+// Unlike ShowDiff, this returns uncolored output suitable for parsing.
+func (r *runner) GetDiffBetween(ctx context.Context, base, head string, files ...string) (string, error) {
+	args := []string{"diff", base, head}
+	if len(files) > 0 {
+		args = append(args, "--")
+		args = append(args, files...)
+	}
+	return r.RunGitCommandRawWithContext(ctx, args...)
+}

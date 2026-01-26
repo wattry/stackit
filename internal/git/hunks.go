@@ -94,6 +94,19 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 			continue
 		}
 
+		// Detect new file via "--- /dev/null" as fallback when "new file mode" is missing.
+		// This can happen with certain git diff formats (e.g., git diff main..HEAD).
+		if line == "--- /dev/null" {
+			currentIsNewFile = true
+			continue
+		}
+
+		// Detect deleted file via "+++ /dev/null" as fallback when "deleted file mode" is missing.
+		if line == "+++ /dev/null" {
+			currentIsDeletedFile = true
+			continue
+		}
+
 		// Check for binary file marker
 		// Format: "Binary files a/path and b/path differ"
 		if strings.HasPrefix(line, "Binary files ") && strings.HasSuffix(line, " differ") {

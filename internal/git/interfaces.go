@@ -95,6 +95,9 @@ type DiffOperations interface {
 	GetDiffNumstat(base, head string) (string, error)
 	GetStagedDiff(ctx context.Context, files ...string) (string, error)
 	GetUnstagedDiff(ctx context.Context, files ...string) (string, error)
+	// GetDiffBetween returns the raw diff between two refs, without color codes.
+	// This is suitable for parsing into hunks.
+	GetDiffBetween(ctx context.Context, base, head string, files ...string) (string, error)
 }
 
 // StagingOperations handles staging area operations.

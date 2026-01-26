@@ -75,6 +75,8 @@ type GitDiffer interface {
 	ShowDiff(ctx context.Context, left, right string, stat bool) (string, error)
 	ShowCommits(ctx context.Context, base, head string, patch, stat bool) (string, error)
 	IsAncestor(ancestor, descendant string) (bool, error)
+	// GetDiffBetween returns raw diff between two refs, suitable for parsing into hunks.
+	GetDiffBetween(ctx context.Context, base, head string, files ...string) (string, error)
 }
 
 // WorkingTree handles worktree and staging area operations

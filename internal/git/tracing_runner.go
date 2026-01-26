@@ -481,6 +481,13 @@ func (t *tracingRunner) GetUnstagedDiff(ctx context.Context, files ...string) (s
 	return result, err
 }
 
+func (t *tracingRunner) GetDiffBetween(ctx context.Context, base, head string, files ...string) (string, error) {
+	start := time.Now()
+	result, err := t.inner.GetDiffBetween(ctx, base, head, files...)
+	t.trace("GetDiffBetween", time.Since(start), err == nil, err)
+	return result, err
+}
+
 // StagingOperations methods
 
 func (t *tracingRunner) StageAll(ctx context.Context) error {
