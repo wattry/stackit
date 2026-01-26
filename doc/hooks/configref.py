@@ -73,7 +73,7 @@ def _build_config_reference(config_docs: str, yaml_example: str) -> str:
     output.append("")
     output.append("For team-wide settings that should be shared across all contributors, create a `.stackit.yaml` file in your repository root and commit it to version control. Team settings act as defaults that individual developers can override in their personal git config.")
     output.append("")
-    output.append("See the [Team Workflows Guide](../guide/team-workflows.md) for collaboration patterns using shared configuration.")
+    output.append("See the [Team Collaboration Guide](../workflows/collaboration.md) for collaboration patterns using shared configuration.")
     output.append("")
     output.append("```yaml")
     output.append(yaml_example)

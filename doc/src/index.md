@@ -78,6 +78,6 @@ Get started with stackit in minutes:
 ## Need help?
 
 - Read the [User Guide](guide/index.md) to learn core concepts
-- Check [Common Workflows](guide/workflows.md) for examples
+- Check [Workflows](workflows/index.md) for examples
 - Explore the [CLI Reference](cli/reference.md) for all commands
 - Visit [FAQ](community/faq.md) for frequently asked questions

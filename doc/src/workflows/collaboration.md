@@ -2,7 +2,7 @@
 icon: material/account-group
 ---
 
-# Team Workflows
+# Team Collaboration
 
 Stackit supports team collaboration with shared configuration, branch protection, and stack sharing features.
 
@@ -290,20 +290,8 @@ stackit get their-feature
 stackit merge
 ```
 
-## Shared Reviewers and Labels
-
-Configure default reviewers and labels in `.stackit.yaml` (if supported by your GitHub workflow):
-
-```yaml
-# .stackit.yaml
-submit:
-  footer: true
-```
-
-For more complex PR automation, consider GitHub Actions or CODEOWNERS files.
-
 ## Next Steps
 
-- [Worktrees Guide →](worktrees.md) — Work on multiple stacks in parallel
-- [Common Workflows →](workflows.md) — Day-to-day stackit usage
-- [Configuration →](../cli/config.md) — All configuration options
+- [Daily Workflows →](daily.md)
+- [Advanced Workflows →](advanced.md)
+- [Configuration →](../cli/config.md)

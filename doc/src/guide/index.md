@@ -4,7 +4,7 @@ icon: material/book-open-variant
 
 # User Guide
 
-This guide covers everything you need to know to work effectively with stackit.
+This guide covers core concepts and troubleshooting for stackit. For practical usage patterns, see [Workflows](../workflows/index.md). For parallel development, see [Worktrees](../worktrees/index.md).
 
 ## Topics
 
@@ -18,30 +18,6 @@ This guide covers everything you need to know to work effectively with stackit.
 
     [Learn concepts →](concepts.md)
 
--   :material-workflow:{ .lg .middle } **Common Workflows**
-
-    ---
-
-    Real-world examples of using stackit for code reviews, updates, and collaboration.
-
-    [View workflows →](workflows.md)
-
--   :material-folder-multiple:{ .lg .middle } **Worktrees**
-
-    ---
-
-    Work on multiple stacks in parallel, each in its own directory.
-
-    [Learn worktrees →](worktrees.md)
-
--   :material-account-group:{ .lg .middle } **Team Workflows**
-
-    ---
-
-    Share configuration, protect branches, and collaborate on stacks with your team.
-
-    [Team workflows →](team-workflows.md)
-
 -   :material-help-circle:{ .lg .middle } **Troubleshooting**
 
     ---
@@ -52,9 +28,9 @@ This guide covers everything you need to know to work effectively with stackit.
 
 </div>
 
-## Quick reference
+## Quick Reference
 
-### Essential commands
+### Essential Commands
 
 - $$stackit log$$ - View your stack
 - $$stackit create$$ - Create a new branch
@@ -62,7 +38,7 @@ This guide covers everything you need to know to work effectively with stackit.
 - $$stackit sync$$ - Update from trunk
 - $$stackit merge$$ - Merge your stack
 
-### Need help fast?
+### Need Help Fast?
 
 Run the doctor command to diagnose common issues:
 
@@ -72,6 +48,8 @@ stackit doctor
 
 Or check the [FAQ](../community/faq.md) for frequently asked questions.
 
-### Integrations
+## Related Sections
 
-Looking to integrate stackit with your tools? See the [Integrations](../integrations/index.md) section for Claude Code, GitHub Actions, git hooks, and shell integration.
+- [Workflows →](../workflows/index.md) — Daily, advanced, and team collaboration patterns
+- [Worktrees →](../worktrees/index.md) — Work on multiple stacks in parallel
+- [Integrations →](../integrations/index.md) — Claude Code, GitHub, git hooks, and shell
