@@ -167,5 +167,5 @@ This provides:
 ## Next Steps
 
 - [Git Hooks →](git-hooks.md) — Local pre-commit and pre-push hooks
-- [Team Workflows →](../guide/team-workflows.md) — Branch locking patterns
+- [Team Collaboration →](../workflows/collaboration.md) — Branch locking patterns
 - [Other integrations →](index.md)

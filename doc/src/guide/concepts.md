@@ -186,5 +186,5 @@ Stackit can use scopes for:
 
 ## Next steps
 
-- [Learn common workflows →](workflows.md)
+- [Workflows →](../workflows/index.md)
 - [Explore the CLI reference →](../cli/reference.md)

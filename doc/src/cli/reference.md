@@ -14,4 +14,4 @@ Complete reference for all stackit commands.
 ## See also
 
 - [Configuration options →](config.md)
-- [Common workflows →](../guide/workflows.md)
+- [Workflows →](../workflows/index.md)

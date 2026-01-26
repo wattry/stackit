@@ -172,5 +172,5 @@ If Claude commands aren't working:
 ## Next steps
 
 - [View all CLI commands →](../cli/reference.md)
-- [Learn common workflows →](../guide/workflows.md)
+- [Workflows →](../workflows/index.md)
 - [Other integrations →](index.md)

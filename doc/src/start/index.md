@@ -80,5 +80,6 @@ This pushes both branches and creates two PRs on GitHub, with `add-logic` correc
 Once you're comfortable with the basics, explore:
 
 - [Core concepts](../guide/concepts.md) - Understanding stacks, parents, and children
-- [Common workflows](../guide/workflows.md) - Real-world stacking patterns
+- [Workflows](../workflows/index.md) - Daily, advanced, and team collaboration patterns
+- [Worktrees](../worktrees/index.md) - Work on multiple stacks in parallel
 - [Integrations](../integrations/index.md) - Claude, GitHub, git hooks, and more

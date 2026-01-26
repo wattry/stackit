@@ -209,4 +209,4 @@ This shows:
 
 - [View all CLI commands →](../cli/reference.md)
 - [Check the FAQ →](../community/faq.md)
-- [Explore workflows →](workflows.md)
+- [Workflows →](../workflows/index.md)

@@ -121,6 +121,6 @@ Consolidates all branches into a single PR for atomic merging.
 
 ## Next steps
 
-- [Learn about common workflows →](../guide/workflows.md)
+- [Workflows →](../workflows/index.md)
 - [Understand core concepts →](../guide/concepts.md)
 - [Explore the CLI reference →](../cli/reference.md)

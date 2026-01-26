@@ -2,9 +2,9 @@
 icon: material/console
 ---
 
-# Shell Integration
+# Shell Integration for Worktrees
 
-Shell integration enables stackit to change your working directory when opening or creating worktrees. This is separate from tab completions.
+Shell integration enables automatic directory changes when opening or creating worktrees. This is separate from tab completions.
 
 ## Setup
 
@@ -65,9 +65,7 @@ You likely want both shell integration and tab completions:
     stackit shell fish | source
     ```
 
-## Features Enabled
-
-### Automatic Directory Changes
+## What It Enables
 
 With shell integration, these commands change your working directory:
 
@@ -79,8 +77,6 @@ stackit worktree create my-feature --open
 stackit worktree open my-feature
 ```
 
-### Interactive Prompts
-
 In interactive mode, stackit prompts whether to open the worktree after creation:
 
 ```
@@ -90,7 +86,7 @@ Open worktree? [Y/n]
 
 ## Without Shell Integration
 
-If you prefer not to use shell integration, you can still navigate to worktrees manually:
+If you prefer not to use shell integration, navigate to worktrees manually:
 
 ```bash
 # Print path and navigate manually
@@ -116,26 +112,18 @@ cd $(stackit worktree create my-feature)
     source ~/.zshrc
     ```
 
-3. **Check for errors**: Run the shell command directly to see any output:
+3. **Check for errors**: Run the shell command directly:
 
     ```bash
     stackit shell zsh
     ```
 
-### Multiple Shell Configurations
-
-If you use multiple shells, add integration to each:
-
-- `~/.zshrc` for zsh
-- `~/.bashrc` for bash
-- `~/.config/fish/config.fish` for fish
-
 ### Directory Changes Not Persisting
 
-Shell integration uses a shell function wrapper. If changes aren't persisting, ensure:
+Shell integration uses a function wrapper. If changes aren't persisting:
 
-1. You're using `stackit` directly, not through a script or alias that spawns a subshell
-2. The shell function is loaded (check with `type stackit`)
+1. Use `stackit` directly, not through a script or alias that spawns a subshell
+2. Verify the shell function is loaded: `type stackit`
 
 ## How It Works
 
@@ -145,7 +133,6 @@ This approach is necessary because child processes cannot change the parent shel
 
 ## Next Steps
 
-- [Worktrees →](../worktrees/index.md)
-- [Worktree Shell Integration →](../worktrees/shell-integration.md)
-- [Command Reference →](../cli/reference.md)
-- [Other integrations →](index.md)
+- [Getting Started →](getting-started.md)
+- [Management →](management.md)
+- [Shell Integration (full guide) →](../integrations/shell.md)

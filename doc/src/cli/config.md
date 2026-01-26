@@ -141,7 +141,7 @@ git config --global stackit.submit.footer false
 ## Next steps
 
 - [View command reference →](reference.md)
-- [Learn common workflows →](../guide/workflows.md)
-- [Worktrees Guide →](../guide/worktrees.md)
-- [Team Workflows →](../guide/team-workflows.md)
+- [Workflows →](../workflows/index.md)
+- [Worktrees →](../worktrees/index.md)
+- [Team Collaboration →](../workflows/collaboration.md)
 - [Integrations →](../integrations/index.md)

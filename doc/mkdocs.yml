@@ -48,7 +48,7 @@ extra_css:
 
 nav:
   - Home: index.md
-  - Get started: &get-started
+  - Get Started: &get-started
     - Overview: start/index.md
     - Installation: start/install.md
     - Create a stack: start/stack.md
@@ -56,10 +56,17 @@ nav:
   - User Guide: &user-guide
     - Overview: guide/index.md
     - Core Concepts: guide/concepts.md
-    - Common Workflows: guide/workflows.md
-    - Worktrees: guide/worktrees.md
-    - Team Workflows: guide/team-workflows.md
     - Troubleshooting: guide/troubleshooting.md
+  - Workflows: &workflows
+    - Overview: workflows/index.md
+    - Daily Workflows: workflows/daily.md
+    - Advanced Workflows: workflows/advanced.md
+    - Team Collaboration: workflows/collaboration.md
+  - Worktrees: &worktrees
+    - Overview: worktrees/index.md
+    - Getting Started: worktrees/getting-started.md
+    - Shell Integration: worktrees/shell-integration.md
+    - Management: worktrees/management.md
   - Integrations: &integrations
     - Overview: integrations/index.md
     - Claude Code: integrations/claude.md
@@ -83,6 +90,9 @@ plugins:
         'guide/claude-integration.md': 'integrations/claude.md'
         'cli/hooks.md': 'integrations/git-hooks.md'
         'cli/shell.md': 'integrations/shell.md'
+        'guide/workflows.md': 'workflows/index.md'
+        'guide/team-workflows.md': 'workflows/collaboration.md'
+        'guide/worktrees.md': 'worktrees/index.md'
   - search
   - social:
       enabled: !ENV [CI, false]
@@ -91,7 +101,7 @@ plugins:
       sections:
         Home:
           - index.md
-        Get started:
+        Get Started:
           - start/index.md
           - start/install.md
           - start/stack.md
@@ -99,10 +109,17 @@ plugins:
         User Guide:
           - guide/index.md
           - guide/concepts.md
-          - guide/workflows.md
-          - guide/worktrees.md
-          - guide/team-workflows.md
           - guide/troubleshooting.md
+        Workflows:
+          - workflows/index.md
+          - workflows/daily.md
+          - workflows/advanced.md
+          - workflows/collaboration.md
+        Worktrees:
+          - worktrees/index.md
+          - worktrees/getting-started.md
+          - worktrees/shell-integration.md
+          - worktrees/management.md
         Integrations:
           - integrations/index.md
           - integrations/claude.md
