@@ -15,12 +15,21 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DryRunResult represents the JSON output for sync --dry-run
+type DryRunResult struct {
+	WouldPull     string   `json:"would_pull,omitempty"`     // Trunk branch that would be pulled
+	WouldClean    []string `json:"would_clean,omitempty"`    // Branches that would be deleted
+	WouldRestack  []string `json:"would_restack,omitempty"`  // Branches that would be restacked
+	SkippedStacks []string `json:"skipped_stacks,omitempty"` // Stacks skipped due to dirty worktrees
+}
+
 // Options contains options for the sync command
 type Options struct {
 	All          bool
 	Force        bool
 	Restack      bool
 	DryRun       bool
+	JSON         bool     // CLI layer uses this to determine JSON output mode (requires DryRun)
 	RestackScope []string // When non-nil, only restack these branches (skip current-branch expansion)
 }
 
