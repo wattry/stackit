@@ -143,6 +143,14 @@ $ command stackit foreach --stack "<build-command>"
 All branches pass!
 ```
 
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior.
+
+## Confidence Threshold
+
+Only apply fixes you're 90%+ confident about. When sourcing fixes from unabsorbable hunks or absorbed code, verify the fix matches the error before applying. Better to ask than to introduce new bugs.
+
 ## Do NOT
 - Skip the JSON analysis (it tells you where to find fixes)
 - Apply fixes to multiple branches manually (fix at source, restack propagates)

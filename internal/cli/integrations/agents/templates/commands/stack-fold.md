@@ -37,6 +37,10 @@ Fold (squash) granular branches into their parent branches.
 7. Run `command stackit restack --no-interactive` after folding
 8. Show final stack state
 
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior.
+
 ## Do NOT
 - Fold into trunk unless user explicitly requests it
 - Fold locked or frozen branches

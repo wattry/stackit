@@ -1,20 +1,209 @@
 ---
-description: Apply actionable PR review comments and mark them resolved
-allowed-tools: Bash(gh:*), Bash(stackit:*), Bash(git:*), Read, Edit, Grep, Glob, Task, AskUserQuestion
-argument-hint: [--dry-run]
+description: Code review PRs in the stack, finding bugs and reporting issues locally
+model: claude-sonnet-4-20250514
+allowed-tools: Bash(gh:*), Bash(stackit:*), Bash(git:*), Read, Grep, Glob, Task, Edit, AskUserQuestion
+argument-hint: [--apply | --branch <name>]
 ---
 
 # Stack Review
 
-Fetch PR review comments for the current branch, evaluate them, apply actionable changes, and mark resolved.
+Perform code reviews on PRs in the stack. Finds bugs, checks CLAUDE.md compliance, and reports issues locally.
+
+**Two modes:**
+- **Review mode** (default): Analyze PRs and report findings locally
+- **Apply mode** (`--apply`): Apply existing review comments from GitHub and mark resolved
 
 ## Context
 - Current branch: !`git branch --show-current`
 - Repo: !`gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null`
-- PR info: !`gh pr view --json number,url,state,reviewDecision,headRefName 2>/dev/null || echo "No PR for this branch"`
+- Stack state: !`command stackit log --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
+
+---
+
+# REVIEW MODE (Default)
+
+Perform code reviews on stack PRs in parallel, reporting high-confidence issues locally.
+
+## Review Philosophy
+
+**High-Signal Only.** Only flag issues meeting strict criteria:
+- Compilation/parsing failures
+- Definitive logic errors that produce wrong results
+- Clear, quotable CLAUDE.md or project guideline violations
+- Security vulnerabilities (injection, auth bypass, etc.)
+
+**Exclude:**
+- Style preferences or subjective improvements
+- Speculative issues ("this might cause...")
+- Performance concerns without clear evidence
+- Input-dependent edge cases
+- "Nits" or minor suggestions
+
+**False positives erode trust.** Better to find 3 real bugs than 10 items where 7 are noise.
+
+## Instructions
+
+### Step 1: Gather Stack PRs
+
+Get all branches in the stack that have open PRs:
+
+```bash
+command stackit log --json --no-interactive 2>&1
+```
+
+Parse the JSON to identify branches with PRs. For each branch, check if the PR is reviewable:
+
+```bash
+gh pr view <branch> --json state,isDraft,number,url,headRefName 2>/dev/null
+```
+
+**Skip branches where:**
+- No PR exists
+- PR is closed or merged (`state != "OPEN"`)
+- PR is a draft (`isDraft == true`)
+
+If `--branch <name>` is specified, only review that single branch.
+
+### Step 2: Gather Context
+
+For each reviewable PR, collect:
+
+**A. CLAUDE.md files in affected directories:**
+```bash
+# Get changed files
+gh pr diff <number> --name-only
+
+# For each unique directory, check for CLAUDE.md
+# e.g., if src/auth/login.go changed, check src/auth/CLAUDE.md and src/CLAUDE.md
+```
+
+**B. PR diff summary:**
+```bash
+gh pr diff <number>
+```
+
+### Step 3: Parallel Review (Per Branch)
+
+For each branch with a reviewable PR, spawn a **parallel Task subagent** to perform the review.
+
+**Launch all reviews in parallel using the Task tool:**
+
+```
+For each branch:
+  Task(
+    subagent_type: "general-purpose",
+    model: "opus",  # Use opus for bug detection
+    prompt: "Review PR #<number> for <branch>. Find ONLY high-confidence bugs.
+
+    Context:
+    - PR diff: <diff>
+    - CLAUDE.md guidelines: <guidelines>
+    - Project: <repo-name>
+
+    Review criteria (ONLY flag these):
+    1. Compilation/parsing errors
+    2. Definitive logic bugs (null deref, off-by-one, wrong return value)
+    3. Clear CLAUDE.md violations with quotable rule
+    4. Security vulnerabilities
+
+    DO NOT flag:
+    - Style preferences
+    - Speculative issues
+    - Performance without evidence
+    - Subjective improvements
+
+    For each issue found, return JSON:
+    {
+      'issues': [
+        {
+          'file': 'path/to/file.go',
+          'line': 42,
+          'end_line': 45,  // optional, for multi-line
+          'severity': 'bug' | 'violation',
+          'title': 'Short title',
+          'body': 'Explanation with evidence',
+          'suggestion': 'optional code suggestion',
+          'confidence': 0.0-1.0
+        }
+      ]
+    }
+
+    Return empty issues array if nothing meets the high bar."
+  )
+```
+
+Wait for all parallel reviews to complete.
+
+### Step 4: Filter and Validate
+
+For each issue returned by subagents:
+
+**Confidence threshold:** Only keep issues with `confidence >= 0.9`
+
+**Validation step:** For remaining issues, spawn a **haiku** validation subagent:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "haiku",
+  prompt: "Validate this potential bug. Is it a DEFINITE issue or speculative?
+
+  Issue: <issue>
+  Code context: <surrounding code>
+
+  Return JSON: { 'valid': true/false, 'reason': 'why' }"
+)
+```
+
+Only report issues that pass validation.
+
+### Step 5: Report Results
+
+For each branch reviewed, display findings locally:
+
+```
+## Review Results
+
+### <branch-name> (PR #<number>)
+Status: Clean | Issues found
+
+#### Issues (if any)
+
+**[severity] <title>**
+File: <file>:<line>
+<body>
+
+Suggested fix:
+```<language>
+<suggestion>
+```
+
+---
+
+[Next issue...]
+```
+
+**Clean review message:** When no issues found:
+> "No issues found. Checked for bugs and CLAUDE.md compliance."
+
+**Summary at end:**
+```
+## Summary
+
+Branches reviewed: N
+Issues found: M
+- <branch-1>: X issues
+- <branch-2>: Clean
+```
+
+---
+
+# APPLY MODE (`--apply`)
+
+Apply existing review comments from GitHub PRs and mark them resolved.
 
 ## Instructions
 
@@ -22,21 +211,7 @@ $ARGUMENTS
 
 If there's no PR for the current branch, inform the user and stop.
 
-### Step 2: Parse Repository Information
-
-Extract owner and repo from the `nameWithOwner` context value (format: `owner/repo`):
-
-```bash
-# Example: if nameWithOwner is "myorg/myrepo"
-# owner = "myorg"
-# repo = "myrepo"
-```
-
-Extract the PR number from the PR info JSON's `number` field.
-
-### Step 3: Fetch Review Threads
-
-Get all review threads with their comments and resolution status:
+### Step 2: Fetch Review Threads
 
 ```bash
 gh api graphql -f query='
@@ -50,16 +225,11 @@ query($owner: String!, $repo: String!, $pr: Int!) {
           isOutdated
           path
           line
-          startLine
-          originalLine
-          originalStartLine
-          diffSide
           comments(first: 20) {
             nodes {
               id
               body
               author { login }
-              createdAt
             }
           }
         }
@@ -69,178 +239,116 @@ query($owner: String!, $repo: String!, $pr: Int!) {
 }' -f owner=<OWNER> -f repo=<REPO> -F pr=<NUMBER>
 ```
 
-Replace `<OWNER>`, `<REPO>`, and `<NUMBER>` with the parsed values from Step 2.
-
-**Pagination note:** This query fetches up to 100 threads with 20 comments each. For PRs with more threads, you would need to paginate using `after` cursor, but this covers the vast majority of PRs.
-
-### Step 4: Filter Threads
+### Step 3: Filter Threads
 
 Focus only on threads that are:
-- **Not resolved** (`isResolved: false`)
-- **Not outdated** (`isOutdated: false`) - outdated means the code has changed
-- **Have a file path** (`path` is not null) - skip PR-level comments without file context
+- Not resolved (`isResolved: false`)
+- Not outdated (`isOutdated: false`)
+- Have a file path
+- Not from bots (filter `author.login` ending in `[bot]`)
 
-Also filter out bot comments by checking `author.login` for common bot patterns:
-- Names ending in `[bot]` (e.g., `dependabot[bot]`, `github-actions[bot]`)
-- Known CI bots: `codecov`, `sonarcloud`, `renovate`
+### Step 4: Classify as Actionable
 
-Skip threads that are already resolved, outdated, or only contain bot comments.
+**Actionable if:**
+- Requests specific code change ("rename X to Y", "add null check")
+- Points out bug with clear fix
+- Requests error handling or validation
 
-### Step 5: Batch Read Files
+**Not actionable if:**
+- Question without clear answer
+- Discussion or debate
+- Praise ("LGTM")
+- Vague about what change is needed
 
-**Optimization:** Before evaluating threads, collect all unique file paths and read them upfront:
+**Confidence threshold:** Only apply changes you're 90%+ confident about. Skip unclear comments.
 
-```bash
-# Get unique paths from filtered threads
-# Read each file once and cache for later use
-```
+### Step 5: Apply Changes
 
-This avoids reading the same file multiple times when multiple threads reference it.
+For each actionable comment:
+1. Read the file
+2. Locate the code at `path` and `line`
+3. Apply the change using Edit tool
+4. Track successful changes
 
-### Step 6: Evaluate Each Thread
-
-For each unresolved thread, examine the code from the cached file content.
-
-**Handle line number edge cases:**
-- If `line` is `null`: This is a file-level comment (applies to whole file, not a specific line)
-- If `startLine` differs from `line`: This is a multi-line comment spanning `startLine` to `line`
-- Use `diffSide` to determine if comment is on old (`LEFT`) or new (`RIGHT`) code
-- **Line drift:** If `line` differs from `originalLine`, the code may have shifted. Use the comment body and `originalLine` context to locate the actual code being referenced. Search for distinctive patterns mentioned in the comment.
-
-**For many threads (5+):** Use a **haiku** subagent with the `review-triage` template to batch-classify threads efficiently. The subagent returns JSON with actionable/not-actionable classifications.
-
-**Classify as ACTIONABLE if the comment:**
-- Requests a specific code change ("rename X to Y", "add null check", "remove this")
-- Points out a bug with a clear fix ("this will NPE", "missing return")
-- Requests error handling, validation, or safety improvements
-- Asks for documentation/comments on specific code
-
-**Classify as NOT ACTIONABLE if the comment:**
-- Is a question without a clear answer ("why is this here?")
-- Is a discussion or debate without resolution
-- Is praise or approval ("LGTM", "nice work")
-- Requires clarification from the author before acting
-- Is vague or ambiguous about what change is needed
-- Is a file-level comment without specific change request
-
-**Be conservative:** When in doubt, skip the comment rather than make an incorrect change.
-
-**When truly uncertain about actionability**, use `AskUserQuestion`:
-- Header: "Review comment"
-- Question: "I'm unsure how to handle this comment: '<short excerpt>'. What should I do?"
-- Options:
-  - "Apply it" - Treat as actionable, apply the change
-  - "Skip it" - Mark as not actionable
-  - "Show context" - Read surrounding code first
-
-### Step 7: Apply Changes (or Dry Run)
-
-**If `--dry-run` is specified:**
-- List each actionable comment and what change would be made
-- Do NOT modify any files
-- Do NOT resolve any threads
-- Stop here
-
-**If many actionable comments (5+)**, use `AskUserQuestion`:
-- Header: "Apply changes"
-- Question: "Ready to apply N changes from review comments?"
-- Options:
-  - "Apply all" - Proceed with all changes
-  - "Show summary" - List changes before applying
-  - "Dry run first" - Preview changes without modifying files
-
-**Otherwise, for each actionable comment:**
-
-1. Read the relevant file
-2. Locate the code using `path` and `line` from the thread
-3. Apply the suggested change using the Edit tool
-4. **Verify the edit succeeded** - if the Edit tool reports an error, mark this thread as failed
-5. Track successful changes for the commit message
-
-### Step 8: Commit Changes
-
-If any changes were successfully applied, stage and commit them.
-
-**Note:** Using `git commit` here is acceptable because we're adding to an existing stacked branch, not creating a new one. The `stackit create` command is for creating new branches with commits.
+### Step 6: Commit and Resolve
 
 ```bash
 git add -A
 git commit -m "refactor: apply PR review feedback
 
 Applied reviewer suggestions:
-- <bullet list of successful changes>"
+- <list of changes>"
 ```
 
-### Step 9: Mark Threads as Resolved
-
-**Only resolve threads where:**
-- The edit was successfully applied (verified in Step 7)
-- The commit succeeded (verified in Step 8)
-
-For efficiency, batch multiple thread resolutions into a single GraphQL mutation using aliases:
-
+Batch-resolve threads:
 ```bash
 gh api graphql -f query='
 mutation {
-  t1: resolveReviewThread(input: {threadId: "THREAD_ID_1"}) {
-    thread { isResolved }
-  }
-  t2: resolveReviewThread(input: {threadId: "THREAD_ID_2"}) {
-    thread { isResolved }
-  }
+  t1: resolveReviewThread(input: {threadId: "ID1"}) { thread { isResolved } }
+  t2: resolveReviewThread(input: {threadId: "ID2"}) { thread { isResolved } }
 }'
 ```
 
-Replace `THREAD_ID_1`, `THREAD_ID_2`, etc. with the actual thread IDs. Use unique aliases (`t1`, `t2`, etc.) for each mutation.
-
-**Do NOT resolve threads where:**
-- The edit failed or was skipped
-- The commit failed
-- The change couldn't be verified
-
-### Step 10: Restack
-
-If changes were committed, restack to update dependent branches:
+### Step 7: Restack
 
 ```bash
 command stackit restack --no-interactive
 ```
 
-If restack fails with conflicts:
-1. Check `git status` for conflicted files
-2. Read each conflicted file
-3. Resolve conflicts keeping the review feedback changes where appropriate
-4. Continue with `command stackit continue --no-interactive`
-
-### Step 11: Report Results
-
-Provide a summary:
+### Step 8: Report
 
 ```
-## Review Summary
+## Apply Summary
 
 **Threads processed:** N
 **Changes applied:** N
 **Threads resolved:** N
-**Threads skipped:** N
-**Threads failed:** N
-
-### Applied Changes
-- file.go:42 - Added error handling per @reviewer
-- utils.go:15 - Renamed variable for clarity
-
-### Skipped Threads
-- file.go:88 - Question about design (needs discussion)
-- main.go:12 - File-level comment without specific change
-
-### Failed Threads (if any)
-- config.go:23 - Edit failed: could not locate code block
+**Threads skipped:** N (with reasons)
 ```
 
+---
+
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior.
+
 ## Do NOT
-- Apply changes from vague or unclear comments - skip them
-- Guess at what a reviewer meant - if unclear, skip
-- Modify files when `--dry-run` is specified
-- Resolve threads that weren't actually addressed or where edits failed
-- Apply changes that would break compilation without fixing
-- Force push or modify history that's already been reviewed
+
+**In Review mode:**
+- Flag style nits or subjective preferences
+- Flag speculative or input-dependent issues
+- Post comments to GitHub (report locally only)
+- Review closed or draft PRs
+
+**In Apply mode:**
+- Apply vague or unclear comments
+- Resolve threads where edits failed
+- Force push or modify reviewed history
+
+## Follow-up
+
+After review completes, use `AskUserQuestion`:
+
+**If issues were found:**
+- Header: "Next step"
+- Question: "Review found issues. What would you like to do?"
+- Options:
+  - label: "Fix issues (Recommended)"
+    description: "Apply the suggested fixes to the code"
+  - label: "View details"
+    description: "Show more context about each issue"
+  - label: "Done for now"
+    description: "I'll review manually"
+
+**If no issues found:**
+- Header: "Next step"
+- Question: "All PRs are clean. What would you like to do?"
+- Options:
+  - label: "Submit/update PRs (Recommended)"
+    description: "Push any pending changes"
+  - label: "Done for now"
+    description: "No action needed"
+
+Based on response:
+- **"Fix issues"**: For each issue with a suggestion, apply the fix using Edit tool, then offer to commit
+- **"Submit/update PRs"**: Invoke `/stack-submit` skill using the `Skill` tool

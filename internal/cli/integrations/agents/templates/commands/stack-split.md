@@ -1,5 +1,6 @@
 ---
 description: Split committed changes between current branch and a new branch (parent or child)
+model: claude-opus-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Write, Glob, Grep, AskUserQuestion
 argument-hint: [check-command]
 ---
@@ -425,6 +426,14 @@ new file mode 100644
 - `--by-commit`: Splits at commit boundaries
 
 **Note:** `--by-file` extracts entire files to the new branch, not just the changes to those files. Use `--patch` or `--by-hunk` for hunk-level splitting.
+
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior.
+
+## Confidence Threshold
+
+Only classify hunks you're 90%+ confident about. For ambiguous hunks, ask the user rather than guessing. Incorrect splits require manual cleanup.
 
 ## Do NOT
 - Proceed if there are uncommitted changes in the working directory

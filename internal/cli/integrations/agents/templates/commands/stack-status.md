@@ -1,12 +1,10 @@
 ---
-description: View current stack state, branch position, and health status
-model: claude-sonnet-4-20250514
+description: View current stack state and health
+model: claude-haiku-4-20250414
 allowed-tools: Bash(stackit:*), Bash(git:*)
 ---
 
 # Stack Status
-
-Show the current stack state and identify any issues.
 
 ## Context
 - Current branch: !`git branch --show-current`
@@ -14,10 +12,12 @@ Show the current stack state and identify any issues.
 - Stack state: !`command stackit log --no-interactive 2>&1`
 - Branch info: !`command stackit info --json --no-interactive 2>&1`
 
-## Instructions
+## Task
 
-Based on the context above:
-- If branches need restack: suggest `command stackit restack`
-- If branches have no PR: suggest `command stackit submit`
-- If uncommitted changes: note them
-- If stack is healthy: confirm status is good
+Summarize the stack state from the context above. Note any issues:
+- Branches needing restack
+- Branches without PRs
+- Uncommitted changes
+- Detached HEAD state
+
+If healthy, confirm the stack is in good state. Do not run additional commands.

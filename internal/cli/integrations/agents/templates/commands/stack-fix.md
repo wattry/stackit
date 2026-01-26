@@ -1,7 +1,7 @@
 ---
 description: Diagnose and fix common stack issues
 model: claude-sonnet-4-20250514
-allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion, Skill
+allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion, Skill, Task
 ---
 
 # Stack Fix
@@ -189,9 +189,17 @@ The restack command automatically propagates your fix to all child branches.
 
 **Branching stack (multiple children)**: foreach handles this - all descendants are checked.
 
-**Multiple independent failures**: After fixing one, re-run foreach to find next failure.
+**Multiple independent failures**: After fixing one, re-run foreach to find next failure. For large error outputs with many distinct issues, consider spawning parallel haiku Task subagents to classify and prioritize errors before fixing.
 
 **After amending a commit**: Always run `command stackit restack --no-interactive` because child branches reference the old commit SHA.
+
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior or check if commands exist.
+
+## Confidence Threshold
+
+Only apply fixes you're 90%+ confident about. If unsure whether a fix is correct, ask the user rather than guessing. False fixes erode trust—better to ask than to introduce new bugs.
 
 ## Do NOT
 - Fix the same bug on multiple branches manually

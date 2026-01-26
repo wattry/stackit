@@ -1,6 +1,6 @@
 ---
 description: Extract commits or files to an independent branch
-model: claude-sonnet-4-20250514
+model: claude-haiku-4-20250414
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Glob, Grep
 ---
 
@@ -69,6 +69,10 @@ command stackit log  # Both branches should be siblings on the same parent
 | Changes don't belong in this stack | Changes are a dependency for this stack |
 | You want an independent PR | The split should be merged first |
 | Files should exist on both branches | Files should only be on the split branch |
+
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior.
 
 ## Do NOT
 - Use raw git commands when stackit commands are available

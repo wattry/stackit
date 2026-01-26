@@ -1,47 +1,35 @@
 ---
 description: Rebase all branches to ensure proper ancestry
-model: claude-sonnet-4-20250514
+model: claude-haiku-4-20250414
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
 
 # Stack Restack
-
-Rebase all branches in the stack to ensure proper parent-child ancestry.
 
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
 - Stack state: !`command stackit log --no-interactive 2>&1`
 
-## Instructions
+## Task
 
-1. Check preconditions from context above:
-   - If no current branch (detached HEAD): suggest `command stackit checkout <branch>`
-   - If uncommitted changes: suggest committing or stashing first
-2. Run `command stackit restack --no-interactive`
-3. If conflicts occur, guide user through resolution then `command stackit continue`
-4. Show final stack state
-5. Suggest `command stackit submit` to update PRs
+Rebase all branches in the stack to ensure proper parent-child ancestry.
 
-## Do NOT
-- Proceed with uncommitted changes
-- Proceed in detached HEAD state
-- Force through conflicts without user resolution
+**Preconditions** (check context above):
+- Must be on a branch (not detached HEAD)
+- Must have clean working directory (no uncommitted changes)
+
+If preconditions fail, inform user and stop.
+
+Otherwise, run `command stackit restack --no-interactive` and show the result.
+
+If conflicts occur, inform user they need to resolve conflicts and run `command stackit continue`.
 
 ## Follow-up
 
 After successful restack, use `AskUserQuestion`:
 - Header: "Next step"
-- Question: "Stack rebased successfully. What would you like to do next?"
+- Question: "Stack rebased. What would you like to do next?"
 - Options:
-  - label: "Submit to update PRs (Recommended)"
-    description: "Push rebased branches to update remote PRs"
-  - label: "View stack"
-    description: "Show current stack state"
-  - label: "Done for now"
-    description: "No follow-up action needed"
-
-Based on response:
-- **"Submit to update PRs"**: Invoke `/stack-submit` skill using the `Skill` tool
-- **"View stack"**: Run `command stackit log --no-interactive`
-- **"Done for now"**: End with summary of restacked branches
+  - "Submit to update PRs (Recommended)" → Invoke `/stack-submit` using Skill tool
+  - "Done for now" → End with summary
