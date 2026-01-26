@@ -3,6 +3,8 @@ package git
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -96,30 +98,92 @@ func (r *runner) ParseStagedHunks(ctx context.Context) ([]Hunk, error) {
 
 // StageHunks stages specific hunks by applying them as patches to the index.
 // This allows selective staging without using interactive git add -p.
+// New files are handled specially since git apply --cached cannot create files
+// that don't exist in the working tree.
 func (r *runner) StageHunks(ctx context.Context, hunks []Hunk) error {
 	if len(hunks) == 0 {
 		return nil
 	}
 
-	// Build a patch from the selected hunks
-	patch := BuildPatchFromHunks(hunks)
-	if patch == "" {
-		return nil
+	// Separate new files from modifications
+	var newFileHunks []Hunk
+	var modHunks []Hunk
+	for _, h := range hunks {
+		if h.IsNewFile {
+			newFileHunks = append(newFileHunks, h)
+		} else {
+			modHunks = append(modHunks, h)
+		}
 	}
 
-	// Apply the patch to the index using git apply --cached
-	// We use --3way to handle conflicts better and --allow-empty for edge cases
-	_, err := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached", "--3way")
-	if err != nil {
-		// Try without --3way as a fallback (some git versions have issues with --3way)
-		_, fallbackErr := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached")
-		if fallbackErr != nil {
-			// Include both errors for debugging
-			return fmt.Errorf("failed to apply patch: %w (note: --3way also failed)", fallbackErr)
+	// Handle new files: extract content and write to disk, then stage with git add
+	for _, h := range newFileHunks {
+		content := extractContentFromHunk(h)
+		filePath := filepath.Join(r.repoRoot, h.File)
+
+		// Create parent directories if they don't exist
+		if dir := filepath.Dir(filePath); dir != "." {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				return fmt.Errorf("failed to create directory for new file %s: %w", h.File, err)
+			}
+		}
+
+		// Determine file mode (default to 0644 for regular files)
+		fileMode := os.FileMode(0o644)
+		if h.FileMode == "100755" {
+			fileMode = 0o755
+		}
+
+		if err := os.WriteFile(filePath, []byte(content), fileMode); err != nil {
+			return fmt.Errorf("failed to write new file %s: %w", h.File, err)
+		}
+
+		// Stage the new file
+		if _, err := r.RunGitCommandWithContext(ctx, "add", h.File); err != nil {
+			return fmt.Errorf("failed to stage new file %s: %w", h.File, err)
+		}
+	}
+
+	// Handle modifications with existing git apply --cached
+	if len(modHunks) > 0 {
+		patch := BuildPatchFromHunks(modHunks)
+		if patch != "" {
+			// Apply the patch to the index using git apply --cached
+			// We use --3way to handle conflicts better
+			_, err := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached", "--3way")
+			if err != nil {
+				// Try without --3way as a fallback (some git versions have issues with --3way)
+				_, fallbackErr := r.runGitInternal(ctx, patch, nil, true, "apply", "--cached")
+				if fallbackErr != nil {
+					return fmt.Errorf("failed to apply patch: %w (note: --3way also failed)", fallbackErr)
+				}
+			}
 		}
 	}
 
 	return nil
+}
+
+// extractContentFromHunk extracts the file content from a new file hunk.
+// It parses the unified diff format and returns only the added lines (without the + prefix).
+func extractContentFromHunk(h Hunk) string {
+	var lines []string
+	for _, line := range strings.Split(h.Content, "\n") {
+		// Skip the hunk header line (@@ ... @@)
+		if strings.HasPrefix(line, "@@") {
+			continue
+		}
+		// Include lines that start with + (but not the +++ header)
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			lines = append(lines, strings.TrimPrefix(line, "+"))
+		}
+	}
+	result := strings.Join(lines, "\n")
+	// Ensure file ends with newline if there was content
+	if len(lines) > 0 && !strings.HasSuffix(result, "\n") {
+		result += "\n"
+	}
+	return result
 }
 
 // UnstageAll removes all changes from the staging area.

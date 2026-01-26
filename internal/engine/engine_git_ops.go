@@ -2,6 +2,9 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"stackit.dev/stackit/internal/git"
@@ -62,6 +65,30 @@ func (e *engineImpl) HasStagedChanges(ctx context.Context) (bool, error) {
 // HasUnstagedChanges checks if there are unstaged changes in the repository
 func (e *engineImpl) HasUnstagedChanges(ctx context.Context) (bool, error) {
 	return e.git.HasUnstagedChanges(ctx)
+}
+
+// HasUntrackedFiles checks if there are untracked files in the repository
+func (e *engineImpl) HasUntrackedFiles(ctx context.Context) (bool, error) {
+	return e.git.HasUntrackedFiles(ctx)
+}
+
+// GetUntrackedFileHunks returns synthetic hunks for all untracked files.
+// This allows new files to be included in hunk-based operations like split.
+func (e *engineImpl) GetUntrackedFileHunks(ctx context.Context) ([]git.Hunk, error) {
+	files, err := e.git.GetUntrackedFiles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get untracked files: %w", err)
+	}
+
+	hunks := make([]git.Hunk, 0, len(files))
+	for _, file := range files {
+		content, err := os.ReadFile(filepath.Join(e.git.GetRepoRoot(), file))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read untracked file %s: %w", file, err)
+		}
+		hunks = append(hunks, git.GenerateNewFileHunk(file, content))
+	}
+	return hunks, nil
 }
 
 // GetMergeBase returns the merge base between two revisions
