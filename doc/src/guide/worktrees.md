@@ -111,7 +111,7 @@ Without shell integration, these commands print the path for manual navigation:
 cd $(stackit worktree open my-feature)
 ```
 
-See [Shell Integration](../cli/shell.md) for more details.
+See [Shell Integration](../integrations/shell.md) for more details.
 
 ## Managing Worktrees
 
@@ -243,6 +243,6 @@ cd ~/projects/my-repo
 
 ## Next Steps
 
-- [Shell Integration →](../cli/shell.md)
+- [Shell Integration →](../integrations/shell.md)
 - [Common Workflows →](workflows.md)
 - [Configuration →](../cli/config.md)

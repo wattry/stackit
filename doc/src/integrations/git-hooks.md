@@ -119,4 +119,5 @@ Branches fetched with $$stackit get$$ are **frozen** by default. Frozen branches
 ## Next steps
 
 - [Learn about branch locking →](../guide/concepts.md#frozen-vs-locked-branches)
-- [Configuration options →](config.md)
+- [Configuration options →](../cli/config.md)
+- [Other integrations →](index.md)

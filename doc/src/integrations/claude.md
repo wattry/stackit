@@ -167,9 +167,10 @@ If Claude commands aren't working:
    brew upgrade stackit
    ```
 
-3. Consult the [troubleshooting guide](troubleshooting.md)
+3. Consult the [troubleshooting guide](../guide/troubleshooting.md)
 
 ## Next steps
 
 - [View all CLI commands →](../cli/reference.md)
-- [Learn common workflows →](workflows.md)
+- [Learn common workflows →](../guide/workflows.md)
+- [Other integrations →](index.md)

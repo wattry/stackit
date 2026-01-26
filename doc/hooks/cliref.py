@@ -183,39 +183,115 @@ def _generate_cli_reference(stackit_bin: Path, main_help: str) -> str:
 
 
 def _format_help_output(help_text: str, cmd: str) -> str:
-    """Format help output into markdown."""
+    """Format help output into markdown.
+
+    Parses the Cobra help format:
+    - Description (before Usage:)
+    - Usage line(s)
+    - Flags section
+    - Global Flags section (skipped - shown once at end)
+    """
     lines = help_text.split('\n')
     output = []
 
-    # Extract description (usually the first few lines after the usage)
-    in_description = False
-    description = []
+    # State machine for parsing
+    section = "description"  # description, usage, flags, global_flags, done
+    description_lines = []
+    usage_lines = []
+    flags = []
 
     for line in lines:
+        # Detect section transitions
         if line.startswith('Usage:'):
+            section = "usage"
             continue
-        if line.strip().startswith(f'stackit {cmd}'):
-            output.append("```")
-            output.append(line.strip())
-            output.append("```")
-            output.append("")
-            in_description = True
+        if line.startswith('Flags:'):
+            section = "flags"
             continue
-        if in_description:
-            if line.strip() == '' or line.startswith('Flags:') or line.startswith('Global Flags:'):
-                in_description = False
-                if description:
-                    output.extend(description)
-                    output.append("")
-                continue
-            if line.strip():
-                description.append(line.strip())
+        if line.startswith('Global Flags:'):
+            section = "global_flags"
+            continue
+        if line.startswith('Available Commands:') or line.startswith('Commands:'):
+            section = "done"
+            continue
 
-    # Add any remaining content
-    if not output:
-        output.append(help_text)
+        # Process based on current section
+        if section == "description":
+            if line.strip():
+                description_lines.append(line.strip())
+        elif section == "usage":
+            if line.strip():
+                usage_lines.append(line.strip())
+        elif section == "flags":
+            if line.strip():
+                flags.append(line)
+        elif section == "global_flags":
+            # Skip global flags - they're documented once at the end
+            pass
+
+    # Build output
+
+    # Usage block
+    if usage_lines:
+        output.append("```")
+        for usage in usage_lines:
+            output.append(usage)
+        output.append("```")
+        output.append("")
+
+    # Description
+    if description_lines:
+        for desc in description_lines:
+            output.append(desc)
+        output.append("")
+
+    # Flags table
+    if flags:
+        output.append("**Flags:**")
+        output.append("")
+        output.append("| Flag | Description |")
+        output.append("|:-----|:------------|")
+
+        for flag_line in flags:
+            parsed = _parse_flag_line(flag_line)
+            if parsed:
+                flag_str, desc = parsed
+                # Escape pipe characters in description
+                desc = desc.replace("|", "\\|")
+                output.append(f"| `{flag_str}` | {desc} |")
+
+        output.append("")
 
     return '\n'.join(output)
+
+
+def _parse_flag_line(line: str) -> tuple[str, str] | None:
+    """Parse a flag line into (flag_string, description).
+
+    Handles formats like:
+      -a, --all              Description here
+      --flag                 Description here
+      -f, --flag string      Description with type
+    """
+    line = line.strip()
+    if not line or not line.startswith('-'):
+        return None
+
+    # Find where the description starts
+    # Flags are indented with multiple spaces before description
+    parts = line.split('  ')
+    if len(parts) < 2:
+        # Single part - might be wrapped or malformed
+        return None
+
+    # First part is the flag(s), rest is description
+    flag_part = parts[0].strip()
+
+    # Find the description (skip empty parts from multiple spaces)
+    desc_parts = [p.strip() for p in parts[1:] if p.strip()]
+    description = ' '.join(desc_parts) if desc_parts else ""
+
+    return (flag_part, description)
 
 
 def _create_placeholder(doc_dir: Path):
