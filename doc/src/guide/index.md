@@ -42,14 +42,6 @@ This guide covers everything you need to know to work effectively with stackit.
 
     [Team workflows →](team-workflows.md)
 
--   :material-robot:{ .lg .middle } **Claude Integration**
-
-    ---
-
-    Use AI-assisted commands for intelligent stacking workflows.
-
-    [Setup Claude →](claude-integration.md)
-
 -   :material-help-circle:{ .lg .middle } **Troubleshooting**
 
     ---
@@ -79,3 +71,7 @@ stackit doctor
 ```
 
 Or check the [FAQ](../community/faq.md) for frequently asked questions.
+
+### Integrations
+
+Looking to integrate stackit with your tools? See the [Integrations](../integrations/index.md) section for Claude Code, GitHub Actions, git hooks, and shell integration.

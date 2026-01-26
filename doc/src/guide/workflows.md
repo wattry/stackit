@@ -245,5 +245,5 @@ By default, this runs on all upstack branches (from current to top). Use `--down
 
 - [Worktrees Guide →](worktrees.md)
 - [Team Workflows →](team-workflows.md)
-- [Setup Claude integration →](claude-integration.md)
+- [Integrations →](../integrations/index.md)
 - [Troubleshooting →](troubleshooting.md)

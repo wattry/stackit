@@ -81,4 +81,4 @@ Once you're comfortable with the basics, explore:
 
 - [Core concepts](../guide/concepts.md) - Understanding stacks, parents, and children
 - [Common workflows](../guide/workflows.md) - Real-world stacking patterns
-- [Claude integration](../guide/claude-integration.md) - AI-assisted stacking
+- [Integrations](../integrations/index.md) - Claude, GitHub, git hooks, and more

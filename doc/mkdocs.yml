@@ -59,14 +59,17 @@ nav:
     - Common Workflows: guide/workflows.md
     - Worktrees: guide/worktrees.md
     - Team Workflows: guide/team-workflows.md
-    - Claude Integration: guide/claude-integration.md
     - Troubleshooting: guide/troubleshooting.md
+  - Integrations: &integrations
+    - Overview: integrations/index.md
+    - Claude Code: integrations/claude.md
+    - GitHub: integrations/github.md
+    - Git Hooks: integrations/git-hooks.md
+    - Shell: integrations/shell.md
   - CLI: &cli
     - Overview: cli/index.md
     - Command Reference: cli/reference.md
     - Configuration: cli/config.md
-    - Shell Integration: cli/shell.md
-    - Git Hooks: cli/hooks.md
   - Community: &community
     - Overview: community/index.md
     - FAQ: community/faq.md
@@ -77,6 +80,9 @@ plugins:
   - redirects:
       redirect_maps:
         'faq.md': 'community/faq.md'
+        'guide/claude-integration.md': 'integrations/claude.md'
+        'cli/hooks.md': 'integrations/git-hooks.md'
+        'cli/shell.md': 'integrations/shell.md'
   - search
   - social:
       enabled: !ENV [CI, false]
@@ -96,14 +102,17 @@ plugins:
           - guide/workflows.md
           - guide/worktrees.md
           - guide/team-workflows.md
-          - guide/claude-integration.md
           - guide/troubleshooting.md
+        Integrations:
+          - integrations/index.md
+          - integrations/claude.md
+          - integrations/github.md
+          - integrations/git-hooks.md
+          - integrations/shell.md
         CLI:
           - cli/index.md
           - cli/reference.md
           - cli/config.md
-          - cli/shell.md
-          - cli/hooks.md
         Community:
           - community/index.md
           - community/faq.md

@@ -146,4 +146,5 @@ This approach is necessary because child processes cannot change the parent shel
 ## Next Steps
 
 - [Worktrees Guide →](../guide/worktrees.md)
-- [Command Reference →](reference.md)
+- [Command Reference →](../cli/reference.md)
+- [Other integrations →](index.md)
