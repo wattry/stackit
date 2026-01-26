@@ -1,7 +1,7 @@
 ---
 description: Verify stack health by running checks on all branches
 model: claude-sonnet-4-20250514
-allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
+allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill, Task
 argument-hint: [check-command]
 ---
 
@@ -49,6 +49,8 @@ command stackit foreach --upstack "<check-command>" 2>&1
 ```bash
 command stackit foreach --upstack --no-fail-fast "<check-command>" 2>&1
 ```
+
+**Parallel mode** - For large stacks (5+ branches) with independent branches, consider spawning parallel Task subagents to verify sibling branches simultaneously. Only use this when branches don't have linear dependencies.
 
 If uncertain which mode to use, prompt with `AskUserQuestion`:
 - Header: "Verify mode"
@@ -113,6 +115,10 @@ First failure: branch-name-3
 **All branches pass**: Clearly report success, suggest `/stack-submit`.
 
 **Check command fails immediately**: Suggest verifying command works manually first.
+
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior.
 
 ## Do NOT
 - Attempt to fix any issues (that's /stack-fix's job)

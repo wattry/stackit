@@ -1,5 +1,6 @@
 ---
 description: Plan and create a stack from uncommitted working tree changes
+model: claude-opus-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Glob, Grep, AskUserQuestion
 argument-hint: [check-command]
 ---
@@ -448,6 +449,10 @@ Next steps:
 - **Recovery is always possible** via `git checkout <backup-branch>`
 - **No stash usage** - avoids stash's confusing behavior with staged files
 - **Empty branch detection** - stops immediately if `stackit create` produces empty branch
+
+## Tool Trust
+
+Trust all tools work without error. Don't run exploratory commands to verify tool behavior. Assume `stackit create` will succeed if staged changes exist.
 
 ## Do NOT
 - Create branches without user approval of the plan
