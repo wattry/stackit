@@ -90,7 +90,7 @@ stackit config set submit.footer false
 
 ### worktree.basePath
 
-Customize where worktrees are created.
+Customize where worktrees are created. See the [Worktrees Guide](../guide/worktrees.md) for comprehensive worktree documentation.
 
 **Default**: `../<repo-name>-stacks`
 
@@ -254,6 +254,8 @@ stackit config set navigation.showMerged true
 
 For team-wide settings that should be shared across all contributors, create a `.stackit.yaml` file in your repository root and commit it to version control. Team settings act as defaults that individual developers can override in their personal git config.
 
+See the [Team Workflows Guide](../guide/team-workflows.md) for collaboration patterns using shared configuration.
+
 ```yaml
 # .stackit.yaml - Team-wide defaults
 trunk: main
@@ -384,4 +386,7 @@ git config --global stackit.submit.footer false
 ## Next steps
 
 - [View command reference →](reference.md)
+- [Shell Integration →](shell.md)
 - [Learn common workflows →](../guide/workflows.md)
+- [Worktrees Guide →](../guide/worktrees.md)
+- [Team Workflows →](../guide/team-workflows.md)
