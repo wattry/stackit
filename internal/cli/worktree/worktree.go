@@ -9,7 +9,6 @@ import (
 	"stackit.dev/stackit/internal/actions/worktree"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -35,8 +34,8 @@ directory. Create a worktree with 'stackit worktree create' from trunk.`,
 // newCreateCmd creates the worktree create command
 func newCreateCmd() *cobra.Command {
 	var (
-		scope string
-		open  bool
+		scope  string
+		noOpen bool
 	)
 
 	cmd := &cobra.Command{
@@ -49,8 +48,8 @@ serves as the base for stacked branches created within the worktree.
 
 The worktree will be created in a sibling directory to your repository.
 
-Use --open to automatically change to the new worktree directory after creation.
-In interactive mode, you will be prompted to open the worktree if --open is not specified.`,
+With shell integration enabled, automatically changes to the new worktree directory.
+Use --no-open to skip the automatic directory change.`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,21 +62,11 @@ In interactive mode, you will be prompted to open the worktree if --open is not 
 					return err
 				}
 
-				// Determine if we should open the worktree
-				// Only prompt if shell integration is available (otherwise cd can't work)
-				shouldOpen := open
-				if !shouldOpen && tui.IsTTY() && common.HasShellIntegration() {
-					// Prompt in interactive mode
-					confirmed, promptErr := tui.PromptConfirm("Change to worktree directory now?", true)
-					if promptErr == nil && confirmed {
-						shouldOpen = true
-					}
-				}
-
-				if shouldOpen && result.Path != "" && common.HasShellIntegration() {
+				// Auto-cd to worktree by default when shell integration is available
+				if !noOpen && result.Path != "" && common.HasShellIntegration() {
 					ctx.Output.DirectiveCD(result.Path)
 				} else if result.Path != "" {
-					// User declined, non-interactive, or no shell integration
+					// User opted out or no shell integration
 					ctx.Output.Tip("cd %s", result.Path)
 				}
 
@@ -87,7 +76,7 @@ In interactive mode, you will be prompted to open the worktree if --open is not 
 	}
 
 	cmd.Flags().StringVarP(&scope, "scope", "s", "", "Scope to apply to all branches in this worktree")
-	cmd.Flags().BoolVarP(&open, "open", "o", false, "Open the worktree after creation (change to its directory)")
+	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Don't change to the worktree directory after creation")
 
 	return cmd
 }
