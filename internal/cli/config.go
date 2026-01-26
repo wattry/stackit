@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -101,6 +103,7 @@ Examples:
 	cmd.AddCommand(newConfigUnsetCmd())
 	cmd.AddCommand(newConfigShowCmd())
 	cmd.AddCommand(newConfigResetCmd())
+	cmd.AddCommand(newConfigInitCmd())
 
 	return cmd
 }
@@ -679,6 +682,57 @@ Use with caution - this will clear all personal configuration including:
 		},
 	}
 
+	return cmd
+}
+
+// newConfigInitCmd creates the config init command
+func newConfigInitCmd() *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Create an example .stackit.yaml with documented options",
+		Long: `Create a .stackit.yaml file with all available configuration options.
+
+The generated file contains commented examples for all team-shared settings.
+Uncomment and modify the options you want to use.
+
+If .stackit.yaml already exists, use --force to overwrite it.`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			runner := git.NewRunner(nil)
+			if cwd != "" {
+				runner = git.NewRunnerWithPath(cwd, nil)
+			}
+			repoRoot, err := runner.DiscoverRepoRoot()
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+
+			configPath := filepath.Join(repoRoot, ".stackit.yaml")
+
+			// Check if file already exists
+			if _, err := os.Stat(configPath); err == nil {
+				if !force {
+					return fmt.Errorf(".stackit.yaml already exists; use --force to overwrite")
+				}
+			}
+
+			// Write the template
+			template := config.GenerateConfigTemplate()
+			if err := os.WriteFile(configPath, []byte(template), 0600); err != nil {
+				return fmt.Errorf("failed to write .stackit.yaml: %w", err)
+			}
+
+			splog := output.NewConsoleOutput(cmd.OutOrStdout(), false)
+			splog.Info("Created .stackit.yaml with documented configuration options")
+			splog.Info("Edit the file to customize team settings, then commit it to share with your team")
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing .stackit.yaml")
 	return cmd
 }
 

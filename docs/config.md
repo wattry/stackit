@@ -5,13 +5,15 @@
 **Key files:**
 - `internal/config/config_git.go` - High-level typed interface (`GitConfig`)
 - `internal/config/keys.go` - Key constants and defaults
+- `internal/config/metadata.go` - Config option metadata registry (for docs/template generation)
 - `internal/config/project_config.go` - Team config (`.stackit.yaml`)
 - `internal/git/config.go` - Low-level git config access (`ConfigStore`)
 
 **Adding a new config key:**
 1. Add constant to `keys.go`: `const KeyFoo = "stackit.foo"`
-2. Add getter/setter to `config_git.go`
-3. If interface method needed, add to `interface.go`
+2. Add entry to `metadata.go`: `Options` registry (for template/docs generation)
+3. Add getter/setter to `config_git.go`
+4. If interface method needed, add to `interface.go`
 
 **Priority:** Personal git config > `.stackit.yaml` > defaults
 
@@ -77,6 +79,8 @@ The configuration system is implemented across several files:
 internal/config/
 ├── config_git.go      # GitConfig - high-level typed interface
 ├── keys.go            # Configuration key constants and defaults
+├── metadata.go        # Config option metadata registry
+├── template.go        # Template generation for `stackit config init`
 ├── interface.go       # Configurer interface definition
 ├── branch_pattern.go  # Branch naming pattern parsing
 └── migrate.go         # Legacy JSON migration
@@ -376,19 +380,24 @@ Adding a new config key requires updates to multiple files. The pattern differs 
    - Add default constant: `const DefaultMyNewSetting = "value"`
    - For enum types, add validation slice: `var ValidMyNewSetting = []string{"opt1", "opt2"}`
 
-2. **`internal/config/config_git.go`**
+2. **`internal/config/metadata.go`** (for template/docs generation)
+   - Add entry to `Options` slice with YAMLPath, GitKey, Description, Default, Section
+   - Run `go test ./internal/config -run TestGenerateConfigTemplate_Golden -update` to update template
+   - Verify `TestOptionsCoversAllKeys` passes (ensures all keys are documented)
+
+3. **`internal/config/config_git.go`**
    - Add getter method with layered fallback (personal > team > default)
    - Add setter method with validation
    - Add `Unset*` method to remove personal override
    - Add key to `ResetAllPersonal()` slice
 
-3. **`internal/config/project_config.go`** (for team config support)
+4. **`internal/config/project_config.go`** (for team config support)
    - Add field to appropriate config struct (e.g., `SubmitConfig`)
    - Add `Has*` method to check if set
    - Add `Get*` method for pointer types (bool)
    - Add validation in `Validate()` if needed
 
-4. **`internal/cli/config.go`** (for CLI support)
+5. **`internal/cli/config.go`** (for CLI support)
    - Add key constant (e.g., `keyMyNewSetting = "my.newSetting"`)
    - Add case in `newConfigGetCmd()` switch
    - Add case in `newConfigSetCmd()` switch

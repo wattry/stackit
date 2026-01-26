@@ -1,0 +1,63 @@
+# Stackit Team Configuration
+# Shared with your team via git. Personal overrides: stackit config set <key> <value>
+# Docs: https://getstackit.github.io/stackit/cli/config/
+
+# Primary trunk branch (default: main)
+# trunk: main
+# Additional trunk branches (e.g., release branches)
+# trunks:
+#   - develop
+#   - release
+
+# Branch naming pattern
+# branch:
+#   # Placeholders: {username}, {date}, {message}, {scope}
+#   pattern: "{username}/{date}/{message}" # Branch naming pattern
+
+# PR submission settings
+# submit:
+#   footer: true # Include navigation footer
+#   draft: false # Create as draft
+#   web: never # Open in browser: always, created, never
+#   labels: [] # Default labels
+#   reviewers: [] # Default reviewers
+#   assignees: [] # Default assignees
+
+# Merge method: squash, merge, rebase
+# merge:
+#   method: squash # Merge method: squash, merge, rebase
+
+# CI validation
+# ci:
+#   command: "make test" # Command to run
+#   timeout: 600 # Timeout in seconds
+
+# Undo history
+# undo:
+#   depth: 10 # Max snapshots
+
+# Worktree settings
+# worktree:
+#   basePath: "" # Base directory (empty = auto)
+#   autoClean: true # Clean during sync
+
+# Split command
+# split:
+#   hunkSelector: tui # tui or git
+
+# Concurrency
+# 0 = auto-detect (default: 0)
+# maxConcurrency: 0
+
+# PR navigation display
+# navigation:
+#   when: multiple # always, never, multiple
+#   location: body # body, comment, none
+#   marker: 👈 # Current branch marker
+#   showMerged: true # Show merged history
+
+# Post-worktree-create hooks (require approval on first run)
+# hooks:
+#   post-worktree-create:
+#     - npm install
+#     - mise install
