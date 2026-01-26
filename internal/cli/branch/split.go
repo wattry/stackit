@@ -24,6 +24,7 @@ func NewSplitCmd() *cobra.Command {
 		below             bool
 		name              string
 		message           string
+		patchFile         string
 	)
 
 	cmd := &cobra.Command{
@@ -43,6 +44,10 @@ Direction options for --by-hunk:
   --below (default): New branch inserted between current and parent (downstack)
   --above: New branch inserted as child of current (upstack)
 
+Non-interactive mode (--patch):
+  --patch <file>: Read hunks from a patch file instead of prompting interactively.
+                  Use "-" to read from stdin. Implies --by-hunk --below unless --above is specified.
+
 By default, --by-file creates a new PARENT branch, making the current branch
 a child of the split branch. Use --as-sibling to create an independent branch
 on the same parent instead (leaving the current branch unchanged).
@@ -52,6 +57,8 @@ Examples:
   stackit split --by-hunk                              # Skip type selection
   stackit split --by-hunk --below                      # Skip type and direction
   stackit split --by-hunk --above                      # Split upstack (child)
+  stackit split --patch extract.patch -n parent -m "Extract to parent"  # Non-interactive (below)
+  stackit split --patch extract.patch --above -n child -m "Extract to child"  # Non-interactive (above)
   stackit split --by-file path/to/file.go             # Extract to parent branch
   stackit split --by-file path/to/file.go --as-sibling # Extract to sibling branch
   stackit split --by-commit --as-sibling              # Split commits as siblings`,
@@ -75,27 +82,37 @@ Examples:
 						byFile = filePaths
 					}
 					style = split.StyleFile
+				case patchFile != "":
+					// --patch implies --by-hunk
+					style = split.StyleHunk
 				}
 
 				// Determine direction
 				var direction split.Direction
-				if above && below {
+				switch {
+				case above && below:
 					return fmt.Errorf("cannot specify both --above and --below")
-				}
-				if above {
+				case above:
 					direction = split.DirectionAbove
-				} else if below {
+				case below:
+					direction = split.DirectionBelow
+				case patchFile != "":
+					// --patch defaults to --below if no direction specified
 					direction = split.DirectionBelow
 				}
 				// If direction is empty, wizard will prompt (for hunk mode)
 
 				// Validate flag combinations
-				// --name and --message require explicit --by-file (not auto-detected style)
-				if name != "" && style != split.StyleFile {
-					return fmt.Errorf("--name can only be used with --by-file")
+				// --patch can only be used with --by-hunk
+				if patchFile != "" && style != split.StyleHunk {
+					return fmt.Errorf("--patch can only be used with --by-hunk")
 				}
-				if message != "" && style != split.StyleFile {
-					return fmt.Errorf("--message can only be used with --by-file")
+				// --name and --message require --by-file or --by-hunk with --patch
+				if name != "" && style != split.StyleFile && patchFile == "" {
+					return fmt.Errorf("--name can only be used with --by-file or --by-hunk --patch")
+				}
+				if message != "" && style != split.StyleFile && patchFile == "" {
+					return fmt.Errorf("--message can only be used with --by-file or --by-hunk --patch")
 				}
 				// --above/--below only make sense with --by-hunk
 				if (above || below) && style != "" && style != split.StyleHunk {
@@ -115,7 +132,8 @@ Examples:
 
 				// Determine if we should use wizard mode
 				// Use wizard when: no style specified, or style is hunk with no direction
-				useWizard := style == "" || (style == split.StyleHunk && direction == "")
+				// Never use wizard when --patch is provided (non-interactive mode)
+				useWizard := (style == "" || (style == split.StyleHunk && direction == "")) && patchFile == ""
 
 				// Run split action
 				return split.Action(ctx, split.Options{
@@ -128,6 +146,7 @@ Examples:
 					Message:       message,
 					UseWizard:     useWizard,
 					HunkSelector:  hunkSelector,
+					PatchFile:     patchFile,
 				}, handler)
 			})
 		},
@@ -150,6 +169,9 @@ Examples:
 	// Direction options (for hunk mode)
 	cmd.Flags().BoolVar(&above, "above", false, "Insert new branch above current (as child, upstack)")
 	cmd.Flags().BoolVar(&below, "below", false, "Insert new branch below current (as parent, downstack)")
+
+	// Non-interactive hunk mode
+	cmd.Flags().StringVarP(&patchFile, "patch", "p", "", "Patch file specifying hunks to split (implies --by-hunk, defaults to --below, use \"-\" for stdin)")
 
 	// Add alternative long form names (these will be checked in RunE via cmd.Flags().Changed)
 	// Note: We can't bind the same variable twice, so we check for these flags manually
