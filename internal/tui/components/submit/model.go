@@ -171,12 +171,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	var b strings.Builder
 
-	// Show sequential mode notice if applicable
-	if m.IsSequential && m.hasActiveSubmission() {
-		b.WriteString(m.Styles.DimStyle.Render("Creating PRs sequentially to preserve ordering..."))
-		b.WriteString("\n\n")
-	}
-
 	if m.Renderer != nil {
 		// Update annotations based on items
 		for _, item := range m.Items {
@@ -295,14 +289,4 @@ func (m *Model) View() string {
 
 	b.WriteString("\n")
 	return b.String()
-}
-
-// hasActiveSubmission returns true if any item is currently being submitted
-func (m *Model) hasActiveSubmission() bool {
-	for _, item := range m.Items {
-		if item.Status == StatusSubmitting || item.Status == StatusSyncing {
-			return true
-		}
-	}
-	return false
 }
