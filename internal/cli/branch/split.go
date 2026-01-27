@@ -25,6 +25,7 @@ func NewSplitCmd() *cobra.Command {
 		name              string
 		message           string
 		patchFile         string
+		dryRun            bool
 	)
 
 	cmd := &cobra.Command{
@@ -36,11 +37,11 @@ func NewSplitCmd() *cobra.Command {
 Has three forms: split --by-commit, split --by-hunk, and split --by-file.
 split --by-commit slices up the commit history, allowing you to select split points.
 split --by-hunk interactively stages changes to create new single-commit branches.
-split --by-file <files> extracts specified files into a new parent branch.
+split --by-file <files> extracts specified files into a new branch.
 split -F (--by-file-interactive) shows an interactive file selector.
 split without options will launch an interactive wizard.
 
-Direction options for --by-hunk:
+Direction options (for --by-hunk and --by-file):
   --below (default): New branch inserted between current and parent (downstack)
   --above: New branch inserted as child of current (upstack)
 
@@ -49,8 +50,12 @@ Non-interactive mode (--patch):
                   Use "-" to read from stdin. Implies --by-hunk --below unless --above is specified.
 
 By default, --by-file creates a new PARENT branch, making the current branch
-a child of the split branch. Use --as-sibling to create an independent branch
-on the same parent instead (leaving the current branch unchanged).
+a child of the split branch. Use --above to create a CHILD branch instead.
+Use --as-sibling to create an independent branch on the same parent (leaving
+the current branch unchanged).
+
+Preview mode:
+  --dry-run: Show what would happen without executing the split.
 
 Examples:
   stackit split                                        # Interactive wizard
@@ -59,8 +64,10 @@ Examples:
   stackit split --by-hunk --above                      # Split upstack (child)
   stackit split --patch extract.patch -n parent -m "Extract to parent"  # Non-interactive (below)
   stackit split --patch extract.patch --above -n child -m "Extract to child"  # Non-interactive (above)
-  stackit split --by-file path/to/file.go             # Extract to parent branch
+  stackit split --by-file path/to/file.go             # Extract to parent branch (below)
+  stackit split --by-file path/to/file.go --above     # Extract to child branch (above)
   stackit split --by-file path/to/file.go --as-sibling # Extract to sibling branch
+  stackit split --by-file path/to/file.go --dry-run   # Preview the split
   stackit split --by-commit --as-sibling              # Split commits as siblings`,
 		SilenceUsage: true,
 		// Disable default help flag to allow -h for --by-hunk
@@ -114,9 +121,13 @@ Examples:
 				if message != "" && style != split.StyleFile && patchFile == "" {
 					return fmt.Errorf("--message can only be used with --by-file or --by-hunk --patch")
 				}
-				// --above/--below only make sense with --by-hunk
-				if (above || below) && style != "" && style != split.StyleHunk {
-					return fmt.Errorf("--above/--below can only be used with --by-hunk")
+				// --above/--below make sense with --by-hunk and --by-file
+				if (above || below) && style != "" && style != split.StyleHunk && style != split.StyleFile {
+					return fmt.Errorf("--above/--below can only be used with --by-hunk or --by-file")
+				}
+				// --above with --by-file is incompatible with --as-sibling
+				if above && style == split.StyleFile && asSibling {
+					return fmt.Errorf("--above and --as-sibling cannot be used together")
 				}
 
 				// Load config for branch pattern and hunk selector
@@ -147,6 +158,7 @@ Examples:
 					UseWizard:     useWizard,
 					HunkSelector:  hunkSelector,
 					PatchFile:     patchFile,
+					DryRun:        dryRun,
 				}, handler)
 			})
 		},
@@ -166,12 +178,15 @@ Examples:
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Name for the new split branch (default: auto-generated)")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "Commit message for extraction (only with --by-file)")
 
-	// Direction options (for hunk mode)
+	// Direction options (for hunk and file modes)
 	cmd.Flags().BoolVar(&above, "above", false, "Insert new branch above current (as child, upstack)")
 	cmd.Flags().BoolVar(&below, "below", false, "Insert new branch below current (as parent, downstack)")
 
 	// Non-interactive hunk mode
 	cmd.Flags().StringVarP(&patchFile, "patch", "p", "", "Patch file specifying hunks to split (implies --by-hunk, defaults to --below, use \"-\" for stdin)")
+
+	// Dry-run mode
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would happen without executing the split")
 
 	// Add alternative long form names (these will be checked in RunE via cmd.Flags().Changed)
 	// Note: We can't bind the same variable twice, so we check for these flags manually

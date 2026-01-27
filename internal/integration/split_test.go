@@ -1328,3 +1328,170 @@ func TestSplitEdgeCases(t *testing.T) {
 		sh.OnBranch("feature")
 	})
 }
+
+// =============================================================================
+// Split --by-file --above Tests
+//
+// These tests cover the --above direction for --by-file splits which creates
+// a child branch instead of a parent branch.
+// =============================================================================
+
+func TestSplitByFileAbove(t *testing.T) {
+	t.Parallel()
+
+	t.Run("split --by-file --above creates child branch with extracted files", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: create branch with multiple files
+		sh.Write("keep", "content to keep").
+			Write("extract", "content to extract").
+			Run("create feature -m 'Add files'")
+
+		// Split with --above to create child branch
+		sh.Run("split --by-file extract_test.txt --above --name child -m 'Extracted file'")
+
+		// Verify child branch has the extracted file
+		sh.Checkout("child").
+			Git("show HEAD:extract_test.txt").
+			OutputContains("content to extract")
+
+		// Verify feature keeps the other file but not the extracted one
+		sh.Checkout("feature").
+			Git("show HEAD:keep_test.txt").
+			OutputContains("content to keep")
+
+		// The extracted file should NOT be on feature anymore
+		sh.Git("show HEAD -- extract_test.txt").
+			OutputNotContains("content to extract")
+
+		// Verify parent relationship: child's parent is feature
+		sh.ExpectBranchParent("child", "feature")
+	})
+
+	t.Run("split --by-file --above reparents existing children", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: feature -> existing-child
+		sh.Write("keep", "keep content").
+			Write("extract", "extract content").
+			Run("create feature -m 'Add files'")
+
+		sh.Write("child-file", "child content").
+			Run("create existing-child -m 'Existing child'")
+
+		// Go back to feature and split
+		sh.Checkout("feature").
+			Run("split --by-file extract_test.txt --above --name new-child -m 'Extracted'")
+
+		// Verify existing-child is now a child of new-child, not feature
+		sh.ExpectBranchParent("existing-child", "new-child")
+
+		// Verify new-child is a child of feature
+		sh.ExpectBranchParent("new-child", "feature")
+	})
+
+	t.Run("split --by-file --above incompatible with --as-sibling", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file", "content").
+			Run("create feature -m 'Add file'")
+
+		sh.RunExpectError("split --by-file file_test.txt --above --as-sibling").
+			OutputContains("--above and --as-sibling cannot be used together")
+	})
+
+	t.Run("split --by-file --above with new file", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: base with one file, then feature adds another
+		sh.Write("base", "base content").
+			Run("create base -m 'Base'")
+
+		sh.Write("keep", "keep content").
+			Write("newfile", "new file content").
+			Run("create feature -m 'Add files'")
+
+		// Split the new file to a child branch
+		sh.Run("split --by-file newfile_test.txt --above --name child -m 'Extract new file'")
+
+		// Verify child has the new file
+		sh.Checkout("child").
+			Git("show HEAD:newfile_test.txt").
+			OutputContains("new file content")
+
+		// Verify feature does NOT have the new file anymore
+		sh.Checkout("feature").
+			Git("show HEAD -- newfile_test.txt").
+			OutputNotContains("new file content")
+	})
+}
+
+// =============================================================================
+// Split --dry-run Tests
+//
+// These tests cover the --dry-run flag which previews splits without executing.
+// =============================================================================
+
+func TestSplitDryRun(t *testing.T) {
+	t.Parallel()
+
+	t.Run("split --by-file --dry-run shows preview without executing", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("keep", "keep content").
+			Write("extract", "extract content").
+			Run("create feature -m 'Add files'")
+
+		// Run with --dry-run
+		sh.Run("split --by-file extract_test.txt --dry-run").
+			OutputContains("Dry Run").
+			OutputContains("extract_test.txt").
+			OutputContains("Run without --dry-run to execute")
+
+		// Verify no new branch was created
+		sh.HasBranches("feature", "main")
+
+		// Verify still on feature
+		sh.OnBranch("feature")
+	})
+
+	t.Run("split --by-file --above --dry-run shows child direction", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("keep", "keep content").
+			Write("extract", "extract content").
+			Run("create feature -m 'Add files'")
+
+		// Run with --dry-run and --above
+		sh.Run("split --by-file extract_test.txt --above --dry-run").
+			OutputContains("Dry Run").
+			OutputContains("above").
+			OutputContains("child")
+
+		// Verify no new branch was created
+		sh.HasBranches("feature", "main")
+	})
+
+	t.Run("split --by-file --as-sibling --dry-run shows sibling direction", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("keep", "keep content").
+			Write("extract", "extract content").
+			Run("create feature -m 'Add files'")
+
+		// Run with --dry-run and --as-sibling
+		sh.Run("split --by-file extract_test.txt --as-sibling --dry-run").
+			OutputContains("Dry Run").
+			OutputContains("sibling")
+
+		// Verify no new branch was created
+		sh.HasBranches("feature", "main")
+	})
+}
