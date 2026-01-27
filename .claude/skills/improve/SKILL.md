@@ -1,3 +1,9 @@
+---
+name: improve
+description: Analyze changes in the current stack and provide actionable improvement suggestions using parallel multi-agent analysis. Reviews bugs, simplification opportunities, performance, test coverage, documentation, security, and UX. Keywords improve, code review, analysis, bugs, performance, security.
+allowed-tools: Bash(git:*), Read, Grep, Glob, Task
+---
+
 # /improve - Code Improvement Analysis
 
 Analyze changes in the current stack and provide actionable improvement suggestions across multiple dimensions.
