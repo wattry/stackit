@@ -626,3 +626,72 @@ func formatSquashPlanSteps(plan *Plan) string {
 
 	return result.String()
 }
+
+// AllBranchesAreLeaves checks if all branches in the plan have no children in the stack graph.
+// This is used to determine if individual merging is possible (only leaf branches can be
+// merged individually without affecting other branches).
+func AllBranchesAreLeaves(graph *engine.StackGraph, branches []BranchMergeInfo) bool {
+	for _, branchInfo := range branches {
+		node := graph.Nodes[branchInfo.BranchName]
+		if node != nil && len(node.Children) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// IndividualMergeStatus contains the result of checking if individual merge is possible
+type IndividualMergeStatus struct {
+	CanMerge       bool            // True if all PRs can be merged individually
+	MergeableState map[string]bool // Per-branch mergeable state (true = mergeable)
+	BlockingReason string          // Reason why individual merge is blocked (if any)
+}
+
+// CanMergeIndividually checks if all PRs can be merged individually by verifying:
+// 1. All branches are leaf branches (no children)
+// 2. All PRs have GitHub mergeable state = MERGEABLE (no conflicts with trunk)
+//
+// Returns the status including per-branch mergeable states for display purposes.
+func CanMergeIndividually(ctx context.Context, gitRunner git.Runner, githubClient github.Client, graph *engine.StackGraph, branches []BranchMergeInfo) (*IndividualMergeStatus, error) {
+	status := &IndividualMergeStatus{
+		MergeableState: make(map[string]bool),
+	}
+
+	// Check 1: All branches must be leaves
+	if !AllBranchesAreLeaves(graph, branches) {
+		status.BlockingReason = "some branches have children"
+		return status, nil
+	}
+
+	// Check 2: All PRs must have MERGEABLE state
+	owner, repo := githubClient.GetOwnerRepo()
+
+	for _, branchInfo := range branches {
+		// Get the PR info from GitHub to obtain NodeID
+		prInfo, err := githubClient.GetPullRequest(ctx, owner, repo, branchInfo.PRNumber)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get PR #%d for %s: %w", branchInfo.PRNumber, branchInfo.BranchName, err)
+		}
+
+		if prInfo == nil || prInfo.NodeID == "" {
+			status.BlockingReason = fmt.Sprintf("branch %s has no PR node ID", branchInfo.BranchName)
+			return status, nil
+		}
+
+		// Check mergeable state via GraphQL
+		mergeState, err := github.GetPRMergeableState(ctx, gitRunner, prInfo.NodeID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get mergeable state for %s: %w", branchInfo.BranchName, err)
+		}
+
+		status.MergeableState[branchInfo.BranchName] = mergeState.Mergeable
+
+		if !mergeState.Mergeable {
+			status.BlockingReason = fmt.Sprintf("PR for %s has conflicts with trunk", branchInfo.BranchName)
+		}
+	}
+
+	// All checks passed if no blocking reason was set
+	status.CanMerge = status.BlockingReason == ""
+	return status, nil
+}

@@ -356,3 +356,98 @@ func TestCreateMergePlan(t *testing.T) {
 		require.Equal(t, merge.StepDeleteBranch, plan.Steps[3].StepType)
 	})
 }
+
+func TestAllBranchesAreLeaves(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns true when all branches are leaves", func(t *testing.T) {
+		t.Parallel()
+
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"leaf1": "main",
+				"leaf2": "main",
+			})
+
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+
+		branches := []merge.BranchMergeInfo{
+			{BranchName: "leaf1", PRNumber: 1},
+			{BranchName: "leaf2", PRNumber: 2},
+		}
+
+		result := merge.AllBranchesAreLeaves(graph, branches)
+		require.True(t, result)
+	})
+
+	t.Run("returns false when a branch has children", func(t *testing.T) {
+		t.Parallel()
+
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"parent": "main",
+				"child":  "parent",
+			})
+
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+
+		branches := []merge.BranchMergeInfo{
+			{BranchName: "parent", PRNumber: 1},
+		}
+
+		result := merge.AllBranchesAreLeaves(graph, branches)
+		require.False(t, result)
+	})
+
+	t.Run("returns true for single leaf branch", func(t *testing.T) {
+		t.Parallel()
+
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"only-branch": "main",
+			})
+
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+
+		branches := []merge.BranchMergeInfo{
+			{BranchName: "only-branch", PRNumber: 1},
+		}
+
+		result := merge.AllBranchesAreLeaves(graph, branches)
+		require.True(t, result)
+	})
+
+	t.Run("returns true for empty branch list", func(t *testing.T) {
+		t.Parallel()
+
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+
+		branches := []merge.BranchMergeInfo{}
+
+		result := merge.AllBranchesAreLeaves(graph, branches)
+		require.True(t, result)
+	})
+
+	t.Run("returns false when one of multiple branches has children", func(t *testing.T) {
+		t.Parallel()
+
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"leaf":   "main",
+				"parent": "main",
+				"child":  "parent",
+			})
+
+		graph := engine.BuildStackGraph(s.Engine, engine.SortStrategyAlphabetical, nil)
+
+		branches := []merge.BranchMergeInfo{
+			{BranchName: "leaf", PRNumber: 1},
+			{BranchName: "parent", PRNumber: 2},
+		}
+
+		result := merge.AllBranchesAreLeaves(graph, branches)
+		require.False(t, result)
+	})
+}
