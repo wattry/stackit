@@ -67,8 +67,10 @@ type LogModel struct {
 	inSearchMode  bool
 	searchMatches map[string]bool // Branch name -> whether it matches search
 
-	// Cached rendering
-	cachedLines []string // All rendered lines (with selection applied)
+	// Cached rendering - two-phase approach for fast navigation
+	cachedTreeData  *tree.CachedTreeData // Cached tree without selection (Phase 3)
+	cachedTreeValid bool                 // Whether cachedTreeData is valid
+	cachedLines     []string             // All rendered lines (with selection applied)
 
 	// Options
 	style             string
@@ -373,6 +375,13 @@ type enrichDataMsg struct {
 	annotations map[string]tree.BranchAnnotation
 }
 
+// invalidateTreeCache marks the cached tree data as stale.
+// Call this when the tree structure or display changes (collapse, search, data enrichment).
+// Navigation (up/down) does NOT invalidate the cache - it uses the fast path.
+func (m *LogModel) invalidateTreeCache() {
+	m.cachedTreeValid = false
+}
+
 // validationTickMsg is sent after debounce delay to trigger validation
 type validationTickMsg struct {
 	branchName string // The branch to validate
@@ -394,15 +403,17 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.inSearchMode {
 			switch msg.String() {
 			case KeyEsc:
-				// Exit search mode
+				// Exit search mode - invalidates cache because search affects display
 				m.inSearchMode = false
 				m.searchQuery = ""
 				m.updateSearchMatches()
+				m.invalidateTreeCache()
 				m.renderTree()
 			case "backspace":
 				if len(m.searchQuery) > 0 {
 					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 					m.updateSearchMatches()
+					m.invalidateTreeCache()
 					m.renderTree()
 					m.moveToFirstMatch()
 				}
@@ -411,10 +422,11 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.inSearchMode = false
 				m.renderTree()
 			default:
-				// Handle regular character input
+				// Handle regular character input - invalidates cache because search affects display
 				if len(msg.Runes) > 0 {
 					m.searchQuery += string(msg.Runes)
 					m.updateSearchMatches()
+					m.invalidateTreeCache()
 					m.renderTree()
 					m.moveToFirstMatch()
 				}
@@ -435,6 +447,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.inSearchMode = true
 			m.searchQuery = ""
 			m.updateSearchMatches()
+			m.invalidateTreeCache() // Search affects display
 			m.renderTree()
 		case key.Matches(msg, m.logKeys.Up):
 			if len(m.branches) > 0 {
@@ -490,11 +503,13 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.selectedBranch != "" {
 				m.collapsed[m.selectedBranch] = !m.collapsed[m.selectedBranch]
+				m.invalidateTreeCache() // Collapse/expand changes tree structure
 				m.renderTree()
 			}
 		case key.Matches(msg, m.selectKeys.Expand):
 			if m.selectedBranch != "" {
 				m.collapsed[m.selectedBranch] = !m.collapsed[m.selectedBranch]
+				m.invalidateTreeCache() // Collapse/expand changes tree structure
 				m.renderTree()
 			}
 		}
@@ -507,9 +522,13 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport = viewport.New(msg.Width, msg.Height-2)
 			m.ready = true
 			m.updateSearchMatches()
+			m.invalidateTreeCache() // First render needs full tree
 		} else {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - 2
+			// Note: width changes might affect rendering, but for simplicity
+			// we don't invalidate cache here - lines are pre-built and width
+			// mainly affects viewport scrolling
 		}
 		m.renderTree()
 
@@ -532,6 +551,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.log("enrichDataMsg received, ready=%v, renderer=%v", m.ready, m.renderer != nil)
 		if m.renderer != nil {
 			m.renderer.SetAnnotations(msg.annotations)
+			m.invalidateTreeCache() // New data requires full re-render
 			m.renderTree()
 			m.log("Tree re-rendered with enriched data")
 		}
@@ -570,13 +590,13 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // renderTree updates the cached branches and viewport content with the current tree state.
 // In inline mode or before the viewport is ready, View() uses the cached branches directly.
+// Uses two-phase rendering for fast navigation: if only selection changed, reuses cached tree data.
 func (m *LogModel) renderTree() {
 	if m.renderer == nil {
 		return
 	}
 
 	trunk := m.engine.Trunk().GetName()
-	// Render with selection - the tree component handles cursor prefix and branch name styling
 	mode := tree.RenderModeFull
 	if m.mode == LogModeSelect {
 		mode = tree.RenderModeSelect
@@ -589,7 +609,17 @@ func (m *LogModel) renderTree() {
 		SearchMatches:  m.searchMatches,
 		NonSelectable:  m.nonSelectable,
 	}
-	m.branches = m.renderer.RenderStackDetailed(trunk, opts)
+
+	// Two-phase rendering: reuse cached tree data if valid, only update selection
+	if m.cachedTreeValid && m.cachedTreeData != nil {
+		// Fast path: apply selection to cached data
+		m.branches = m.cachedTreeData.ApplySelection(m.selectedBranch)
+	} else {
+		// Slow path: full render and cache
+		m.cachedTreeData = m.renderer.RenderStackCached(trunk, opts)
+		m.cachedTreeValid = true
+		m.branches = m.cachedTreeData.ApplySelection(m.selectedBranch)
+	}
 
 	// Flatten lines for viewport/direct rendering
 	m.cachedLines = nil

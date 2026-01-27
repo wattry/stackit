@@ -153,17 +153,31 @@ const (
 	SelectionPadding = "  " // Same width as cursor for unselected items
 )
 
+// Cached styles for selection (created once, reused)
+var (
+	selectionStyle       lipgloss.Style
+	selectionStyleOnce   sync.Once
+	selectionCursorStyle lipgloss.Style
+	selectionCursorOnce  sync.Once
+)
+
 // Selection returns a style for selected items
 func Selection() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Background(lipgloss.Color(ColorAccent)).
-		Foreground(lipgloss.Color("0")).
-		Bold(true)
+	selectionStyleOnce.Do(func() {
+		selectionStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorAccent)).
+			Foreground(lipgloss.Color("0")).
+			Bold(true)
+	})
+	return selectionStyle
 }
 
 // SelectionCursorStyle returns the style for the selection cursor
 func SelectionCursorStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(ColorAccent)).
-		Bold(true)
+	selectionCursorOnce.Do(func() {
+		selectionCursorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorAccent)).
+			Bold(true)
+	})
+	return selectionCursorStyle
 }

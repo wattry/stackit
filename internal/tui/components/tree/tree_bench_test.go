@@ -186,3 +186,141 @@ func BenchmarkRenderStackDetailed(b *testing.B) {
 		renderer.RenderStackDetailed(mock.TrunkVal, RenderOptions{Mode: RenderModeFull})
 	}
 }
+
+// BenchmarkRenderStackCached_Small tests the cache building time for a small tree.
+func BenchmarkRenderStackCached_Small(b *testing.B) {
+	mock := NewMockTreeData()
+	renderer := NewRenderer(mock)
+
+	b.ResetTimer()
+	for b.Loop() {
+		renderer.RenderStackCached(mock.TrunkVal, RenderOptions{Mode: RenderModeSelect})
+	}
+}
+
+// BenchmarkRenderStackCached_Large tests the cache building time for a larger tree.
+func BenchmarkRenderStackCached_Large(b *testing.B) {
+	mock := generateLargeTree(50)
+	renderer := NewRenderer(mock)
+
+	b.ResetTimer()
+	for b.Loop() {
+		renderer.RenderStackCached(mock.TrunkVal, RenderOptions{Mode: RenderModeSelect})
+	}
+}
+
+// BenchmarkApplySelection_Small tests the fast path for selection updates
+// on a small tree - this should be very fast since it only updates cursor.
+func BenchmarkApplySelection_Small(b *testing.B) {
+	mock := NewMockTreeData()
+	renderer := NewRenderer(mock)
+
+	// Pre-cache the tree
+	cached := renderer.RenderStackCached(mock.TrunkVal, RenderOptions{Mode: RenderModeSelect})
+
+	b.ResetTimer()
+	for b.Loop() {
+		cached.ApplySelection("feature-1")
+	}
+}
+
+// BenchmarkApplySelection_Large tests the fast path for selection updates
+// on a larger tree.
+func BenchmarkApplySelection_Large(b *testing.B) {
+	mock := generateLargeTree(100)
+	renderer := NewRenderer(mock)
+
+	// Pre-cache the tree
+	cached := renderer.RenderStackCached(mock.TrunkVal, RenderOptions{Mode: RenderModeSelect})
+
+	// Select a branch in the middle
+	selectedBranch := branchName(50)
+
+	b.ResetTimer()
+	for b.Loop() {
+		cached.ApplySelection(selectedBranch)
+	}
+}
+
+// BenchmarkFullRender_vs_CachedSelection compares full render vs cached selection
+func BenchmarkFullRender_vs_CachedSelection(b *testing.B) {
+	mock := generateLargeTree(50)
+	renderer := NewRenderer(mock)
+
+	// Add annotations to make rendering more realistic
+	prNum := 1
+	for branch := range mock.ChildrenMap {
+		renderer.SetAnnotation(branch, BranchAnnotation{
+			PRNumber:     &prNum,
+			CheckStatus:  CheckStatusPassing,
+			ReviewStatus: "Approved",
+			CommitCount:  3,
+			LinesAdded:   100,
+			LinesDeleted: 20,
+			Scope:        "test",
+		})
+		prNum++
+	}
+
+	b.Run("full_render", func(b *testing.B) {
+		for b.Loop() {
+			renderer.RenderStackDetailed(mock.TrunkVal, RenderOptions{
+				Mode:           RenderModeSelect,
+				SelectedBranch: branchName(25),
+			})
+		}
+	})
+
+	b.Run("cached_then_apply", func(b *testing.B) {
+		// Pre-cache the tree once (this would happen on first render or after invalidation)
+		cached := renderer.RenderStackCached(mock.TrunkVal, RenderOptions{Mode: RenderModeSelect})
+
+		b.ResetTimer()
+		for b.Loop() {
+			cached.ApplySelection(branchName(25))
+		}
+	})
+}
+
+// BenchmarkNavigationSimulation simulates navigating through a tree
+func BenchmarkNavigationSimulation(b *testing.B) {
+	mock := generateLargeTree(50)
+	renderer := NewRenderer(mock)
+
+	// Add annotations
+	prNum := 1
+	for branch := range mock.ChildrenMap {
+		renderer.SetAnnotation(branch, BranchAnnotation{
+			PRNumber:    &prNum,
+			CheckStatus: CheckStatusPassing,
+			Scope:       "feat",
+		})
+		prNum++
+	}
+
+	b.Run("old_approach_full_render_each_nav", func(b *testing.B) {
+		// Simulate the old approach: full render on each navigation
+		for b.Loop() {
+			// Simulate navigating down 10 times
+			for i := range 10 {
+				renderer.RenderStackDetailed(mock.TrunkVal, RenderOptions{
+					Mode:           RenderModeSelect,
+					SelectedBranch: branchName(i),
+				})
+			}
+		}
+	})
+
+	b.Run("new_approach_cached_selection", func(b *testing.B) {
+		// Simulate the new approach: cache once, apply selection on each navigation
+		cached := renderer.RenderStackCached(mock.TrunkVal, RenderOptions{Mode: RenderModeSelect})
+
+		b.ResetTimer()
+		for b.Loop() {
+			// Simulate navigating down 10 times
+			for i := range 10 {
+				cached.ApplySelection(branchName(i))
+			}
+		}
+	})
+}
