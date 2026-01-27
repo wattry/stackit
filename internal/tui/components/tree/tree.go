@@ -295,6 +295,9 @@ type RenderedBranch struct {
 	Lines []string
 	// CursorLineIndex is the index within Lines where the selection cursor should appear (typically 0)
 	CursorLineIndex int
+	// CursorLineSelected is the pre-computed cursor line with selection styling.
+	// This is populated during render to enable fast selection updates without re-rendering.
+	CursorLineSelected string
 }
 
 // CachedBranchRender holds pre-rendered branch content with both selected and unselected versions.
@@ -339,53 +342,27 @@ func (c *CachedTreeData) ApplySelection(selectedBranch string) []RenderedBranch 
 }
 
 // RenderStackCached renders the tree and returns cached data for fast selection updates.
-// It renders twice: once unselected, once with a single branch selected.
-// The selected cursor line transformation is then derived for all other branches.
+// It renders once, generating both selected and unselected cursor lines in a single pass.
 func (r *StackTreeRenderer) RenderStackCached(branchName string, opts RenderOptions) *CachedTreeData {
-	// Render the tree without any selection to get the unselected version
+	// Render the tree without any selection - each branch will have its
+	// CursorLineSelected pre-computed during the render
 	optsNoSel := opts
 	optsNoSel.SelectedBranch = ""
-	branchesNoSel := r.RenderStackDetailed(branchName, optsNoSel)
+	branches := r.RenderStackDetailed(branchName, optsNoSel)
 
-	// Build the cached data with unselected lines
+	// Build the cached data using the pre-computed values
 	cached := &CachedTreeData{
-		Branches: make([]CachedBranchRender, len(branchesNoSel)),
+		Branches: make([]CachedBranchRender, len(branches)),
 	}
 
-	for i, b := range branchesNoSel {
+	for i, b := range branches {
 		isNonSel := opts.NonSelectable != nil && opts.NonSelectable[b.Name]
 		cached.Branches[i] = CachedBranchRender{
-			Name:            b.Name,
-			LinesUnselected: b.Lines,
-			CursorLineIndex: b.CursorLineIndex,
-			IsNonSelectable: isNonSel,
-		}
-	}
-
-	// Now generate the selected cursor line for each branch.
-	// Instead of rendering the full tree N times, we render once with each
-	// branch selected and extract just its cursor line. This is still O(N)
-	// renders, but we use shared caches (indent, style) to make it faster.
-	//
-	// TODO: For further optimization, we could generate these lines directly
-	// using the same logic as getInfoLines but with isSelected=true.
-
-	for i, b := range branchesNoSel {
-		if cached.Branches[i].IsNonSelectable {
-			continue
-		}
-
-		// Render with this branch selected
-		optsSelected := opts
-		optsSelected.SelectedBranch = b.Name
-		selectedBranches := r.RenderStackDetailed(branchName, optsSelected)
-
-		// Find this branch and extract its cursor line
-		for _, sb := range selectedBranches {
-			if sb.Name == b.Name && sb.CursorLineIndex < len(sb.Lines) {
-				cached.Branches[i].CursorLineSelected = sb.Lines[sb.CursorLineIndex]
-				break
-			}
+			Name:               b.Name,
+			LinesUnselected:    b.Lines,
+			CursorLineIndex:    b.CursorLineIndex,
+			IsNonSelectable:    isNonSel,
+			CursorLineSelected: b.CursorLineSelected, // Pre-computed during render
 		}
 	}
 
@@ -677,10 +654,20 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 
 func (r *StackTreeRenderer) getBranchRendered(args treeRenderArgs) []RenderedBranch {
 	lines, cursorIdx := r.getBranchLinesWithCursor(args)
+
+	// Pre-compute the selected cursor line for fast selection updates.
+	// Skip if branch is non-selectable or if selection prefix is skipped.
+	var cursorLineSelected string
+	isNonSelectable := args.nonSelectable != nil && args.nonSelectable[args.branchName]
+	if !args.skipSelectionPrefix && !isNonSelectable {
+		cursorLineSelected = r.renderCursorLineSelected(args, cursorIdx)
+	}
+
 	return []RenderedBranch{{
-		Name:            args.branchName,
-		Lines:           lines,
-		CursorLineIndex: cursorIdx,
+		Name:               args.branchName,
+		Lines:              lines,
+		CursorLineIndex:    cursorIdx,
+		CursorLineSelected: cursorLineSelected,
 	}}
 }
 
@@ -702,6 +689,23 @@ func (r *StackTreeRenderer) getBranchLinesWithCursor(args treeRenderArgs) ([]str
 	}
 
 	return lines, cursorIdx
+}
+
+// renderCursorLineSelected generates the cursor line with selection styling applied.
+// This is used to pre-compute selected cursor lines for fast selection updates.
+func (r *StackTreeRenderer) renderCursorLineSelected(args treeRenderArgs, cursorIdx int) string {
+	// Create modified args with this branch selected
+	selectedArgs := args
+	selectedArgs.selectedBranch = args.branchName
+
+	// Generate lines with selection applied
+	selectedLines := r.getBranchLines(selectedArgs)
+
+	// Return the cursor line from the selected render
+	if cursorIdx < len(selectedLines) {
+		return selectedLines[cursorIdx]
+	}
+	return ""
 }
 
 func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
