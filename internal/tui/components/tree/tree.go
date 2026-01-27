@@ -174,7 +174,13 @@ type StackTreeRenderer struct {
 
 	// indentCache caches pre-computed indent strings to avoid repeated strings.Repeat calls.
 	// Key is indent level, value is the pre-computed string like "│ │ │ ".
+	// This cache persists across renders as indent strings are deterministic.
 	indentCache map[int]string
+
+	// styleCache caches lipgloss styles by key to avoid repeated NewStyle() calls.
+	// Keys use format: "scope:<name>" for scope colors, "dim" for dim style, etc.
+	// This cache persists across renders as styles are deterministic.
+	styleCache map[string]lipgloss.Style
 }
 
 // NewRenderer creates a new tree renderer from a Data source.
@@ -218,14 +224,21 @@ func (r *StackTreeRenderer) children(branchName string) []string {
 
 // initCache initializes the caches for a new render operation.
 func (r *StackTreeRenderer) initCache() {
+	// Only create childrenCache per-render; indent and style caches persist
 	r.childrenCache = make(map[string][]string)
-	r.indentCache = make(map[int]string)
+	if r.indentCache == nil {
+		r.indentCache = make(map[int]string)
+	}
+	if r.styleCache == nil {
+		r.styleCache = make(map[string]lipgloss.Style)
+	}
 }
 
-// clearCache clears the caches after a render operation.
+// clearCache clears the per-render caches after a render operation.
+// Indent and style caches are preserved as they are deterministic.
 func (r *StackTreeRenderer) clearCache() {
 	r.childrenCache = nil
-	r.indentCache = nil
+	// Note: indentCache and styleCache are preserved across renders
 }
 
 // getIndentString returns a cached indent string for the given level.
@@ -242,12 +255,118 @@ func (r *StackTreeRenderer) getIndentString(level int) string {
 	return s
 }
 
+// getCachedStyle returns a cached lipgloss style for the given key.
+// If the style doesn't exist, it calls builder to create it and caches the result.
+func (r *StackTreeRenderer) getCachedStyle(key string, builder func() lipgloss.Style) lipgloss.Style {
+	if r.styleCache == nil {
+		r.styleCache = make(map[string]lipgloss.Style)
+	}
+	if s, ok := r.styleCache[key]; ok {
+		return s
+	}
+	s := builder()
+	r.styleCache[key] = s
+	return s
+}
+
+// getScopeStyle returns a cached style for the given scope color.
+func (r *StackTreeRenderer) getScopeStyle(scope string) lipgloss.Style {
+	if scope == "" {
+		return lipgloss.NewStyle()
+	}
+	return r.getCachedStyle("scope:"+scope, func() lipgloss.Style {
+		if color, ok := style.GetScopeColor(scope); ok {
+			return lipgloss.NewStyle().Foreground(color)
+		}
+		return lipgloss.NewStyle()
+	})
+}
+
+// getDimStyle returns a cached dim style.
+func (r *StackTreeRenderer) getDimStyle() lipgloss.Style {
+	return r.getCachedStyle("dim", func() lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(style.DimColor())
+	})
+}
+
 // RenderedBranch represents a branch and its rendered lines
 type RenderedBranch struct {
 	Name  string
 	Lines []string
 	// CursorLineIndex is the index within Lines where the selection cursor should appear (typically 0)
 	CursorLineIndex int
+	// CursorLineSelected is the pre-computed cursor line with selection styling.
+	// This is populated during render to enable fast selection updates without re-rendering.
+	CursorLineSelected string
+}
+
+// CachedBranchRender holds pre-rendered branch content with both selected and unselected versions.
+// This allows fast updates when only the selection changes.
+type CachedBranchRender struct {
+	Name               string   // Branch name
+	LinesUnselected    []string // Lines without selection (padding prefix, no highlight)
+	CursorLineSelected string   // The cursor line with selection styling (cursor prefix + highlighted name)
+	CursorLineIndex    int      // Which line gets the cursor
+	IsNonSelectable    bool     // If true, never show as selected
+}
+
+// CachedTreeData holds the entire cached tree structure for fast selection updates.
+type CachedTreeData struct {
+	Branches []CachedBranchRender
+}
+
+// ApplySelection applies selection styling to cached branch data.
+// This is fast because it only swaps the cursor line between selected/unselected versions.
+func (c *CachedTreeData) ApplySelection(selectedBranch string) []RenderedBranch {
+	result := make([]RenderedBranch, len(c.Branches))
+
+	for i, branch := range c.Branches {
+		isSelected := branch.Name == selectedBranch && !branch.IsNonSelectable
+
+		// Copy lines, swapping the cursor line if selected
+		lines := make([]string, len(branch.LinesUnselected))
+		copy(lines, branch.LinesUnselected)
+
+		if isSelected && branch.CursorLineIndex < len(lines) && branch.CursorLineSelected != "" {
+			lines[branch.CursorLineIndex] = branch.CursorLineSelected
+		}
+
+		result[i] = RenderedBranch{
+			Name:            branch.Name,
+			Lines:           lines,
+			CursorLineIndex: branch.CursorLineIndex,
+		}
+	}
+
+	return result
+}
+
+// RenderStackCached renders the tree and returns cached data for fast selection updates.
+// It renders once, generating both selected and unselected cursor lines in a single pass.
+func (r *StackTreeRenderer) RenderStackCached(branchName string, opts RenderOptions) *CachedTreeData {
+	// Render the tree without any selection - each branch will have its
+	// CursorLineSelected pre-computed during the render
+	optsNoSel := opts
+	optsNoSel.SelectedBranch = ""
+	branches := r.RenderStackDetailed(branchName, optsNoSel)
+
+	// Build the cached data using the pre-computed values
+	cached := &CachedTreeData{
+		Branches: make([]CachedBranchRender, len(branches)),
+	}
+
+	for i, b := range branches {
+		isNonSel := opts.NonSelectable != nil && opts.NonSelectable[b.Name]
+		cached.Branches[i] = CachedBranchRender{
+			Name:               b.Name,
+			LinesUnselected:    b.Lines,
+			CursorLineIndex:    b.CursorLineIndex,
+			IsNonSelectable:    isNonSel,
+			CursorLineSelected: b.CursorLineSelected, // Pre-computed during render
+		}
+	}
+
+	return cached
 }
 
 // RenderStack renders the full stack tree starting from a branch
@@ -535,10 +654,20 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 
 func (r *StackTreeRenderer) getBranchRendered(args treeRenderArgs) []RenderedBranch {
 	lines, cursorIdx := r.getBranchLinesWithCursor(args)
+
+	// Pre-compute the selected cursor line for fast selection updates.
+	// Skip if branch is non-selectable or if selection prefix is skipped.
+	var cursorLineSelected string
+	isNonSelectable := args.nonSelectable != nil && args.nonSelectable[args.branchName]
+	if !args.skipSelectionPrefix && !isNonSelectable {
+		cursorLineSelected = r.renderCursorLineSelected(args, cursorIdx)
+	}
+
 	return []RenderedBranch{{
-		Name:            args.branchName,
-		Lines:           lines,
-		CursorLineIndex: cursorIdx,
+		Name:               args.branchName,
+		Lines:              lines,
+		CursorLineIndex:    cursorIdx,
+		CursorLineSelected: cursorLineSelected,
 	}}
 }
 
@@ -560,6 +689,23 @@ func (r *StackTreeRenderer) getBranchLinesWithCursor(args treeRenderArgs) ([]str
 	}
 
 	return lines, cursorIdx
+}
+
+// renderCursorLineSelected generates the cursor line with selection styling applied.
+// This is used to pre-compute selected cursor lines for fast selection updates.
+func (r *StackTreeRenderer) renderCursorLineSelected(args treeRenderArgs, cursorIdx int) string {
+	// Create modified args with this branch selected
+	selectedArgs := args
+	selectedArgs.selectedBranch = args.branchName
+
+	// Generate lines with selection applied
+	selectedLines := r.getBranchLines(selectedArgs)
+
+	// Return the cursor line from the selected render
+	if cursorIdx < len(selectedLines) {
+		return selectedLines[cursorIdx]
+	}
+	return ""
 }
 
 func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
@@ -663,14 +809,14 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, indentLevel int, p
 	}
 
 	var prefixBuilder strings.Builder
-	for i := 0; i < indentLevel; i++ {
+	for i := range indentLevel {
 		scope := ""
 		if i < len(parentScopes) {
 			scope = parentScopes[i]
 		}
 		char := "│"
-		if color, ok := style.GetScopeColor(scope); ok {
-			char = lipgloss.NewStyle().Foreground(color).Render(char)
+		if scope != "" {
+			char = r.getScopeStyle(scope).Render(char)
 		}
 		prefixBuilder.WriteString(char + "  ")
 	}
@@ -684,13 +830,14 @@ func (r *StackTreeRenderer) getBranchingLine(numChildren int, indentLevel int, p
 	isClosed := annotation.PRState == PRStateClosed
 	isDim := isMerged || isClosed
 
-	styleObj := lipgloss.NewStyle()
-	if color, ok := style.GetScopeColor(scope); ok {
-		styleObj = styleObj.Foreground(color)
-	}
-
-	if isDim {
-		styleObj = styleObj.Foreground(style.DimColor())
+	var styleObj lipgloss.Style
+	switch {
+	case isDim:
+		styleObj = r.getDimStyle()
+	case scope != "":
+		styleObj = r.getScopeStyle(scope)
+	default:
+		styleObj = lipgloss.NewStyle()
 	}
 
 	middle := "──┴"
@@ -733,16 +880,16 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	// Check if branch is non-selectable (visible but cursor skips it)
 	isNonSelectable := args.nonSelectable != nil && args.nonSelectable[args.branchName]
 
-	// Build prefix for indentation
+	// Build prefix for indentation using cached styles
 	var prefixBuilder strings.Builder
-	for i := 0; i < args.indentLevel; i++ {
+	for i := range args.indentLevel {
 		scope := ""
 		if i < len(args.parentScopes) {
 			scope = args.parentScopes[i]
 		}
 		char := "│"
-		if color, ok := style.GetScopeColor(scope); ok {
-			char = lipgloss.NewStyle().Foreground(color).Render(char)
+		if scope != "" {
+			char = r.getScopeStyle(scope).Render(char)
 		}
 		prefixBuilder.WriteString(char + "  ")
 	}
@@ -763,9 +910,16 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		}
 	}
 
-	styleObj := lipgloss.NewStyle()
-	if color, ok := style.GetScopeColor(annotation.Scope); ok {
-		styleObj = styleObj.Foreground(color)
+	// Determine style based on branch state using cached styles
+	var styleObj lipgloss.Style
+	shouldDim := isDim || (!matchesSearch && args.searchQuery != "") || isNonSelectable
+	switch {
+	case shouldDim:
+		styleObj = r.getDimStyle()
+	case annotation.Scope != "":
+		styleObj = r.getScopeStyle(annotation.Scope)
+	default:
+		styleObj = lipgloss.NewStyle()
 	}
 
 	// Parent style for connecting line
@@ -773,21 +927,14 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 	if parent := r.getParent(args.branchName); parent != "" {
 		parentScope = r.Annotations[parent].Scope
 	}
-	parentStyle := lipgloss.NewStyle()
-	if color, ok := style.GetScopeColor(parentScope); ok {
-		parentStyle = parentStyle.Foreground(color)
-	}
-
-	if isDim {
-		styleObj = styleObj.Foreground(style.DimColor())
-		parentStyle = parentStyle.Foreground(style.DimColor())
-	}
-	// Also dim style for non-matching search results or non-selectable branches
-	if !matchesSearch && args.searchQuery != "" {
-		styleObj = styleObj.Foreground(style.DimColor())
-	}
-	if isNonSelectable {
-		styleObj = styleObj.Foreground(style.DimColor())
+	var parentStyle lipgloss.Style
+	switch {
+	case isDim:
+		parentStyle = r.getDimStyle()
+	case parentScope != "":
+		parentStyle = r.getScopeStyle(parentScope)
+	default:
+		parentStyle = lipgloss.NewStyle()
 	}
 
 	// Selection cursor prefix
