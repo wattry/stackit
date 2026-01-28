@@ -347,9 +347,8 @@ func TestValidateRebases(t *testing.T) {
 	})
 }
 
-//nolint:tparallel // Cannot use t.Parallel with t.Setenv in subtests
 func TestValidateRebasesParallel(t *testing.T) {
-	// NOTE: Not using t.Parallel() because one subtest uses t.Setenv
+	t.Parallel()
 
 	t.Run("validates wide stack with multiple siblings in parallel", func(t *testing.T) {
 		t.Parallel()
