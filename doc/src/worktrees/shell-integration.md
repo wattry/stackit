@@ -4,11 +4,11 @@ icon: material/console
 
 # Shell Integration for Worktrees
 
-Shell integration enables automatic directory changes when opening or creating worktrees. This is separate from tab completions.
+Shell integration enables automatic directory changes when opening or creating worktrees. Without it, you need to manually `cd` into worktree directories.
 
-## Setup
+## Quick Setup
 
-Add the appropriate line to your shell configuration file:
+Add the appropriate line to your shell config:
 
 === "zsh"
 
@@ -31,108 +31,32 @@ Add the appropriate line to your shell configuration file:
     stackit shell fish | source
     ```
 
-After adding the line, restart your shell or source the configuration:
-
-```bash
-source ~/.zshrc  # or ~/.bashrc
-```
-
-## Complete Setup
-
-You likely want both shell integration and tab completions:
-
-=== "zsh"
-
-    ```bash
-    # Add both to ~/.zshrc
-    eval "$(stackit completion zsh)"
-    eval "$(stackit shell zsh)"
-    ```
-
-=== "bash"
-
-    ```bash
-    # Add both to ~/.bashrc
-    eval "$(stackit completion bash)"
-    eval "$(stackit shell bash)"
-    ```
-
-=== "fish"
-
-    ```fish
-    # Add both to ~/.config/fish/config.fish
-    stackit completion fish | source
-    stackit shell fish | source
-    ```
+Then restart your shell or source the config.
 
 ## What It Enables
 
-With shell integration, these commands change your working directory:
+With shell integration, worktree commands change your working directory automatically:
 
 ```bash
-# Create and open a new worktree
-stackit worktree create my-feature --open
-
-# Open an existing worktree
-stackit worktree open my-feature
-```
-
-In interactive mode, stackit prompts whether to open the worktree after creation:
-
-```
-Created worktree at ../repo-stacks/my-feature
-Open worktree? [Y/n]
+stackit worktree create my-feature --open  # Creates and cd's into worktree
+stackit worktree open my-feature           # Opens existing worktree
 ```
 
 ## Without Shell Integration
 
-If you prefer not to use shell integration, navigate to worktrees manually:
+Navigate manually using command substitution:
 
 ```bash
-# Print path and navigate manually
 cd $(stackit worktree open my-feature)
-
-# Or use command substitution in the create flow
-cd $(stackit worktree create my-feature)
 ```
 
-## Troubleshooting
+## Full Guide
 
-### Shell Integration Not Working
+For complete setup instructions, troubleshooting, and how it works:
 
-1. **Verify setup**: Check that the eval line is in your shell config
-
-    ```bash
-    grep "stackit shell" ~/.zshrc  # or ~/.bashrc
-    ```
-
-2. **Source the config**: Restart your shell or run:
-
-    ```bash
-    source ~/.zshrc
-    ```
-
-3. **Check for errors**: Run the shell command directly:
-
-    ```bash
-    stackit shell zsh
-    ```
-
-### Directory Changes Not Persisting
-
-Shell integration uses a function wrapper. If changes aren't persisting:
-
-1. Use `stackit` directly, not through a script or alias that spawns a subshell
-2. Verify the shell function is loaded: `type stackit`
-
-## How It Works
-
-The shell integration defines a function that wraps the `stackit` command. When worktree commands output a special marker followed by a path, the wrapper function captures this and runs `cd` in your current shell.
-
-This approach is necessary because child processes cannot change the parent shell's working directory directly.
+**[Shell Integration (Full Guide) →](../integrations/shell.md)**
 
 ## Next Steps
 
-- [Getting Started →](getting-started.md)
-- [Management →](management.md)
-- [Shell Integration (full guide) →](../integrations/shell.md)
+- [Getting Started with Worktrees →](getting-started.md)
+- [Worktree Management →](management.md)
