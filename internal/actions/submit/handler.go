@@ -12,6 +12,10 @@ type Handler interface {
 	// Returns (confirmed, error).
 	// Non-interactive handlers should return (defaultYes, nil).
 	Confirm(message string, defaultYes bool) (bool, error)
+
+	// IsInteractive returns true if the handler supports interactive prompts.
+	// Used to determine whether to prompt for actions like tracking untracked branches.
+	IsInteractive() bool
 }
 
 // ChannelHandler is a Handler that sends events to a channel.
@@ -41,6 +45,11 @@ func (h *ChannelHandler) OnEvent(e Event) {
 // Dashboard operations don't support interactive confirmation.
 func (h *ChannelHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
+}
+
+// IsInteractive returns false - dashboard/channel handlers are not interactive.
+func (h *ChannelHandler) IsInteractive() bool {
+	return false
 }
 
 // Events returns the event channel for reading.

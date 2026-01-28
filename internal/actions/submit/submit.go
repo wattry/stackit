@@ -99,6 +99,46 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	nav := ctx.Navigator()
 	pr := ctx.PR()
+	eng := ctx.Engine
+
+	// Determine target branch (explicit --branch flag or current branch)
+	var targetBranch engine.Branch
+	if opts.Branch != "" {
+		targetBranch = nav.GetBranch(opts.Branch)
+	} else if cb := nav.CurrentBranch(); cb != nil {
+		targetBranch = *cb
+	}
+
+	// Check if target branch is untracked
+	if targetBranch.GetName() != "" && !targetBranch.IsTracked() && !targetBranch.IsTrunk() {
+		branchName := targetBranch.GetName()
+		if !handler.IsInteractive() {
+			// Non-interactive: inform and exit gracefully
+			ctx.Output.Info("Branch %s is not tracked by stackit.", branchName)
+			ctx.Output.Tip("Run 'stackit track' to track this branch, then try again.")
+			handler.OnEvent(CompletionEvent{Success: true, Message: "Branch not tracked"})
+			return nil
+		}
+
+		// Interactive: prompt to track
+		message := fmt.Sprintf("Branch %s is not tracked. Track it with %s as parent?",
+			branchName, nav.Trunk().GetName())
+		shouldTrack, err := handler.Confirm(message, true)
+		if err != nil {
+			return err
+		}
+		if !shouldTrack {
+			ctx.Output.Info("Skipping. Use 'stackit track --parent <branch>' for a different parent.")
+			handler.OnEvent(CompletionEvent{Success: true, Message: "Tracking declined"})
+			return nil
+		}
+
+		// Track the branch
+		if err := eng.TrackBranch(ctx.Context, branchName, nav.Trunk().GetName()); err != nil {
+			return fmt.Errorf("failed to track branch: %w", err)
+		}
+		ctx.Output.Info("Tracked %s with parent %s.", branchName, nav.Trunk().GetName())
+	}
 
 	// Get branches to submit
 	branches, err := getBranchesToSubmit(ctx, opts)
@@ -112,6 +152,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	ctx.Logger.Info("submit started", "branchCount", len(branches), "dryRun", opts.DryRun)
 
+	// Get current branch for display purposes (used to highlight in tree view)
 	currentBranch := nav.CurrentBranch()
 	currentBranchName := ""
 	if currentBranch != nil {

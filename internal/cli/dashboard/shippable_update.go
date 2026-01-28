@@ -401,3 +401,7 @@ func (h *publishSubmitHandler) OnEvent(event submit.Event) {
 func (h *publishSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
+
+func (h *publishSubmitHandler) IsInteractive() bool {
+	return false
+}

@@ -16,10 +16,9 @@ import (
 // noopHandler is a test handler that ignores all events
 type noopHandler struct{}
 
-func (h *noopHandler) OnEvent(_ submit.Event) {}
-func (h *noopHandler) Confirm(_ string, defaultYes bool) (bool, error) {
-	return defaultYes, nil
-}
+func (h *noopHandler) OnEvent(_ submit.Event)                          {}
+func (h *noopHandler) Confirm(_ string, defaultYes bool) (bool, error) { return defaultYes, nil }
+func (h *noopHandler) IsInteractive() bool                             { return false }
 
 func TestScopeRequiredInPattern(t *testing.T) {
 	t.Parallel()
