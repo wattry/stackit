@@ -356,4 +356,57 @@ func TestInfoCommand(t *testing.T) {
 		require.Contains(t, output, "\"parent\": \"main\"")
 		require.Contains(t, output, "\"parent\": \"a\"")
 	})
+
+	t.Run("info with --json shows JSON output for single branch", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, func(sc *testhelpers.Scene) error {
+			// Create initial commit
+			if err := sc.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			return nil
+		}).WithInProcess(true)
+
+		// Create branch with change
+		if err := s.Scene.Repo.CreateChange("feature change", "test", false); err != nil {
+			t.Fatal(err)
+		}
+		s.RunCli("create", "feature", "-m", "feature change")
+
+		// Run info --json
+		output, err := s.RunCliAndGetOutput("info", "--json")
+
+		require.NoError(t, err, "info command failed: %s", output)
+		// Should be valid JSON with expected fields
+		require.Contains(t, output, "\"name\": \"feature\"")
+		require.Contains(t, output, "\"is_current\": true")
+		require.Contains(t, output, "\"is_trunk\": false")
+		require.Contains(t, output, "\"parent\": \"main\"")
+		require.Contains(t, output, "\"scope\": \"\"")
+		require.Contains(t, output, "\"commit_messages\":")
+		require.Contains(t, output, "\"diff_stats\":")
+	})
+
+	t.Run("info with --json shows scope when set", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, func(sc *testhelpers.Scene) error {
+			// Create initial commit
+			if err := sc.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			return nil
+		}).WithInProcess(true)
+
+		// Create branch with scope
+		if err := s.Scene.Repo.CreateChange("feature change", "test", false); err != nil {
+			t.Fatal(err)
+		}
+		s.RunCli("create", "feature", "-m", "feature change", "--scope", "api")
+
+		// Run info --json
+		output, err := s.RunCliAndGetOutput("info", "--json")
+
+		require.NoError(t, err, "info command failed: %s", output)
+		require.Contains(t, output, "\"scope\": \"api\"")
+	})
 }

@@ -56,7 +56,7 @@ If no branch is specified and --stack is not provided, displays information abou
 	cmd.Flags().BoolVarP(&patch, "patch", "p", false, "Show the changes made by each commit")
 	cmd.Flags().BoolVarP(&stat, "stat", "s", false, "Show a diffstat instead of a full diff. Modifies either --patch or --diff. If neither is passed, implies --diff")
 	cmd.Flags().BoolVar(&stack, "stack", false, "Show information about the entire stack")
-	cmd.Flags().BoolVar(&json, "json", false, "Output in JSON format (requires --stack)")
+	cmd.Flags().BoolVar(&json, "json", false, "Output in JSON format")
 
 	return cmd
 }

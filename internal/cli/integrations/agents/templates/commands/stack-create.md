@@ -2,7 +2,7 @@
 description: Create a new stacked branch with commit
 model: claude-sonnet-4-20250514
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
-argument-hint: [-m "message"] [branch-name]
+argument-hint: [-m "message"] [--scope <scope>] [branch-name]
 ---
 
 # Stack Create
@@ -33,7 +33,13 @@ Create a new stacked branch with the current changes.
      - "Let me describe" → Wait for user to provide message
 4. If user provided `-m "message"`, use that message
 5. Otherwise, generate a commit message matching the project's style (see recent commits)
-6. Run: `echo "<message>" | command stackit create [branch-name] --no-interactive`
+6. Run: `echo "<message>" | command stackit create [branch-name] [--scope <scope> if provided] --no-interactive`
+7. **If create fails due to missing scope** (error mentions scope required):
+   - Use `AskUserQuestion`:
+     - Header: "Scope"
+     - Question: "Branch pattern requires a scope (e.g., feature area, ticket ID). What scope should this branch use?"
+     - Options: Generate 2-3 sensible suggestions based on the codebase + user can type custom
+   - Retry with `--scope <value>`
 
 You can call multiple tools in a single response. Stage and create in one message.
 
