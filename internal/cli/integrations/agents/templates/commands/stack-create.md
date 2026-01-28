@@ -9,10 +9,11 @@ argument-hint: [-m "message"] [--scope <scope>] [branch-name]
 
 ## Context
 - Current branch: !`git branch --show-current`
+- Current branch info: !`command stackit info --json 2>/dev/null || echo "{}"`
+- Branch pattern: !`command stackit config get branch.pattern 2>/dev/null || echo "{username}/{date}/{message}"`
 - Unstaged changes: !`git diff --stat 2>&1 | head -20`
 - Staged changes: !`git diff --cached --stat 2>&1 | head -20`
 - Recent commits (for style): !`git log --oneline -5 2>&1`
-- Branch pattern: !`command stackit config get branch.pattern 2>/dev/null || echo "{username}/{date}/{message}"`
 
 ## Arguments
 $ARGUMENTS
@@ -34,7 +35,12 @@ Create a new stacked branch with the current changes.
      - "Let me describe" → Wait for user to provide message
 4. If user provided `-m "message"`, use that message
 5. Otherwise, generate a commit message matching the project's style (see recent commits)
-6. **If branch pattern contains `{scope}` and no `--scope` in arguments:**
+6. **Check if scope is needed** (all conditions must be true):
+   - Branch pattern contains `{scope}` AND
+   - Current branch info shows empty `scope` field (no inherited scope) AND
+   - No `--scope` in arguments
+
+   If scope is needed:
    - Use `AskUserQuestion`:
      - Header: "Scope"
      - Question: "Branch pattern requires a scope (e.g., feature area, ticket ID). What scope should this branch use?"

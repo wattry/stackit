@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,39 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
 )
+
+// SingleBranchInfo represents JSON-serializable info for a single branch (used by info --json)
+type SingleBranchInfo struct {
+	Name           string              `json:"name"`
+	IsCurrent      bool                `json:"is_current"`
+	IsTrunk        bool                `json:"is_trunk"`
+	IsLocked       bool                `json:"is_locked"`
+	IsFrozen       bool                `json:"is_frozen"`
+	NeedsRestack   bool                `json:"needs_restack"`
+	Scope          string              `json:"scope"`
+	CommitDate     string              `json:"commit_date,omitempty"`
+	Parent         string              `json:"parent,omitempty"`
+	Children       []string            `json:"children,omitempty"`
+	PR             *SingleBranchPRInfo `json:"pr,omitempty"`
+	CommitMessages []string            `json:"commit_messages"`
+	DiffStats      SingleBranchStats   `json:"diff_stats"`
+}
+
+// SingleBranchPRInfo represents PR information for JSON output
+type SingleBranchPRInfo struct {
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	State   string `json:"state"`
+	IsDraft bool   `json:"is_draft"`
+	URL     string `json:"url"`
+}
+
+// SingleBranchStats represents diff statistics for a branch
+type SingleBranchStats struct {
+	FilesChanged int `json:"files_changed"`
+	Additions    int `json:"additions"`
+	Deletions    int `json:"deletions"`
+}
 
 // InfoOptions contains options for the info command
 type InfoOptions struct {
@@ -62,6 +96,11 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 				}
 			}
 		}
+	}
+
+	// Handle JSON output for single branch
+	if opts.JSON {
+		return outputBranchInfoJSON(ctx, branch)
 	}
 
 	// If stat is set without diff or patch, it implies diff
@@ -233,4 +272,90 @@ func getPRTitleLine(prInfo *engine.PrInfo) string {
 		prState := style.ColorPRState(state, prInfo.IsDraft())
 		return fmt.Sprintf("%s %s %s", prNumber, prState, prInfo.Title())
 	}
+}
+
+// outputBranchInfoJSON outputs branch information as JSON
+func outputBranchInfoJSON(ctx *app.Context, branch engine.Branch) error {
+	eng := ctx.Engine
+	branchName := branch.GetName()
+	currentBranch := eng.CurrentBranch()
+	isCurrent := currentBranch != nil && branchName == currentBranch.GetName()
+	isTrunk := branch.IsTrunk()
+
+	info := SingleBranchInfo{
+		Name:           branchName,
+		IsCurrent:      isCurrent,
+		IsTrunk:        isTrunk,
+		IsLocked:       branch.IsLocked(),
+		IsFrozen:       branch.IsFrozen(),
+		NeedsRestack:   !isTrunk && !branch.IsBranchUpToDate(),
+		Scope:          branch.GetScope().String(),
+		CommitMessages: []string{},
+		Children:       []string{},
+	}
+
+	// Commit date
+	commitDate, err := branch.GetCommitDate()
+	if err == nil {
+		info.CommitDate = commitDate.Format(time.RFC3339)
+	}
+
+	// Parent
+	if parent := branch.GetParent(); parent != nil {
+		info.Parent = parent.GetName()
+	}
+
+	// Children
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	for _, child := range graph.ChildBranches(branch) {
+		info.Children = append(info.Children, child.GetName())
+	}
+
+	// PR info
+	if !isTrunk {
+		prInfo, _ := branch.GetPrInfo()
+		if prInfo != nil && prInfo.Number() != nil {
+			info.PR = &SingleBranchPRInfo{
+				Number:  *prInfo.Number(),
+				Title:   prInfo.Title(),
+				State:   prInfo.State(),
+				IsDraft: prInfo.IsDraft(),
+				URL:     prInfo.URL(),
+			}
+		}
+	}
+
+	// Commit messages
+	commits, err := branch.GetAllCommits(engine.CommitFormatReadable)
+	if err == nil {
+		info.CommitMessages = commits
+	}
+
+	// Diff stats
+	added, deleted, err := branch.GetDiffStats()
+	if err == nil {
+		info.DiffStats.Additions = added
+		info.DiffStats.Deletions = deleted
+	}
+
+	// Files changed
+	if info.Parent != "" {
+		parentRev, err := eng.GetRevision(eng.GetBranch(info.Parent))
+		if err == nil {
+			branchRev, err := branch.GetRevision()
+			if err == nil {
+				files, err := eng.GetChangedFiles(ctx.Context, parentRev, branchRev)
+				if err == nil {
+					info.DiffStats.FilesChanged = len(files)
+				}
+			}
+		}
+	}
+
+	data, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal branch info to JSON: %w", err)
+	}
+	ctx.Output.Info("%s", string(data))
+	return nil
 }
