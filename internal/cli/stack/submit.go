@@ -326,6 +326,11 @@ func (h *SimpleSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
 
+// IsInteractive returns false - simple handler is not interactive.
+func (h *SimpleSubmitHandler) IsInteractive() bool {
+	return false
+}
+
 // InteractiveSubmitHandler implements submit.Handler with bubbletea for animated progress
 type InteractiveSubmitHandler struct {
 	runner        *tui.Runner
@@ -484,4 +489,9 @@ func (h *InteractiveSubmitHandler) Confirm(message string, defaultYes bool) (boo
 	confirmed, err := tui.PromptConfirm(message, defaultYes)
 	h.runner.Resume()
 	return confirmed, err
+}
+
+// IsInteractive returns true - interactive handler supports prompts.
+func (h *InteractiveSubmitHandler) IsInteractive() bool {
+	return true
 }

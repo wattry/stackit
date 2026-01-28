@@ -105,3 +105,7 @@ func (h *lockSubmitHandler) OnEvent(e submit.Event) {
 func (h *lockSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
+
+func (h *lockSubmitHandler) IsInteractive() bool {
+	return false
+}

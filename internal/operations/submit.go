@@ -219,3 +219,8 @@ func (o *SubmitOperation) OnEvent(e submitAction.Event) {
 func (o *SubmitOperation) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
+
+// IsInteractive returns false - operations are not interactive.
+func (o *SubmitOperation) IsInteractive() bool {
+	return false
+}
