@@ -16,6 +16,7 @@ extra:
   social:
     - icon: fontawesome/brands/github-alt
       link: https://github.com/getstackit/stackit
+  generator: false  # Hide "Made with Material for MkDocs"
 
 validation:
   omitted_files: warn
@@ -26,6 +27,7 @@ strict: false  # Set to true once CLI reference is generated
 
 theme:
   name: material
+  custom_dir: overrides
   palette:
     scheme: default
 
@@ -83,6 +85,10 @@ nav:
     - Contributing: community/contributing.md
 
 plugins:
+  - search
+  - sitemap:
+      changefreq: weekly
+      priority: 0.8
   - markdown-exec
   - redirects:
       redirect_maps:
@@ -93,7 +99,6 @@ plugins:
         'guide/workflows.md': 'workflows/index.md'
         'guide/team-workflows.md': 'workflows/collaboration.md'
         'guide/worktrees.md': 'worktrees/index.md'
-  - search
   - social:
       enabled: !ENV [CI, false]
   - llmstxt:

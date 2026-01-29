@@ -1,5 +1,7 @@
 ---
 icon: material/console
+title: Shell Integration for Worktrees
+description: Enable automatic directory changes when opening or creating stackit worktrees. Quick setup for zsh, bash, and fish shells.
 ---
 
 # Shell Integration for Worktrees

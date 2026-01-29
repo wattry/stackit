@@ -1,5 +1,7 @@
 ---
 icon: material/rocket-launch
+title: Get Started with Stackit
+description: Learn how to install stackit and create your first stack of Git branches in under 5 minutes. Quick walkthrough with examples.
 ---
 
 # Get started

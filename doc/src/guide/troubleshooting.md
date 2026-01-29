@@ -1,5 +1,7 @@
 ---
 icon: material/help-circle
+title: Troubleshooting Stackit
+description: Solutions to common stackit issues including merge conflicts, detached HEAD, failed restacks, permission errors, and recovery commands.
 ---
 
 # Troubleshooting

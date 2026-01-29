@@ -1,5 +1,7 @@
 ---
 icon: material/folder-multiple
+title: Git Worktrees with Stackit
+description: Work on multiple stacks in parallel using Git worktrees. Create isolated directories for different features without stashing.
 ---
 
 # Worktrees

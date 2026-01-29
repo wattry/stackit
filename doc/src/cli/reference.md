@@ -1,5 +1,7 @@
 ---
 icon: material/book-open
+title: CLI Command Reference
+description: Complete reference for all stackit CLI commands. Browse commands for creating, submitting, syncing, and managing stacked Git branches.
 ---
 
 # Command Reference

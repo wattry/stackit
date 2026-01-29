@@ -1,3 +1,8 @@
+---
+title: Stackit - Stacked Changes for Git
+description: Stackit is a CLI tool for managing stacked Git branches. Break large features into small, reviewable PRs with automatic rebasing and GitHub integration.
+---
+
 # stackit
 
 **stackit** is a command-line tool that makes working with stacked changes fast and intuitive.

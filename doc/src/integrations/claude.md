@@ -1,5 +1,7 @@
 ---
 icon: material/robot
+title: Claude Code Integration
+description: AI-assisted stacking with Claude Code. Intelligent commands for creating branches, syncing stacks, absorbing changes, and fixing issues.
 ---
 
 # Claude Code Integration

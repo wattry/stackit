@@ -1,5 +1,7 @@
 ---
 icon: material/sitemap
+title: Stackit Workflows
+description: Practical guides for daily, advanced, and team collaboration workflows with stackit. Learn absorb, sync, split, and more.
 ---
 
 # Workflows

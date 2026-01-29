@@ -1,5 +1,7 @@
 ---
 icon: material/upload
+title: Submit PRs for Your Stack
+description: Push your entire stack to GitHub and create PRs with one command. Learn about PR descriptions, updating PRs, and merging strategies.
 ---
 
 # Submit your PRs

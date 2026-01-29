@@ -1,5 +1,7 @@
 ---
 icon: material/github
+title: GitHub Actions Integration
+description: Automated CI checks for stackit branches. Prevent merging locked PRs and enforce correct merge order with GitHub Actions.
 ---
 
 # GitHub Integration

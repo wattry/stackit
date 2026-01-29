@@ -1,5 +1,7 @@
 ---
 icon: material/account-group
+title: Team Collaboration with Stackit
+description: Collaborate on stacks with your team. Share configuration, protect branches with freeze/lock, fetch teammate stacks, and coordinate handoffs.
 ---
 
 # Team Collaboration

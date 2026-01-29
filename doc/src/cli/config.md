@@ -1,5 +1,7 @@
 ---
 icon: material/wrench
+title: Stackit Configuration
+description: Customize stackit with layered configuration. Set team defaults in .stackit.yaml, override locally, and configure branch naming, PR settings, and hooks.
 ---
 
 # Configuration

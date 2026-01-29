@@ -1,5 +1,7 @@
 ---
 icon: material/frequently-asked-questions
+title: Stackit FAQ
+description: Answers to common questions about stackit. Learn about stacking, GitHub integration, metadata, troubleshooting, and team collaboration.
 ---
 
 # Frequently Asked Questions

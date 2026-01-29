@@ -1,5 +1,7 @@
 ---
 icon: material/graph
+title: Core Concepts - Stacks, Parents, Children
+description: Understand stackit fundamentals including stacks, parent-child relationships, trunk branches, restacking, metadata, and worktrees.
 ---
 
 # Core Concepts

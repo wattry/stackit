@@ -1,5 +1,7 @@
 ---
 icon: material/tools
+title: Advanced Stackit Workflows
+description: Power-user operations including splitting commits, reorganizing stacks, moving branches, and running commands across multiple branches.
 ---
 
 # Advanced Workflows

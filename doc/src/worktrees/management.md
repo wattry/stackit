@@ -1,5 +1,7 @@
 ---
 icon: material/cog
+title: Worktree Management
+description: List, open, remove, and configure stackit worktrees. Set up auto-cleanup, custom paths, and post-create hooks for dependency installation.
 ---
 
 # Worktree Management

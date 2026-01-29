@@ -1,5 +1,7 @@
 ---
 icon: material/source-branch
+title: Create Your First Stack
+description: Step-by-step guide to creating a stack of Git branches with stackit. Learn to visualize and navigate your stack structure.
 ---
 
 # Create your first stack

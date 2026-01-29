@@ -1,5 +1,7 @@
 ---
 icon: material/console
+title: Stackit CLI Overview
+description: Complete command-line interface reference for stackit. Browse navigation, branch management, stack operations, and worktree commands.
 ---
 
 # CLI
