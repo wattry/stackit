@@ -201,7 +201,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		pathspecs := opts.Pathspecs
 		// If no pathspecs provided, prompt interactively
 		if len(pathspecs) == 0 {
-			pathspecs, err = promptForFiles(context, *currentBranch, eng, out, opts.AsSibling)
+			pathspecs, err = promptForFiles(context, *currentBranch, eng, out, opts.AsSibling, opts.Direction)
 			if err != nil {
 				return err
 			}

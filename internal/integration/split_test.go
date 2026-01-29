@@ -1428,6 +1428,52 @@ func TestSplitByFileAbove(t *testing.T) {
 			Git("show HEAD -- newfile_test.txt").
 			OutputNotContains("new file content")
 	})
+
+	t.Run("split --by-file --above reparents multiple existing children", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: feature -> [child1, child2, child3]
+		sh.Write("keep", "keep content").
+			Write("extract", "extract content").
+			Run("create feature -m 'Add files'")
+
+		sh.Write("child1-file", "child1 content").
+			Run("create child1 -m 'Child 1'")
+
+		sh.Checkout("feature").
+			Write("child2-file", "child2 content").
+			Run("create child2 -m 'Child 2'")
+
+		sh.Checkout("feature").
+			Write("child3-file", "child3 content").
+			Run("create child3 -m 'Child 3'")
+
+		// Go back to feature and split
+		sh.Checkout("feature").
+			Run("split --by-file extract_test.txt --above --name new-child -m 'Extracted'")
+
+		// Verify all existing children are now children of new-child
+		sh.ExpectBranchParent("child1", "new-child").
+			ExpectBranchParent("child2", "new-child").
+			ExpectBranchParent("child3", "new-child")
+
+		// Verify new-child is a child of feature
+		sh.ExpectBranchParent("new-child", "feature")
+	})
+
+	t.Run("split --by-file --above fails when all files selected", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Setup: feature with only one file changed
+		sh.Write("onlyfile", "only content").
+			Run("create feature -m 'Add file'")
+
+		// Try to extract the only file - should fail
+		sh.RunExpectError("split --by-file onlyfile_test.txt --above --name child -m 'Extract'").
+			OutputContains("all changes were selected")
+	})
 }
 
 // =============================================================================
