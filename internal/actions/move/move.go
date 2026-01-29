@@ -18,6 +18,7 @@ type Options struct {
 	Onto        string // Branch to move onto
 	SkipConfirm bool   // Skip confirmation prompt (--yes flag)
 	DryRun      bool   // If true, only shows what would happen without making changes
+	AutoRename  bool   // Auto-rename branch when scope changes (non-interactive mode)
 }
 
 // Action performs the move operation
@@ -207,19 +208,26 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	sourceScope := sourceBranch.GetScope()
 	ontoScope := ontoBranch.GetScope()
 	if sourceScope.IsDefined() && ontoScope.IsDefined() && !sourceScope.Equal(ontoScope) {
+		shouldRename := false
 		if handler.IsInteractive() && strings.Contains(source, sourceScope.String()) {
 			confirmed, err := handler.PromptRename(source, sourceScope.String(), ontoScope.String())
 			if err == nil && confirmed {
-				newName := strings.Replace(source, sourceScope.String(), ontoScope.String(), 1)
-				if err := eng.RenameBranch(gctx, eng.GetBranch(source), eng.GetBranch(newName)); err != nil {
-					out.Info("Warning: failed to rename branch: %v", err)
-				} else {
-					handler.OnRename(source, newName)
-					out.Info("Renamed branch %s to %s.", style.ColorBranchName(source, false), style.ColorBranchName(newName, true))
-					source = newName
-					sourceBranch = eng.GetBranch(source)
-					renamed = true
-				}
+				shouldRename = true
+			}
+		} else if opts.AutoRename && strings.Contains(source, sourceScope.String()) {
+			shouldRename = true
+		}
+
+		if shouldRename {
+			newName := strings.Replace(source, sourceScope.String(), ontoScope.String(), 1)
+			if err := eng.RenameBranch(gctx, eng.GetBranch(source), eng.GetBranch(newName)); err != nil {
+				out.Info("Warning: failed to rename branch: %v", err)
+			} else {
+				handler.OnRename(source, newName)
+				out.Info("Renamed branch %s to %s.", style.ColorBranchName(source, false), style.ColorBranchName(newName, true))
+				source = newName
+				sourceBranch = eng.GetBranch(source)
+				renamed = true
 			}
 		}
 	}

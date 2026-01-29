@@ -19,6 +19,7 @@ func NewMoveCmd() *cobra.Command {
 		all    bool
 		dryRun bool
 		onto   string
+		rename bool
 		source string
 		yes    bool
 	)
@@ -59,6 +60,10 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 					if dryRun {
 						return fmt.Errorf("--onto flag is required when using --dry-run")
 					}
+					// Non-interactive mode requires --onto to be specified
+					if !ctx.Interactive {
+						return fmt.Errorf("--onto flag is required in non-interactive mode")
+					}
 					var err error
 					ontoBranch, err = interactiveOntoSelection(ctx, sourceBranch)
 					if err != nil {
@@ -78,6 +83,7 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 					Onto:        ontoBranch,
 					SkipConfirm: yes,
 					DryRun:      dryRun,
+					AutoRename:  rename,
 				}, handler)
 			})
 		},
@@ -89,6 +95,7 @@ If no --onto is specified, opens an interactive selector to choose the target.`,
 	cmd.Flags().StringVarP(&onto, "onto", "o", "", "Branch to move the current branch onto.")
 	cmd.Flags().StringVar(&source, "source", "", "Branch to move (defaults to current branch).")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
+	cmd.Flags().BoolVar(&rename, "rename", false, "Auto-rename branch when scope changes during move.")
 
 	_ = cmd.RegisterFlagCompletionFunc("onto", common.CompleteBranches)
 	_ = cmd.RegisterFlagCompletionFunc("source", common.CompleteBranches)
