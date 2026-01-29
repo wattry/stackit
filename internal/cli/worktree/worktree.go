@@ -27,6 +27,7 @@ directory. Create a worktree with 'stackit worktree create' from trunk.`,
 	cmd.AddCommand(newListCmd())
 	cmd.AddCommand(newRemoveCmd())
 	cmd.AddCommand(newOpenCmd())
+	cmd.AddCommand(newPruneCmd())
 
 	return cmd
 }
@@ -88,8 +89,7 @@ func newListCmd() *cobra.Command {
 		Short: "List all managed worktrees",
 		Long: `List all stackit-managed worktrees.
 
-Shows each worktree's anchor branch and path, with an indicator if the
-worktree directory no longer exists on disk.`,
+Shows each worktree's name, stack size, current branch, and status.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
@@ -104,16 +104,9 @@ worktree directory no longer exists on disk.`,
 					return nil
 				}
 
-				ctx.Output.Info("Managed worktrees:")
 				for _, wt := range result.Worktrees {
-					stackName := style.ColorBranchName(wt.AnchorBranch, false)
-					if wt.Exists {
-						ctx.Output.Print(fmt.Sprintf("  %s %s", stackName, style.ColorDim(wt.Path)))
-					} else {
-						ctx.Output.Print(fmt.Sprintf("  %s %s %s", stackName, style.ColorDim(wt.Path), style.ColorRed("(missing)")))
-					}
+					renderWorktreeEntry(ctx, wt, result.CurrentAnchor)
 				}
-				ctx.Output.Newline()
 
 				return nil
 			})
@@ -121,6 +114,62 @@ worktree directory no longer exists on disk.`,
 	}
 
 	return cmd
+}
+
+// renderWorktreeEntry renders a single worktree entry
+func renderWorktreeEntry(ctx *app.Context, wt worktree.Entry, currentAnchor string) {
+	// Indicator for current worktree
+	indicator := "  "
+	isCurrent := currentAnchor != "" && wt.AnchorBranch == currentAnchor
+	if isCurrent {
+		indicator = style.ColorGreen("@ ")
+	}
+
+	// Name (use worktree name if available, otherwise anchor branch)
+	name := wt.Name
+	if name == "" {
+		name = wt.AnchorBranch
+	}
+	coloredName := style.ColorBranchName(name, isCurrent)
+
+	// Handle missing worktrees
+	if !wt.Exists {
+		ctx.Output.Println(fmt.Sprintf("%s%s  %s", indicator, coloredName, style.ColorRed("(missing)")))
+		return
+	}
+
+	// Stack size
+	stackInfo := style.ColorDim("empty")
+	if wt.StackSize > 0 {
+		branchWord := "branch"
+		if wt.StackSize > 1 {
+			branchWord = "branches"
+		}
+		stackInfo = fmt.Sprintf("%d %s", wt.StackSize, branchWord)
+	}
+
+	// Current branch in worktree (only show if different from anchor)
+	branchInfo := ""
+	if wt.CurrentBranch != "" && wt.CurrentBranch != wt.AnchorBranch {
+		branchInfo = style.ColorCyan(wt.CurrentBranch)
+	}
+
+	// Status indicator
+	status := ""
+	if wt.IsDirty {
+		status = style.ColorYellow("*")
+	}
+
+	// Build the output line
+	line := fmt.Sprintf("%s%s  %s", indicator, coloredName, stackInfo)
+	if branchInfo != "" {
+		line += fmt.Sprintf("  on %s", branchInfo)
+	}
+	if status != "" {
+		line += " " + status
+	}
+
+	ctx.Output.Println(line)
 }
 
 // newRemoveCmd creates the worktree remove command
@@ -148,6 +197,58 @@ name or the anchor branch name.`,
 	}
 
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force removal even if there are errors")
+
+	return cmd
+}
+
+// newPruneCmd creates the worktree prune command
+func newPruneCmd() *cobra.Command {
+	var dryRun bool
+
+	cmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Remove empty worktrees",
+		Long: `Remove all worktrees that have no stacked branches.
+
+Empty worktrees are those with only the anchor branch and no work in progress.
+Worktrees with uncommitted changes are skipped unless --force is used.`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
+				result, err := worktree.PruneAction(ctx, worktree.PruneOptions{
+					DryRun: dryRun,
+				})
+				if err != nil {
+					return err
+				}
+
+				if len(result.Pruned) == 0 && len(result.Skipped) == 0 {
+					ctx.Output.Info("No empty worktrees to prune.")
+					return nil
+				}
+
+				if dryRun {
+					ctx.Output.Info("Would prune:")
+				}
+
+				for _, name := range result.Pruned {
+					if dryRun {
+						ctx.Output.Println(fmt.Sprintf("  %s", style.ColorBranchName(name, false)))
+					} else {
+						ctx.Output.Success("Pruned %s", style.ColorBranchName(name, false))
+					}
+				}
+
+				for _, entry := range result.Skipped {
+					ctx.Output.Info("Skipped %s: %s", style.ColorBranchName(entry.Name, false), style.ColorDim(entry.Reason))
+				}
+
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be pruned without removing")
 
 	return cmd
 }
