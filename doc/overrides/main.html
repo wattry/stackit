@@ -4,11 +4,12 @@
 <!-- Umami Analytics -->
 <script defer src="https://umami-production-85f2.up.railway.app/script.js" data-website-id="db914a4c-c204-474a-b11c-1670d4555300"></script>
 
+{% if page %}
 <!-- Open Graph / Facebook -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{ page.canonical_url }}">
 <meta property="og:title" content="{{ page.title }} - stackit">
-<meta property="og:description" content="{% if page.meta.description %}{{ page.meta.description }}{% else %}{{ config.site_description }}{% endif %}">
+<meta property="og:description" content="{% if page.meta and page.meta.description %}{{ page.meta.description }}{% else %}{{ config.site_description }}{% endif %}">
 <meta property="og:image" content="{{ config.site_url }}assets/images/social.png">
 <meta property="og:site_name" content="stackit">
 
@@ -16,12 +17,13 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:url" content="{{ page.canonical_url }}">
 <meta name="twitter:title" content="{{ page.title }} - stackit">
-<meta name="twitter:description" content="{% if page.meta.description %}{{ page.meta.description }}{% else %}{{ config.site_description }}{% endif %}">
+<meta name="twitter:description" content="{% if page.meta and page.meta.description %}{{ page.meta.description }}{% else %}{{ config.site_description }}{% endif %}">
 <meta name="twitter:image" content="{{ config.site_url }}assets/images/social.png">
 
 <!-- Additional SEO -->
 <meta name="author" content="Stackit Contributors">
 <link rel="canonical" href="{{ page.canonical_url }}">
+{% endif %}
 
 <!-- Structured Data -->
 <script type="application/ld+json">

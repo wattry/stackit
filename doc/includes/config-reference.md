@@ -1,3 +1,29 @@
+## Trunk branches
+
+### trunk
+
+Primary trunk branch
+
+**Default**: `main`
+
+**Example**:
+
+```bash
+stackit config set trunk main
+```
+
+### trunks
+
+Additional trunk branches (e.g., release branches)
+
+**Default**: (not set)
+
+**Example**:
+
+```bash
+stackit config set trunks "develop, release"
+```
+
 ## Branch naming
 
 ### branch.pattern
@@ -66,60 +92,6 @@ Default reviewers
 
 Default assignees
 
-## PR navigation
-
-### navigation.when
-
-always, never, multiple
-
-**Default**: `multiple`
-
-**Options**: `always`, `never`, `multiple`
-
-**Example**:
-
-```bash
-stackit config set navigation.when multiple
-```
-
-### navigation.marker
-
-Current branch marker
-
-**Default**: `👈`
-
-**Example**:
-
-```bash
-stackit config set navigation.marker 👈
-```
-
-### navigation.location
-
-body, comment, none
-
-**Default**: `body`
-
-**Options**: `body`, `comment`, `none`
-
-**Example**:
-
-```bash
-stackit config set navigation.location body
-```
-
-### navigation.showMerged
-
-Show merged history
-
-**Default**: `true`
-
-**Example**:
-
-```bash
-stackit config set navigation.showMerged false
-```
-
 ## Merge settings
 
 ### merge.method
@@ -162,6 +134,32 @@ Timeout in seconds
 stackit config set ci.timeout 600
 ```
 
+## Other settings
+
+### undo.depth
+
+Max snapshots
+
+**Default**: `10`
+
+**Example**:
+
+```bash
+stackit config set undo.depth 10
+```
+
+### maxConcurrency
+
+0 = auto-detect
+
+**Default**: `0`
+
+**Example**:
+
+```bash
+stackit config set maxConcurrency 0
+```
+
 ## Worktree settings
 
 ### worktree.basePath
@@ -196,56 +194,58 @@ tui or git
 stackit config set split.hunkSelector tui
 ```
 
-## Trunk branches
+## PR navigation
 
-### trunk
+### navigation.when
 
-Primary trunk branch
+always, never, multiple
 
-**Default**: `main`
+**Default**: `multiple`
+
+**Options**: `always`, `never`, `multiple`
 
 **Example**:
 
 ```bash
-stackit config set trunk main
+stackit config set navigation.when multiple
 ```
 
-### trunks
+### navigation.location
 
-Additional trunk branches (e.g., release branches)
+body, comment, none
 
-**Default**: (not set)
+**Default**: `body`
+
+**Options**: `body`, `comment`, `none`
 
 **Example**:
 
 ```bash
-stackit config set trunks "develop, release"
+stackit config set navigation.location body
 ```
 
-## Other settings
+### navigation.marker
 
-### undo.depth
+Current branch marker
 
-Max snapshots
-
-**Default**: `10`
+**Default**: `👈`
 
 **Example**:
 
 ```bash
-stackit config set undo.depth 10
+stackit config set navigation.marker 👈
 ```
 
-### maxConcurrency
+### navigation.showMerged
 
-0 = auto-detect
+Show merged history
 
-**Default**: `0`
+**Default**: `true`
 
 **Example**:
 
 ```bash
-stackit config set maxConcurrency 0
+stackit config set navigation.showMerged false
 ```
 
 
@@ -263,7 +263,7 @@ trunks:
   - develop
   - staging
 
-# Branch naming pattern for the team
+# Branch naming pattern
 branch:
   pattern: "{username}/{date}/{message}"
 
@@ -278,7 +278,7 @@ submit:
     - teammate1
   assignees: []
 
-# Default merge method
+# Merge method: squash, merge, rebase
 merge:
   method: squash
 
@@ -296,21 +296,21 @@ worktree:
   basePath: ""
   autoClean: true
 
-# Split settings
+# Split command
 split:
   hunkSelector: tui
 
-# Concurrency (0 = auto based on CPU count)
+# Concurrency
 maxConcurrency: 0
 
-# PR navigation display options
+# PR navigation display
 navigation:
   when: multiple
   location: body
   marker: 👈
   showMerged: true
 
-# Worktree hooks
+# Post-worktree-create hooks (require approval on first run)
 hooks:
   post-worktree-create:
     - npm install

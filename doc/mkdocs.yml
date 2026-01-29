@@ -86,9 +86,6 @@ nav:
 
 plugins:
   - search
-  - sitemap:
-      changefreq: weekly
-      priority: 0.8
   - markdown-exec
   - redirects:
       redirect_maps:
