@@ -104,6 +104,7 @@ func ListAction(ctx *app.Context, _ ListOptions) (*ListResult, error) {
 type RemoveOptions struct {
 	AnchorBranch string // Anchor branch name to remove worktree for
 	Force        bool   // Force removal even if worktree has uncommitted changes
+	KeepBranch   bool   // Keep the anchor branch instead of deleting it
 }
 
 // findWorktreeByNameOrBranch looks up a worktree by name or anchor branch
@@ -152,11 +153,34 @@ func RemoveAction(ctx *app.Context, opts RemoveOptions) error {
 		}
 	} else {
 		out.Debug("Worktree path %s does not exist, skipping removal", wtInfo.Path)
+		// Prune stale git worktree references to allow branch deletion later
+		if pruneErr := ctx.Engine.PruneWorktrees(ctx.Context); pruneErr != nil {
+			out.Debug("Failed to prune worktrees: %v", pruneErr)
+		}
 	}
 
 	// Unregister from registry (use the anchor branch from worktree info)
 	if unregErr := ctx.Engine.UnregisterWorktree(wtInfo.AnchorBranch); unregErr != nil {
 		return fmt.Errorf("failed to unregister worktree: %w", unregErr)
+	}
+
+	// Delete anchor branch unless --keep-branch is set
+	if !opts.KeepBranch {
+		anchorBranch := ctx.Engine.GetBranch(wtInfo.AnchorBranch)
+		if anchorBranch.IsTracked() {
+			// Check for children using stack graph
+			graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+			children := graph.Children(anchorBranch)
+			if len(children) > 0 {
+				out.Warn("Anchor branch %s has children, not deleting", style.ColorBranchName(wtInfo.AnchorBranch, false))
+			} else {
+				if err := ctx.Engine.DeleteBranch(ctx.Context, anchorBranch); err != nil {
+					out.Warn("Failed to delete anchor branch: %v", err)
+				} else {
+					out.Debug("Deleted anchor branch %s", wtInfo.AnchorBranch)
+				}
+			}
+		}
 	}
 
 	out.Success("Removed worktree for stack %s", style.ColorBranchName(wtInfo.AnchorBranch, false))
@@ -426,12 +450,39 @@ func PruneAction(ctx *app.Context, opts PruneOptions) (*PruneResult, error) {
 			name = wt.AnchorBranch
 		}
 
-		// Skip missing worktrees (they should be cleaned up separately)
+		// Clean up missing worktrees (directory deleted but registration remains)
 		if !wt.Exists {
-			result.Skipped = append(result.Skipped, SkippedEntry{
-				Name:   name,
-				Reason: "worktree directory missing",
-			})
+			if opts.DryRun {
+				result.Pruned = append(result.Pruned, name)
+				continue
+			}
+
+			// Check if anchor branch has children before deleting
+			anchorBranch := ctx.Engine.GetBranch(wt.AnchorBranch)
+			if anchorBranch.IsTracked() {
+				graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+				children := graph.Children(anchorBranch)
+				if len(children) > 0 {
+					result.Skipped = append(result.Skipped, SkippedEntry{
+						Name:   name,
+						Reason: fmt.Sprintf("anchor branch has %d children", len(children)),
+					})
+					continue
+				}
+			}
+
+			// Unregister and delete anchor branch
+			if err := RemoveAction(ctx, RemoveOptions{
+				AnchorBranch: wt.AnchorBranch,
+				Force:        true, // Force since directory is missing
+			}); err != nil {
+				result.Skipped = append(result.Skipped, SkippedEntry{
+					Name:   name,
+					Reason: fmt.Sprintf("cleanup failed: %v", err),
+				})
+				continue
+			}
+			result.Pruned = append(result.Pruned, name)
 			continue
 		}
 
