@@ -50,6 +50,9 @@ type Options struct {
 	// If set, hunks in the patch are staged directly without prompting.
 	// Use "-" to read from stdin.
 	PatchFile string
+	// DryRun shows what would happen without executing the split.
+	// When true, the split logic runs but no branches are created or modified.
+	DryRun bool
 }
 
 // Result contains the result of a split operation
@@ -198,7 +201,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		pathspecs := opts.Pathspecs
 		// If no pathspecs provided, prompt interactively
 		if len(pathspecs) == 0 {
-			pathspecs, err = promptForFiles(context, *currentBranch, eng, out, opts.AsSibling)
+			pathspecs, err = promptForFiles(context, *currentBranch, eng, out, opts.AsSibling, opts.Direction)
 			if err != nil {
 				return err
 			}
@@ -210,23 +213,54 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		// and updates the parent relationship (unless AsSibling is true)
 		fileResult, err := splitByFile(context, *currentBranch, pathspecs, eng, splitByFileOptions{
 			AsSibling: opts.AsSibling,
+			Direction: opts.Direction,
 			Name:      opts.Name,
 			Message:   opts.Message,
+			DryRun:    opts.DryRun,
 		})
 		if err != nil {
 			return err
 		}
-		// Restack upstack branches if any
-		rng := engine.StackRange{
-			RecursiveParents:  false,
-			IncludeCurrent:    false,
-			RecursiveChildren: true,
+
+		// Dry-run mode: show preview and exit
+		if opts.DryRun {
+			out.Info("Dry Run - Split Preview")
+			out.Info("========================")
+			out.Info("Current branch: %s", currentBranch.GetName())
+			switch {
+			case opts.Direction == DirectionAbove:
+				out.Info("New child branch: %s", fileResult.BranchNames[0])
+				out.Info("Direction: above (extract to child)")
+			case opts.AsSibling:
+				out.Info("New sibling branch: %s", fileResult.BranchNames[0])
+				out.Info("Direction: sibling (original unchanged)")
+			default:
+				out.Info("New parent branch: %s", fileResult.BranchNames[0])
+				out.Info("Direction: below (extract to parent)")
+			}
+			out.Info("")
+			out.Info("Files to extract:")
+			for _, p := range pathspecs {
+				out.Info("  %s", p)
+			}
+			out.Info("")
+			out.Info("Run without --dry-run to execute.")
+			return nil
 		}
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		upstackBranches := graph.Range(*currentBranch, rng)
-		if len(upstackBranches) > 0 {
-			if err := actions.RestackBranches(ctx, upstackBranches); err != nil {
-				return fmt.Errorf("failed to restack upstack branches: %w", err)
+
+		// Restack upstack branches if any (not needed for --above since splitByFileAbove handles it)
+		if opts.Direction != DirectionAbove {
+			rng := engine.StackRange{
+				RecursiveParents:  false,
+				IncludeCurrent:    false,
+				RecursiveChildren: true,
+			}
+			graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+			upstackBranches := graph.Range(*currentBranch, rng)
+			if len(upstackBranches) > 0 {
+				if err := actions.RestackBranches(ctx, upstackBranches); err != nil {
+					return fmt.Errorf("failed to restack upstack branches: %w", err)
+				}
 			}
 		}
 		handler.Complete(ActionResult{

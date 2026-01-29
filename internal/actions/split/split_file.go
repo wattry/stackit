@@ -28,12 +28,17 @@ type splitByFileOptions struct {
 	// When true, the extracted files go to a new branch on the same parent,
 	// and the original branch is unchanged (files are NOT removed).
 	AsSibling bool
+	// Direction specifies whether to create the split branch above (child) or below (parent).
+	// Only applies when AsSibling is false. Default (empty) is below (parent).
+	Direction Direction
 	// Name specifies a custom name for the split branch.
 	// If empty, defaults to "{original}_split".
 	Name string
 	// Message specifies a custom commit message for the extraction.
 	// If empty, auto-generates: "Extract {files} from {branch}"
 	Message string
+	// DryRun shows what would happen without executing the split.
+	DryRun bool
 }
 
 // recoverToOriginalBranch attempts to restore the user to the original branch after an error.
@@ -46,6 +51,19 @@ func recoverToOriginalBranch(ctx context.Context, eng splitByFileEngine, branch 
 			originalErr, branch.GetName(), err.Error(), recoveryMsg)
 	}
 	return originalErr
+}
+
+// recoverToOriginalBranchAndRef attempts to restore the user to the original branch AND
+// restore the branch ref to its original SHA. Use this after UpdateBranchRef has modified
+// the branch pointer but subsequent operations failed.
+func recoverToOriginalBranchAndRef(ctx context.Context, eng splitByFileEngine, branch engine.Branch, originalSHA string, originalErr error) error {
+	// First restore the branch ref
+	if err := eng.UpdateBranchRef(ctx, branch.GetName(), originalSHA); err != nil {
+		return fmt.Errorf("%w (WARNING: failed to restore branch ref: %s; run 'git branch -f %s %s' to recover)",
+			originalErr, err.Error(), branch.GetName(), originalSHA)
+	}
+	// Then checkout the branch
+	return recoverToOriginalBranch(ctx, eng, branch, originalErr)
 }
 
 // splitByFile splits a branch by extracting CHANGES to specified files to a new branch.
@@ -139,10 +157,23 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 
 	// For sibling mode, use simpler approach - create branch at parent and apply hunks directly
 	if opts.AsSibling {
-		return splitByFileSibling(ctx, branchToSplit, parentBranch, newBranchName, filteredHunks, commitMessage, eng)
+		return splitByFileSibling(ctx, branchToSplit, parentBranch, newBranchName, filteredHunks, commitMessage, eng, opts.DryRun)
 	}
 
-	// Default mode: extract to parent branch
+	// For above mode (upstack), extract to child branch
+	if opts.Direction == DirectionAbove {
+		return splitByFileAbove(ctx, branchToSplit, newBranchName, filteredHunks, defaultCommitMessage, commitMessage, eng, opts.DryRun)
+	}
+
+	// Dry-run mode: show what would happen without executing
+	if opts.DryRun {
+		return &Result{
+			BranchNames:  []string{newBranchName},
+			BranchPoints: []int{0},
+		}, nil
+	}
+
+	// Default mode: extract to parent branch (below)
 
 	// Detach and reset branch changes (all changes become unstaged)
 	if err := eng.DetachAndResetBranchChanges(ctx, branchToSplit.GetName()); err != nil {
@@ -215,6 +246,14 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 			fmt.Errorf("failed to commit remaining changes: %w", err))
 	}
 
+	// Save original SHA before modifying branch ref (for recovery)
+	originalSHA, err := eng.GetCommitSHA(branchToSplit.GetName(), 0)
+	if err != nil {
+		cleanupStash()
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to get original commit SHA: %w", err))
+	}
+
 	// Update branchToSplit to point to this commit (contains remaining changes)
 	if err := eng.UpdateBranchRef(ctx, branchToSplit.GetName(), "HEAD"); err != nil {
 		cleanupStash()
@@ -222,51 +261,50 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 			fmt.Errorf("failed to update branch reference: %w", err))
 	}
 
+	// From this point, recovery must restore the original branch ref
+	recoverWithRef := func(originalErr error) error {
+		cleanupStash()
+		return recoverToOriginalBranchAndRef(ctx, eng, branchToSplit, originalSHA, originalErr)
+	}
+
 	// Reset to original parent to create the new parent branch
 	if err := eng.ResetHard(ctx, parentBranchName); err != nil {
-		cleanupStash()
-		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
-			fmt.Errorf("failed to reset to original parent: %w", err))
+		return nil, recoverWithRef(fmt.Errorf("failed to reset to original parent: %w", err))
 	}
 
 	// Pop the stash to get the parent branch changes
 	if err := eng.StashPop(ctx); err != nil {
-		return nil, fmt.Errorf("failed to pop stash: %w. Recovery: run 'git stash pop' to restore changes", err)
+		return nil, fmt.Errorf("failed to pop stash: %w. Recovery: check 'git stash list' for pending stash, resolve any conflicts manually", err)
 	}
 	stashPopped = true
 
 	// Stage and commit - this becomes the NEW PARENT branch content
 	if err := eng.StageAll(ctx); err != nil {
 		// Changes are in the working tree after stash pop, not staged
-		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
-			fmt.Errorf("failed to stage parent branch changes: %w; changes are in working tree", err))
+		return nil, recoverWithRef(fmt.Errorf("failed to stage parent branch changes: %w; changes are in working tree", err))
 	}
 
 	if err := eng.CommitWithOptions(ctx, git.CommitOptions{
 		Message:  commitMessage,
 		NoVerify: true,
 	}); err != nil {
-		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
-			fmt.Errorf("failed to commit parent branch changes: %w", err))
+		return nil, recoverWithRef(fmt.Errorf("failed to commit parent branch changes: %w", err))
 	}
 
 	// Create the new parent branch at HEAD
 	if err := eng.CreateBranch(ctx, newBranchName, "HEAD"); err != nil {
-		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
-			fmt.Errorf("failed to create parent branch: %w", err))
+		return nil, recoverWithRef(fmt.Errorf("failed to create parent branch: %w", err))
 	}
 
 	// Track the new parent branch with originalParent as its parent
 	newBranch := eng.GetBranch(newBranchName)
 	if err := eng.TrackBranch(ctx, newBranchName, parentBranchName); err != nil {
-		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
-			fmt.Errorf("failed to track parent branch: %w", err))
+		return nil, recoverWithRef(fmt.Errorf("failed to track parent branch: %w", err))
 	}
 
 	// Update branchToSplit to have newBranch as its parent
 	if err := eng.SetParent(ctx, branchToSplit, newBranch); err != nil {
-		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
-			fmt.Errorf("failed to update parent of %s: %w", branchToSplit.GetName(), err))
+		return nil, recoverWithRef(fmt.Errorf("failed to update parent of %s: %w", branchToSplit.GetName(), err))
 	}
 
 	// Checkout branchToSplit (we end up on the original branch)
@@ -280,9 +318,204 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 	}, nil
 }
 
+// splitByFileAbove extracts specified file changes to a new CHILD branch.
+// The original branch keeps the remaining changes, and the new branch becomes a child.
+// Existing children of the original branch are reparented to the new child.
+//
+// Algorithm:
+//  1. Capture existing children before modifications
+//  2. Detach HEAD and soft reset to parent (all changes unstaged)
+//  3. Stage the filtered hunks (changes go to new child branch)
+//  4. Stash staged changes
+//  5. Commit remaining changes (stay on original branch)
+//  6. Update original branch ref
+//  7. Checkout original branch
+//  8. Create child branch from current
+//  9. Pop stash and commit (extracted files)
+//  10. Track child branch with original as parent
+//  11. Reparent existing children to new child
+func splitByFileAbove(ctx context.Context, branchToSplit engine.Branch, newBranchName string, hunks []git.Hunk, defaultCommitMessage string, childCommitMessage string, eng splitByFileEngine, dryRun bool) (*Result, error) {
+	// Dry-run mode: show what would happen without executing
+	if dryRun {
+		return &Result{
+			BranchNames:  []string{newBranchName},
+			BranchPoints: []int{0},
+		}, nil
+	}
+
+	// Get existing children before we modify anything
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	existingChildren := graph.Children(branchToSplit)
+
+	// Detach and reset branch changes (all changes become unstaged)
+	if err := eng.DetachAndResetBranchChanges(ctx, branchToSplit.GetName()); err != nil {
+		return nil, fmt.Errorf("failed to detach and reset: %w", err)
+	}
+
+	// Stage the filtered hunks (these will go to the new child branch)
+	if err := eng.StageHunks(ctx, hunks); err != nil {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to stage hunks: %w", err))
+	}
+
+	// Check if anything was staged
+	hasStaged, err := eng.HasStagedChanges(ctx)
+	if err != nil {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to check staged changes: %w", err))
+	}
+	if !hasStaged {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("no changes staged for extraction"))
+	}
+
+	// Check if there are remaining changes (to keep on branchToSplit)
+	hasUnstaged, err := eng.HasUnstagedChanges(ctx)
+	if err != nil {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to check unstaged changes: %w", err))
+	}
+	hasUntracked, err := eng.HasUntrackedFiles(ctx)
+	if err != nil {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to check untracked files: %w", err))
+	}
+	if !hasUnstaged && !hasUntracked {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("all changes were selected - nothing would remain on %s", branchToSplit.GetName()))
+	}
+
+	// Stash only the staged changes (what we want to extract to child)
+	stashName := fmt.Sprintf("stackit-split-file-above-%d", time.Now().UnixNano())
+	_, err = eng.StashPushStaged(ctx, stashName)
+	if err != nil {
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to stash staged changes: %w", err))
+	}
+
+	// Track stash state for cleanup
+	stashPopped := false
+	cleanupStash := func() {
+		if !stashPopped {
+			_ = eng.StashPop(ctx)
+			stashPopped = true
+		}
+	}
+
+	// Stage and commit remaining changes - these stay on branchToSplit
+	if err := eng.StageAll(ctx); err != nil {
+		cleanupStash()
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to stage remaining changes: %w", err))
+	}
+
+	if err := eng.CommitWithOptions(ctx, git.CommitOptions{
+		Message:  defaultCommitMessage,
+		NoVerify: true,
+	}); err != nil {
+		cleanupStash()
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to commit remaining changes: %w", err))
+	}
+
+	// Save original SHA before modifying branch ref (for recovery)
+	originalSHA, err := eng.GetCommitSHA(branchToSplit.GetName(), 0)
+	if err != nil {
+		cleanupStash()
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to get original commit SHA: %w", err))
+	}
+
+	// Update branchToSplit to point to this commit (the "keep" content)
+	if err := eng.UpdateBranchRef(ctx, branchToSplit.GetName(), "HEAD"); err != nil {
+		cleanupStash()
+		return nil, recoverToOriginalBranch(ctx, eng, branchToSplit,
+			fmt.Errorf("failed to update branch reference: %w", err))
+	}
+
+	// From this point, recovery must restore the original branch ref
+	recoverWithRef := func(originalErr error) error {
+		cleanupStash()
+		return recoverToOriginalBranchAndRef(ctx, eng, branchToSplit, originalSHA, originalErr)
+	}
+
+	// Checkout the updated branch
+	if err := eng.CheckoutBranch(ctx, branchToSplit); err != nil {
+		return nil, recoverWithRef(fmt.Errorf("failed to checkout branch: %w", err))
+	}
+
+	// Create the child branch at the current position
+	if err := eng.CreateBranch(ctx, newBranchName, "HEAD"); err != nil {
+		return nil, recoverWithRef(fmt.Errorf("failed to create child branch: %w", err))
+	}
+
+	// Track whether child branch was created for cleanup
+	childBranchCreated := true
+	cleanupChildBranch := func() {
+		if childBranchCreated {
+			_ = eng.DeleteBranch(ctx, eng.GetBranch(newBranchName))
+		}
+	}
+
+	// Checkout the child branch
+	childBranch := eng.GetBranch(newBranchName)
+	if err := eng.CheckoutBranch(ctx, childBranch); err != nil {
+		cleanupChildBranch()
+		return nil, recoverWithRef(fmt.Errorf("failed to checkout child branch: %w", err))
+	}
+
+	// Pop the stash to get the extract changes back
+	if err := eng.StashPop(ctx); err != nil {
+		cleanupChildBranch()
+		_ = eng.CheckoutBranch(ctx, branchToSplit)
+		return nil, fmt.Errorf("failed to pop stash: %w. Recovery: check 'git stash list' for pending stash, resolve any conflicts manually", err)
+	}
+	stashPopped = true
+
+	// Stage and commit the extracted changes on child branch
+	if err := eng.StageAll(ctx); err != nil {
+		return nil, fmt.Errorf("failed to stage extracted changes: %w. Recovery: run 'git add -A && git commit' to complete", err)
+	}
+
+	if err := eng.CommitWithOptions(ctx, git.CommitOptions{
+		Message:  childCommitMessage,
+		NoVerify: true,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to commit extracted changes: %w. Recovery: run 'git commit' to complete", err)
+	}
+
+	// Track the child branch with parent = branchToSplit
+	if err := eng.TrackBranch(ctx, newBranchName, branchToSplit.GetName()); err != nil {
+		return nil, fmt.Errorf("failed to track child branch: %w", err)
+	}
+
+	// Child branch is now fully set up, don't clean it up on subsequent errors
+	childBranchCreated = false
+
+	// Re-parent existing children to the new child branch
+	for _, existingChildName := range existingChildren {
+		existingChild := eng.GetBranch(existingChildName)
+		if err := eng.SetParent(ctx, existingChild, childBranch); err != nil {
+			return nil, fmt.Errorf("failed to reparent %s: %w", existingChildName, err)
+		}
+	}
+
+	return &Result{
+		BranchNames:  []string{newBranchName},
+		BranchPoints: []int{0},
+	}, nil
+}
+
 // splitByFileSibling creates a sibling branch with the specified file changes.
 // The original branch is unchanged.
-func splitByFileSibling(ctx context.Context, branchToSplit engine.Branch, parentBranch engine.Branch, newBranchName string, hunks []git.Hunk, commitMessage string, eng splitByFileEngine) (*Result, error) {
+func splitByFileSibling(ctx context.Context, branchToSplit engine.Branch, parentBranch engine.Branch, newBranchName string, hunks []git.Hunk, commitMessage string, eng splitByFileEngine, dryRun bool) (*Result, error) {
+	// Dry-run mode: show what would happen without executing
+	if dryRun {
+		return &Result{
+			BranchNames:  []string{newBranchName},
+			BranchPoints: []int{0},
+		}, nil
+	}
 	// First checkout the parent branch so the new branch starts from there
 	if err := eng.CheckoutBranch(ctx, parentBranch); err != nil {
 		return nil, fmt.Errorf("failed to checkout parent branch: %w", err)
@@ -361,7 +594,7 @@ func filterHunksByFiles(hunks []git.Hunk, files []string) []git.Hunk {
 }
 
 // promptForFiles shows an interactive file selector for split --by-file
-func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog output.Output, asSibling bool) ([]string, error) {
+func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitByFileEngine, splog output.Output, asSibling bool, direction Direction) ([]string, error) {
 	if !utils.IsInteractive() {
 		return nil, fmt.Errorf("file selection must be specified via pathspecs in non-interactive mode")
 	}
@@ -388,12 +621,16 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 		return nil, fmt.Errorf("only one file changed in branch - nothing to split")
 	}
 
-	// Show instructions
+	// Show instructions based on mode
 	splog.Info("Splitting %s by file.", style.ColorBranchName(branchToSplit.GetName(), true))
-	if asSibling {
+	switch {
+	case asSibling:
 		splog.Info("Select the files to extract to a new sibling branch.")
 		splog.Info("The original branch will remain unchanged.")
-	} else {
+	case direction == DirectionAbove:
+		splog.Info("Select the files to extract to a new child branch.")
+		splog.Info("The remaining files will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
+	default:
 		splog.Info("Select the files to extract to a new parent branch.")
 		splog.Info("The remaining files will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
 	}

@@ -82,6 +82,39 @@ Use **Conventional Commits**: `<type>: <description>`
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`
 
+## Stacking Multi-Phase Changes
+
+**When implementing changes with multiple logical phases, use stackit to create separate PRs for each phase.** This makes code review easier and keeps each PR focused.
+
+**When to stack:**
+- Adding multiple related features (e.g., new phase + error handling + docs)
+- Changes that touch different subsystems
+- Refactoring + new feature in the same task
+- Any change with 3+ distinct logical units
+
+**Example:** Adding dependency analysis to a skill file:
+```bash
+# Phase 1: Add dependency analysis
+git add -A && command stackit create -m "feat: add dependency analysis phase"
+
+# Phase 2: Enhance related file detection
+git add -A && command stackit create -m "feat: add related file detection guidance"
+
+# Phase 3: Update error handling
+git add -A && command stackit create -m "feat: add error cases for new phases"
+
+# Submit all as stacked PRs
+command stackit submit
+```
+
+**Benefits:**
+- Reviewers can approve phases independently
+- Easy to revert a single phase if needed
+- Clearer git history
+- Smaller, focused diffs
+
+**Use `/stack-plan` when starting from scratch** to plan the stack structure before writing code.
+
 ## Metadata
 
 Stackit stores branch relationships in `refs/stackit/metadata/`. The `Engine` package is the source of truth for stack structure. Always use `Engine` to query/modify branch relationships.

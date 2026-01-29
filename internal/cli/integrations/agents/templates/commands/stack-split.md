@@ -7,16 +7,24 @@ argument-hint: [check-command]
 
 # Stack Split
 
-Split the committed changes on the current branch between this branch and a new branch. Supports **hunk-level** analysis for fine-grained splitting.
+Split the committed changes on the current branch between this branch and a new branch. Supports both **file-level** and **hunk-level** splitting.
 
-**Split directions:**
-- `--above` (upstack): Extract hunks to a NEW CHILD branch above current
-- `--below` (downstack, default): Extract hunks to a NEW PARENT branch below current
+**Split methods:**
+- `--by-file <files>`: Extract entire files (simplest, recommended for file-level splits)
+- `--patch <file>`: Extract specific hunks using a patch file (for fine-grained control)
+- `--by-hunk`: Interactive TUI for selecting hunks
+
+**Split directions (works with all methods):**
+- `--above` (upstack): Extract to a NEW CHILD branch above current
+- `--below` (downstack, default): Extract to a NEW PARENT branch below current
+
+**Preview mode:**
+- `--dry-run`: Show what will happen without executing
 
 **Key difference from related skills:**
 - `/stack-plan` - Creates N branches from **uncommitted** changes (from scratch)
 - `/stack-extract` - Extracts commits/files to sibling or parent branches
-- `/stack-split` - Binary split of **committed** changes at hunk level
+- `/stack-split` - Binary split of **committed** changes at file or hunk level
 
 **Primary objective: Never lose someone's work.**
 
@@ -94,11 +102,92 @@ This branch has no commits ahead of its parent.
 ```
 Stop and exit.
 
-**If branch has commits**: Continue to Phase 2.
+**If branch has commits**: Continue to Phase 1.5.
+
+### Phase 1.5: Dependency Analysis
+
+Before proposing a split, analyze relationships between changed files to avoid breaking dependencies.
+
+**Step 1: Check for project documentation**
+
+Look for dependency/build guidance:
+```bash
+# Check for project-specific guidance
+ls README.md CONTRIBUTING.md DEVELOPMENT.md docs/CONTRIBUTING.md 2>/dev/null
+```
+
+If found, read them to understand:
+- How the project is structured
+- Import/module conventions
+- Test file conventions (e.g., `*_test.go`, `*.test.ts`, `__tests__/`)
+
+**Step 2: Identify potential dependencies between changed files**
+
+For each file being considered for extraction, check if kept files reference it:
+
+```bash
+# Get list of changed files
+git diff --name-only <parent-branch>..HEAD
+
+# For each file that might be extracted, search for references in other changed files
+# Extract identifiers (function names, exports, class names, type definitions)
+# Search kept files for those identifiers
+rg -l "<identifier>" <other-changed-files>
+```
+
+**Language-agnostic patterns to check:**
+- **Import statements**: `import`, `require`, `from ... import`, `#include`, `use`
+- **Function/class names**: grep for identifiers defined in one file, used in another
+- **Type definitions**: structs, interfaces, classes, enums defined in extracted files
+- **Constants/variables**: exported values used across files
+
+**Step 3: Flag potential dependency conflicts**
+
+If a kept file appears to use symbols from an extracted file:
+
+```
+⚠️ Potential Dependency Conflict
+================================
+File to extract: internal/tui/style/formatter.go
+  - Defines: IconInfo, IconWarning (functions)
+
+File to keep: internal/actions/health.go
+  - Uses: style.IconInfo (line 488)
+
+Options:
+1. Keep formatter.go with health.go (recommended)
+2. Extract both files together
+3. Proceed anyway (may break build)
+```
+
+Use `AskUserQuestion` to resolve:
+- Header: "Dependency conflict"
+- Question: "<kept-file> uses <symbol> from <extract-file>. How should we handle this?"
+- Options:
+  - "Keep together (Recommended)" - Move extract-file to keep list
+  - "Extract both" - Move kept-file to extract list
+  - "Proceed anyway" - I'll handle the dependency manually
+
+**Continue to Phase 2** after resolving any conflicts.
 
 ### Phase 2: Analyze and Propose Split (Hunk-Level)
 
 Analyze the changes at the **hunk level**. A hunk is a contiguous block of changes within a file.
+
+**Related file detection** (check before proposing split):
+
+Common patterns where files should stay together:
+- **Implementation + Test**: `foo.go` and `foo_test.go`, `bar.ts` and `bar.test.ts`
+- **Interface + Implementation**: Files defining types used by other changed files
+- **Helper + Consumer**: Utility files and files that import them
+- **Config + User**: Configuration files and code that reads them
+
+Before proposing a split, verify:
+1. Test files go with their implementation files
+2. Files that define symbols stay with files that use those symbols
+3. Helper/utility files stay with their consumers
+
+If unsure, check the project's README or CONTRIBUTING file for guidance on code organization.
 
 **Split Criteria:**
 
@@ -158,11 +247,26 @@ Extract to [child-branch]:
 
 **If provided in arguments**: Use that command.
 
-**Otherwise, auto-detect**:
+**Otherwise, determine the build command:**
+
+**Step 1: Check project documentation first**
+
+```bash
+# Look for build/test instructions
+cat README.md CONTRIBUTING.md 2>/dev/null | head -100
+```
+
+Look for sections like:
+- "Development", "Building", "Testing", "Getting Started"
+- Commands mentioned: `make`, `npm`, `cargo`, `go`, `mise`
+
+**Step 2: Auto-detect if not documented**
+
 1. Check for `mise.toml` → use `mise run check` or `mise run test`
 2. Check for `Makefile` → use `make test` or `make check`
 3. Check for `package.json` → use `npm test` or `npm run check`
-4. Check README.md or CONTRIBUTING.md for build/test instructions
+4. Check for `Cargo.toml` → use `cargo check` or `cargo test`
+5. Check for `go.mod` → use `go build ./...` or `go test ./...`
 
 **If no command found**, use `AskUserQuestion`:
 - Header: "Check command"
@@ -182,7 +286,8 @@ Stack Split Summary
 ===================
 Current branch: <current-branch>
 Parent branch: <parent-branch>
-Child branch to create: <child-branch>
+New branch to create: <new-branch>
+Direction: above (child) / below (parent)
 
 Commits being split: N commits
 
@@ -190,7 +295,7 @@ Keep on [current-branch] (X hunks, Y files):
   - src/auth.go:42-58 (validateUser function)
   - src/auth.go:102-110 (error handling)
 
-Extract to [child-branch] (A hunks, B files):
+Extract to [new-branch] (A hunks, B files):
   - src/auth.go:15-20 (import cleanup)
   - src/utils.go:5-30 (new helper)
 
@@ -202,45 +307,34 @@ Use `AskUserQuestion` to get approval:
 - Question: "Ready to split these changes?"
 - Options:
   - "Execute" - Create the split with verification
-  - "Dry run" - Show exact commands without executing
+  - "Dry run" - Preview what will happen without executing
   - "Swap" - Exchange keep/extract categories
   - "Modify" - Change the split classification
   - "Cancel" - Exit without making changes
 
-**If user selects "Dry run"**, show the exact commands:
-```
-Dry Run - Generate Extract Patch
-================================
-# Write patch file with hunks to extract to child branch
-# (using Write tool to create /tmp/extract.patch)
+**If user selects "Dry run"**, use the `--dry-run` flag to preview:
 
-Dry Run - Execute Split
-=======================
-command stackit split --by-hunk --above \
-    --patch /tmp/extract.patch \
-    --name "<child-branch-name>" \
-    --message "<child-commit-message>"
-
-# This command internally:
-# 1. Takes snapshot (for undo support)
-# 2. Resets branch to expose changes as unstaged
-# 3. Stages hunks from patch file
-# 4. Commits unstaged changes to current branch
-# 5. Creates child branch with staged changes
-# 6. Reparents any existing children
-
-Dry Run - Verify Build
-======================
-<check-command>
-git checkout <current-branch>
-<check-command>
-
-Recovery (if needed)
-====================
-command stackit undo
+For file-level splits:
+```bash
+command stackit split --by-file <files-to-extract> --above --dry-run \
+    --name "<new-branch-name>" \
+    --message "<commit-message>"
 ```
 
-Then ask again whether to execute or cancel.
+For hunk-level splits (write patch first, then):
+```bash
+command stackit split --patch /tmp/extract.patch --above --dry-run \
+    --name "<new-branch-name>" \
+    --message "<commit-message>"
+```
+
+The `--dry-run` output shows:
+- Current branch and new branch names
+- Direction (above/below/sibling)
+- Files that will be extracted
+- No actual changes are made
+
+After showing the preview, ask again whether to execute or cancel.
 
 **If user selects "Swap"**, exchange the keep/extract classifications and present the updated plan for approval.
 
@@ -248,9 +342,37 @@ Then ask again whether to execute or cancel.
 
 ### Phase 5: Execute Split
 
-#### Step 1: Generate Extract Patch
+Choose the appropriate method based on your split type:
 
-Write the extract patch to a temporary file using the Write tool. This patch contains the hunks to move to the child branch.
+#### Option A: File-Level Split (Recommended for extracting entire files)
+
+Use `--by-file` when extracting complete files (not individual hunks within files):
+
+```bash
+# Extract files to a child branch (upstack):
+command stackit split --by-file path/to/file1.go path/to/file2.go --above \
+    --name "<child-branch-name>" \
+    --message "<commit-message>"
+
+# Extract files to a parent branch (downstack, default):
+command stackit split --by-file path/to/file1.go path/to/file2.go \
+    --name "<parent-branch-name>" \
+    --message "<commit-message>"
+```
+
+**Advantages of `--by-file`:**
+- No patch file generation needed
+- Simpler command
+- Works with new files without special handling
+- Supports `--dry-run` for preview
+
+#### Option B: Hunk-Level Split (For fine-grained splitting)
+
+Use `--patch` when you need to split changes within files at the hunk level:
+
+**Step 1: Generate Extract Patch**
+
+Write the extract patch to a temporary file using the Write tool. This patch contains the hunks to move to the new branch.
 
 **The extract patch must be in valid unified diff format:**
 - Include proper `diff --git` headers
@@ -272,33 +394,32 @@ diff --git a/src/utils.go b/src/utils.go
 
 **Handling new files**: A new file is a single hunk. Include the entire file in extract.patch.
 
-**Handling deleted files**: A deleted file is a single hunk. Include the deletion if it should be in the child branch.
+**Handling deleted files**: A deleted file is a single hunk. Include the deletion if it should be in the new branch.
 
 Write the patch to `/tmp/extract.patch` using the Write tool.
 
-#### Step 2: Run Split Command
-
-Use the `--patch` flag to execute the split:
+**Step 2: Run Split Command**
 
 ```bash
 # For --above (extract to child branch):
 command stackit split --patch /tmp/extract.patch --above \
     --name "<child-branch-name>" \
-    --message "<child-commit-message>"
+    --message "<commit-message>"
 
 # For --below (extract to parent branch, default):
 command stackit split --patch /tmp/extract.patch \
     --name "<parent-branch-name>" \
-    --message "<parent-commit-message>"
+    --message "<commit-message>"
 ```
 
-This command:
+#### What the split command does internally:
+
 1. Takes a snapshot for undo support
 2. Resets the branch to expose all changes
-3. Stages the hunks specified in the patch file
-4. Keeps remaining hunks on the current branch
-5. Creates the child branch with extracted hunks
-6. Reparents any existing children to the new child branch
+3. Stages the specified files/hunks
+4. Keeps remaining changes on the current branch
+5. Creates the new branch with extracted changes
+6. Reparents any existing children appropriately
 
 **Note**: Stackit handles all git operations safely. No manual git reset or backup branch is needed.
 
@@ -355,6 +476,7 @@ Next steps:
 |-------|----------|----------|
 | Phase 0 | Uncommitted changes | Inform and exit - user must commit/stash first |
 | Phase 1 | No commits on branch | Inform and exit - nothing to split |
+| Phase 1.5 | Dependency conflict detected | Ask user: keep together / extract both / proceed |
 | Phase 2 | All hunks same category | Inform user - splitting not needed |
 | Phase 4 | User cancels | Exit - no changes made |
 | Phase 5 | Split command fails | `command stackit undo` |
@@ -375,7 +497,9 @@ command stackit undo
 
 Then report: "Rolled back to original state. Your commits are restored."
 
-## Patch File Format
+## Patch File Format (for hunk-level splits only)
+
+**Note:** If you're extracting entire files, use `--by-file` instead - no patch file needed.
 
 Valid patch format for `git apply`:
 
@@ -414,18 +538,41 @@ new file mode 100644
 
 | Scenario | Use Mode |
 |----------|----------|
+| Extract entire files to child (upstack) | `--by-file <files> --above` |
+| Extract entire files to parent (downstack) | `--by-file <files>` (or `--below`) |
 | Split hunks within files | `--patch` or `--by-hunk` |
-| Extract entire files | `--by-file` |
 | Extract specific commits | `--by-commit` |
 | Interactive hunk selection | `--by-hunk` (default) |
+| Preview without executing | Add `--dry-run` to any mode |
 
 **Key differences:**
-- `--patch`: Non-interactive, uses a patch file you provide
+- `--by-file`: Extracts entire files. Supports `--above` (child) and `--below` (parent) directions. **Recommended for file-level splits.**
+- `--patch`: Non-interactive hunk-level split using a patch file you provide
 - `--by-hunk`: Interactive TUI for selecting hunks
-- `--by-file`: Extracts entire files (not individual hunks within files)
 - `--by-commit`: Splits at commit boundaries
+- `--dry-run`: Preview what will happen without executing (works with all modes)
 
-**Note:** `--by-file` extracts entire files to the new branch, not just the changes to those files. Use `--patch` or `--by-hunk` for hunk-level splitting.
+**Direction options (for `--by-file` and `--by-hunk`/`--patch`):**
+- `--above`: Extract to a new CHILD branch (upstack)
+- `--below` (default): Extract to a new PARENT branch (downstack)
+- `--as-sibling`: Extract to an independent branch on the same parent
+
+**Examples:**
+```bash
+# Extract files to child branch (upstack)
+command stackit split --by-file internal/utils.go --above -n "refactor-utils" -m "Extract utilities"
+
+# Extract files to parent branch (downstack, default)
+command stackit split --by-file internal/config.go -n "config-changes" -m "Extract config"
+
+# Preview a file-level split without executing
+command stackit split --by-file internal/utils.go --above --dry-run -n "refactor-utils"
+
+# Hunk-level split using a patch file
+command stackit split --patch /tmp/extract.patch --above -n "feature-part-2" -m "Part 2"
+```
+
+**Note:** `--by-file` extracts entire files to the new branch, not just the changes to those files. Use `--patch` or `--by-hunk` for hunk-level splitting within files.
 
 ## Tool Trust
 
