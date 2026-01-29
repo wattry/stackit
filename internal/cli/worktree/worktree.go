@@ -175,15 +175,18 @@ func renderWorktreeEntry(ctx *app.Context, wt worktree.Entry, currentAnchor stri
 // newRemoveCmd creates the worktree remove command
 func newRemoveCmd() *cobra.Command {
 	var force bool
+	var keepBranch bool
 
 	cmd := &cobra.Command{
 		Use:   "remove <name-or-anchor-branch>",
 		Short: "Remove a managed worktree",
 		Long: `Remove a stackit-managed worktree.
 
-This removes both the worktree directory and unregisters it from stackit.
-The stack's branches remain intact. You can specify either the worktree
-name or the anchor branch name.`,
+This removes the worktree directory, unregisters it from stackit, and deletes
+the anchor branch. You can specify either the worktree name or the anchor
+branch name.
+
+Use --keep-branch to preserve the anchor branch after removing the worktree.`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -191,12 +194,14 @@ name or the anchor branch name.`,
 				return worktree.RemoveAction(ctx, worktree.RemoveOptions{
 					AnchorBranch: args[0],
 					Force:        force,
+					KeepBranch:   keepBranch,
 				})
 			})
 		},
 	}
 
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force removal even if there are errors")
+	cmd.Flags().BoolVar(&keepBranch, "keep-branch", false, "Keep the anchor branch instead of deleting it")
 
 	return cmd
 }

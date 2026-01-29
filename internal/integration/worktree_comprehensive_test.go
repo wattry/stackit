@@ -872,3 +872,164 @@ func TestWorktreeErrorHandling(t *testing.T) {
 			RunExpectError("create child -w -m 'child with worktree'")
 	})
 }
+
+// =============================================================================
+// Anchor Branch Cleanup
+// =============================================================================
+
+func TestWorktreeAnchorBranchCleanup(t *testing.T) {
+	t.Run("worktree remove deletes anchor branch", func(t *testing.T) {
+		sh := NewTestShellInProcess(t)
+
+		// Create worktree
+		sh.WriteFile("mystack.txt", "mystack").
+			Run("create mystack -w -m 'mystack branch'")
+
+		// Verify anchor branch exists
+		sh.HasBranches("main", "mystack")
+
+		worktreePath := sh.GetWorktreePath("mystack")
+
+		// Remove the worktree
+		sh.Run("worktree remove mystack")
+
+		// Worktree should be removed
+		if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+			t.Errorf("Worktree directory should be removed at %s", worktreePath)
+		}
+
+		// Anchor branch should also be deleted
+		sh.HasBranches("main")
+	})
+
+	t.Run("worktree remove with --keep-branch preserves anchor", func(t *testing.T) {
+		sh := NewTestShellInProcess(t)
+
+		// Create worktree
+		sh.WriteFile("mystack.txt", "mystack").
+			Run("create mystack -w -m 'mystack branch'")
+
+		// Verify anchor branch exists
+		sh.HasBranches("main", "mystack")
+
+		worktreePath := sh.GetWorktreePath("mystack")
+
+		// Remove the worktree with --keep-branch
+		sh.Run("worktree remove mystack --keep-branch")
+
+		// Worktree should be removed
+		if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+			t.Errorf("Worktree directory should be removed at %s", worktreePath)
+		}
+
+		// Anchor branch should still exist
+		sh.HasBranches("main", "mystack")
+	})
+
+	t.Run("worktree remove skips deletion when anchor has children", func(t *testing.T) {
+		sh := NewTestShellInProcess(t)
+
+		// Create worktree with child branches
+		sh.WriteFile("feature.txt", "feature").
+			Run("create feature -w -m 'feature branch'")
+
+		worktreePath := sh.GetWorktreePath("feature")
+		shW := sh.InWorktree(worktreePath)
+
+		// Create a child branch
+		shW.WriteFile("child.txt", "child").
+			Run("create child -m 'child branch'")
+
+		// Checkout main in worktree so we can remove it
+		shW.Git("checkout --detach HEAD")
+
+		// Remove the worktree - should warn about children and not delete anchor
+		sh.Run("worktree remove feature")
+
+		// Anchor branch and child should still exist
+		sh.HasBranches("main", "feature", "child")
+	})
+
+	t.Run("worktree prune cleans up missing directories", func(t *testing.T) {
+		sh := NewTestShellInProcess(t)
+
+		// Create worktree
+		sh.WriteFile("test-wt.txt", "test-wt").
+			Run("create test-wt -w -m 'test worktree'")
+
+		// Verify anchor branch exists
+		sh.HasBranches("main", "test-wt")
+
+		worktreePath := sh.GetWorktreePath("test-wt")
+
+		// Manually delete the worktree directory (simulating external deletion)
+		if err := os.RemoveAll(worktreePath); err != nil {
+			t.Fatalf("Failed to remove worktree directory: %v", err)
+		}
+
+		// Worktree list should show missing worktree
+		sh.Run("worktree list").
+			OutputContains("missing")
+
+		// Prune should clean up the missing worktree
+		sh.Run("worktree prune")
+
+		// Worktree list should be empty
+		sh.Run("worktree list").
+			OutputContains("No managed worktrees")
+
+		// Anchor branch should be deleted
+		sh.HasBranches("main")
+	})
+
+	t.Run("worktree prune dry-run shows what would be cleaned", func(t *testing.T) {
+		sh := NewTestShellInProcess(t)
+
+		// Create worktree
+		sh.WriteFile("test-wt.txt", "test-wt").
+			Run("create test-wt -w -m 'test worktree'")
+
+		worktreePath := sh.GetWorktreePath("test-wt")
+
+		// Manually delete the worktree directory
+		if err := os.RemoveAll(worktreePath); err != nil {
+			t.Fatalf("Failed to remove worktree directory: %v", err)
+		}
+
+		// Prune with dry-run should show what would be cleaned
+		sh.Run("worktree prune --dry-run").
+			OutputContains("Would prune").
+			OutputContains("test-wt")
+
+		// But nothing should actually be deleted
+		sh.HasBranches("main", "test-wt")
+	})
+
+	t.Run("worktree prune skips missing worktrees with children", func(t *testing.T) {
+		sh := NewTestShellInProcess(t)
+
+		// Create worktree with child branches
+		sh.WriteFile("feature.txt", "feature").
+			Run("create feature -w -m 'feature branch'")
+
+		worktreePath := sh.GetWorktreePath("feature")
+		shW := sh.InWorktree(worktreePath)
+
+		// Create a child branch
+		shW.WriteFile("child.txt", "child").
+			Run("create child -m 'child branch'")
+
+		// Manually delete the worktree directory
+		if err := os.RemoveAll(worktreePath); err != nil {
+			t.Fatalf("Failed to remove worktree directory: %v", err)
+		}
+
+		// Prune should skip because anchor has children
+		sh.Run("worktree prune").
+			OutputContains("Skipped").
+			OutputContains("children")
+
+		// Anchor branch and child should still exist
+		sh.HasBranches("main", "feature", "child")
+	})
+}

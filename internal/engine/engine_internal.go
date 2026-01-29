@@ -205,6 +205,12 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 		return false
 	}
 
+	// Worktree anchor branches should never be reparented - they are permanent parents
+	// for their stacks, even though they may be at trunk HEAD
+	if e.IsWorktreeAnchor(e.GetBranch(parentBranchName)) {
+		return false
+	}
+
 	// Check if parent branch still exists locally
 	parentExists := false
 	for _, name := range e.branches {
