@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -122,6 +123,70 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 	if opts.dryRun {
 		out.Info("Dry-run mode: No changes were made.")
 		return nil
+	}
+
+	// Check if individual merge is possible (only in interactive mode without --yes)
+	if !opts.yes && ctx.Interactive && len(plan.BranchesToMerge) > 0 {
+		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+		if mergeAction.AllBranchesAreLeaves(graph, plan.BranchesToMerge) {
+			// All branches are leaves - check if they're all mergeable
+			status, err := mergeAction.CanMergeIndividually(ctx.Context, ctx.Engine.Git(), ctx.GitHubClient, graph, plan.BranchesToMerge)
+			if err != nil {
+				out.Debug("Failed to check individual merge possibility: %v", err)
+			} else if status.CanMerge {
+				// Create a TUI handler for the prompt
+				runner, eventHandler := NewMergeUI(ctx.Output, ctx.Logger)
+				if runner != nil {
+					defer runner.Cleanup()
+				}
+
+				// Cast to InteractiveHandler to access the prompt method
+				if interactiveHandler, ok := eventHandler.(mergeAction.InteractiveHandler); ok && interactiveHandler.IsInteractive() {
+					useIndividual, err := interactiveHandler.PromptIndividualMerge(plan.BranchesToMerge)
+					if err != nil {
+						return fmt.Errorf("selection canceled: %w", err)
+					}
+
+					if useIndividual {
+						// Switch to bottom-up strategy
+						out.Info("Switching to individual merge mode...")
+						plan, _, err = mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
+							Strategy: mergeAction.StrategyBottomUp,
+							Force:    opts.force,
+							Scope:    opts.scope,
+							Wait:     true, // Individual merge always waits
+						})
+						if err != nil {
+							return err
+						}
+
+						// Execute bottom-up merge
+						cfg, _ := config.LoadConfig(ctx.RepoRoot)
+						actionOpts := mergeAction.Options{
+							DryRun:         false,
+							Confirm:        false,
+							Strategy:       mergeAction.StrategyBottomUp,
+							Force:          opts.force,
+							Wait:           true,
+							Scope:          opts.scope,
+							Plan:           plan,
+							UndoStackDepth: cfg.UndoStackDepth(),
+							Handler:        mergeAction.NewLegacyHandlerAdapter(eventHandler),
+						}
+
+						if err := mergeAction.Action(ctx, actionOpts); err != nil {
+							return err
+						}
+
+						// Post-merge cleanup
+						if postMergeHandler != nil {
+							return postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk)
+						}
+						return nil
+					}
+				}
+			}
+		}
 	}
 
 	// Confirm unless --yes

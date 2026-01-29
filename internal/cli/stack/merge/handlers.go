@@ -131,6 +131,11 @@ func (h *SimpleMergeEventHandler) PromptPostMerge(_ bool, _ string) (mergeAction
 	return mergeAction.PostMergeDone, nil
 }
 
+// PromptIndividualMerge implements InteractiveHandler. Returns error in non-interactive mode.
+func (h *SimpleMergeEventHandler) PromptIndividualMerge(_ []mergeAction.BranchMergeInfo) (bool, error) {
+	return false, fmt.Errorf("interactive mode required for individual merge selection")
+}
+
 // InteractiveMergeEventHandler provides a TUI for merge operations using runner.Send()
 type InteractiveMergeEventHandler struct {
 	runner *tui.Runner
@@ -469,6 +474,48 @@ func (h *InteractiveMergeEventHandler) PromptPostMerge(hasUncommittedChanges boo
 	default:
 		return mergeAction.PostMergeDone, nil
 	}
+}
+
+// PromptIndividualMerge implements InteractiveHandler.
+func (h *InteractiveMergeEventHandler) PromptIndividualMerge(branches []mergeAction.BranchMergeInfo) (bool, error) {
+	h.runner.Pause()
+	defer h.runner.Resume()
+
+	// Build descriptive prompt
+	branchCount := len(branches)
+	var branchList strings.Builder
+	for i, b := range branches {
+		if i > 0 {
+			branchList.WriteString(", ")
+		}
+		branchList.WriteString(fmt.Sprintf("PR #%d (%s)", b.PRNumber, b.BranchName))
+		if i >= 2 && branchCount > 3 {
+			fmt.Fprintf(&branchList, ", and %d more", branchCount-i-1)
+			break
+		}
+	}
+
+	fmt.Println()
+	fmt.Printf("All %d PRs are independent branches with no conflicts.\n", branchCount)
+	fmt.Printf("Branches: %s\n\n", branchList.String())
+
+	options := []tui.SelectOption{
+		{
+			Label: "🔄 Merge individually — Merge each PR one at a time (recommended)",
+			Value: "individual",
+		},
+		{
+			Label: "🔀 Create consolidated PR — Combine all into a single merge commit",
+			Value: "consolidate",
+		},
+	}
+
+	selected, err := tui.PromptSelect("How would you like to merge these PRs?", options, 0)
+	if err != nil {
+		return false, err
+	}
+
+	return selected == "individual", nil
 }
 
 // Group represents a group of steps that should be displayed as a single line.
