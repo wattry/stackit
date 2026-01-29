@@ -1,5 +1,7 @@
 ---
 icon: material/play-circle
+title: Getting Started with Git Worktrees
+description: Create and use Git worktrees for parallel development with stackit. Work on multiple features simultaneously in isolated directories.
 ---
 
 # Getting Started with Worktrees

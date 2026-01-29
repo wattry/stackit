@@ -1,5 +1,7 @@
 ---
 icon: material/book-open-variant
+title: Stackit User Guide
+description: Comprehensive guide to using stackit. Learn core concepts, troubleshoot common issues, and master stacked Git workflows.
 ---
 
 # User Guide

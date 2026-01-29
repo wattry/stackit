@@ -1,5 +1,7 @@
 ---
 icon: material/download
+title: Install Stackit
+description: Install stackit via Homebrew on macOS or Linux. Set up shell integration, completions, and initialize your repository for stacked changes.
 ---
 
 # Installation

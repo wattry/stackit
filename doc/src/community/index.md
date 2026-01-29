@@ -1,5 +1,7 @@
 ---
 icon: material/account-group
+title: Stackit Community
+description: Join the stackit community. Find help, report issues, contribute to the project, and connect with other developers using stacked changes.
 ---
 
 # Community

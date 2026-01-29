@@ -1,5 +1,7 @@
 ---
 icon: material/puzzle
+title: Stackit Integrations
+description: Integrate stackit with Claude Code, GitHub Actions, Git hooks, and shell for a seamless stacking workflow.
 ---
 
 # Integrations

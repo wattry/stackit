@@ -1,5 +1,7 @@
 ---
 icon: material/hook
+title: Git Hooks for Branch Protection
+description: Install pre-commit and pre-push hooks to prevent modifications to locked or frozen branches. Catch issues locally before pushing.
 ---
 
 # Git Hooks

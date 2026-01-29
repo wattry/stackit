@@ -1,5 +1,7 @@
 ---
 icon: material/console
+title: Shell Integration
+description: Enable stackit to change your working directory when opening worktrees. Setup guide for zsh, bash, and fish with troubleshooting tips.
 ---
 
 # Shell Integration

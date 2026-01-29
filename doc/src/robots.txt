@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://getstackit.github.io/stackit/sitemap.xml

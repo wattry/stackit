@@ -1,5 +1,7 @@
 ---
 icon: material/clock-outline
+title: Daily Stackit Workflows
+description: Common daily tasks with stackit including updating after code review, using absorb for multi-branch fixes, and syncing with main.
 ---
 
 # Daily Workflows
