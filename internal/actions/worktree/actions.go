@@ -23,15 +23,19 @@ type ListOptions struct {
 
 // ListResult contains the results of listing worktrees
 type ListResult struct {
-	Worktrees []Entry
+	Worktrees     []Entry
+	CurrentAnchor string // Anchor branch of the worktree we're currently in (if any)
 }
 
 // Entry represents a single managed worktree
 type Entry struct {
-	Name         string // User-provided name (empty for legacy worktrees)
-	AnchorBranch string // Anchor branch name
-	Path         string
-	Exists       bool // Whether the path still exists on disk
+	Name          string // User-provided name (empty for legacy worktrees)
+	AnchorBranch  string // Anchor branch name
+	Path          string
+	Exists        bool   // Whether the path still exists on disk
+	StackSize     int    // Number of branches in the stack (excluding anchor)
+	CurrentBranch string // Branch currently checked out in this worktree
+	IsDirty       bool   // Has uncommitted changes
 }
 
 // ListAction lists all managed worktrees
@@ -45,19 +49,52 @@ func ListAction(ctx *app.Context, _ ListOptions) (*ListResult, error) {
 		Worktrees: make([]Entry, 0, len(worktrees)),
 	}
 
-	for _, wt := range worktrees {
-		// Check if path exists
-		exists := true
-		if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
-			exists = false
-		}
+	// Check if we're in a managed worktree
+	if ctx.InManagedWorktree && ctx.WorktreeInfo != nil {
+		result.CurrentAnchor = ctx.WorktreeInfo.AnchorBranch
+	}
 
-		result.Worktrees = append(result.Worktrees, Entry{
+	// Build stack graph once to get stack sizes
+	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+
+	for _, wt := range worktrees {
+		entry := Entry{
 			Name:         wt.Name,
 			AnchorBranch: wt.AnchorBranch,
 			Path:         wt.Path,
-			Exists:       exists,
-		})
+			Exists:       true,
+		}
+
+		// Check if path exists
+		if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+			entry.Exists = false
+			result.Worktrees = append(result.Worktrees, entry)
+			continue
+		}
+
+		// Get stack size (descendants of anchor branch)
+		anchorBranch := ctx.Engine.GetBranch(wt.AnchorBranch)
+		if anchorBranch.IsTracked() {
+			descendants := graph.Range(anchorBranch, engine.StackRange{
+				RecursiveChildren: true,
+				IncludeCurrent:    false,
+			})
+			entry.StackSize = len(descendants)
+		}
+
+		// Get current branch in worktree
+		currentBranch, err := ctx.Git().GetWorktreeCurrentBranch(ctx.Context, wt.Path)
+		if err == nil && currentBranch != "" {
+			entry.CurrentBranch = currentBranch
+		}
+
+		// Check for uncommitted changes
+		isDirty, err := ctx.Git().WorktreeHasUncommittedChanges(ctx.Context, wt.Path)
+		if err == nil {
+			entry.IsDirty = isDirty
+		}
+
+		result.Worktrees = append(result.Worktrees, entry)
 	}
 
 	return result, nil
@@ -350,4 +387,101 @@ func cleanupAnchorBranch(ctx context.Context, eng engine.Engine, branchName stri
 	if err := eng.DeleteBranch(ctx, eng.GetBranch(branchName)); err != nil {
 		out.Warn("Failed to clean up anchor branch %s: %v", branchName, err)
 	}
+}
+
+// PruneOptions contains options for the prune action
+type PruneOptions struct {
+	DryRun bool // If true, only show what would be pruned
+}
+
+// PruneResult contains the results of pruning worktrees
+type PruneResult struct {
+	Pruned  []string       // Names of pruned worktrees
+	Skipped []SkippedEntry // Worktrees that were skipped and why
+}
+
+// SkippedEntry represents a worktree that was skipped during pruning
+type SkippedEntry struct {
+	Name   string
+	Reason string
+}
+
+// PruneAction removes all empty worktrees
+func PruneAction(ctx *app.Context, opts PruneOptions) (*PruneResult, error) {
+	// Get list of all worktrees with their details
+	listResult, err := ListAction(ctx, ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	result := &PruneResult{
+		Pruned:  make([]string, 0),
+		Skipped: make([]SkippedEntry, 0),
+	}
+
+	for _, wt := range listResult.Worktrees {
+		// Determine display name
+		name := wt.Name
+		if name == "" {
+			name = wt.AnchorBranch
+		}
+
+		// Skip missing worktrees (they should be cleaned up separately)
+		if !wt.Exists {
+			result.Skipped = append(result.Skipped, SkippedEntry{
+				Name:   name,
+				Reason: "worktree directory missing",
+			})
+			continue
+		}
+
+		// Skip worktrees with stacked branches
+		if wt.StackSize > 0 {
+			result.Skipped = append(result.Skipped, SkippedEntry{
+				Name:   name,
+				Reason: fmt.Sprintf("has %d stacked branches", wt.StackSize),
+			})
+			continue
+		}
+
+		// Skip worktrees with uncommitted changes
+		if wt.IsDirty {
+			result.Skipped = append(result.Skipped, SkippedEntry{
+				Name:   name,
+				Reason: "has uncommitted changes",
+			})
+			continue
+		}
+
+		// Skip if we're currently in this worktree
+		if listResult.CurrentAnchor != "" && wt.AnchorBranch == listResult.CurrentAnchor {
+			result.Skipped = append(result.Skipped, SkippedEntry{
+				Name:   name,
+				Reason: "currently in this worktree",
+			})
+			continue
+		}
+
+		// This worktree is empty and can be pruned
+		if opts.DryRun {
+			result.Pruned = append(result.Pruned, name)
+			continue
+		}
+
+		// Actually remove the worktree
+		if err := RemoveAction(ctx, RemoveOptions{
+			AnchorBranch: wt.AnchorBranch,
+			Force:        false,
+		}); err != nil {
+			result.Skipped = append(result.Skipped, SkippedEntry{
+				Name:   name,
+				Reason: fmt.Sprintf("removal failed: %v", err),
+			})
+			continue
+		}
+
+		result.Pruned = append(result.Pruned, name)
+	}
+
+	return result, nil
 }
