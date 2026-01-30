@@ -22,36 +22,46 @@ func getCommitMessage(ctx *app.Context) (string, error) {
 	return utils.CleanCommitMessage(msg), nil
 }
 
-// getCommitMessageForBranch gets the commit message needed for branch name generation.
+// getCommitMessageForBranch gets the commit message, reading from stdin if needed.
 // If branch name is not provided and commit message is empty, it will prompt for one in interactive mode.
 func getCommitMessageForBranch(ctx *app.Context, opts *Options, commitMessage string) (string, error) {
-	// If branch name is provided, we don't need commit message for branch generation
-	if opts.BranchName != "" {
+	// If commit message is already provided, use it
+	if commitMessage != "" {
 		return commitMessage, nil
 	}
 
-	// If commit message is empty, we need to get it
-	if commitMessage == "" {
-		// Try reading from stdin first (even in non-interactive mode)
-		stdinMsg, err := utils.ReadFromStdin()
-		if err == nil && stdinMsg != "" {
-			return stdinMsg, nil
-		}
+	// Try reading from stdin first (even in non-interactive mode)
+	stdinMsg, err := utils.ReadFromStdin()
+	if err == nil && stdinMsg != "" {
+		return stdinMsg, nil
+	}
 
+	// If branch name is provided, we can create the branch without a message
+	// (will result in empty commit if there are staged changes)
+	if opts.BranchName != "" {
 		if !utils.IsInteractive() {
-			return "", fmt.Errorf("must specify either a branch name or commit message")
+			return "", nil // Allow empty message when branch name is explicit
 		}
-
-		// Interactive: get commit message from editor
+		// Interactive: prompt for commit message via editor
 		msg, err := getCommitMessage(ctx)
 		if err != nil {
 			return "", err
 		}
-		if msg == "" {
-			return "", fmt.Errorf("aborting due to empty commit message")
-		}
 		return msg, nil
 	}
 
-	return commitMessage, nil
+	// No branch name and no message - need one for branch generation
+	if !utils.IsInteractive() {
+		return "", fmt.Errorf("must specify either a branch name or commit message")
+	}
+
+	// Interactive: get commit message from editor
+	msg, err := getCommitMessage(ctx)
+	if err != nil {
+		return "", err
+	}
+	if msg == "" {
+		return "", fmt.Errorf("aborting due to empty commit message")
+	}
+	return msg, nil
 }
