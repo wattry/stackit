@@ -22,6 +22,7 @@ internal/
 
 - `docs/config.md` - Configuration system, keys, layered config
 - `docs/tui.md` - TUI patterns, BaseModel, styling, components
+- `docs/worktree.md` - Worktree management, create vs attach, workflows
 
 ## Common Development Tasks
 
@@ -31,6 +32,7 @@ internal/
 | Add submit command config | See "Submit Command Config Flow" in `docs/config.md` |
 | Add a new CLI command | Follow patterns in `internal/cli/` |
 | Add TUI component | See `docs/tui.md` |
+| Add worktree functionality | See `docs/worktree.md` |
 
 ## CLI Tools
 

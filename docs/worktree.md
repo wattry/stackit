@@ -1,0 +1,260 @@
+# Worktrees
+
+Worktrees allow you to work on multiple stacks in parallel, each in its own directory.
+
+## Quick Reference
+
+| Command | Description |
+|:---|:---|
+| `stackit worktree create <name>` | Create a new worktree with a fresh anchor branch |
+| `stackit worktree attach <branch>` | Create a worktree for an existing stack |
+| `stackit worktree list` | List all managed worktrees |
+| `stackit worktree open <name>` | Open/cd to a worktree |
+| `stackit worktree remove <name>` | Remove worktree and delete branches |
+| `stackit worktree detach <name>` | Remove worktree but keep branches |
+| `stackit worktree prune` | Clean up empty/stale worktrees |
+
+**Alias:** `wt` is a short alias for `worktree` (e.g., `stackit wt list`).
+
+---
+
+## Overview
+
+Git worktrees let you check out multiple branches simultaneously in separate directories. Stackit manages worktrees to give each stack its own isolated workspace.
+
+**Key concepts:**
+
+- **Anchor branch**: The root branch of a worktree's stack. For `wt create`, this is a special marker branch. For `wt attach`, it's the existing stack root.
+- **Main repo**: Your original repository checkout.
+- **Worktree**: A secondary checkout in a separate directory.
+
+**Default location:** Worktrees are created in a sibling directory named `{repo}-stacks/`. For example, if your repo is at `~/projects/myapp`, worktrees go to `~/projects/myapp-stacks/`.
+
+---
+
+## Commands
+
+### `worktree create` - Start a new stack in a worktree
+
+Creates a fresh worktree with an empty anchor branch. Use this when starting new work that you want isolated from your main checkout.
+
+```bash
+stackit worktree create my-feature
+# Creates:
+#   - Anchor branch: {pattern}-my-feature-wt (at trunk HEAD)
+#   - Worktree at: ../myapp-stacks/my-feature/
+```
+
+**Options:**
+- `--scope <name>`: Set a scope (Jira ticket, Linear ID) on the anchor branch
+- `--no-open`: Don't auto-cd to the new worktree
+
+**Workflow:**
+```bash
+stackit wt create auth-refactor
+# Now in ../myapp-stacks/auth-refactor/
+stackit create api-changes -m "refactor: update auth API"
+stackit create ui-updates -m "feat: new login UI"
+```
+
+### `worktree attach` - Move existing stack to a worktree
+
+Creates a worktree for a stack that already exists in your main repo. The stack root becomes the worktree anchor.
+
+```bash
+# You have a stack: main -> feature -> tests
+stackit worktree attach feature
+# Creates worktree at: ../myapp-stacks/feature/
+# Main repo switches to trunk
+```
+
+**Options:**
+- `--name <name>`: Custom worktree name (defaults to stack root name)
+- `--no-open`: Don't auto-cd to the new worktree
+
+**When to use:**
+- You started work in the main repo but want to isolate it
+- You want to work on a different stack without stashing/switching
+- You fetched someone's stack with `stackit get` and want a dedicated workspace
+
+### `worktree list` - Show all managed worktrees
+
+```bash
+stackit worktree list
+```
+
+Shows each worktree with:
+- Name and anchor branch
+- Path on disk
+- Stack size (number of branches)
+- Current branch in that worktree
+- Dirty status (uncommitted changes)
+
+### `worktree open` - Navigate to a worktree
+
+```bash
+stackit worktree open my-feature
+```
+
+With shell integration enabled, this changes your directory to the worktree. Without shell integration, it prints the path for use with `cd $(...)`.
+
+### `worktree remove` - Delete worktree and branches
+
+Removes the worktree directory and deletes the anchor branch (if it has no children).
+
+```bash
+stackit worktree remove my-feature
+```
+
+**Options:**
+- `--force`: Remove even with uncommitted changes
+- `--keep-branch`: Keep the anchor branch instead of deleting it
+
+**Use when:** The stack is fully merged or you want to discard all the work.
+
+### `worktree detach` - Remove worktree, keep branches
+
+Removes the worktree directory but preserves all stack branches in the main repo.
+
+```bash
+stackit worktree detach my-feature
+```
+
+**Behavior depends on how the worktree was created:**
+
+| Created with | What `detach` does |
+|:---|:---|
+| `wt create` | Reparents children to trunk, deletes empty anchor branch |
+| `wt attach` | Leaves all branches intact (they have real commits) |
+
+**Options:**
+- `--force`: Detach even with uncommitted changes
+
+**Use when:**
+- You want to continue work in the main repo instead
+- You need to free up disk space but keep your branches
+- You're done with the isolated workspace but not the code
+
+### `worktree prune` - Clean up stale worktrees
+
+Removes worktrees that are empty (no stacked branches) or have missing directories.
+
+```bash
+stackit worktree prune
+stackit worktree prune --dry-run  # Preview what would be removed
+```
+
+**Skips worktrees that:**
+- Have stacked branches
+- Have uncommitted changes
+- Are currently checked out
+
+---
+
+## Create vs Attach
+
+| | `wt create` | `wt attach` |
+|:---|:---|:---|
+| **Starting point** | Fresh (from trunk) | Existing stack |
+| **Anchor branch** | New empty marker branch | Stack root (has commits) |
+| **Main repo after** | Unchanged | Switches to trunk |
+| **On detach** | Anchor deleted, children reparented | Branches preserved as-is |
+
+**Rule of thumb:**
+- Use `create` when starting new work
+- Use `attach` when moving existing work to a worktree
+
+---
+
+## Configuration
+
+Configure worktree behavior in `.stackit.yaml` or via `stackit config`:
+
+```yaml
+# .stackit.yaml
+worktree:
+  basePath: "../my-stacks"  # Custom location (default: ../{repo}-stacks)
+  autoClean: true           # Auto-remove merged worktrees during sync
+```
+
+```bash
+stackit config set worktree.basePath "../my-stacks"
+stackit config set worktree.autoClean false
+```
+
+---
+
+## Shell Integration
+
+Enable shell integration to auto-cd when creating/opening worktrees:
+
+```bash
+# zsh (~/.zshrc)
+eval "$(stackit shell zsh)"
+
+# bash (~/.bashrc)
+eval "$(stackit shell bash)"
+
+# fish (~/.config/fish/config.fish)
+stackit shell fish | source
+```
+
+Without shell integration, use command substitution:
+```bash
+cd $(stackit worktree open my-feature)
+```
+
+---
+
+## Post-Create Hooks
+
+Run commands automatically after creating a worktree:
+
+```yaml
+# .stackit.yaml
+hooks:
+  post-worktree-create:
+    - npm install
+    - cp .env.example .env
+```
+
+**Security:** First-time hooks require approval (defaults to "No"). Approvals are stored in git config. Hooks have a 60-second timeout.
+
+---
+
+## Common Workflows
+
+### Start isolated feature work
+
+```bash
+stackit wt create payments
+# In worktree now
+stackit create api -m "feat: payment API"
+stackit create ui -m "feat: checkout UI"
+stackit submit
+```
+
+### Move in-progress work to worktree
+
+```bash
+# In main repo with stack: main -> auth -> tests
+stackit wt attach auth
+# Now in worktree, main repo is on trunk
+```
+
+### Finish and clean up
+
+```bash
+# After PRs merged
+stackit sync           # Cleans up merged worktrees if autoClean=true
+# Or manually:
+stackit wt remove my-feature
+```
+
+### Keep branches, remove worktree
+
+```bash
+stackit wt detach my-feature
+# Worktree gone, branches still in main repo
+stackit checkout my-feature  # Continue in main repo
+```
