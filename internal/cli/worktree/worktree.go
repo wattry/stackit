@@ -29,6 +29,8 @@ directory. Create a worktree with 'stackit worktree create' from trunk.`,
 	cmd.AddCommand(newRemoveCmd())
 	cmd.AddCommand(newOpenCmd())
 	cmd.AddCommand(newPruneCmd())
+	cmd.AddCommand(newAttachCmd())
+	cmd.AddCommand(newDetachCmd())
 
 	return cmd
 }
@@ -300,6 +302,98 @@ To enable shell integration, add to your shell config:
 			})
 		},
 	}
+
+	return cmd
+}
+
+// newAttachCmd creates the worktree attach command
+func newAttachCmd() *cobra.Command {
+	var name string
+	var noOpen bool
+
+	cmd := &cobra.Command{
+		Use:   "attach <branch>",
+		Short: "Create a worktree for an existing stack",
+		Long: `Create a worktree for an existing stack.
+
+Takes any branch in the stack and creates a worktree for the entire stack.
+The stack root branch serves as the anchor for the worktree.
+
+Examples:
+  stackit worktree attach feature      # Attach stack rooted at 'feature'
+  stackit wt attach feature --name wt  # Use custom worktree name
+  stackit wt attach child-branch       # Attach the stack containing 'child-branch'
+
+With shell integration enabled, automatically changes to the new worktree directory.
+Use --no-open to skip the automatic directory change.`,
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
+				result, err := worktree.AttachAction(ctx, worktree.AttachOptions{
+					Branch: args[0],
+					Name:   name,
+				})
+				if err != nil {
+					return err
+				}
+
+				// Auto-cd to worktree by default when shell integration is available
+				if !noOpen && result.Path != "" && common.HasShellIntegration() {
+					ctx.Output.DirectiveCD(result.Path)
+				} else if result.Path != "" {
+					// User opted out or no shell integration
+					ctx.Output.Tip("cd %s", result.Path)
+				}
+
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().StringVar(&name, "name", "", "Custom name for the worktree (defaults to stack root branch name)")
+	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Don't change to the worktree directory after creation")
+
+	return cmd
+}
+
+// newDetachCmd creates the worktree detach command
+func newDetachCmd() *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "detach <name-or-branch>",
+		Short: "Remove a worktree while keeping stack branches",
+		Long: `Remove a worktree while preserving all stack branches.
+
+Unlike 'remove', this command preserves the branches in the main repository.
+Use this when you want to stop working in a worktree but keep all your branches.
+
+For worktrees created with 'wt create' (anchor-only worktrees):
+  - Reparents children of the anchor branch to trunk
+  - Deletes the anchor branch (which has no commits)
+
+For worktrees created with 'wt attach' (existing stack worktrees):
+  - Leaves all branches intact
+  - The stack remains usable in the main repository
+
+Examples:
+  stackit worktree detach my-feature   # Detach by worktree name
+  stackit wt detach feature-branch     # Detach by anchor branch name
+  stackit wt detach my-wt --force      # Force detach with uncommitted changes`,
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return common.Run(cmd, func(ctx *app.Context) error {
+				return worktree.DetachAction(ctx, worktree.DetachOptions{
+					NameOrBranch: args[0],
+					Force:        force,
+				})
+			})
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force detach even with uncommitted changes")
 
 	return cmd
 }
