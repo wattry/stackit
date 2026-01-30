@@ -339,36 +339,17 @@ func (e *engineImpl) restackBranch(
 		}
 	}
 
-	// Check if branch needs restacking using cached metadata
-	if meta.ParentBranchRevision != nil && *meta.ParentBranchRevision == parentRev {
-		return RestackBranchResult{
-			Result:            RestackUnneeded,
-			RebasedBranchBase: parentRev,
-			Reparented:        reparented,
-			OldParent:         oldParent,
-			NewParent:         parent,
-		}, nil
-	}
-
+	// Get oldParentRev from metadata (or use parentRev as default)
 	oldParentRev := parentRev
 	if meta.ParentBranchRevision != nil {
 		oldParentRev = *meta.ParentBranchRevision
 	}
 
-	// If parent hasn't changed, no need to restack (early exit before expensive operations)
-	if parentRev == oldParentRev {
-		return RestackBranchResult{
-			Result:            RestackUnneeded,
-			RebasedBranchBase: parentRev,
-			Reparented:        reparented,
-			OldParent:         oldParent,
-			NewParent:         parent,
-		}, nil
-	}
-
 	// RESILIENCY: If oldParentRev is no longer an ancestor of branchName,
 	// or if it's empty, find the actual merge base. This handles cases where
-	// the parent was amended or rebased outside of stackit.
+	// the parent was amended or rebased outside of stackit, or where metadata
+	// was set to a revision that was never actually an ancestor.
+	// This check MUST run before the early-exit checks to match buildRebaseSpecs behavior.
 	if oldParentRev != "" {
 		if isAncestor, _ := e.git.IsAncestor(oldParentRev, branchName); !isAncestor {
 			if mergeBase, err := e.git.GetMergeBase(branchName, parent); err == nil {
@@ -382,7 +363,7 @@ func (e *engineImpl) restackBranch(
 		}
 	}
 
-	// Check again after resiliency logic - parent might still be unchanged
+	// Check if branch needs restacking - parent must have changed
 	if parentRev == oldParentRev {
 		return RestackBranchResult{
 			Result:            RestackUnneeded,
