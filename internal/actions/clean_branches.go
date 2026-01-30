@@ -181,6 +181,8 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 	c := ctx.Context
 	out := ctx.Output
 
+	ctx.Logger.Info("identifyBranchesToDelete started", "force", opts.Force, "inManagedWorktree", opts.InManagedWorktree)
+
 	allTrackedBranches := eng.AllBranches()
 	candidateBranches := []engine.Branch{}
 	branchNames := []string{}
@@ -233,6 +235,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 					mu.Lock()
 					skippedInWorktree = append(skippedInWorktree, name)
 					mu.Unlock()
+					ctx.Logger.Info("identifyBranchesToDelete skipped (worktree)", "branch", name)
 					return
 				}
 				mu.Lock()
@@ -242,9 +245,14 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 					utilityBranches[name] = true
 				}
 				mu.Unlock()
+				ctx.Logger.Info("identifyBranchesToDelete marked for deletion", "branch", name, "reason", reason)
 			}
 		})
 	}
+
+	ctx.Logger.Info("identifyBranchesToDelete completed",
+		"toDeleteCount", len(deleteStatuses),
+		"skippedCount", len(skippedInWorktree))
 
 	return deleteStatuses, skippedInWorktree, utilityBranches
 }

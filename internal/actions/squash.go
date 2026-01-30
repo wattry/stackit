@@ -30,6 +30,9 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 		return err
 	}
 
+	// Log entry point for diagnostics
+	ctx.Logger.Info("squash started", "branch", currentBranch.GetName())
+
 	// Take snapshot before modifying the repository
 	snapshotOpts := NewSnapshot("squash",
 		WithFlagValue("-m", opts.Message),
@@ -50,6 +53,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 	}
 
 	out.Info("Squashed commits in %s.", style.ColorBranchName(currentBranch.GetName(), true))
+	ctx.Logger.Info("squash completed", "branch", currentBranch.GetName())
 
 	// Get upstack branches (recursive children only, excluding current branch)
 	rng := engine.StackRange{
@@ -59,6 +63,17 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 	}
 	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 	upstackBranches := graph.Range(*currentBranch, rng)
+
+	// Log upstack branches for diagnostics
+	if len(upstackBranches) > 0 {
+		upstackNames := make([]string, len(upstackBranches))
+		for i, b := range upstackBranches {
+			upstackNames[i] = b.GetName()
+		}
+		ctx.Logger.Info("squash restacking upstack", "branches", upstackNames, "count", len(upstackBranches))
+	} else {
+		ctx.Logger.Info("squash no upstack branches to restack")
+	}
 
 	// Restack upstack branches
 	if len(upstackBranches) > 0 {

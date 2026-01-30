@@ -61,6 +61,13 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		return nil
 	}
 
+	// Log entry point for diagnostics
+	branchNames := make([]string, len(branches))
+	for i, b := range branches {
+		branchNames[i] = b.GetName()
+	}
+	ctx.Logger.Info("restack started", "branches", branchNames, "count", len(branches))
+
 	// Pre-flight validation: check branch ancestry relationships
 	if err := validateBranchAncestry(ctx, branches); err != nil {
 		return fmt.Errorf("pre-flight validation failed: %w", err)
@@ -69,6 +76,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	// Build rebase specs for validation
 	specs, branchMap := buildRebaseSpecs(ctx, branches)
 	if len(specs) == 0 {
+		ctx.Logger.Info("restack no specs built, nothing to do")
 		return nil
 	}
 
@@ -162,6 +170,25 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		batchResult, err := ctx.Engine.RestackBranches(ctx.Context, successBranches)
 		if err != nil {
 			return fmt.Errorf("batch restack failed: %w", err)
+		}
+
+		// Log restack results for diagnostics
+		for branchName, result := range batchResult.Results {
+			resultStr := "unknown"
+			switch result.Result {
+			case engine.RestackDone:
+				resultStr = "done"
+			case engine.RestackUnneeded:
+				resultStr = "unneeded"
+			case engine.RestackConflict:
+				resultStr = "conflict"
+			}
+			ctx.Logger.Info("restack result",
+				"branch", branchName,
+				"result", resultStr,
+				"reparented", result.Reparented,
+				"oldParent", result.OldParent,
+				"newParent", result.NewParent)
 		}
 
 		// Report results via callback or output
@@ -356,6 +383,8 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 	specs := make([]engine.RebaseSpec, 0, len(branches))
 	branchMap := make(map[string]bool)
 
+	ctx.Logger.Debug("buildRebaseSpecs starting", "branchCount", len(branches))
+
 	for _, branch := range branches {
 		branchName := branch.GetName()
 
@@ -428,8 +457,14 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 			OldUpstream: oldParentRev,
 		})
 		branchMap[branchName] = true
+
+		ctx.Logger.Debug("buildRebaseSpecs added spec",
+			"branch", branchName,
+			"newParent", parentName,
+			"oldUpstream", oldParentRev)
 	}
 
+	ctx.Logger.Debug("buildRebaseSpecs completed", "specCount", len(specs))
 	return specs, branchMap
 }
 

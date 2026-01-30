@@ -255,6 +255,79 @@ func TestSquashCommand(t *testing.T) {
 		require.Equal(t, 1, lines, "should still have one commit after squash")
 	})
 
+	t.Run("squash single-commit child does not affect parent", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			// Create initial commit
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			// Create branch A with two commits
+			if err := s.Repo.CreateChange("a change 1", "a1", false); err != nil {
+				return err
+			}
+			cmd := exec.Command(binaryPath, "create", "a", "-m", "a change 1")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			if err := s.Repo.CreateChange("a change 2", "a2", false); err != nil {
+				return err
+			}
+			if err := s.Repo.CreateChangeAndCommit("a change 2", "a change 2"); err != nil {
+				return err
+			}
+			// Create branch B on top of A with single commit
+			if err := s.Repo.CreateChange("b change", "b", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "b", "-m", "b change")
+			cmd.Dir = s.Dir
+			return cmd.Run()
+		})
+
+		// Record A's commit SHA before squashing B
+		cmd := exec.Command("git", "rev-parse", "a")
+		cmd.Dir = scene.Dir
+		aRevBefore := strings.TrimSpace(string(testhelpers.Must(cmd.CombinedOutput())))
+
+		// Record A's commit count before squashing B
+		cmd = exec.Command("git", "log", "--oneline", "main..a")
+		cmd.Dir = scene.Dir
+		aLogBefore := string(testhelpers.Must(cmd.CombinedOutput()))
+		aCommitCountBefore := countLines(aLogBefore)
+		require.Equal(t, 2, aCommitCountBefore, "A should have 2 commits before squash")
+
+		// Run squash on B (the child with single commit)
+		cmd = exec.Command(binaryPath, "squash", "-n")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, "squash should work on single commit branch: %s", string(output))
+
+		// Verify A's commit SHA is unchanged
+		cmd = exec.Command("git", "rev-parse", "a")
+		cmd.Dir = scene.Dir
+		aRevAfter := strings.TrimSpace(string(testhelpers.Must(cmd.CombinedOutput())))
+		require.Equal(t, aRevBefore, aRevAfter, "parent branch A's SHA should not change when squashing child B")
+
+		// Verify A still has 2 commits
+		cmd = exec.Command("git", "log", "--oneline", "main..a")
+		cmd.Dir = scene.Dir
+		aLogAfter := string(testhelpers.Must(cmd.CombinedOutput()))
+		aCommitCountAfter := countLines(aLogAfter)
+		require.Equal(t, 2, aCommitCountAfter, "A should still have 2 commits after squashing B")
+
+		// Verify A's commits are the same
+		require.Equal(t, aLogBefore, aLogAfter, "A's commit history should be unchanged")
+
+		// Verify B still has 1 commit
+		cmd = exec.Command("git", "log", "--oneline", "a..b")
+		cmd.Dir = scene.Dir
+		output = testhelpers.Must(cmd.CombinedOutput())
+		bCommitCount := countLines(string(output))
+		require.Equal(t, 1, bCommitCount, "B should still have 1 commit after squash")
+	})
+
 	t.Run("squash restacks multiple upstack branches", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
