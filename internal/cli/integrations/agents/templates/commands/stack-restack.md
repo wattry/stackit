@@ -1,6 +1,6 @@
 ---
 description: Rebase all branches to ensure proper ancestry
-model: claude-haiku-4-20250414
+model: haiku
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
 

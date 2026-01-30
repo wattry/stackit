@@ -1,6 +1,6 @@
 ---
 description: Split committed changes between current branch and a new branch (parent or child)
-model: claude-opus-4-20250514
+model: opus
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Write, Glob, Grep, AskUserQuestion
 argument-hint: [check-command]
 ---

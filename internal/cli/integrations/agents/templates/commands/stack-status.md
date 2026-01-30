@@ -1,6 +1,6 @@
 ---
 description: View current stack state and health
-model: claude-haiku-4-20250414
+model: haiku
 allowed-tools: Bash(stackit:*), Bash(git:*)
 ---
 

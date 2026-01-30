@@ -1,6 +1,6 @@
 ---
 description: Plan and create a stack from uncommitted working tree changes
-model: claude-opus-4-20250514
+model: opus
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Glob, Grep, AskUserQuestion
 argument-hint: [check-command]
 ---

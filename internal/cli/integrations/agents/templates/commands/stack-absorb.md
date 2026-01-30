@@ -1,6 +1,6 @@
 ---
 description: Absorb working changes into correct commits with intelligent fix sourcing
-model: claude-sonnet-4-20250514
+model: sonnet
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Edit, Glob, Grep, AskUserQuestion, Skill
 ---
 

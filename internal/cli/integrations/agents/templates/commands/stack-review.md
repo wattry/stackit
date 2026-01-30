@@ -1,6 +1,6 @@
 ---
 description: Code review PRs in the stack, finding bugs and reporting issues locally
-model: claude-sonnet-4-20250514
+model: sonnet
 allowed-tools: Bash(gh:*), Bash(stackit:*), Bash(git:*), Read, Grep, Glob, Task, Edit, AskUserQuestion
 argument-hint: [--apply | --branch <name>]
 ---

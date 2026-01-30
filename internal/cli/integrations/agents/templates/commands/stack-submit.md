@@ -1,6 +1,6 @@
 ---
 description: Submit branches as PRs with auto-generated descriptions
-model: claude-sonnet-4-20250514
+model: sonnet
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion, Skill
 argument-hint: [--stack | --draft]
 ---

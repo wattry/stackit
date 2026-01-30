@@ -1,6 +1,6 @@
 ---
 description: Extract commits or files to an independent branch
-model: claude-haiku-4-20250414
+model: haiku
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, Glob, Grep
 ---
 
