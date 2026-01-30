@@ -1,6 +1,6 @@
 ---
 description: Verify stack health by running checks on all branches
-model: claude-sonnet-4-20250514
+model: sonnet
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill, Task
 argument-hint: [check-command]
 ---

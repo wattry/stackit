@@ -1,6 +1,6 @@
 ---
 description: Create a new stacked branch with commit
-model: claude-sonnet-4-20250514
+model: sonnet
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 argument-hint: [-m "message"] [--scope <scope>] [branch-name]
 ---

@@ -1,6 +1,6 @@
 ---
 description: Sync with trunk and cleanup merged branches
-model: claude-haiku-4-20250414
+model: haiku
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
 

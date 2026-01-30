@@ -1,6 +1,6 @@
 ---
 description: Intelligently fold granular branches into their parents
-model: claude-sonnet-4-20250514
+model: sonnet
 allowed-tools: Bash(stackit:*), Bash(git:*), Read, AskUserQuestion, Skill
 ---
 
