@@ -146,3 +146,20 @@ func DefaultSelectionStyles() SelectionStyles {
 func InsertStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorInsert))
 }
+
+// HelpKeyStyle returns a style for help key bindings.
+// Uses a more visible color than the default bubbles help style.
+func HelpKeyStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorSubtleValue())
+}
+
+// HelpDescStyle returns a style for help descriptions.
+// Uses a more visible color than the default bubbles help style.
+func HelpDescStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorDimValue())
+}
+
+// HelpSeparatorStyle returns a style for help separators (the • between items).
+func HelpSeparatorStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorDimValue())
+}

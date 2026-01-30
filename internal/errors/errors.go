@@ -39,6 +39,9 @@ var (
 
 	// ErrCanceled indicates that an interactive operation was canceled by the user
 	ErrCanceled = errors.New("canceled")
+
+	// ErrBack indicates that the user wants to go back to the previous step
+	ErrBack = errors.New("back")
 )
 
 // BranchNotFoundError represents an error when a branch is not found

@@ -78,6 +78,11 @@ func (h *SimpleSplitHandler) Complete(result split.ActionResult) {
 	}
 }
 
+// PromptCommitMessageWithContext returns a generated default message in non-interactive mode
+func (h *SimpleSplitHandler) PromptCommitMessageWithContext(ctx split.CommitMessageContext) (string, error) {
+	return splitcomp.GenerateDefaultCommitMessage(ctx.Files, ctx.OriginalCommitMessage), nil
+}
+
 // TUISplitHandler provides interactive TUI prompts for split operations.
 // It uses a unified model with state machine for type/direction selection,
 // and delegates to full-screen TUI components for hunk selection.
@@ -134,8 +139,8 @@ func (h *TUISplitHandler) PromptSplitType(availableTypes []split.TypeChoice) (sp
 	}
 	model := splitcomp.NewModel(cfg)
 
-	// Run as standalone program
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	// Run as standalone program (no alt screen to avoid flashing between views)
+	p := tea.NewProgram(model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	finalModel, err := p.Run()
 	if err != nil {
 		return "", err
@@ -198,6 +203,47 @@ func (h *TUISplitHandler) PromptCommitMessage(defaultMsg string) (string, error)
 		return "", err
 	}
 	return utils.CleanCommitMessage(msg), nil
+}
+
+// PromptCommitMessageWithContext prompts for commit message with full context displayed.
+// Uses an inline textarea editor that shows the split context (files, direction, etc.).
+func (h *TUISplitHandler) PromptCommitMessageWithContext(ctx split.CommitMessageContext) (string, error) {
+	if !utils.IsInteractive() {
+		// In non-interactive mode, generate a sensible default
+		return splitcomp.GenerateDefaultCommitMessage(ctx.Files, ctx.OriginalCommitMessage), nil
+	}
+
+	// Generate a sensible default commit message based on original commit
+	defaultMsg := splitcomp.GenerateDefaultCommitMessage(ctx.Files, ctx.OriginalCommitMessage)
+
+	// Create the inline commit editor model
+	editorCfg := splitcomp.CommitEditorConfig{
+		DefaultMessage: defaultMsg,
+		Files:          ctx.Files,
+		Direction:      splitcomp.Direction(ctx.Direction),
+		CurrentBranch:  ctx.CurrentBranch,
+	}
+	model := splitcomp.NewCommitEditorModel(editorCfg)
+
+	// Run as standalone program
+	p := tea.NewProgram(model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+
+	if m, ok := finalModel.(*splitcomp.CommitEditorModel); ok {
+		if m.Canceled() {
+			return "", errors.ErrCanceled
+		}
+		msg := m.Message()
+		if msg == "" {
+			return "", fmt.Errorf("commit message cannot be empty")
+		}
+		return msg, nil
+	}
+
+	return "", fmt.Errorf("unexpected model type")
 }
 
 // PromptBranchName asks the user to enter a branch name

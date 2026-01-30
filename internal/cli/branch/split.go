@@ -81,13 +81,9 @@ Examples:
 					style = split.StyleCommit
 				case byHunk || cmd.Flags().Changed("hunk"):
 					style = split.StyleHunk
-				case byFileInteractive || len(byFile) > 0 || cmd.Flags().Changed("file"):
+				case byFileInteractive || len(byFile) > 0:
 					// -F triggers interactive file selection
 					// --by-file with pathspecs uses those files directly
-					if cmd.Flags().Changed("file") {
-						filePaths, _ := cmd.Flags().GetStringSlice("file")
-						byFile = filePaths
-					}
 					style = split.StyleFile
 				case patchFile != "":
 					// --patch implies --by-hunk

@@ -3,8 +3,11 @@ package split
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // WizardOptions configures the interactive split wizard
@@ -69,54 +72,68 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	}
 	hasMultipleCommits := len(commits) > 1
 
-	// Step 1: Choose split type (if not pre-selected)
+	// Step 1 & 2: Choose split type and direction (with back navigation support)
 	style := opts.Style
-	if style == "" {
-		handler.OnStep(StepChoosingType, StatusStarted, "Choose split type")
-
-		availableTypes := buildTypeChoices(hasMultipleCommits)
-		selectedStyle, err := handler.PromptSplitType(availableTypes)
-		if err != nil {
-			return err
-		}
-		style = selectedStyle
-
-		handler.OnStep(StepChoosingType, StatusCompleted, string(style))
-		out.Debug("split wizard: user selected style: %s", style)
-	}
-
-	// Step 2: Choose direction (if not pre-selected)
 	direction := opts.Direction
-	if direction == "" {
-		handler.OnStep(StepChoosingDirection, StatusStarted, "Choose direction")
+	availableTypes := buildTypeChoices(hasMultipleCommits)
 
-		// Build context for direction prompt
-		parentName := ""
-		if parent := currentBranch.GetParent(); parent != nil {
-			parentName = parent.GetName()
-		} else {
-			parentName = eng.Trunk().GetName()
+	// Loop to allow going back from direction to type selection
+	for {
+		// Step 1: Choose split type (if not pre-selected)
+		if style == "" {
+			handler.OnStep(StepChoosingType, StatusStarted, "Choose split type")
+
+			selectedStyle, err := handler.PromptSplitType(availableTypes)
+			if err != nil {
+				return err
+			}
+			style = selectedStyle
+
+			handler.OnStep(StepChoosingType, StatusCompleted, string(style))
+			out.Debug("split wizard: user selected style: %s", style)
 		}
 
-		// Get children of current branch
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		childNames := graph.Children(*currentBranch)
+		// Step 2: Choose direction (if not pre-selected)
+		if direction == "" {
+			handler.OnStep(StepChoosingDirection, StatusStarted, "Choose direction")
 
-		dirCtx := DirectionContext{
-			Engine:        eng,
-			CurrentBranch: currentBranch.GetName(),
-			ParentBranch:  parentName,
-			Children:      childNames,
+			// Build context for direction prompt
+			parentName := ""
+			if parent := currentBranch.GetParent(); parent != nil {
+				parentName = parent.GetName()
+			} else {
+				parentName = eng.Trunk().GetName()
+			}
+
+			// Get children of current branch
+			graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+			childNames := graph.Children(*currentBranch)
+
+			dirCtx := DirectionContext{
+				Engine:        eng,
+				CurrentBranch: currentBranch.GetName(),
+				ParentBranch:  parentName,
+				Children:      childNames,
+			}
+
+			selectedDirection, err := handler.PromptDirection(dirCtx)
+			if errors.Is(err, errors.ErrBack) {
+				// User wants to go back to type selection
+				style = ""
+				out.Debug("split wizard: user pressed back, returning to type selection")
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			direction = selectedDirection
+
+			handler.OnStep(StepChoosingDirection, StatusCompleted, string(direction))
+			out.Debug("split wizard: user selected direction: %s", direction)
 		}
 
-		selectedDirection, err := handler.PromptDirection(dirCtx)
-		if err != nil {
-			return err
-		}
-		direction = selectedDirection
-
-		handler.OnStep(StepChoosingDirection, StatusCompleted, string(direction))
-		out.Debug("split wizard: user selected direction: %s", direction)
+		// Both selections made, break out of the loop
+		break
 	}
 
 	// Start handler with branch info and style
@@ -138,10 +155,105 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 			useGitAddP: opts.HunkSelector == "git",
 		}
 		return splitByHunkWithHandler(ctx, *currentBranch, eng, out, handler, direction, hunkOpts)
-	case StyleCommit, StyleFile:
-		// For now, these don't support the new wizard flow with direction
-		// Fall back to the existing implementation
-		return fmt.Errorf("style %s with direction is not yet implemented in wizard mode", style)
+
+	case StyleFile:
+		// Prompt for files to extract
+		pathspecs, err := promptForFiles(ctx.Context, *currentBranch, eng, out, false, direction)
+		if err != nil {
+			return err
+		}
+		if len(pathspecs) == 0 {
+			return fmt.Errorf("no files selected")
+		}
+
+		// Get the original commit message from the first commit on this branch
+		// GetAllCommits returns newest to oldest, so the first commit is the last element
+		var originalCommitMessage string
+		commitMessages, err := currentBranch.GetAllCommits(engine.CommitFormatMessage)
+		if err == nil && len(commitMessages) > 0 {
+			// Use the first (oldest) commit's message
+			originalCommitMessage = commitMessages[len(commitMessages)-1]
+		}
+
+		// Prompt for commit message with context (shows files being extracted)
+		handler.OnStep(StepCommitMessage, StatusStarted, "Enter commit message")
+		commitMsgCtx := CommitMessageContext{
+			Files:                 pathspecs,
+			Direction:             direction,
+			CurrentBranch:         currentBranch.GetName(),
+			OriginalCommitMessage: originalCommitMessage,
+		}
+		commitMessage, err := handler.PromptCommitMessageWithContext(commitMsgCtx)
+		if err != nil {
+			return err
+		}
+		handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
+
+		// Generate default branch name from commit message using the branch pattern
+		cfg, _ := config.LoadConfig(ctx.RepoRoot)
+		branchPatternStr := cfg.BranchNamePattern()
+		branchPattern, patternErr := config.NewBranchPattern(branchPatternStr)
+		var defaultBranchName string
+		if patternErr == nil {
+			defaultBranchName, err = branchPattern.GetBranchName(ctx, commitMessage, "")
+		}
+		if patternErr != nil || err != nil {
+			// Fallback to simpler default if pattern fails
+			defaultBranchName = currentBranch.GetName() + "_split"
+		}
+
+		// Build list of existing branch names for validation
+		existingBranchNames := make(map[string]bool)
+		for _, b := range eng.AllBranches() {
+			existingBranchNames[b.GetName()] = true
+		}
+
+		// Prompt for branch name
+		handler.OnStep(StepBranchName, StatusStarted, "Enter branch name")
+		branchName, err := handler.PromptBranchName(defaultBranchName, []string{}, existingBranchNames, currentBranch.GetName())
+		if err != nil {
+			return err
+		}
+		handler.OnStep(StepBranchName, StatusCompleted, branchName)
+
+		// Execute the file split with the provided name and message
+		fileResult, err := splitByFile(ctx.Context, *currentBranch, pathspecs, eng, splitByFileOptions{
+			AsSibling: false,
+			Direction: direction,
+			Name:      branchName,
+			Message:   commitMessage,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Restack upstack branches if needed (not needed for --above since splitByFileAbove handles it)
+		if direction != DirectionAbove {
+			rng := engine.StackRange{
+				RecursiveParents:  false,
+				IncludeCurrent:    false,
+				RecursiveChildren: true,
+			}
+			graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+			upstackBranches := graph.Range(*currentBranch, rng)
+			if len(upstackBranches) > 0 {
+				if err := actions.RestackBranches(ctx, upstackBranches); err != nil {
+					return fmt.Errorf("failed to restack upstack branches: %w", err)
+				}
+			}
+		}
+
+		handler.Complete(ActionResult{
+			OriginalBranch: currentBranch.GetName(),
+			NewBranches:    fileResult.BranchNames,
+			Style:          style,
+		})
+		return nil
+
+	case StyleCommit:
+		// Commit split doesn't use direction in the same way
+		return fmt.Errorf("style %s is not yet implemented in wizard mode", style)
+
 	default:
 		return fmt.Errorf("unknown split style: %s", style)
 	}

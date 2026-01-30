@@ -107,7 +107,7 @@ func NewModel(cfg Config) *Model {
 		branchInput: ti,
 		keys:        DefaultKeyMap,
 		styles:      DefaultStyles(),
-		direction:   DirectionBelow, // Default
+		direction:   DirectionAbove, // Default to above (extract to child branch)
 	}
 
 	// Determine initial state based on preselected values
@@ -266,22 +266,42 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateSelectingType handles input during type selection
 func (m *Model) updateSelectingType(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Guard against empty availableTypes
+	if len(m.availableTypes) == 0 {
+		return m, nil
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.Up):
-		m.typeCursor = max(0, m.typeCursor-1)
-		// Skip unavailable options
-		for m.typeCursor > 0 && !m.availableTypes[m.typeCursor].Available {
-			m.typeCursor--
+		// Find the previous available option
+		newCursor := m.typeCursor - 1
+		for newCursor >= 0 && !m.availableTypes[newCursor].Available {
+			newCursor--
+		}
+		// Only move if we found an available option
+		if newCursor >= 0 {
+			m.typeCursor = newCursor
 		}
 	case key.Matches(msg, m.keys.Down):
-		m.typeCursor = min(len(m.availableTypes)-1, m.typeCursor+1)
-		// Skip unavailable options
-		for m.typeCursor < len(m.availableTypes)-1 && !m.availableTypes[m.typeCursor].Available {
-			m.typeCursor++
+		// Find the next available option
+		newCursor := m.typeCursor + 1
+		for newCursor < len(m.availableTypes) && !m.availableTypes[newCursor].Available {
+			newCursor++
+		}
+		// Only move if we found an available option
+		if newCursor < len(m.availableTypes) {
+			m.typeCursor = newCursor
 		}
 	case key.Matches(msg, m.keys.Select):
 		if m.typeCursor < len(m.availableTypes) && m.availableTypes[m.typeCursor].Available {
 			m.result.Style = m.availableTypes[m.typeCursor].Style
+			// If we're in type-selection-only mode (no engine configured),
+			// complete immediately after type selection. This happens when
+			// the model is used by PromptSplitType() which only needs the type.
+			if m.config.Engine == nil {
+				m.state = StateComplete
+				return m, tea.Quit
+			}
 			m.state = StateSelectingDirection
 		}
 	case key.Matches(msg, m.keys.Cancel):
@@ -335,7 +355,7 @@ func (m *Model) updateBranchNameInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Validate the name
 		if err := m.validateBranchName(name); err != nil {
 			m.errorMessage = err.Error()
-			return m, nil
+			return m, textinput.Blink
 		}
 		m.errorMessage = ""
 		m.sessionNames = append(m.sessionNames, name)
