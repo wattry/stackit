@@ -15,8 +15,9 @@ import (
 // NewWorktreeCmd creates the worktree command group
 func NewWorktreeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "worktree",
-		Short: "Manage stackit-managed worktrees",
+		Use:     "worktree",
+		Aliases: []string{"wt"},
+		Short:   "Manage stackit-managed worktrees",
 		Long: `Manage stackit-managed worktrees.
 
 Worktrees allow you to work on multiple stacks in parallel, each in its own
