@@ -158,15 +158,16 @@ type directionSelectKeyMap struct {
 	Up     key.Binding
 	Down   key.Binding
 	Submit key.Binding
+	Back   key.Binding
 	Cancel key.Binding
 }
 
 func (k directionSelectKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Submit, k.Cancel}
+	return []key.Binding{k.Up, k.Down, k.Submit, k.Back, k.Cancel}
 }
 
 func (k directionSelectKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{k.Up, k.Down, k.Submit, k.Cancel}}
+	return [][]key.Binding{{k.Up, k.Down, k.Submit, k.Back, k.Cancel}}
 }
 
 var defaultDirectionKeys = directionSelectKeyMap{
@@ -182,6 +183,10 @@ var defaultDirectionKeys = directionSelectKeyMap{
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "select"),
 	),
+	Back: key.NewBinding(
+		key.WithKeys("backspace", "left", "h"),
+		key.WithHelp("←/backspace", "back"),
+	),
 	Cancel: key.NewBinding(
 		key.WithKeys("ctrl+c", "esc", "q"),
 		key.WithHelp("esc", "cancel"),
@@ -196,6 +201,7 @@ type DirectionSelectModel struct {
 	direction     Direction
 	done          bool
 	ready         bool
+	back          bool
 	err           error
 	help          help.Model
 	keys          directionSelectKeyMap
@@ -226,7 +232,7 @@ func NewDirectionSelectModel(eng engine.BranchReader, currentBranch, parentBranc
 		currentBranch: currentBranch,
 		parentBranch:  parentBranch,
 		children:      children,
-		direction:     DirectionBelow, // Default to below
+		direction:     DirectionAbove, // Default to above (extract to child branch)
 		help:          help.New(),
 		keys:          defaultDirectionKeys,
 		stackPath:     stackPath,
@@ -251,6 +257,10 @@ func (m *DirectionSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Down):
 			m.direction = DirectionBelow
 		case key.Matches(msg, m.keys.Submit):
+			m.done = true
+			return m, tea.Quit
+		case key.Matches(msg, m.keys.Back):
+			m.back = true
 			m.done = true
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Cancel):
@@ -309,7 +319,7 @@ func (m *DirectionSelectModel) renderOptions() string {
 	}
 	sb.WriteString("\n")
 
-	// Below option (default)
+	// Below option
 	if m.direction == DirectionBelow {
 		sb.WriteString(selectionStyles.Highlighted.Render("▸ Below"))
 		sb.WriteString(normalStyle.Render(" - Insert between parent and current"))
@@ -392,6 +402,11 @@ func (m *DirectionSelectModel) Err() error {
 	return m.err
 }
 
+// Back returns true if the user pressed back
+func (m *DirectionSelectModel) Back() bool {
+	return m.back
+}
+
 // PromptDirectionSelect shows an interactive direction selector and returns the chosen direction
 func PromptDirectionSelect(eng engine.BranchReader, currentBranch, parentBranch string, children []string) (Direction, error) {
 	if err := CheckInteractiveAllowed(); err != nil {
@@ -400,13 +415,16 @@ func PromptDirectionSelect(eng engine.BranchReader, currentBranch, parentBranch 
 
 	m := NewDirectionSelectModel(eng, currentBranch, parentBranch, children)
 
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	model, err := p.Run()
 	if err != nil {
 		return "", err
 	}
 
 	if finalModel, ok := model.(*DirectionSelectModel); ok {
+		if finalModel.Back() {
+			return "", errors.ErrBack
+		}
 		if finalModel.Err() != nil {
 			return "", finalModel.Err()
 		}

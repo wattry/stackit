@@ -13,6 +13,19 @@ type DirectionContext struct {
 	Children      []string
 }
 
+// CommitMessageContext provides context for commit message prompting
+type CommitMessageContext struct {
+	// Files being extracted to the new branch
+	Files []string
+	// Direction of the split (above = child, below = parent)
+	Direction Direction
+	// CurrentBranch is the name of the branch being split
+	CurrentBranch string
+	// OriginalCommitMessage is the full message of the first commit on the branch
+	// (title + body). Used as the basis for the split commit message.
+	OriginalCommitMessage string
+}
+
 // TypeChoice represents an available split type option
 type TypeChoice struct {
 	Style       Style
@@ -51,6 +64,12 @@ type InteractiveHandler interface {
 	// defaultMsg is the suggested default (e.g., from original commit).
 	// Returns the final message or an error if canceled.
 	PromptCommitMessage(defaultMsg string) (string, error)
+
+	// PromptCommitMessageWithContext asks the user to enter a commit message
+	// with full context about the split operation displayed.
+	// The context includes files being extracted, direction, and current branch.
+	// Returns the commit message or an error if canceled.
+	PromptCommitMessageWithContext(ctx CommitMessageContext) (string, error)
 
 	// PromptBranchName asks the user to enter a branch name.
 	// defaultName is the auto-generated suggestion.

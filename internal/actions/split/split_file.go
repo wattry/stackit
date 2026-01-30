@@ -136,7 +136,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 		}
 	}
 	if len(binaryFiles) > 0 {
-		return nil, fmt.Errorf("cannot split binary files: %s. Binary files must be split as whole files using a different approach",
+		return nil, fmt.Errorf("cannot split binary files by hunk: %s. Exclude these files from the split, or use git commands directly to handle binary files",
 			strings.Join(binaryFiles, ", "))
 	}
 
@@ -221,7 +221,10 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 		return nil, fmt.Errorf("failed to stash staged changes: %w", err)
 	}
 
-	// Track stash state for cleanup
+	// Track stash state for cleanup.
+	// Note: cleanupStash is called during error recovery, so we intentionally
+	// ignore the StashPop error to avoid masking the original error.
+	// If StashPop fails, the stash remains in 'git stash list' for manual recovery.
 	stashPopped := false
 	cleanupStash := func() {
 		if !stashPopped {
@@ -393,7 +396,10 @@ func splitByFileAbove(ctx context.Context, branchToSplit engine.Branch, newBranc
 			fmt.Errorf("failed to stash staged changes: %w", err))
 	}
 
-	// Track stash state for cleanup
+	// Track stash state for cleanup.
+	// Note: cleanupStash is called during error recovery, so we intentionally
+	// ignore the StashPop error to avoid masking the original error.
+	// If StashPop fails, the stash remains in 'git stash list' for manual recovery.
 	stashPopped := false
 	cleanupStash := func() {
 		if !stashPopped {
@@ -618,7 +624,7 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 	}
 
 	if len(changedFiles) == 1 {
-		return nil, fmt.Errorf("only one file changed in branch - nothing to split")
+		return nil, fmt.Errorf("only one file changed in branch - use --by-hunk to split by individual changes")
 	}
 
 	// Show instructions based on mode
@@ -644,7 +650,7 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 
 	// Validate that not all files were selected (only in default mode where files are removed)
 	if !asSibling && len(selectedFiles) == len(changedFiles) {
-		return nil, fmt.Errorf("cannot extract all files - at least one must remain on the original branch")
+		return nil, fmt.Errorf("cannot extract all files - at least one must remain on the original branch; use --as-sibling to extract without modifying the original branch")
 	}
 
 	return selectedFiles, nil

@@ -85,9 +85,9 @@ func colorDimValue() lipgloss.Color {
 
 func colorSubtleValue() lipgloss.Color {
 	if IsDarkBackground() {
-		return lipgloss.Color("240") // Medium gray for dark backgrounds
+		return lipgloss.Color("246") // Medium gray for dark backgrounds (was 240, too faint)
 	}
-	return lipgloss.Color("245") // Medium-dark gray for light backgrounds
+	return lipgloss.Color("243") // Medium-dark gray for light backgrounds
 }
 
 // DimColor returns the dim color value (adaptive to terminal background)
