@@ -383,14 +383,15 @@ func TestValidateRebasesParallel(t *testing.T) {
 
 		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
 		require.NoError(t, err)
-		require.True(t, result.Success)
+		require.True(t, result.Success, "validation failed for branch %q: %s (error type: %d, conflicting files: %v)",
+			result.FailedBranch, result.ErrorMessage, result.ErrorType, result.ConflictingFiles)
 
 		// All branches should have new SHAs
-		require.NotEmpty(t, result.NewSHAs["feature-a"])
-		require.NotEmpty(t, result.NewSHAs["feature-b"])
-		require.NotEmpty(t, result.NewSHAs["feature-c"])
-		require.NotEmpty(t, result.NewSHAs["feature-d"])
-		require.NotEmpty(t, result.NewSHAs["feature-e"])
+		require.NotEmpty(t, result.NewSHAs["feature-a"], "feature-a should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-b"], "feature-b should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-c"], "feature-c should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-d"], "feature-d should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-e"], "feature-e should have new SHA")
 	})
 
 	t.Run("validates mixed depth stack correctly", func(t *testing.T) {
@@ -434,14 +435,15 @@ func TestValidateRebasesParallel(t *testing.T) {
 
 		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
 		require.NoError(t, err)
-		require.True(t, result.Success)
+		require.True(t, result.Success, "validation failed for branch %q: %s (error type: %d, conflicting files: %v)",
+			result.FailedBranch, result.ErrorMessage, result.ErrorType, result.ConflictingFiles)
 
 		// All branches should have new SHAs
-		require.NotEmpty(t, result.NewSHAs["feature-a"])
-		require.NotEmpty(t, result.NewSHAs["feature-a1"])
-		require.NotEmpty(t, result.NewSHAs["feature-a2"])
-		require.NotEmpty(t, result.NewSHAs["feature-b"])
-		require.NotEmpty(t, result.NewSHAs["feature-b1"])
+		require.NotEmpty(t, result.NewSHAs["feature-a"], "feature-a should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-a1"], "feature-a1 should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-a2"], "feature-a2 should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-b"], "feature-b should have new SHA")
+		require.NotEmpty(t, result.NewSHAs["feature-b1"], "feature-b1 should have new SHA")
 	})
 
 	t.Run("detects conflict in parallel execution", func(t *testing.T) {
@@ -510,7 +512,8 @@ func TestValidateRebasesParallel(t *testing.T) {
 
 		result, err := s.Engine.ValidateRebases(context.Background(), specs)
 		require.NoError(t, err)
-		require.True(t, result.Success)
+		require.True(t, result.Success, "validation failed for branch %q: %s (error type: %d, conflicting files: %v)",
+			result.FailedBranch, result.ErrorMessage, result.ErrorType, result.ConflictingFiles)
 		require.Len(t, result.NewSHAs, 4)
 
 		// All branches should have new SHAs
@@ -541,7 +544,8 @@ func TestValidateRebasesParallel(t *testing.T) {
 
 		result, err := s.Engine.ValidateRebases(context.Background(), specs)
 		require.NoError(t, err)
-		require.True(t, result.Success)
+		require.True(t, result.Success, "validation failed for branch %q: %s (error type: %d, conflicting files: %v)",
+			result.FailedBranch, result.ErrorMessage, result.ErrorType, result.ConflictingFiles)
 		require.Len(t, result.NewSHAs, 3)
 	})
 
@@ -573,8 +577,9 @@ func TestValidateRebasesParallel(t *testing.T) {
 
 		result, err := s.Engine.ValidateRebasesParallel(context.Background(), specs)
 		require.NoError(t, err)
-		require.True(t, result.Success)
-		require.NotEmpty(t, result.NewSHAs["branch1"])
+		require.True(t, result.Success, "validation failed for branch %q: %s (error type: %d, conflicting files: %v)",
+			result.FailedBranch, result.ErrorMessage, result.ErrorType, result.ConflictingFiles)
+		require.NotEmpty(t, result.NewSHAs["branch1"], "branch1 should have new SHA")
 	})
 
 	t.Run("stops on first conflict in level", func(t *testing.T) {
