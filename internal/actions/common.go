@@ -480,6 +480,13 @@ type deleteBranchCachedEngine interface {
 
 // ShouldDeleteBranchCached checks if a branch should be deleted using pre-fetched metadata and revisions
 func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng deleteBranchCachedEngine, force bool, meta *git.Meta, revisions map[string]string, mergedBranches map[string]bool) (bool, string) {
+	// 0. Never delete worktree anchor branches - they appear "merged" because they
+	// point to the same commit as trunk, but they're needed for worktree management
+	branch := eng.GetBranch(branchName)
+	if branch.IsWorktreeAnchor() {
+		return false, ""
+	}
+
 	// 1. Check PR info from cached metadata
 	if meta != nil && meta.PrInfo != nil {
 		const (
@@ -512,7 +519,6 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 	// 3. Check if empty
 	// Need parent revision
 	var parentRev string
-	branch := eng.GetBranch(branchName)
 	parent := branch.GetParent()
 	parentName := trunkName
 	if parent != nil {
