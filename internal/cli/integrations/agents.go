@@ -2,6 +2,7 @@
 package integrations
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	stackiterrors "stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/tui"
 )
 
 // NewAgentsCmd creates the agent command
@@ -34,7 +37,7 @@ to understand how to use stackit commands for managing stacked branches.`,
 func newAgentInstallCmd(version string) *cobra.Command {
 	var local bool
 	var force bool
-	var includeAgentsMD bool
+	var skipWorkflowBlock bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -56,9 +59,9 @@ to manage stacked branches, create commits, submit PRs, and more.
 Subagent templates enable cost-effective delegation of tasks like commit message
 and PR description generation to the faster Haiku model.
 
-Use --include-agents-md to also add a stacking workflow block to your project's
-CLAUDE.md or AGENTS.md file. This helps AI agents proactively think about
-stacking during regular development work.`,
+When run in a git repository, you will be prompted to add a stacking workflow
+block to your project's CLAUDE.md or AGENTS.md file. This helps AI agents
+proactively think about stacking during regular development work.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
@@ -66,31 +69,28 @@ stacking during regular development work.`,
 			if cwd != "" {
 				runner = git.NewRunnerWithPath(cwd, nil)
 			}
-			return runAgentInstall(runner, local, force, includeAgentsMD, version, cmd.OutOrStdout())
+			return runAgentInstall(runner, local, force, skipWorkflowBlock, version, cmd.OutOrStdout())
 		},
 	}
 
 	cmd.Flags().BoolVar(&local, "local", false, "Install files in current repository instead of globally")
 	cmd.Flags().BoolVar(&force, "force", false, "Force overwrite existing files")
-	cmd.Flags().BoolVar(&includeAgentsMD, "include-agents-md", false, "Add stacking workflow block to CLAUDE.md or AGENTS.md")
+	cmd.Flags().BoolVar(&skipWorkflowBlock, "skip-workflow-block", false, "Skip adding stacking workflow block to CLAUDE.md or AGENTS.md")
 
 	return cmd
 }
 
-func runAgentInstall(runner git.Runner, local, force, includeAgentsMD bool, version string, out io.Writer) error {
+func runAgentInstall(runner git.Runner, local, force, skipWorkflowBlock bool, version string, out io.Writer) error {
 	var baseDir string
 	var repoRoot string
 
-	if local || includeAgentsMD {
-		// Need repo root for local install or agents-md installation
-		var err error
-		repoRoot, err = runner.DiscoverRepoRoot()
-		if err != nil && (local || includeAgentsMD) {
-			return fmt.Errorf("not a git repository: %w", err)
-		}
-	}
+	// Try to discover repo root (needed for local install or workflow block)
+	repoRoot, _ = runner.DiscoverRepoRoot()
 
 	if local {
+		if repoRoot == "" {
+			return fmt.Errorf("not a git repository: cannot use --local outside a git repository")
+		}
 		// Local installation - install in current repo
 		baseDir = repoRoot
 	} else {
@@ -296,12 +296,12 @@ func runAgentInstall(runner git.Runner, local, force, includeAgentsMD bool, vers
 		return fmt.Errorf("failed to write Cursor rules file: %w", err)
 	}
 
-	// Install agents-md block if requested
-	var agentsMDInstalled bool
-	var agentsMDPath string
-	if includeAgentsMD && repoRoot != "" {
+	// Install workflow block to CLAUDE.md or AGENTS.md if in a git repo
+	var workflowBlockInstalled bool
+	var workflowBlockPath string
+	if repoRoot != "" && !skipWorkflowBlock {
 		var blockErr error
-		agentsMDInstalled, agentsMDPath, blockErr = installAgentsMDBlock(repoRoot, force)
+		workflowBlockInstalled, workflowBlockPath, blockErr = promptAndInstallWorkflowBlock(repoRoot, force)
 		if blockErr != nil {
 			return blockErr
 		}
@@ -328,10 +328,10 @@ func runAgentInstall(runner git.Runner, local, force, includeAgentsMD bool, vers
 	_, _ = fmt.Fprintln(out, "Cursor integration:")
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.cursor/rules/stackit.md\n", getDisplayPath(baseDir, local))
 
-	if agentsMDInstalled {
+	if workflowBlockInstalled {
 		_, _ = fmt.Fprintln(out)
-		_, _ = fmt.Fprintln(out, "Agents MD block:")
-		_, _ = fmt.Fprintf(out, "✓ Added stacking workflow block to %s\n", agentsMDPath)
+		_, _ = fmt.Fprintln(out, "Stacking workflow documentation:")
+		_, _ = fmt.Fprintf(out, "✓ Added stacking workflow block to %s\n", workflowBlockPath)
 	}
 
 	_, _ = fmt.Fprintln(out)
@@ -409,34 +409,169 @@ func getDisplayPath(_ string, local bool) string {
 }
 
 const (
-	agentsMDBlockStart = "<!-- stackit:start -->"
-	agentsMDBlockEnd   = "<!-- stackit:end -->"
+	workflowBlockStart = "<!-- stackit:start -->"
+	workflowBlockEnd   = "<!-- stackit:end -->"
 )
 
-// installAgentsMDBlock adds the stacking workflow block to CLAUDE.md or AGENTS.md.
+// agentsFileInfo holds information about a potential agents file
+type agentsFileInfo struct {
+	name     string
+	exists   bool
+	hasBlock bool
+	readErr  error // non-nil if file exists but couldn't be read (permission error, etc.)
+	content  string
+}
+
+// discoverAgentsFiles checks for CLAUDE.md and AGENTS.md in the repo root.
+func discoverAgentsFiles(repoRoot string) (claude, agents agentsFileInfo) {
+	claude = checkAgentsFile(repoRoot, "CLAUDE.md")
+	agents = checkAgentsFile(repoRoot, "AGENTS.md")
+	return claude, agents
+}
+
+// checkAgentsFile checks if a specific agents file exists and its state.
+func checkAgentsFile(repoRoot, filename string) agentsFileInfo {
+	info := agentsFileInfo{name: filename}
+	filePath := filepath.Join(repoRoot, filename)
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// File doesn't exist - that's fine
+			return info
+		}
+		// File exists but we can't read it (permission error, etc.)
+		info.exists = true
+		info.readErr = err
+		return info
+	}
+
+	info.exists = true
+	info.content = string(content)
+	info.hasBlock = strings.Contains(info.content, workflowBlockStart)
+	return info
+}
+
+// promptAndInstallWorkflowBlock prompts the user and installs the workflow block.
 // Returns (installed, path, error) where installed indicates if the block was added/updated.
-func installAgentsMDBlock(repoRoot string, force bool) (bool, string, error) {
+func promptAndInstallWorkflowBlock(repoRoot string, force bool) (bool, string, error) {
+	claude, agents := discoverAgentsFiles(repoRoot)
+
+	// Check for read errors
+	if claude.readErr != nil {
+		return false, claude.name, fmt.Errorf("cannot read %s: %w", claude.name, claude.readErr)
+	}
+	if agents.readErr != nil {
+		return false, agents.name, fmt.Errorf("cannot read %s: %w", agents.name, agents.readErr)
+	}
+
+	// Determine which file(s) are available
+	var targetFile string
+	switch {
+	case claude.exists && agents.exists:
+		// Both exist - prompt user to choose
+		selected, err := tui.PromptSelect(
+			"Both CLAUDE.md and AGENTS.md exist. Which file should receive the stacking workflow block?",
+			[]tui.SelectOption{
+				{Label: "CLAUDE.md", Value: "CLAUDE.md"},
+				{Label: "AGENTS.md", Value: "AGENTS.md"},
+				{Label: "Skip (don't add workflow block)", Value: "skip"},
+			},
+			0,
+		)
+		if errors.Is(err, stackiterrors.ErrCanceled) || errors.Is(err, tui.ErrInteractiveDisabled) {
+			// User canceled or non-interactive mode - skip silently
+			return false, "", nil
+		}
+		if err != nil {
+			return false, "", fmt.Errorf("failed to prompt for file selection: %w", err)
+		}
+		if selected == "skip" {
+			return false, "", nil
+		}
+		targetFile = selected
+
+	case claude.exists:
+		// Only CLAUDE.md exists - confirm
+		confirmed, err := tui.PromptConfirm(
+			fmt.Sprintf("Add stacking workflow block to %s?", claude.name),
+			true,
+		)
+		if errors.Is(err, stackiterrors.ErrCanceled) || errors.Is(err, tui.ErrInteractiveDisabled) {
+			return false, "", nil
+		}
+		if err != nil {
+			return false, "", fmt.Errorf("failed to prompt for confirmation: %w", err)
+		}
+		if !confirmed {
+			return false, "", nil
+		}
+		targetFile = claude.name
+
+	case agents.exists:
+		// Only AGENTS.md exists - confirm
+		confirmed, err := tui.PromptConfirm(
+			fmt.Sprintf("Add stacking workflow block to %s?", agents.name),
+			true,
+		)
+		if errors.Is(err, stackiterrors.ErrCanceled) || errors.Is(err, tui.ErrInteractiveDisabled) {
+			return false, "", nil
+		}
+		if err != nil {
+			return false, "", fmt.Errorf("failed to prompt for confirmation: %w", err)
+		}
+		if !confirmed {
+			return false, "", nil
+		}
+		targetFile = agents.name
+
+	default:
+		// Neither exists - ask if they want to create CLAUDE.md
+		confirmed, err := tui.PromptConfirm(
+			"No CLAUDE.md or AGENTS.md found. Create CLAUDE.md with stacking workflow block?",
+			true,
+		)
+		if errors.Is(err, stackiterrors.ErrCanceled) || errors.Is(err, tui.ErrInteractiveDisabled) {
+			return false, "", nil
+		}
+		if err != nil {
+			return false, "", fmt.Errorf("failed to prompt for confirmation: %w", err)
+		}
+		if !confirmed {
+			return false, "", nil
+		}
+		targetFile = "CLAUDE.md"
+	}
+
+	// Get the file info for the selected file
+	var fileInfo agentsFileInfo
+	if targetFile == "CLAUDE.md" {
+		fileInfo = claude
+	} else {
+		fileInfo = agents
+	}
+
+	return installWorkflowBlock(repoRoot, targetFile, fileInfo, force)
+}
+
+// installWorkflowBlock installs the workflow block to the specified file.
+func installWorkflowBlock(repoRoot, targetFile string, fileInfo agentsFileInfo, force bool) (bool, string, error) {
 	// Read the block template
 	blockContent, err := agentTemplates.ReadFile("agents/templates/agents-block.md")
 	if err != nil {
-		return false, "", fmt.Errorf("failed to read agents-block template: %w", err)
+		return false, "", fmt.Errorf("failed to read workflow block template: %w", err)
 	}
 
-	// Find target file: prefer CLAUDE.md, fall back to AGENTS.md, create CLAUDE.md if neither
-	targetFile := findAgentsFile(repoRoot)
 	targetPath := filepath.Join(repoRoot, targetFile)
-
-	// Read existing content (may not exist)
-	existingContent, _ := os.ReadFile(targetPath)
-	contentStr := string(existingContent)
+	contentStr := fileInfo.content
 
 	// Check for existing block
-	if strings.Contains(contentStr, agentsMDBlockStart) {
+	if fileInfo.hasBlock {
 		if !force {
 			return false, targetFile, fmt.Errorf("stackit block already exists in %s, use --force to update", targetFile)
 		}
 		// Replace existing block
-		contentStr = replaceAgentsMDBlock(contentStr, string(blockContent))
+		contentStr = replaceWorkflowBlock(contentStr, string(blockContent))
 	} else {
 		// Append block
 		if len(contentStr) > 0 && !strings.HasSuffix(contentStr, "\n") {
@@ -455,32 +590,17 @@ func installAgentsMDBlock(repoRoot string, force bool) (bool, string, error) {
 	return true, targetFile, nil
 }
 
-// findAgentsFile returns the appropriate agents file name for the repo.
-// Returns CLAUDE.md if it exists, AGENTS.md if it exists, or CLAUDE.md as default.
-func findAgentsFile(repoRoot string) string {
-	claudePath := filepath.Join(repoRoot, "CLAUDE.md")
-	if _, err := os.Stat(claudePath); err == nil {
-		return "CLAUDE.md"
-	}
+// replaceWorkflowBlock replaces the existing stackit block with new content.
+func replaceWorkflowBlock(content, newBlock string) string {
+	startIdx := strings.Index(content, workflowBlockStart)
+	endIdx := strings.Index(content, workflowBlockEnd)
 
-	agentsPath := filepath.Join(repoRoot, "AGENTS.md")
-	if _, err := os.Stat(agentsPath); err == nil {
-		return "AGENTS.md"
-	}
-
-	return "CLAUDE.md"
-}
-
-// replaceAgentsMDBlock replaces the existing stackit block with new content.
-func replaceAgentsMDBlock(content, newBlock string) string {
-	startIdx := strings.Index(content, agentsMDBlockStart)
-	endIdx := strings.Index(content, agentsMDBlockEnd)
-
-	if startIdx == -1 || endIdx == -1 {
+	// Handle missing or malformed markers
+	if startIdx == -1 || endIdx == -1 || endIdx < startIdx {
 		return content
 	}
 
-	endIdx += len(agentsMDBlockEnd)
+	endIdx += len(workflowBlockEnd)
 
 	// Preserve content before and after the block
 	before := content[:startIdx]
@@ -490,14 +610,16 @@ func replaceAgentsMDBlock(content, newBlock string) string {
 	before = strings.TrimRight(before, "\n")
 	after = strings.TrimLeft(after, "\n")
 
-	result := before
+	var result strings.Builder
+	result.WriteString(before)
 	if len(before) > 0 {
-		result += "\n\n"
+		result.WriteString("\n\n")
 	}
-	result += newBlock
+	result.WriteString(newBlock)
 	if len(after) > 0 {
-		result += "\n" + after
+		result.WriteString("\n")
+		result.WriteString(after)
 	}
 
-	return result
+	return result.String()
 }
