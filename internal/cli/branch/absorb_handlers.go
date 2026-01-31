@@ -2,6 +2,7 @@ package branch
 
 import (
 	"stackit.dev/stackit/internal/actions/absorb"
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
@@ -39,7 +40,7 @@ func (h *SimpleAbsorbHandler) Start(_ bool) {
 }
 
 // OnStep is called for each step in the absorb process
-func (h *SimpleAbsorbHandler) OnStep(_ absorb.Step, _ absorb.StepStatus, _ string) {
+func (h *SimpleAbsorbHandler) OnStep(_ absorb.Step, _ handler.StepStatus, _ string) {
 	// Steps are handled silently in simple handler
 }
 

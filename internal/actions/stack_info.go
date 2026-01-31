@@ -6,6 +6,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -38,7 +39,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 
 	currentBranch := eng.CurrentBranch()
 	if currentBranch == nil {
-		return fmt.Errorf("not on a branch")
+		return errors.ErrNotOnBranch
 	}
 
 	// Build StackGraph for efficient traversals

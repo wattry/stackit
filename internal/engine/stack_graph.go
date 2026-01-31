@@ -362,3 +362,78 @@ func (g *StackGraph) isAncestorOf(ancestor, descendant string) bool {
 	}
 	return false
 }
+
+// ForEachDepth iterates over branches grouped by depth, calling fn for each depth level.
+// The function receives the depth (0 = trunk level) and branches at that depth.
+// If fn returns an error, iteration stops and that error is returned.
+// Branches at the same depth can be processed in parallel by fn.
+// This is useful for operations like restacking where parents must complete before children.
+func (g *StackGraph) ForEachDepth(fn func(depth int, branches []Branch) error) error {
+	byDepth := g.GetBranchesByDepth()
+
+	// Get max depth
+	maxDepth := 0
+	for d := range byDepth {
+		if d > maxDepth {
+			maxDepth = d
+		}
+	}
+
+	// Process each depth in order
+	for depth := 0; depth <= maxDepth; depth++ {
+		names := byDepth[depth]
+		if len(names) == 0 {
+			continue
+		}
+
+		// Convert names to branches
+		branches := make([]Branch, len(names))
+		for i, name := range names {
+			branches[i] = g.nodes[name].Branch
+		}
+
+		if err := fn(depth, branches); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MaxDepth returns the maximum depth in the graph.
+// Returns -1 if the graph is empty.
+func (g *StackGraph) MaxDepth() int {
+	maxDepth := -1
+	for _, node := range g.nodes {
+		if node.Depth > maxDepth {
+			maxDepth = node.Depth
+		}
+	}
+	return maxDepth
+}
+
+// BranchesAtDepth returns all branches at the specified depth.
+// Returns nil if no branches exist at that depth.
+func (g *StackGraph) BranchesAtDepth(depth int) []Branch {
+	var branches []Branch
+	for _, node := range g.nodes {
+		if node.Depth == depth {
+			branches = append(branches, node.Branch)
+		}
+	}
+	return branches
+}
+
+// Upstack returns children of the branch (upstack).
+func (g *StackGraph) Upstack(branch Branch, includeCurrent bool) []Branch {
+	return g.Range(branch, StackRangeUpstack(includeCurrent))
+}
+
+// Downstack returns parents of the branch (downstack).
+func (g *StackGraph) Downstack(branch Branch, includeCurrent bool) []Branch {
+	return g.Range(branch, StackRangeDownstack(includeCurrent))
+}
+
+// FullStack returns the entire stack (parents + current + children).
+func (g *StackGraph) FullStack(branch Branch) []Branch {
+	return g.Range(branch, StackRangeFull())
+}

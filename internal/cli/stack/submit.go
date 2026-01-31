@@ -13,6 +13,7 @@ import (
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
 	_ "stackit.dev/stackit/internal/demo" // Register demo engine factory
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	submitComponent "stackit.dev/stackit/internal/tui/components/submit"
@@ -89,9 +90,9 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 		submitFooter := cfg.SubmitFooter()
 
 		// Run submit action
-		stackRange := submit.StackRangeDownstack()
+		stackRange := engine.StackRangeDownstack(true)
 		if f.stack {
-			stackRange = submit.StackRangeFull()
+			stackRange = engine.StackRangeFull()
 		}
 		// Get config labels/assignees, respecting --no-labels and --no-assignees flags
 		var configLabels []string

@@ -65,13 +65,7 @@ func cleanOrphanedWorktrees(ctx *app.Context, dirtyAnchors map[string]bool) *Wor
 
 		// Check if the stack root branch still exists and is tracked
 		// A branch "exists" if it's in the branch list (not just tracked)
-		branchExists := false
-		for _, b := range ctx.Engine.AllBranches() {
-			if b.GetName() == wt.AnchorBranch {
-				branchExists = true
-				break
-			}
-		}
+		branchExists := ctx.Engine.BranchNames().Contains(wt.AnchorBranch)
 
 		if !branchExists || (!stackRootBranch.IsTrunk() && !stackRootBranch.IsTracked()) {
 			// Stack root no longer exists or is not tracked

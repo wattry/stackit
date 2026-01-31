@@ -3,6 +3,7 @@ package stack
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/move"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
@@ -46,7 +47,7 @@ func (h *SimpleMoveHandler) Start(sourceBranch, oldParent, newParent string) {
 }
 
 // OnStep is called for each step in the move process
-func (h *SimpleMoveHandler) OnStep(_ move.Step, _ move.StepStatus, _ string) {
+func (h *SimpleMoveHandler) OnStep(_ move.Step, _ handler.StepStatus, _ string) {
 	// Steps are handled silently in simple handler
 }
 

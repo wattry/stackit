@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/handler"
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/actions/worktree"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
@@ -33,23 +35,23 @@ type Options struct {
 }
 
 // Action creates a new branch stacked on top of the current branch.
-func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
+func Action(ctx *app.Context, opts Options, h Handler) (Result, error) {
 	eng := ctx.Engine
 	out := ctx.Output
 
 	// Use null handler if none provided
-	if handler == nil {
-		handler = &NullHandler{}
+	if h == nil {
+		h = &NullHandler{}
 	}
-	defer handler.Cleanup()
+	defer h.Cleanup()
 
-	// Get current branch
-	currentBranch, err := eng.ValidateOnBranch()
-	if err != nil {
+	// Validate preconditions
+	if err := validation.MustBeOnBranch(eng).Validate(); err != nil {
 		return Result{}, err
 	}
+	currentBranch := eng.CurrentBranch().GetName()
 
-	handler.Start(currentBranch)
+	h.Start(currentBranch)
 
 	// Validate worktree flag - only allowed when creating from trunk
 	if opts.Worktree {
@@ -82,34 +84,34 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 
 	// Stage changes based on flags or prompt
 	if opts.All || opts.Update || opts.Patch {
-		handler.OnStep(StepStaging, StatusStarted, "Staging changes")
+		h.OnStep(StepStaging, handler.StatusStarted, "Staging changes")
 		stagingOpts := git.StagingOptions{
 			All:    opts.All,
 			Update: opts.Update,
 			Patch:  opts.Patch,
 		}
 		if err := ctx.Git().StageChanges(ctx.Context, stagingOpts); err != nil {
-			handler.OnStep(StepStaging, StatusFailed, err.Error())
+			h.OnStep(StepStaging, handler.StatusFailed, err.Error())
 			return Result{}, err
 		}
 		hasStaged = true
-		handler.OnStep(StepStaging, StatusCompleted, "Changes staged")
-	} else if !hasStaged && handler.IsInteractive() {
+		h.OnStep(StepStaging, handler.StatusCompleted, "Changes staged")
+	} else if !hasStaged && h.IsInteractive() {
 		hasUnstaged, err := eng.HasUnstagedChanges(ctx.Context)
 		if err != nil {
 			return Result{}, fmt.Errorf("failed to check unstaged changes: %w", err)
 		}
 
 		if hasUnstaged {
-			confirmed, err := handler.PromptStageChanges()
+			confirmed, err := h.PromptStageChanges()
 			if err == nil && confirmed {
-				handler.OnStep(StepStaging, StatusStarted, "Staging changes")
+				h.OnStep(StepStaging, handler.StatusStarted, "Staging changes")
 				if err := eng.StageAll(ctx.Context); err != nil {
-					handler.OnStep(StepStaging, StatusFailed, err.Error())
+					h.OnStep(StepStaging, handler.StatusFailed, err.Error())
 					return Result{}, fmt.Errorf("failed to stage changes: %w", err)
 				}
 				hasStaged = true
-				handler.OnStep(StepStaging, StatusCompleted, "Changes staged")
+				h.OnStep(StepStaging, handler.StatusCompleted, "Changes staged")
 			}
 		}
 	}
@@ -134,8 +136,8 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 
 	// Check if pattern needs scope and we don't have one
 	if opts.BranchPattern.ContainsScope() && scopeToUse == "" {
-		if handler.IsInteractive() {
-			promptedScope, err := handler.PromptScope(opts.BranchPattern.String())
+		if h.IsInteractive() {
+			promptedScope, err := h.PromptScope(opts.BranchPattern.String())
 			if err != nil {
 				return Result{}, err
 			}
@@ -163,35 +165,35 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 	}
 
 	// Create and checkout new branch
-	handler.OnStep(StepBranchCreate, StatusStarted, fmt.Sprintf("Creating branch %s", branchName))
+	h.OnStep(StepBranchCreate, handler.StatusStarted, fmt.Sprintf("Creating branch %s", branchName))
 	if err := eng.CreateAndCheckoutBranch(ctx.Context, branch); err != nil {
-		handler.OnStep(StepBranchCreate, StatusFailed, err.Error())
+		h.OnStep(StepBranchCreate, handler.StatusFailed, err.Error())
 		return Result{}, fmt.Errorf("failed to create branch: %w", err)
 	}
-	handler.OnStep(StepBranchCreate, StatusCompleted, fmt.Sprintf("Created branch %s", branchName))
+	h.OnStep(StepBranchCreate, handler.StatusCompleted, fmt.Sprintf("Created branch %s", branchName))
 
 	// Commit if there are staged changes
 	if hasStaged {
-		handler.OnStep(StepCommit, StatusStarted, "Committing changes")
+		h.OnStep(StepCommit, handler.StatusStarted, "Committing changes")
 		if err := eng.Commit(ctx.Context, commitMessage, opts.Verbose, !ctx.Verify); err != nil {
 			// Clean up branch on commit failure
 			_ = eng.DeleteBranch(ctx.Context, branch)
-			handler.OnStep(StepCommit, StatusFailed, err.Error())
+			h.OnStep(StepCommit, handler.StatusFailed, err.Error())
 			return Result{}, fmt.Errorf("failed to commit: %w", err)
 		}
-		handler.OnStep(StepCommit, StatusCompleted, "Changes committed")
+		h.OnStep(StepCommit, handler.StatusCompleted, "Changes committed")
 	} else {
-		handler.OnStep(StepCommit, StatusSkipped, "No staged changes")
+		h.OnStep(StepCommit, handler.StatusSkipped, "No staged changes")
 	}
 
 	// Track the branch with current branch as parent
-	handler.OnStep(StepTracking, StatusStarted, "Setting up branch tracking")
+	h.OnStep(StepTracking, handler.StatusStarted, "Setting up branch tracking")
 	if err := eng.TrackBranch(ctx.Context, branchName, currentBranch); err != nil {
 		// Log error but don't fail - branch is created, just not tracked
-		handler.OnStep(StepTracking, StatusFailed, err.Error())
+		h.OnStep(StepTracking, handler.StatusFailed, err.Error())
 		out.Info("Warning: failed to track branch: %v", err)
 	} else {
-		handler.OnStep(StepTracking, StatusCompleted, "Branch tracked")
+		h.OnStep(StepTracking, handler.StatusCompleted, "Branch tracked")
 	}
 
 	ctx.Logger.Info("branch created", "name", branchName, "parent", currentBranch, "hasCommit", hasStaged)
@@ -199,7 +201,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 	// Create worktree if requested
 	var worktreePath string
 	if opts.Worktree {
-		handler.OnStep(StepWorktree, StatusStarted, "Creating worktree")
+		h.OnStep(StepWorktree, handler.StatusStarted, "Creating worktree")
 		// Checkout back to trunk first so we can create the worktree for the branch
 		trunkBranch := eng.Trunk()
 		if err := eng.CheckoutBranch(ctx.Context, trunkBranch); err != nil {
@@ -211,10 +213,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		if err != nil {
 			// Clean up branch on worktree failure
 			_ = eng.DeleteBranch(ctx.Context, branch)
-			handler.OnStep(StepWorktree, StatusFailed, err.Error())
+			h.OnStep(StepWorktree, handler.StatusFailed, err.Error())
 			return Result{}, fmt.Errorf("failed to create worktree: %w", err)
 		}
-		handler.OnStep(StepWorktree, StatusCompleted, fmt.Sprintf("Created worktree at %s", worktreePath))
+		h.OnStep(StepWorktree, handler.StatusCompleted, fmt.Sprintf("Created worktree at %s", worktreePath))
 		out.Info("Created worktree at %s", worktreePath)
 
 		// Run post-create hooks in the worktree
@@ -225,26 +227,26 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 
 	// Set scope: use provided scope if given, otherwise let it inherit from parent naturally
 	if opts.Scope != "" {
-		handler.OnStep(StepScope, StatusStarted, fmt.Sprintf("Setting scope to %s", opts.Scope))
+		h.OnStep(StepScope, handler.StatusStarted, fmt.Sprintf("Setting scope to %s", opts.Scope))
 		// Set explicit scope if provided
 		newScope := engine.NewScope(opts.Scope)
 		if err := eng.SetScope(ctx.Context, branch, newScope); err != nil {
-			handler.OnStep(StepScope, StatusFailed, err.Error())
+			h.OnStep(StepScope, handler.StatusFailed, err.Error())
 			out.Info("Warning: failed to set scope: %v", err)
 		} else {
-			handler.OnStep(StepScope, StatusCompleted, fmt.Sprintf("Scope set to %s", opts.Scope))
+			h.OnStep(StepScope, handler.StatusCompleted, fmt.Sprintf("Scope set to %s", opts.Scope))
 		}
 	}
 	// If no scope provided, don't set anything - it will inherit from parent automatically
 
 	// Handle insert logic
 	if opts.Insert {
-		handler.OnStep(StepInsert, StatusStarted, "Inserting branch into stack")
+		h.OnStep(StepInsert, handler.StatusStarted, "Inserting branch into stack")
 		if err := handleInsert(ctx.Context, branchName, currentBranch, ctx, &opts); err != nil {
-			handler.OnStep(StepInsert, StatusFailed, err.Error())
+			h.OnStep(StepInsert, handler.StatusFailed, err.Error())
 			out.Info("Warning: failed to insert branch: %v", err)
 		} else {
-			handler.OnStep(StepInsert, StatusCompleted, "Branch inserted")
+			h.OnStep(StepInsert, handler.StatusCompleted, "Branch inserted")
 		}
 
 		// DX Improvement: Return to the original branch after insertion
@@ -262,7 +264,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		HasCommit:    hasStaged,
 		WorktreePath: worktreePath,
 	}
-	handler.Complete(result)
+	h.Complete(result)
 	return result, nil
 }
 

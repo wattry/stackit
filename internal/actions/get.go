@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"sync"
 
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
@@ -108,8 +109,8 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	out := ctx.Output
 	gctx := ctx.Context
 
-	if ctx.Git().HasUncommittedChanges(gctx) {
-		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before running 'get'")
+	if err := validation.MustNotHaveUncommittedChanges(gctx, ctx.Git()).Validate(); err != nil {
+		return err
 	}
 
 	targetBranch := ""

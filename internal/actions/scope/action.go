@@ -7,6 +7,7 @@ import (
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -37,7 +38,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Handle Show
 	if opts.Show {
 		if isOnTrunk {
-			return fmt.Errorf("not on a branch")
+			return errors.ErrNotOnBranch
 		}
 		currentBranchObj := eng.GetBranch(currentBranch)
 		explicitScope := currentBranchObj.GetExplicitScope()

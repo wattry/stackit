@@ -1,13 +1,12 @@
 package branch
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // NewUnfreezeCmd creates the unfreeze command
@@ -29,7 +28,7 @@ affects the local frozen status and does not affect shared locks.`,
 				} else {
 					current := ctx.Engine.CurrentBranch()
 					if current == nil {
-						return fmt.Errorf("not on a branch and no branch specified")
+						return errors.ErrNotOnBranchNoBranchSpecified
 					}
 					branchName = current.GetName()
 				}

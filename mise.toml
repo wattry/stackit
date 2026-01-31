@@ -28,6 +28,14 @@ golangci-lint = "latest"
 "aqua:mikefarah/yq" = "latest"        # YAML processing
 "cargo:tokei" = "latest"              # Code statistics
 
+[tasks.compile]
+description = "Check compilation only (~2s)"
+run = "go build ./..."
+
+[tasks.lint-only]
+description = "Run linter without fmt or tests (~5s)"
+run = "golangci-lint run --allow-parallel-runners"
+
 [tasks.deps]
 description = "Download dependencies for all modules"
 run = """

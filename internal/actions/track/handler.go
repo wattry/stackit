@@ -4,6 +4,7 @@ package track
 import (
 	"context"
 
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/output"
@@ -27,7 +28,9 @@ type Handler interface {
 }
 
 // NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+type NullHandler struct {
+	handler.NullBase
+}
 
 // PromptSelectParent implements Handler. Returns empty string for null handler.
 func (h *NullHandler) PromptSelectParent(_ context.Context, _ engine.Engine, _ github.Client, _ output.Logger, _ string) (string, error) {
@@ -36,9 +39,3 @@ func (h *NullHandler) PromptSelectParent(_ context.Context, _ engine.Engine, _ g
 
 // PromptTrackChild implements Handler. Returns false for null handler.
 func (h *NullHandler) PromptTrackChild(_, _ string) (bool, error) { return false, nil }
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }

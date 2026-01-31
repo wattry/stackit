@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/handler"
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
@@ -22,16 +24,16 @@ type Options struct {
 }
 
 // Action performs the move operation
-func Action(ctx *app.Context, opts Options, handler Handler) error {
+func Action(ctx *app.Context, opts Options, h Handler) error {
 	eng := ctx.Engine
 	out := ctx.Output
 	gctx := ctx.Context
 
 	// Use null handler if none provided
-	if handler == nil {
-		handler = &NullHandler{}
+	if h == nil {
+		h = &NullHandler{}
 	}
-	defer handler.Cleanup()
+	defer h.Cleanup()
 
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
@@ -55,57 +57,21 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Debug("Failed to take snapshot: %v", err)
 	}
 
-	// Prevent moving trunk (check before tracking check since trunk might not be tracked)
-	sourceBranch := eng.GetBranch(source)
-	if sourceBranch.IsTrunk() {
-		return fmt.Errorf("cannot move trunk branch")
+	// Validate source branch
+	if err := validation.ValidateSourceBranch(eng, source, "move"); err != nil {
+		return err
 	}
 
-	// Validate source exists and is tracked
-	if !sourceBranch.IsTracked() {
-		return fmt.Errorf("branch %s is not tracked by Stackit", source)
-	}
-
-	// Prevent moving worktree anchor branches
-	if sourceBranch.IsWorktreeAnchor() {
-		return fmt.Errorf("cannot move worktree anchor branch %s", source)
-	}
-
-	// Validate onto is provided
+	// Validate target branch
 	onto := opts.Onto
-	if onto == "" {
-		return fmt.Errorf("onto branch must be specified")
+	if err := validation.ValidateTargetBranch(eng, source, onto, "move"); err != nil {
+		return err
 	}
 
-	// Validate onto exists
+	sourceBranch := eng.GetBranch(source)
 	ontoBranch := eng.GetBranch(onto)
-	if !ontoBranch.IsTrunk() && !ontoBranch.IsTracked() {
-		// Check if it's an untracked branch
-		allBranches := eng.AllBranches()
-		found := false
-		for _, branch := range allBranches {
-			if branch.GetName() == onto {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("branch %s does not exist", onto)
-		}
-	}
-
-	// Prevent moving onto worktree anchor branches
-	if ontoBranch.IsWorktreeAnchor() {
-		return fmt.Errorf("cannot move branch onto worktree anchor %s; use 'stackit create' in the worktree instead", onto)
-	}
-
-	// Prevent moving onto itself
-	if source == onto {
-		return fmt.Errorf("cannot move branch onto itself")
-	}
 
 	// Cycle detection: ensure onto is not a descendant of source
-	sourceBranch = eng.GetBranch(source)
 	if graph.IsDescendant(sourceBranch, onto) {
 		return fmt.Errorf("cannot move %s onto its own descendant %s", source, onto)
 	}
@@ -119,12 +85,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Get current parent for preview
 	oldParent := sourceBranch.GetParent()
-	oldParentName := ""
-	if oldParent == nil {
-		oldParentName = eng.Trunk().GetName()
-	} else {
-		oldParentName = oldParent.GetName()
-	}
+	oldParentName := sourceBranch.GetParentPrecondition()
 
 	// Capture old divergence point to preserve it after reparenting
 	// This ensures we only move the commits that belong to this branch.
@@ -139,7 +100,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Prompt for confirmation in interactive mode (unless --yes flag is set)
-	if handler.IsInteractive() && !opts.SkipConfirm {
+	if h.IsInteractive() && !opts.SkipConfirm {
 		// Validate rebases BEFORE showing preview so user can see conflict info
 		validation, validationErr := eng.ValidateRebases(gctx, rebaseSpecs)
 
@@ -170,7 +131,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			preview.ConflictingFiles = validation.ConflictingFiles
 		}
 
-		confirmed, err := handler.PromptConfirmMove(preview)
+		confirmed, err := h.PromptConfirmMove(preview)
 		if err != nil {
 			return fmt.Errorf("failed to prompt for confirmation: %w", err)
 		}
@@ -190,17 +151,17 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		}
 	} else {
 		// Non-interactive mode: validate and fail immediately if there are conflicts
-		handler.OnStep(StepValidating, StatusStarted, "Validating rebases...")
+		h.OnStep(StepValidating, handler.StatusStarted, "Validating rebases...")
 		validation, err := eng.ValidateRebases(gctx, rebaseSpecs)
 		if err != nil {
-			handler.OnStep(StepValidating, StatusFailed, err.Error())
+			h.OnStep(StepValidating, handler.StatusFailed, err.Error())
 			return fmt.Errorf("failed to validate rebases: %w", err)
 		}
 		if !validation.Success {
-			handler.OnStep(StepValidating, StatusFailed, validation.ErrorMessage)
+			h.OnStep(StepValidating, handler.StatusFailed, validation.ErrorMessage)
 			return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
 		}
-		handler.OnStep(StepValidating, StatusCompleted, "Validation passed")
+		h.OnStep(StepValidating, handler.StatusCompleted, "Validation passed")
 	}
 
 	// Check for scope change and potential rename
@@ -209,8 +170,8 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	ontoScope := ontoBranch.GetScope()
 	if sourceScope.IsDefined() && ontoScope.IsDefined() && !sourceScope.Equal(ontoScope) {
 		shouldRename := false
-		if handler.IsInteractive() && strings.Contains(source, sourceScope.String()) {
-			confirmed, err := handler.PromptRename(source, sourceScope.String(), ontoScope.String())
+		if h.IsInteractive() && strings.Contains(source, sourceScope.String()) {
+			confirmed, err := h.PromptRename(source, sourceScope.String(), ontoScope.String())
 			if err == nil && confirmed {
 				shouldRename = true
 			}
@@ -223,7 +184,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			if err := eng.RenameBranch(gctx, eng.GetBranch(source), eng.GetBranch(newName)); err != nil {
 				out.Info("Warning: failed to rename branch: %v", err)
 			} else {
-				handler.OnRename(source, newName)
+				h.OnRename(source, newName)
 				out.Info("Renamed branch %s to %s.", style.ColorBranchName(source, false), style.ColorBranchName(newName, true))
 				source = newName
 				sourceBranch = eng.GetBranch(source)
@@ -233,7 +194,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Start handler with branch info (oldParentName computed earlier for preview)
-	handler.Start(source, oldParentName, onto)
+	h.Start(source, oldParentName, onto)
 
 	// Update parent in engine, preserving the divergence point
 	if err := eng.SetParentPreservingDivergence(gctx, sourceBranch, ontoBranch, oldParentRev); err != nil {
@@ -275,7 +236,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if renamed {
 		newName = source
 	}
-	handler.Complete(Result{
+	h.Complete(Result{
 		SourceBranch: source,
 		OldParent:    oldParentName,
 		NewParent:    onto,

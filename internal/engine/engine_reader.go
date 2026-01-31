@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"iter"
+
+	"stackit.dev/stackit/internal/errors"
 )
 
 // AllBranches returns all branches
@@ -15,6 +17,28 @@ func (e *engineImpl) AllBranches() []Branch {
 		branches[i] = NewBranch(name, e)
 	}
 	return branches
+}
+
+// BranchNames returns a cached BranchSet for O(1) branch name lookups.
+func (e *engineImpl) BranchNames() *BranchSet {
+	e.mu.RLock()
+	if e.branchNamesSet != nil {
+		defer e.mu.RUnlock()
+		return e.branchNamesSet
+	}
+	e.mu.RUnlock()
+
+	// Build and cache with write lock
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if e.branchNamesSet != nil {
+		return e.branchNamesSet
+	}
+
+	e.branchNamesSet = newBranchSet(e.branches)
+	return e.branchNamesSet
 }
 
 // CurrentBranch returns the current branch (nil if not on a branch)
@@ -42,7 +66,7 @@ func (e *engineImpl) CurrentBranch() *Branch {
 func (e *engineImpl) ValidateOnBranch() (string, error) {
 	currentBranch := e.CurrentBranch()
 	if currentBranch == nil {
-		return "", fmt.Errorf("not on a branch")
+		return "", errors.ErrNotOnBranch
 	}
 	return currentBranch.GetName(), nil
 }

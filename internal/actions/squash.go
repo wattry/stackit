@@ -5,6 +5,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -23,7 +24,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 	// Get current branch
 	currentBranch := ctx.Navigator().CurrentBranch()
 	if currentBranch == nil {
-		return fmt.Errorf("not on a branch")
+		return errors.ErrNotOnBranch
 	}
 
 	if err := currentBranch.EnsureCanModify(); err != nil {

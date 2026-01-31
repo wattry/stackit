@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
@@ -20,38 +21,21 @@ func ReorderAction(ctx *app.Context) error {
 
 	out.Debug("reorder: starting reorder action")
 
-	// Pre-checks: validate on branch
-	currentBranch, err := eng.ValidateOnBranch()
-	if err != nil {
-		out.Debug("reorder: failed to validate on branch: %v", err)
+	// Pre-checks using validation chain
+	if err := (validation.Chain{
+		validation.MustBeOnBranch(eng),
+		validation.MustNotHaveRebaseInProgress(gctx, ctx.Git()),
+		validation.MustNotHaveUncommittedChanges(gctx, ctx.Git()),
+		validation.CurrentBranchMustNotBeTrunk(eng, "reorder"),
+	}).Validate(); err != nil {
+		out.Debug("reorder: validation failed: %v", err)
 		return err
 	}
-	out.Debug("reorder: current branch is %s", currentBranch)
 
-	// Pre-checks: ensure no rebase in progress
-	out.Debug("reorder: checking for rebase in progress")
-	if err := ctx.Git().CheckRebaseInProgress(gctx); err != nil {
-		out.Debug("reorder: rebase in progress detected: %v", err)
-		return err
-	}
-	out.Debug("reorder: no rebase in progress")
-
-	// Pre-checks: ensure no uncommitted changes
-	out.Debug("reorder: checking for uncommitted changes")
-	if ctx.Git().HasUncommittedChanges(gctx) {
-		out.Debug("reorder: uncommitted changes detected")
-		return fmt.Errorf("cannot reorder with uncommitted changes. Please commit or stash them first")
-	}
-	out.Debug("reorder: no uncommitted changes")
-
-	// Prevent reordering trunk
+	currentBranch := eng.CurrentBranch().GetName()
 	currentBranchObj := eng.GetBranch(currentBranch)
 	out.Debug("reorder: current branch object: name=%s, isTrunk=%v, isTracked=%v",
 		currentBranchObj.GetName(), currentBranchObj.IsTrunk(), currentBranchObj.IsTracked())
-	if currentBranchObj.IsTrunk() {
-		out.Debug("reorder: cannot reorder from trunk branch")
-		return fmt.Errorf("cannot reorder trunk branch")
-	}
 
 	// Build StackGraph for efficient traversals
 	out.Debug("reorder: building stack graph")
@@ -60,11 +44,7 @@ func ReorderAction(ctx *app.Context) error {
 
 	// Collect branches: get ancestors from trunk to current branch
 	out.Debug("reorder: collecting branches from trunk to current branch")
-	stack := graph.Range(eng.GetBranch(currentBranch), engine.StackRange{
-		RecursiveParents:  true,
-		IncludeCurrent:    true,
-		RecursiveChildren: false,
-	})
+	stack := graph.Downstack(eng.GetBranch(currentBranch), true)
 	out.Debug("reorder: found %d branches in stack (including trunk)", len(stack))
 	for i, b := range stack {
 		out.Debug("reorder: stack[%d]: name=%s, isTrunk=%v, isTracked=%v",

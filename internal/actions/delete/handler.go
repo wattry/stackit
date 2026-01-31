@@ -1,5 +1,7 @@
 package delete
 
+import "stackit.dev/stackit/internal/actions/handler"
+
 // Result contains the result of the delete action.
 type Result struct {
 	MainRepoDirForSwitch string
@@ -39,26 +41,23 @@ type Handler interface {
 	PromptConfirm(branch string, reason string) (bool, error)
 }
 
-// NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds handler.NullBase for Cleanup() and IsInteractive().
+type NullHandler struct {
+	handler.NullBase
+}
 
 // Start implements Handler.
-func (h *NullHandler) Start(_ int) {}
+func (h *NullHandler) Start(int) {}
 
 // OnBranch implements Handler.
-func (h *NullHandler) OnBranch(_ string, _ Status, _ *int) {}
+func (h *NullHandler) OnBranch(string, Status, *int) {}
 
 // OnRestack implements Handler.
-func (h *NullHandler) OnRestack(_ int) {}
+func (h *NullHandler) OnRestack(int) {}
 
 // Complete implements Handler.
-func (h *NullHandler) Complete(_, _ int) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
+func (h *NullHandler) Complete(int, int) {}
 
 // PromptConfirm implements Handler.
-func (h *NullHandler) PromptConfirm(_ string, _ string) (bool, error) { return false, nil }
+func (h *NullHandler) PromptConfirm(string, string) (bool, error) { return false, nil }

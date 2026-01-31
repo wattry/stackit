@@ -373,7 +373,7 @@ func (m *shippableModel) startPublish() (tea.Model, tea.Cmd) {
 		// Submit all branches
 		opts := submit.Options{
 			Branch:     eng.CurrentBranch().GetName(),
-			StackRange: submit.StackRangeFull(),
+			StackRange: engine.StackRangeFull(),
 			Confirm:    true, // Skip confirmation
 		}
 

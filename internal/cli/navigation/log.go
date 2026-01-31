@@ -2,13 +2,12 @@
 package navigation
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // NewLogCmd creates the log command
@@ -87,7 +86,7 @@ func executeLog(cmd *cobra.Command, f *logFlags, style string) error {
 		if f.stack || f.steps > 0 {
 			currentBranch := eng.CurrentBranch()
 			if currentBranch == nil {
-				return fmt.Errorf("not on a branch")
+				return errors.ErrNotOnBranch
 			}
 			branchName = currentBranch.GetName()
 		}

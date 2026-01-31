@@ -1,6 +1,7 @@
 package lock
 
 import (
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/submit"
 )
 
@@ -24,20 +25,17 @@ type Handler interface {
 	IsInteractive() bool
 }
 
-// NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds handler.NullBase for Cleanup() and IsInteractive().
+type NullHandler struct {
+	handler.NullBase
+}
 
 // PromptSubmitBeforeLock implements Handler. Returns false (skip submit) for null handler.
-func (h *NullHandler) PromptSubmitBeforeLock(_ []string) (bool, error) { return false, nil }
+func (h *NullHandler) PromptSubmitBeforeLock([]string) (bool, error) { return false, nil }
 
 // PromptUnlockDownstack implements Handler. Returns false (skip) for null handler.
-func (h *NullHandler) PromptUnlockDownstack(_ []string) (bool, error) { return false, nil }
+func (h *NullHandler) PromptUnlockDownstack([]string) (bool, error) { return false, nil }
 
 // GetSubmitHandler implements Handler. Returns nil for null handler.
 func (h *NullHandler) GetSubmitHandler() submit.Handler { return nil }
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }

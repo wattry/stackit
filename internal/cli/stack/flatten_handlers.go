@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions/flatten"
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
@@ -44,7 +45,7 @@ func (h *SimpleFlattenHandler) Start(branchCount int) {
 }
 
 // OnStep is called for each step in the flatten process
-func (h *SimpleFlattenHandler) OnStep(_ flatten.Step, _ flatten.StepStatus, _ string) {
+func (h *SimpleFlattenHandler) OnStep(_ flatten.Step, _ handler.StepStatus, _ string) {
 	// Steps are handled silently in simple handler
 }
 
@@ -101,7 +102,7 @@ func (h *InteractiveFlattenHandler) OnValidationProgress(current, total int, bra
 }
 
 // OnStep sends step updates to the TUI
-func (h *InteractiveFlattenHandler) OnStep(step flatten.Step, status flatten.StepStatus, _ string) {
+func (h *InteractiveFlattenHandler) OnStep(step flatten.Step, status handler.StepStatus, _ string) {
 	if h.runner == nil {
 		return
 	}
@@ -121,7 +122,7 @@ func (h *InteractiveFlattenHandler) OnStep(step flatten.Step, status flatten.Ste
 		return
 	}
 
-	if status == flatten.StatusStarted {
+	if status == handler.StatusStarted {
 		h.runner.Send(flattenComponent.PhaseStartMsg{Phase: phase})
 	}
 }

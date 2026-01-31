@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
+	handlerBase "stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	sterrors "stackit.dev/stackit/internal/errors"
@@ -94,11 +95,8 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 	splog.Info("The command will continue until all changes have been added to a new branch.")
 	splog.Info("")
 
-	// Build list of existing branch names for validation
-	existingBranchNames := make(map[string]bool)
-	for _, b := range eng.AllBranches() {
-		existingBranchNames[b.GetName()] = true
-	}
+	// Get existing branch names for validation
+	existingBranchNames := eng.BranchNames()
 
 	// cancelWithRestore restores the original branch and returns ErrCanceled.
 	// This ensures the working directory is left in a clean state on user cancel.
@@ -119,7 +117,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		}
 
 		// Show remaining changes via handler
-		handler.OnStep(StepStagingHunks, StatusStarted, fmt.Sprintf("Stage changes for branch %d", len(branchNames)+1))
+		handler.OnStep(StepStagingHunks, handlerBase.StatusStarted, fmt.Sprintf("Stage changes for branch %d", len(branchNames)+1))
 
 		unstagedDiff, err := eng.GetUnstagedDiff(gitCtx)
 		if err != nil {
@@ -188,10 +186,10 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			continue
 		}
 
-		handler.OnStep(StepStagingHunks, StatusCompleted, "Changes staged")
+		handler.OnStep(StepStagingHunks, handlerBase.StatusCompleted, "Changes staged")
 
 		// Prompt for branch name BEFORE creating commit (so we can validate first)
-		handler.OnStep(StepBranchName, StatusStarted, "Enter branch name")
+		handler.OnStep(StepBranchName, handlerBase.StatusStarted, "Enter branch name")
 
 		defaultName := generateDefaultBranchName(branchToSplit.GetName(), branchNames)
 		branchName, err := handler.PromptBranchName(defaultName, branchNames, existingBranchNames, branchToSplit.GetName())
@@ -200,10 +198,10 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			return err
 		}
 
-		handler.OnStep(StepBranchName, StatusCompleted, branchName)
+		handler.OnStep(StepBranchName, handlerBase.StatusCompleted, branchName)
 
 		// Prompt for commit message via handler
-		handler.OnStep(StepCommitMessage, StatusStarted, "Enter commit message")
+		handler.OnStep(StepCommitMessage, handlerBase.StatusStarted, "Enter commit message")
 
 		editMessage, err := handler.PromptEditCommitMessage()
 		if err != nil {
@@ -220,7 +218,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			}
 		}
 
-		handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
+		handler.OnStep(StepCommitMessage, handlerBase.StatusCompleted, "Commit message set")
 
 		// Create commit (after all validation passed)
 		if err := eng.CommitWithOptions(gitCtx, git.CommitOptions{
@@ -231,8 +229,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 			return fmt.Errorf("failed to create commit: %w", err)
 		}
 
-		// Track the new branch name so it's not reused
-		existingBranchNames[branchName] = true
+		// Track the new branch name so it's not reused (sessionNames passed to PromptBranchName)
 		branchNames = append(branchNames, branchName)
 		handler.OnBranchCreated(branchName)
 	}
@@ -336,21 +333,16 @@ func splitByHunkBelowWithPatch(ctx *app.Context, branchToSplit engine.Branch, en
 	}
 	defaultCommitMessage := strings.Join(commitMessages, "\n\n")
 
-	// Build list of existing branch names for validation
-	existingBranchNames := make([]string, 0)
-	existingBranchMap := make(map[string]bool)
-	for _, b := range eng.AllBranches() {
-		existingBranchNames = append(existingBranchNames, b.GetName())
-		existingBranchMap[b.GetName()] = true
-	}
+	// Get existing branch names for validation
+	branchSet := eng.BranchNames()
 
 	// Determine new parent branch name
 	newParentName := opts.name
 	if newParentName == "" {
-		newParentName = generateDefaultBranchName(branchToSplit.GetName(), existingBranchNames)
+		newParentName = generateDefaultBranchName(branchToSplit.GetName(), branchSet.Names())
 	}
 	// Validate branch name doesn't already exist
-	if existingBranchMap[newParentName] {
+	if branchSet.Contains(newParentName) {
 		return fmt.Errorf("branch %q already exists", newParentName)
 	}
 
@@ -546,13 +538,8 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 	}
 	defaultCommitMessage := strings.Join(commitMessages, "\n\n")
 
-	// Build list of existing branch names for validation
-	existingBranchNamesList := make([]string, 0)
-	existingBranchNamesMap := make(map[string]bool)
-	for _, b := range eng.AllBranches() {
-		existingBranchNamesList = append(existingBranchNamesList, b.GetName())
-		existingBranchNamesMap[b.GetName()] = true
-	}
+	// Get existing branch names for validation
+	existingBranches := eng.BranchNames()
 
 	// Show instructions (only for interactive mode)
 	if handler != nil {
@@ -561,7 +548,7 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		splog.Info("Stage the changes you want to EXTRACT to the new child branch.")
 		splog.Info("The remaining changes will stay on %s.", style.ColorBranchName(branchToSplit.GetName(), true))
 		splog.Info("")
-		handler.OnStep(StepStagingHunks, StatusStarted, "Stage changes to extract")
+		handler.OnStep(StepStagingHunks, handlerBase.StatusStarted, "Stage changes to extract")
 	}
 
 	unstagedDiff, err := eng.GetUnstagedDiff(gitCtx)
@@ -669,7 +656,7 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 	}
 
 	if handler != nil {
-		handler.OnStep(StepStagingHunks, StatusCompleted, "Changes staged for extraction")
+		handler.OnStep(StepStagingHunks, handlerBase.StatusCompleted, "Changes staged for extraction")
 	}
 
 	// Determine child branch name and commit message
@@ -680,10 +667,10 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		// Non-interactive mode: use provided name/message or generate defaults
 		childBranchName = opts.name
 		if childBranchName == "" {
-			childBranchName = generateDefaultBranchName(branchToSplit.GetName(), existingBranchNamesList)
+			childBranchName = generateDefaultBranchName(branchToSplit.GetName(), existingBranches.Names())
 		}
 		// Validate branch name doesn't already exist
-		if existingBranchNamesMap[childBranchName] {
+		if existingBranches.Contains(childBranchName) {
 			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 			return fmt.Errorf("branch %q already exists", childBranchName)
 		}
@@ -694,20 +681,20 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 		}
 	} else {
 		// Interactive mode: prompt for branch name and commit message
-		handler.OnStep(StepBranchName, StatusStarted, "Enter child branch name")
+		handler.OnStep(StepBranchName, handlerBase.StatusStarted, "Enter child branch name")
 
-		defaultName := generateDefaultBranchName(branchToSplit.GetName(), existingBranchNamesList)
+		defaultName := generateDefaultBranchName(branchToSplit.GetName(), existingBranches.Names())
 		var err error
-		childBranchName, err = handler.PromptBranchName(defaultName, []string{}, existingBranchNamesMap, branchToSplit.GetName())
+		childBranchName, err = handler.PromptBranchName(defaultName, []string{}, existingBranches, branchToSplit.GetName())
 		if err != nil {
 			_ = eng.ForceCheckoutBranch(gitCtx, branchToSplit)
 			return err
 		}
 
-		handler.OnStep(StepBranchName, StatusCompleted, childBranchName)
+		handler.OnStep(StepBranchName, handlerBase.StatusCompleted, childBranchName)
 
 		// Prompt for commit message for the child branch
-		handler.OnStep(StepCommitMessage, StatusStarted, "Enter commit message for extracted changes")
+		handler.OnStep(StepCommitMessage, handlerBase.StatusStarted, "Enter commit message for extracted changes")
 
 		editMessage, err := handler.PromptEditCommitMessage()
 		if err != nil {
@@ -724,7 +711,7 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 			}
 		}
 
-		handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
+		handler.OnStep(StepCommitMessage, handlerBase.StatusCompleted, "Commit message set")
 	}
 
 	// Stash only the staged changes (what we want to extract to child)

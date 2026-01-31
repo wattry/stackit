@@ -139,7 +139,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 
 		// Submit with --stack flag from branch P
 		opts := submit.Options{
-			StackRange: submit.StackRangeFull(),
+			StackRange: engine.StackRangeFull(),
 			NoEdit:     true,
 			Draft:      true,
 		}

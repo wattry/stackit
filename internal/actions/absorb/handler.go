@@ -1,6 +1,9 @@
 package absorb
 
-import "stackit.dev/stackit/internal/git"
+import (
+	"stackit.dev/stackit/internal/actions/handler"
+	"stackit.dev/stackit/internal/git"
+)
 
 // Step represents a step in the absorb process
 type Step string
@@ -13,17 +16,6 @@ const (
 	StepConfirming Step = "confirming"
 	StepApplying   Step = "applying"
 	StepRestacking Step = "restacking"
-)
-
-// StepStatus represents the status of a step
-type StepStatus string
-
-// Step status constants
-const (
-	StatusStarted   StepStatus = "started"
-	StatusCompleted StepStatus = "completed"
-	StatusSkipped   StepStatus = "skipped"
-	StatusFailed    StepStatus = "failed"
 )
 
 // HunkResult represents the result of absorbing a hunk
@@ -48,7 +40,7 @@ type Handler interface {
 	Start(dryRun bool)
 
 	// OnStep is called for each step in the absorb process
-	OnStep(step Step, status StepStatus, message string)
+	OnStep(step Step, status handler.StepStatus, message string)
 
 	// OnHunkTarget is called when a target is found for a hunk
 	OnHunkTarget(file string, commitSHA string, branchName string)
@@ -72,32 +64,25 @@ type Handler interface {
 	PromptConfirm(message string) (bool, error)
 }
 
-// NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds handler.NullBase for Cleanup() and IsInteractive().
+type NullHandler struct {
+	handler.NullBase
+	handler.NullProgress[Step]
+	handler.NullPromptHandler
+}
 
 // Start implements Handler.
-func (h *NullHandler) Start(_ bool) {}
-
-// OnStep implements Handler.
-func (h *NullHandler) OnStep(_ Step, _ StepStatus, _ string) {}
+func (h *NullHandler) Start(bool) {}
 
 // OnHunkTarget implements Handler.
-func (h *NullHandler) OnHunkTarget(_ string, _ string, _ string) {}
+func (h *NullHandler) OnHunkTarget(string, string, string) {}
 
 // OnUnabsorbedHunk implements Handler.
-func (h *NullHandler) OnUnabsorbedHunk(_ git.Hunk) {}
+func (h *NullHandler) OnUnabsorbedHunk(git.Hunk) {}
 
 // OnApply implements Handler.
-func (h *NullHandler) OnApply(_ string, _ string) {}
+func (h *NullHandler) OnApply(string, string) {}
 
 // Complete implements Handler.
-func (h *NullHandler) Complete(_ Result) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
-
-// PromptConfirm implements Handler.
-func (h *NullHandler) PromptConfirm(_ string) (bool, error) { return false, nil }
+func (h *NullHandler) Complete(Result) {}

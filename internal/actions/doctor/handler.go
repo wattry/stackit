@@ -1,5 +1,7 @@
 package doctor
 
+import "stackit.dev/stackit/internal/actions/handler"
+
 // CheckStatus represents the result of a diagnostic check
 type CheckStatus string
 
@@ -41,23 +43,20 @@ type Handler interface {
 	IsInteractive() bool
 }
 
-// NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds handler.NullBase for Cleanup() and IsInteractive().
+type NullHandler struct {
+	handler.NullBase
+}
 
 // Start implements Handler.
-func (h *NullHandler) Start(_ bool) {}
+func (h *NullHandler) Start(bool) {}
 
 // OnCategory implements Handler.
-func (h *NullHandler) OnCategory(_ Category) {}
+func (h *NullHandler) OnCategory(Category) {}
 
 // OnCheck implements Handler.
-func (h *NullHandler) OnCheck(_ string, _ CheckStatus, _ string) {}
+func (h *NullHandler) OnCheck(string, CheckStatus, string) {}
 
 // Complete implements Handler.
-func (h *NullHandler) Complete(_, _, _ int) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
+func (h *NullHandler) Complete(int, int, int) {}

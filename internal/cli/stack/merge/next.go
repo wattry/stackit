@@ -13,6 +13,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -215,7 +216,7 @@ func findBottomUnmergedPR(ctx *app.Context) (*mergeAction.BranchMergeInfo, []str
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
 	if currentBranch == nil {
-		return nil, nil, fmt.Errorf("not on a branch")
+		return nil, nil, errors.ErrNotOnBranch
 	}
 	if currentBranch.IsTrunk() {
 		return nil, nil, fmt.Errorf("cannot merge from trunk")

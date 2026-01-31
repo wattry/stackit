@@ -6,6 +6,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -37,15 +38,9 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 		// But we need a rebasedBranchBase - try to get it from current branch's parent
 		currentBranch := eng.CurrentBranch()
 		if currentBranch == nil {
-			return fmt.Errorf("not on a branch")
+			return errors.ErrNotOnBranch
 		}
-		parent := currentBranch.GetParent()
-		parentName := ""
-		if parent == nil {
-			parentName = eng.Trunk().GetName()
-		} else {
-			parentName = parent.GetName()
-		}
+		parentName := currentBranch.GetParentPrecondition()
 		parentBranch := eng.GetBranch(parentName)
 		parentRev, err := parentBranch.GetRevision()
 		if err != nil {
@@ -82,7 +77,7 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 		if branchName == "" {
 			currentBranch := eng.CurrentBranch()
 			if currentBranch == nil {
-				return fmt.Errorf("not on a branch")
+				return errors.ErrNotOnBranch
 			}
 			branchName = currentBranch.GetName()
 		}

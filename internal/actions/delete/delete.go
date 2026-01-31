@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
@@ -43,15 +44,17 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		return Result{}, fmt.Errorf("no branch specified and not on a branch")
 	}
 
+	// Validate branch can be deleted
+	if err := (validation.Chain{
+		validation.BranchMustNotBeTrunk(eng, branchName),
+		validation.BranchMustBeTracked(eng, branchName),
+	}).Validate(); err != nil {
+		return Result{}, err
+	}
+
 	branch := eng.GetBranch(branchName)
-	if branch.IsTrunk() {
-		return Result{}, fmt.Errorf("cannot delete trunk branch %s", branchName)
-	}
 
-	if !branch.IsTracked() {
-		return Result{}, fmt.Errorf("branch %s is not tracked by stackit", branchName)
-	}
-
+	// Custom worktree anchor check with helpful guidance
 	if branch.IsWorktreeAnchor() {
 		return Result{}, fmt.Errorf("cannot delete branch %s because it is a worktree anchor; use 'stackit worktree remove' to remove the worktree first", branchName)
 	}

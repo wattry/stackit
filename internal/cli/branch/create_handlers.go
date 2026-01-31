@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions/create"
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
@@ -43,17 +44,17 @@ func (h *SimpleCreateHandler) Start(parentBranch string) {
 }
 
 // OnStep is called for each step in the create process
-func (h *SimpleCreateHandler) OnStep(step create.Step, status create.StepStatus, message string) {
+func (h *SimpleCreateHandler) OnStep(step create.Step, status handler.StepStatus, message string) {
 	h.Lock()
 	defer h.Unlock()
 
 	// Only show meaningful messages for completed/failed steps
 	switch status {
-	case create.StatusCompleted:
+	case handler.StatusCompleted:
 		h.printStepCompleted(step, message)
-	case create.StatusFailed:
+	case handler.StatusFailed:
 		h.Output.Error("Failed: %s", message)
-	case create.StatusSkipped:
+	case handler.StatusSkipped:
 		// Skip silently for most steps
 		if step == create.StepCommit {
 			h.Output.Info("No staged changes; created a branch with no commit.")

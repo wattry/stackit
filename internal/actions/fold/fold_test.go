@@ -158,7 +158,7 @@ func TestFoldAction(t *testing.T) {
 		// Try to fold untracked branch
 		err := Action(s.Context, Options{Keep: false}, nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "cannot fold untracked branch")
+		require.Contains(t, err.Error(), "is not tracked by stackit")
 	})
 
 	t.Run("fails when trying to fold into trunk with --keep", func(t *testing.T) {

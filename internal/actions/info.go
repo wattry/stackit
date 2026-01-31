@@ -66,13 +66,9 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	eng := ctx.Engine
 	out := ctx.Output
 
-	branchName := opts.BranchName
-	if branchName == "" {
-		currentBranch := eng.CurrentBranch()
-		if currentBranch == nil {
-			return fmt.Errorf("not on a branch and no branch specified")
-		}
-		branchName = currentBranch.GetName()
+	branchName, err := ResolveBranchName(eng, opts.BranchName)
+	if err != nil {
+		return err
 	}
 
 	branch := eng.GetBranch(branchName)

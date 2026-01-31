@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
@@ -90,11 +91,12 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 	defer handler.Cleanup()
 
-	// Validate we're on a branch
-	currentBranch, err := eng.ValidateOnBranch()
-	if err != nil {
+	// Validate preconditions
+	if err := validation.GitOperationChain(gctx, eng, ctx.Git(), "fold").Validate(); err != nil {
 		return err
 	}
+	currentBranch := eng.CurrentBranch().GetName()
+	currentBranchObj := eng.GetBranch(currentBranch)
 
 	// Take snapshot before modifying the repository
 	snapshotOpts := actions.NewSnapshot("fold",
@@ -106,43 +108,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Debug("Failed to take snapshot: %v", err)
 	}
 
-	// Check if on trunk
-	currentBranchObj := eng.GetBranch(currentBranch)
-	if currentBranchObj.IsTrunk() {
-		return fmt.Errorf("cannot fold trunk branch")
-	}
-
-	// Check if branch is tracked
-	if !currentBranchObj.IsTracked() {
-		return fmt.Errorf("cannot fold untracked branch %s", currentBranch)
-	}
-
-	// Check if rebase is in progress
-	if err := ctx.Git().CheckRebaseInProgress(gctx); err != nil {
-		return err
-	}
-
-	// Check for uncommitted changes
-	if ctx.Git().HasUncommittedChanges(gctx) {
-		return fmt.Errorf("cannot fold with uncommitted changes. Please commit or stash them first")
-	}
-
 	// Get parent branch
-	// currentBranchObj already declared above
-	parent := currentBranchObj.GetParent()
-	parentName := ""
-	if parent == nil {
-		parentName = eng.Trunk().GetName()
-	} else {
-		parentName = parent.GetName()
-	}
+	parentName := currentBranchObj.GetParentPrecondition()
 
 	parentBranch := eng.GetBranch(parentName)
-
-	// Prohibit folding if current or parent is locked or frozen
-	if err := currentBranchObj.EnsureCanModify(); err != nil {
-		return err
-	}
 	if !parentBranch.IsTrunk() {
 		if err := parentBranch.EnsureCanModify(); err != nil {
 			return err

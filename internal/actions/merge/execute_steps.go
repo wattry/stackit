@@ -90,13 +90,7 @@ func executeUpdatePRBase(ctx *app.Context, eng mergeExecuteEngine, step PlanStep
 
 	// Get the parent revision (old base)
 	branch := eng.GetBranch(step.BranchName)
-	parent := branch.GetParent()
-	parentName := ""
-	if parent == nil {
-		parentName = trunkName
-	} else {
-		parentName = parent.GetName()
-	}
+	parentName := branch.GetParentPrecondition()
 
 	// Get the old parent revision
 	parentBranch := eng.GetBranch(parentName)

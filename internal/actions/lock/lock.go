@@ -64,7 +64,7 @@ func Action(ctx *app.Context, branchName string, handler Handler) error {
 		if err == nil && confirm {
 			submitOpts := submit.Options{
 				Branch:     branchName,
-				StackRange: submit.StackRangeDownstack(),
+				StackRange: engine.StackRangeDownstack(true),
 				Confirm:    false,
 			}
 			submitHandler := handler.GetSubmitHandler()

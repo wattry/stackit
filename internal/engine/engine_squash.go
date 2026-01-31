@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 )
 
@@ -15,7 +16,7 @@ func (e *engineImpl) SquashCurrentBranch(ctx context.Context, opts SquashOptions
 	// Get current branch
 	branchName := e.currentBranch
 	if branchName == "" {
-		return fmt.Errorf("not on a branch")
+		return errors.ErrNotOnBranch
 	}
 
 	// Check if branch is trunk (check directly since we hold the lock)

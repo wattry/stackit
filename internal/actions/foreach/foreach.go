@@ -11,6 +11,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/utils"
 )
@@ -31,7 +32,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	currentBranch := eng.CurrentBranch()
 	if currentBranch == nil {
-		return fmt.Errorf("not on a branch")
+		return errors.ErrNotOnBranch
 	}
 
 	// Get branches based on scope

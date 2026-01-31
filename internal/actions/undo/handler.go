@@ -1,17 +1,8 @@
 package undo
 
 import (
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/engine"
-)
-
-// StepStatus represents the status of an undo step
-type StepStatus string
-
-// Step status constants
-const (
-	StepStarted   StepStatus = "started"
-	StepCompleted StepStatus = "completed"
-	StepSkipped   StepStatus = "skipped"
 )
 
 // Handler receives events from undo action
@@ -23,7 +14,7 @@ type Handler interface {
 	OnSnapshotList(snapshots []engine.SnapshotInfo)
 
 	// OnStep is called for each undo step
-	OnStep(description string, status StepStatus)
+	OnStep(description string, status handler.StepStatus)
 
 	// Complete is called when undo finishes
 	Complete(success bool, message string)
@@ -42,7 +33,9 @@ type Handler interface {
 }
 
 // NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+type NullHandler struct {
+	handler.NullBase
+}
 
 // Start implements Handler.
 func (h *NullHandler) Start() {}
@@ -51,16 +44,10 @@ func (h *NullHandler) Start() {}
 func (h *NullHandler) OnSnapshotList(_ []engine.SnapshotInfo) {}
 
 // OnStep implements Handler.
-func (h *NullHandler) OnStep(_ string, _ StepStatus) {}
+func (h *NullHandler) OnStep(_ string, _ handler.StepStatus) {}
 
 // Complete implements Handler.
 func (h *NullHandler) Complete(_ bool, _ string) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
 
 // SelectSnapshot implements Handler.
 func (h *NullHandler) SelectSnapshot(_ []engine.SnapshotInfo) (string, error) { return "", nil }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/undo"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
@@ -38,16 +39,16 @@ func (h *SimpleUndoHandler) Start() {}
 func (h *SimpleUndoHandler) OnSnapshotList(_ []engine.SnapshotInfo) {}
 
 // OnStep is called for each undo step
-func (h *SimpleUndoHandler) OnStep(description string, status undo.StepStatus) {
+func (h *SimpleUndoHandler) OnStep(description string, status handler.StepStatus) {
 	h.Lock()
 	defer h.Unlock()
 
 	switch status {
-	case undo.StepStarted:
+	case handler.StatusStarted:
 		h.Output.Info("%s", description)
-	case undo.StepCompleted:
+	case handler.StatusCompleted:
 		h.Output.Info("  ✓ %s", description)
-	case undo.StepSkipped:
+	case handler.StatusSkipped:
 		h.Output.Info("  - %s (skipped)", description)
 	}
 }
@@ -89,16 +90,16 @@ func (h *InteractiveUndoHandler) Start() {}
 func (h *InteractiveUndoHandler) OnSnapshotList(_ []engine.SnapshotInfo) {}
 
 // OnStep is called for each undo step
-func (h *InteractiveUndoHandler) OnStep(description string, status undo.StepStatus) {
+func (h *InteractiveUndoHandler) OnStep(description string, status handler.StepStatus) {
 	h.Lock()
 	defer h.Unlock()
 
 	switch status {
-	case undo.StepStarted:
+	case handler.StatusStarted:
 		h.Output.Info("%s", description)
-	case undo.StepCompleted:
+	case handler.StatusCompleted:
 		h.Output.Info("  ✓ %s", description)
-	case undo.StepSkipped:
+	case handler.StatusSkipped:
 		h.Output.Info("  - %s (skipped)", description)
 	}
 }

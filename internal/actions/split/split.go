@@ -8,6 +8,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // Style specifies the split mode
@@ -88,7 +89,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
 	if currentBranch == nil {
-		return fmt.Errorf("not on a branch")
+		return errors.ErrNotOnBranch
 	}
 
 	if err := currentBranch.EnsureCanModify(); err != nil {
@@ -108,14 +109,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	currentBranchObj := eng.GetBranch(currentBranch.GetName())
 	if !currentBranchObj.IsTracked() {
 		// Auto-track the branch
-		parent := currentBranch.GetParent()
-		parentName := ""
-		if parent == nil {
-			// Try to find parent from git
-			parentName = eng.Trunk().GetName()
-		} else {
-			parentName = parent.GetName()
-		}
+		parentName := currentBranch.GetParentPrecondition()
 		if err := eng.TrackBranch(context, currentBranch.GetName(), parentName); err != nil {
 			return fmt.Errorf("failed to track branch: %w", err)
 		}

@@ -22,6 +22,9 @@ var (
 	// ErrNotOnBranch indicates that HEAD is not on a branch
 	ErrNotOnBranch = errors.New("not on a branch")
 
+	// ErrNotOnBranchNoBranchSpecified indicates HEAD is not on a branch and no branch was specified
+	ErrNotOnBranchNoBranchSpecified = errors.New("not on a branch and no branch specified")
+
 	// ErrBranchNotFound indicates that a branch does not exist
 	ErrBranchNotFound = errors.New("branch not found")
 

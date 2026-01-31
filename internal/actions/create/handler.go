@@ -1,5 +1,7 @@
 package create
 
+import "stackit.dev/stackit/internal/actions/handler"
+
 // Step represents a step in the create process
 type Step string
 
@@ -13,17 +15,6 @@ const (
 	StepWorktree     Step = "worktree"
 	StepScope        Step = "scope"
 	StepInsert       Step = "insert"
-)
-
-// StepStatus represents the status of a step
-type StepStatus string
-
-// Step status constants
-const (
-	StatusStarted   StepStatus = "started"
-	StatusCompleted StepStatus = "completed"
-	StatusSkipped   StepStatus = "skipped"
-	StatusFailed    StepStatus = "failed"
 )
 
 // Result contains the result of the create action.
@@ -40,7 +31,7 @@ type Handler interface {
 	Start(parentBranch string)
 
 	// OnStep is called for each step in the create process
-	OnStep(step Step, status StepStatus, message string)
+	OnStep(step Step, status handler.StepStatus, message string)
 
 	// Complete is called when create finishes
 	Complete(result Result)
@@ -60,22 +51,16 @@ type Handler interface {
 }
 
 // NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+type NullHandler struct {
+	handler.NullBase
+	handler.NullProgress[Step]
+}
 
 // Start implements Handler.
 func (h *NullHandler) Start(_ string) {}
 
-// OnStep implements Handler.
-func (h *NullHandler) OnStep(_ Step, _ StepStatus, _ string) {}
-
 // Complete implements Handler.
 func (h *NullHandler) Complete(_ Result) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
 
 // PromptStageChanges implements Handler.
 func (h *NullHandler) PromptStageChanges() (bool, error) { return false, nil }

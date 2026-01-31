@@ -203,7 +203,7 @@ Restacked branch3 on branch1.
 			{
 				name:     "source branch not tracked",
 				args:     []string{"move", "--source", "untracked", "--onto", "main"},
-				expected: "Error: branch untracked is not tracked by Stackit",
+				expected: "Error: branch untracked is not tracked by stackit",
 			},
 		}
 

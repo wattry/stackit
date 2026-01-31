@@ -350,13 +350,8 @@ func deriveBranchName(ctx *app.Context, commitSubject string, pattern config.Bra
 			}
 		}
 		// Also check existing branches in the repo
-		if !conflict {
-			for _, b := range eng.AllBranches() {
-				if b.GetName() == name {
-					conflict = true
-					break
-				}
-			}
+		if !conflict && eng.BranchNames().Contains(name) {
+			conflict = true
 		}
 		if !conflict {
 			break

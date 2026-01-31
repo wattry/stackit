@@ -162,14 +162,14 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 }
 
 func getUntrackedBranchNames(ctx *app.Context) []string {
-	var untracked []string
-	for _, branch := range ctx.Engine.AllBranches() {
-		branchName := branch.GetName()
-		if !branch.IsTrunk() && !branch.IsTracked() {
-			untracked = append(untracked, branchName)
-		}
+	untracked := engine.FilterBranches(ctx.Engine, func(b engine.Branch) bool {
+		return !b.IsTrunk() && !b.IsTracked()
+	})
+	names := make([]string, len(untracked))
+	for i, b := range untracked {
+		names[i] = b.GetName()
 	}
-	return untracked
+	return names
 }
 
 // getEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
