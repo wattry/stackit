@@ -21,6 +21,7 @@ internal/
 ## Documentation
 
 - `docs/config.md` - Configuration system, keys, layered config
+- `docs/shipping.md` - Merge strategies, consolidation, multi-stack shipping
 - `docs/tui.md` - TUI patterns, BaseModel, styling, components
 - `docs/worktree.md` - Worktree management, create vs attach, workflows
 
@@ -33,6 +34,7 @@ internal/
 | Add a new CLI command | Follow patterns in `internal/cli/` |
 | Add TUI component | See `docs/tui.md` |
 | Add worktree functionality | See `docs/worktree.md` |
+| Modify merge/shipping logic | See `docs/shipping.md` |
 
 ## CLI Tools
 
