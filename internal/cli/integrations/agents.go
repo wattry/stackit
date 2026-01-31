@@ -37,7 +37,6 @@ to understand how to use stackit commands for managing stacked branches.`,
 func newAgentInstallCmd(version string) *cobra.Command {
 	var local bool
 	var force bool
-	var skipWorkflowBlock bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -56,12 +55,8 @@ This will create:
 These files contain instructions for AI agents on how to use stackit commands
 to manage stacked branches, create commits, submit PRs, and more.
 
-Subagent templates enable cost-effective delegation of tasks like commit message
-and PR description generation to the faster Haiku model.
-
 When run in a git repository, you will be prompted to add a stacking workflow
-block to your project's CLAUDE.md or AGENTS.md file. This helps AI agents
-proactively think about stacking during regular development work.`,
+block to your project's CLAUDE.md or AGENTS.md file.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
@@ -69,264 +64,170 @@ proactively think about stacking during regular development work.`,
 			if cwd != "" {
 				runner = git.NewRunnerWithPath(cwd, nil)
 			}
-			return runAgentInstall(runner, local, force, skipWorkflowBlock, version, cmd.OutOrStdout())
+			return runAgentInstall(runner, local, force, version, cmd.OutOrStdout())
 		},
 	}
 
 	cmd.Flags().BoolVar(&local, "local", false, "Install files in current repository instead of globally")
 	cmd.Flags().BoolVar(&force, "force", false, "Force overwrite existing files")
-	cmd.Flags().BoolVar(&skipWorkflowBlock, "skip-workflow-block", false, "Skip adding stacking workflow block to CLAUDE.md or AGENTS.md")
 
 	return cmd
 }
 
-func runAgentInstall(runner git.Runner, local, force, skipWorkflowBlock bool, version string, out io.Writer) error {
-	var baseDir string
-	var repoRoot string
+// fileGroup defines a set of files to install from templates.
+type fileGroup struct {
+	templateDir string   // source directory in embedded fs (e.g., "agents/templates/skill/commands")
+	destDir     string   // destination directory relative to baseDir
+	files       []string // list of filenames
+	executable  bool     // whether to make files executable
+	replaceVer  bool     // whether to replace {{VERSION}} placeholder
+}
 
-	// Try to discover repo root (needed for local install or workflow block)
-	repoRoot, _ = runner.DiscoverRepoRoot()
+func runAgentInstall(runner git.Runner, local, force bool, version string, out io.Writer) error {
+	repoRoot, _ := runner.DiscoverRepoRoot()
 
-	if local {
-		if repoRoot == "" {
-			return fmt.Errorf("not a git repository: cannot use --local outside a git repository")
-		}
-		// Local installation - install in current repo
-		baseDir = repoRoot
-	} else {
-		// Global installation - install in home directory
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		baseDir = homeDir
+	baseDir, err := resolveBaseDir(local, repoRoot)
+	if err != nil {
+		return err
 	}
 
-	// Check for existing installation and version
 	if !force {
 		if err := checkExistingInstallation(baseDir, version, out); err != nil {
 			return err
 		}
 	}
 
-	// Create .claude/skills/stackit directory
-	skillDir := filepath.Join(baseDir, ".claude", "skills", "stackit")
-	if err := os.MkdirAll(skillDir, 0750); err != nil {
-		return fmt.Errorf("failed to create .claude/skills/stackit directory: %w", err)
+	// Define all file groups to install
+	skillDir := filepath.Join(".claude", "skills", "stackit")
+	groups := []fileGroup{
+		{
+			templateDir: "agents/templates/skill",
+			destDir:     skillDir,
+			files:       []string{"SKILL.md", "reference.md"},
+			replaceVer:  true,
+		},
+		{
+			templateDir: "agents/templates/skill/commands",
+			destDir:     filepath.Join(skillDir, "commands"),
+			files:       []string{"navigation.md", "branch.md", "stack.md", "recovery.md"},
+		},
+		{
+			templateDir: "agents/templates/skill/workflows",
+			destDir:     filepath.Join(skillDir, "workflows"),
+			files:       []string{"absorb-conflict.md", "conflict-resolution.md", "fix-absorb.md", "stack-fold.md"},
+		},
+		{
+			templateDir: "agents/templates/skill/scripts",
+			destDir:     filepath.Join(skillDir, "scripts"),
+			files:       []string{"analyze_stack.sh"},
+			executable:  true,
+		},
+		{
+			templateDir: "agents/templates/subagents",
+			destDir:     filepath.Join(skillDir, "subagents"),
+			files:       []string{"commit-message.md", "review-triage.md"},
+		},
+		{
+			templateDir: "agents/templates/commands",
+			destDir:     filepath.Join(".claude", "commands"),
+			files: []string{
+				"stack-absorb.md", "stack-create.md", "stack-extract.md", "stack-fix.md",
+				"stack-fold.md", "stack-plan.md", "stack-restack.md", "stack-review.md",
+				"stack-split.md", "stack-status.md", "stack-submit.md", "stack-sync.md",
+				"stack-verify.md",
+			},
+		},
+		{
+			templateDir: "agents/templates/cursor",
+			destDir:     filepath.Join(".cursor", "rules"),
+			files:       []string{"stackit.md"},
+		},
 	}
 
-	// Write skill files
-	skillFiles := map[string]string{
-		"SKILL.md":     "agents/templates/skill/SKILL.md",
-		"reference.md": "agents/templates/skill/reference.md",
-	}
-
-	for filename, templatePath := range skillFiles {
-		content, err := agentTemplates.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
+	// Install all file groups
+	for _, g := range groups {
+		if err := installFileGroup(baseDir, g, version); err != nil {
+			return err
 		}
-
-		// Replace version placeholder with actual version
-		contentStr := string(content)
-		contentStr = strings.ReplaceAll(contentStr, "{{VERSION}}", version)
-
-		filePath := filepath.Join(skillDir, filename)
-		if err := os.WriteFile(filePath, []byte(contentStr), 0600); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
-		}
-	}
-
-	// Create subdirectories for commands, workflows, and scripts
-	commandRefDir := filepath.Join(skillDir, "commands")
-	if err := os.MkdirAll(commandRefDir, 0750); err != nil {
-		return fmt.Errorf("failed to create commands directory: %w", err)
-	}
-
-	workflowsDir := filepath.Join(skillDir, "workflows")
-	if err := os.MkdirAll(workflowsDir, 0750); err != nil {
-		return fmt.Errorf("failed to create workflows directory: %w", err)
-	}
-
-	scriptsDir := filepath.Join(skillDir, "scripts")
-	if err := os.MkdirAll(scriptsDir, 0750); err != nil {
-		return fmt.Errorf("failed to create scripts directory: %w", err)
-	}
-
-	subagentsDir := filepath.Join(skillDir, "subagents")
-	if err := os.MkdirAll(subagentsDir, 0750); err != nil {
-		return fmt.Errorf("failed to create subagents directory: %w", err)
-	}
-
-	// Write command reference files
-	commandRefFiles := []string{
-		"navigation.md",
-		"branch.md",
-		"stack.md",
-		"recovery.md",
-	}
-
-	for _, filename := range commandRefFiles {
-		templatePath := "agents/templates/skill/commands/" + filename
-		content, err := agentTemplates.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
-		}
-
-		filePath := filepath.Join(commandRefDir, filename)
-		if err := os.WriteFile(filePath, content, 0600); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
-		}
-	}
-
-	// Write workflow files
-	workflowFiles := []string{
-		"absorb-conflict.md",
-		"conflict-resolution.md",
-		"fix-absorb.md",
-		"stack-fold.md",
-	}
-
-	for _, filename := range workflowFiles {
-		templatePath := "agents/templates/skill/workflows/" + filename
-		content, err := agentTemplates.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
-		}
-
-		filePath := filepath.Join(workflowsDir, filename)
-		if err := os.WriteFile(filePath, content, 0600); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
-		}
-	}
-
-	// Write script files
-	scriptFiles := []string{
-		"analyze_stack.sh",
-	}
-
-	for _, filename := range scriptFiles {
-		templatePath := "agents/templates/skill/scripts/" + filename
-		content, err := agentTemplates.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
-		}
-
-		filePath := filepath.Join(scriptsDir, filename)
-		if err := os.WriteFile(filePath, content, 0600); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
-		}
-
-		// Make scripts executable (0700 = owner can read, write, execute)
-		// #nosec G302 - Scripts need to be executable
-		if err := os.Chmod(filePath, 0700); err != nil {
-			return fmt.Errorf("failed to make %s executable: %w", filename, err)
-		}
-	}
-
-	// Write subagent files
-	subagentFiles := []string{
-		"commit-message.md",
-		"review-triage.md",
-	}
-
-	for _, filename := range subagentFiles {
-		templatePath := "agents/templates/subagents/" + filename
-		content, err := agentTemplates.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
-		}
-
-		filePath := filepath.Join(subagentsDir, filename)
-		if err := os.WriteFile(filePath, content, 0600); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
-		}
-	}
-
-	// Create .claude/commands directory
-	commandsDir := filepath.Join(baseDir, ".claude", "commands")
-	if err := os.MkdirAll(commandsDir, 0750); err != nil {
-		return fmt.Errorf("failed to create .claude/commands directory: %w", err)
-	}
-
-	// Write slash command files
-	commands := []string{
-		"stack-absorb.md",
-		"stack-create.md",
-		"stack-extract.md",
-		"stack-fix.md",
-		"stack-fold.md",
-		"stack-plan.md",
-		"stack-restack.md",
-		"stack-review.md",
-		"stack-split.md",
-		"stack-status.md",
-		"stack-submit.md",
-		"stack-sync.md",
-		"stack-verify.md",
-	}
-
-	for _, filename := range commands {
-		templatePath := "agents/templates/commands/" + filename
-		content, err := agentTemplates.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
-		}
-
-		cmdPath := filepath.Join(commandsDir, filename)
-		if err := os.WriteFile(cmdPath, content, 0600); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
-		}
-	}
-
-	// Create .cursor/rules directory if it doesn't exist
-	cursorRulesDir := filepath.Join(baseDir, ".cursor", "rules")
-	if err := os.MkdirAll(cursorRulesDir, 0750); err != nil {
-		return fmt.Errorf("failed to create .cursor/rules directory: %w", err)
-	}
-
-	// Write Cursor rules file
-	cursorContent, err := agentTemplates.ReadFile("agents/templates/cursor/stackit.md")
-	if err != nil {
-		return fmt.Errorf("failed to read Cursor template: %w", err)
-	}
-
-	cursorRulesPath := filepath.Join(cursorRulesDir, "stackit.md")
-	if err := os.WriteFile(cursorRulesPath, cursorContent, 0600); err != nil {
-		return fmt.Errorf("failed to write Cursor rules file: %w", err)
 	}
 
 	// Install workflow block to CLAUDE.md or AGENTS.md if in a git repo
 	var workflowBlockInstalled bool
 	var workflowBlockPath string
-	if repoRoot != "" && !skipWorkflowBlock {
-		var blockErr error
-		workflowBlockInstalled, workflowBlockPath, blockErr = promptAndInstallWorkflowBlock(repoRoot, force)
-		if blockErr != nil {
-			return blockErr
+	if repoRoot != "" {
+		workflowBlockInstalled, workflowBlockPath, err = promptAndInstallWorkflowBlock(repoRoot, force)
+		if err != nil {
+			return err
 		}
 	}
 
-	// Print success message
+	printSuccessMessage(out, local, workflowBlockInstalled, workflowBlockPath, len(groups[5].files))
+	return nil
+}
+
+func resolveBaseDir(local bool, repoRoot string) (string, error) {
+	if local {
+		if repoRoot == "" {
+			return "", fmt.Errorf("not a git repository: cannot use --local outside a git repository")
+		}
+		return repoRoot, nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return homeDir, nil
+}
+
+func installFileGroup(baseDir string, g fileGroup, version string) error {
+	destPath := filepath.Join(baseDir, g.destDir)
+	if err := os.MkdirAll(destPath, 0750); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", g.destDir, err)
+	}
+
+	for _, filename := range g.files {
+		templatePath := g.templateDir + "/" + filename
+		content, err := agentTemplates.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
+		}
+
+		if g.replaceVer {
+			content = []byte(strings.ReplaceAll(string(content), "{{VERSION}}", version))
+		}
+
+		filePath := filepath.Join(destPath, filename)
+		if err := os.WriteFile(filePath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+
+		if g.executable {
+			// #nosec G302 - Scripts need to be executable
+			if err := os.Chmod(filePath, 0700); err != nil {
+				return fmt.Errorf("failed to make %s executable: %w", filename, err)
+			}
+		}
+	}
+	return nil
+}
+
+func printSuccessMessage(out io.Writer, local, workflowBlockInstalled bool, workflowBlockPath string, commandCount int) {
+	displayPath := "~"
 	installType := "globally"
 	if local {
+		displayPath = "."
 		installType = "locally"
 	}
 
-	_, _ = fmt.Fprintf(out, "✓ Installed agent files %s (version %s)\n\n", installType, version)
+	_, _ = fmt.Fprintf(out, "✓ Installed agent files %s\n\n", installType)
 	_, _ = fmt.Fprintln(out, "Claude Code integration:")
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/SKILL.md\n", getDisplayPath(baseDir, local))
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/reference.md\n", getDisplayPath(baseDir, local))
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/commands/ (4 reference files)\n", getDisplayPath(baseDir, local))
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/workflows/ (4 workflow guides)\n", getDisplayPath(baseDir, local))
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/scripts/ (1 utility script)\n", getDisplayPath(baseDir, local))
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/subagents/ (2 subagent templates)\n", getDisplayPath(baseDir, local))
+	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/skills/stackit/ (skill + reference + commands + workflows + scripts + subagents)\n", displayPath)
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Slash commands:")
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/commands/stack-*.md (%d commands)\n", getDisplayPath(baseDir, local), len(commands))
+	_, _ = fmt.Fprintf(out, "✓ Created %s/.claude/commands/stack-*.md (%d commands)\n", displayPath, commandCount)
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Cursor integration:")
-	_, _ = fmt.Fprintf(out, "✓ Created %s/.cursor/rules/stackit.md\n", getDisplayPath(baseDir, local))
+	_, _ = fmt.Fprintf(out, "✓ Created %s/.cursor/rules/stackit.md\n", displayPath)
 
 	if workflowBlockInstalled {
 		_, _ = fmt.Fprintln(out)
@@ -335,27 +236,14 @@ func runAgentInstall(runner git.Runner, local, force, skipWorkflowBlock bool, ve
 	}
 
 	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "Available Claude Code commands:")
-	_, _ = fmt.Fprintln(out, "  /stack-absorb  - Intelligently absorb changes into commits")
-	_, _ = fmt.Fprintln(out, "  /stack-create  - Create branch with auto-naming")
-	_, _ = fmt.Fprintln(out, "  /stack-extract - Extract commits/files to independent branch")
-	_, _ = fmt.Fprintln(out, "  /stack-fix     - Diagnose and fix stack issues")
-	_, _ = fmt.Fprintln(out, "  /stack-fold    - Fold granular branches into parents")
-	_, _ = fmt.Fprintln(out, "  /stack-plan    - Plan and create stack from uncommitted changes")
-	_, _ = fmt.Fprintln(out, "  /stack-restack - Rebase all branches in stack")
-	_, _ = fmt.Fprintln(out, "  /stack-review  - Apply PR review comments and mark resolved")
-	_, _ = fmt.Fprintln(out, "  /stack-split   - Split changes between current and new child branch")
-	_, _ = fmt.Fprintln(out, "  /stack-status  - View stack state and health")
-	_, _ = fmt.Fprintln(out, "  /stack-submit  - Submit PRs with generated descriptions")
-	_, _ = fmt.Fprintln(out, "  /stack-sync    - Sync with trunk and cleanup")
-	_, _ = fmt.Fprintln(out, "  /stack-verify  - Verify stack health by running checks")
+	_, _ = fmt.Fprintln(out, "Available commands: /stack-absorb, /stack-create, /stack-extract, /stack-fix,")
+	_, _ = fmt.Fprintln(out, "/stack-fold, /stack-plan, /stack-restack, /stack-review, /stack-split,")
+	_, _ = fmt.Fprintln(out, "/stack-status, /stack-submit, /stack-sync, /stack-verify")
 
 	if !local {
 		_, _ = fmt.Fprintln(out)
-		_, _ = fmt.Fprintln(out, "Tip: Use 'stackit agent install --local' to install files in a specific repository")
+		_, _ = fmt.Fprintln(out, "Tip: Use 'stackit agent install --local' to install in a specific repository")
 	}
-
-	return nil
 }
 
 func checkExistingInstallation(baseDir, version string, out io.Writer) error {
@@ -399,13 +287,6 @@ func extractVersion(content string) string {
 	}
 
 	return ""
-}
-
-func getDisplayPath(_ string, local bool) string {
-	if local {
-		return "."
-	}
-	return "~"
 }
 
 const (
