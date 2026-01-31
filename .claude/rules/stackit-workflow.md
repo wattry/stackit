@@ -41,3 +41,16 @@ Use skills instead of manual commands:
 | `/stack-restack` | Rebase all branches in stack |
 
 Run `/stackit` for the full guide.
+
+## Common Pitfalls
+
+| Mistake | Fix |
+|---------|-----|
+| Forgetting to stage before `create` | Always `git add -A` before `stackit create` |
+| Empty branch created | You forgot to stage; delete branch and retry with staged changes |
+| Using `git commit` for new branch | Use `stackit create` - it creates branch + commit together |
+| Using `git checkout -b` | Use `stackit create` - branch name auto-generated from message |
+| Manual rebase broke stack | Use `stackit restack` to safely rebase all children |
+| Using `gh pr create` | Use `stackit submit` - it handles stacked PR dependencies |
+| Amending wrong commit | Use `stackit absorb` to auto-route changes to correct commits |
+| Stack out of sync after merge | Run `stackit sync` to cleanup merged branches and update trunk |

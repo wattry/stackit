@@ -34,6 +34,7 @@ to understand how to use stackit commands for managing stacked branches.`,
 func newAgentInstallCmd(version string) *cobra.Command {
 	var local bool
 	var force bool
+	var includeAgentsMD bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -53,7 +54,11 @@ These files contain instructions for AI agents on how to use stackit commands
 to manage stacked branches, create commits, submit PRs, and more.
 
 Subagent templates enable cost-effective delegation of tasks like commit message
-and PR description generation to the faster Haiku model.`,
+and PR description generation to the faster Haiku model.
+
+Use --include-agents-md to also add a stacking workflow block to your project's
+CLAUDE.md or AGENTS.md file. This helps AI agents proactively think about
+stacking during regular development work.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
@@ -61,26 +66,32 @@ and PR description generation to the faster Haiku model.`,
 			if cwd != "" {
 				runner = git.NewRunnerWithPath(cwd, nil)
 			}
-			return runAgentInstall(runner, local, force, version, cmd.OutOrStdout())
+			return runAgentInstall(runner, local, force, includeAgentsMD, version, cmd.OutOrStdout())
 		},
 	}
 
 	cmd.Flags().BoolVar(&local, "local", false, "Install files in current repository instead of globally")
 	cmd.Flags().BoolVar(&force, "force", false, "Force overwrite existing files")
+	cmd.Flags().BoolVar(&includeAgentsMD, "include-agents-md", false, "Add stacking workflow block to CLAUDE.md or AGENTS.md")
 
 	return cmd
 }
 
-func runAgentInstall(runner git.Runner, local, force bool, version string, out io.Writer) error {
+func runAgentInstall(runner git.Runner, local, force, includeAgentsMD bool, version string, out io.Writer) error {
 	var baseDir string
-	var err error
+	var repoRoot string
+
+	if local || includeAgentsMD {
+		// Need repo root for local install or agents-md installation
+		var err error
+		repoRoot, err = runner.DiscoverRepoRoot()
+		if err != nil && (local || includeAgentsMD) {
+			return fmt.Errorf("not a git repository: %w", err)
+		}
+	}
 
 	if local {
 		// Local installation - install in current repo
-		repoRoot, err := runner.DiscoverRepoRoot()
-		if err != nil {
-			return fmt.Errorf("not a git repository: %w", err)
-		}
 		baseDir = repoRoot
 	} else {
 		// Global installation - install in home directory
@@ -285,6 +296,17 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 		return fmt.Errorf("failed to write Cursor rules file: %w", err)
 	}
 
+	// Install agents-md block if requested
+	var agentsMDInstalled bool
+	var agentsMDPath string
+	if includeAgentsMD && repoRoot != "" {
+		var blockErr error
+		agentsMDInstalled, agentsMDPath, blockErr = installAgentsMDBlock(repoRoot, force)
+		if blockErr != nil {
+			return blockErr
+		}
+	}
+
 	// Print success message
 	installType := "globally"
 	if local {
@@ -305,6 +327,12 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Cursor integration:")
 	_, _ = fmt.Fprintf(out, "✓ Created %s/.cursor/rules/stackit.md\n", getDisplayPath(baseDir, local))
+
+	if agentsMDInstalled {
+		_, _ = fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, "Agents MD block:")
+		_, _ = fmt.Fprintf(out, "✓ Added stacking workflow block to %s\n", agentsMDPath)
+	}
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Available Claude Code commands:")
@@ -378,4 +406,98 @@ func getDisplayPath(_ string, local bool) string {
 		return "."
 	}
 	return "~"
+}
+
+const (
+	agentsMDBlockStart = "<!-- stackit:start -->"
+	agentsMDBlockEnd   = "<!-- stackit:end -->"
+)
+
+// installAgentsMDBlock adds the stacking workflow block to CLAUDE.md or AGENTS.md.
+// Returns (installed, path, error) where installed indicates if the block was added/updated.
+func installAgentsMDBlock(repoRoot string, force bool) (bool, string, error) {
+	// Read the block template
+	blockContent, err := agentTemplates.ReadFile("agents/templates/agents-block.md")
+	if err != nil {
+		return false, "", fmt.Errorf("failed to read agents-block template: %w", err)
+	}
+
+	// Find target file: prefer CLAUDE.md, fall back to AGENTS.md, create CLAUDE.md if neither
+	targetFile := findAgentsFile(repoRoot)
+	targetPath := filepath.Join(repoRoot, targetFile)
+
+	// Read existing content (may not exist)
+	existingContent, _ := os.ReadFile(targetPath)
+	contentStr := string(existingContent)
+
+	// Check for existing block
+	if strings.Contains(contentStr, agentsMDBlockStart) {
+		if !force {
+			return false, targetFile, fmt.Errorf("stackit block already exists in %s, use --force to update", targetFile)
+		}
+		// Replace existing block
+		contentStr = replaceAgentsMDBlock(contentStr, string(blockContent))
+	} else {
+		// Append block
+		if len(contentStr) > 0 && !strings.HasSuffix(contentStr, "\n") {
+			contentStr += "\n"
+		}
+		if len(contentStr) > 0 {
+			contentStr += "\n"
+		}
+		contentStr += string(blockContent)
+	}
+
+	if err := os.WriteFile(targetPath, []byte(contentStr), 0600); err != nil {
+		return false, targetFile, fmt.Errorf("failed to write %s: %w", targetFile, err)
+	}
+
+	return true, targetFile, nil
+}
+
+// findAgentsFile returns the appropriate agents file name for the repo.
+// Returns CLAUDE.md if it exists, AGENTS.md if it exists, or CLAUDE.md as default.
+func findAgentsFile(repoRoot string) string {
+	claudePath := filepath.Join(repoRoot, "CLAUDE.md")
+	if _, err := os.Stat(claudePath); err == nil {
+		return "CLAUDE.md"
+	}
+
+	agentsPath := filepath.Join(repoRoot, "AGENTS.md")
+	if _, err := os.Stat(agentsPath); err == nil {
+		return "AGENTS.md"
+	}
+
+	return "CLAUDE.md"
+}
+
+// replaceAgentsMDBlock replaces the existing stackit block with new content.
+func replaceAgentsMDBlock(content, newBlock string) string {
+	startIdx := strings.Index(content, agentsMDBlockStart)
+	endIdx := strings.Index(content, agentsMDBlockEnd)
+
+	if startIdx == -1 || endIdx == -1 {
+		return content
+	}
+
+	endIdx += len(agentsMDBlockEnd)
+
+	// Preserve content before and after the block
+	before := content[:startIdx]
+	after := content[endIdx:]
+
+	// Trim trailing newlines from before and leading from after to avoid double spacing
+	before = strings.TrimRight(before, "\n")
+	after = strings.TrimLeft(after, "\n")
+
+	result := before
+	if len(before) > 0 {
+		result += "\n\n"
+	}
+	result += newBlock
+	if len(after) > 0 {
+		result += "\n" + after
+	}
+
+	return result
 }

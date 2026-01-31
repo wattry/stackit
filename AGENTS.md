@@ -4,6 +4,74 @@ Go CLI for managing stacked changes in Git repositories.
 
 **Tech stack:** Go 1.25, Cobra, bubbletea, mise
 
+## Stacking Workflow (CRITICAL)
+
+**This project dogfoods stackit.** All changes must use stacked PRs.
+
+### Why Stack?
+
+**Small PRs get reviewed faster.** PRs under 400 lines get reviewed in hours, not days. Stacking lets you ship big features as small, focused PRs.
+
+**Each branch = one reviewable unit.** Stack related changes so reviewers can approve phases independently. The refactor can land while tests are still in review.
+
+**Easy to revert.** If one phase causes issues, revert just that PR without affecting the rest of the feature.
+
+**Clear history.** Your git log tells the story of how a feature evolved, not a jumbled mess of "fix typo" commits.
+
+### Decision Framework
+
+**Stack when ANY of these apply:**
+- Change has 2+ distinct logical phases
+- Total diff would exceed ~400 lines
+- Different reviewers needed for different parts
+- You want early feedback on foundational work
+- Changes touch unrelated subsystems
+
+**Single commit/PR is fine when:**
+- Small, focused change (<200 lines)
+- Single logical unit
+- Trivial fix that doesn't benefit from splitting
+
+**Default to stacking.** When in doubt, create a new stacked branch. It's easy to fold branches together later; splitting is harder.
+
+### Workflow
+
+```bash
+# Stage changes FIRST (required!)
+git add -A
+
+# Create stacked branch with commit
+command stackit create -m "feat: description"
+
+# Continue working, stage more changes, create more branches...
+git add -A && command stackit create -m "feat: next phase"
+
+# Submit when ready
+command stackit submit
+```
+
+### Handling PR Feedback
+
+```bash
+command stackit checkout <branch>  # Go to branch with feedback
+# Make changes...
+command stackit modify             # Amend commit
+command stackit restack            # Update children
+command stackit submit             # Update PRs
+```
+
+### Common Pitfalls
+
+| Mistake | Fix |
+|---------|-----|
+| Forgetting to stage | Always `git add -A` before `create` |
+| Using `git commit` for new branch | Use `stackit create` instead |
+| Using `git checkout -b` | Use `stackit create` instead |
+| Manual rebase | Use `stackit restack` |
+| Using `gh pr create` | Use `stackit submit` |
+
+**Use `/stack-plan` when starting from scratch** to plan the stack structure before writing code.
+
 ## Architecture
 
 ```
@@ -85,39 +153,6 @@ mise run deps    # Install dependencies
 Use **Conventional Commits**: `<type>: <description>`
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`
-
-## Stacking Multi-Phase Changes
-
-**When implementing changes with multiple logical phases, use stackit to create separate PRs for each phase.** This makes code review easier and keeps each PR focused.
-
-**When to stack:**
-- Adding multiple related features (e.g., new phase + error handling + docs)
-- Changes that touch different subsystems
-- Refactoring + new feature in the same task
-- Any change with 3+ distinct logical units
-
-**Example:** Adding dependency analysis to a skill file:
-```bash
-# Phase 1: Add dependency analysis
-git add -A && command stackit create -m "feat: add dependency analysis phase"
-
-# Phase 2: Enhance related file detection
-git add -A && command stackit create -m "feat: add related file detection guidance"
-
-# Phase 3: Update error handling
-git add -A && command stackit create -m "feat: add error cases for new phases"
-
-# Submit all as stacked PRs
-command stackit submit
-```
-
-**Benefits:**
-- Reviewers can approve phases independently
-- Easy to revert a single phase if needed
-- Clearer git history
-- Smaller, focused diffs
-
-**Use `/stack-plan` when starting from scratch** to plan the stack structure before writing code.
 
 ## Metadata
 

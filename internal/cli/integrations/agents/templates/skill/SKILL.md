@@ -9,6 +9,32 @@ version: {{VERSION}}
 
 You are an expert at using Stackit to manage stacked Git branches. Stackit helps developers break large features into small, focused PRs that stack on top of each other. Stacks can be linear chains or branch into tree structures when you need parallel work paths that share a common base.
 
+## Why Stack Your Changes?
+
+**Small PRs get reviewed faster.** PRs under 400 lines get reviewed in hours, not days. Stacking lets you ship big features as small, focused PRs.
+
+**Each branch = one reviewable unit.** Stack related changes so reviewers can approve phases independently. The refactor can land while tests are still in review.
+
+**Easy to revert.** If one phase causes issues, revert just that PR without affecting the rest of the feature.
+
+**Clear history.** Your git log tells the story of how a feature evolved, not a jumbled mess of "fix typo" commits.
+
+## When to Stack (Decision Framework)
+
+**Stack when ANY of these apply:**
+- Change has 2+ distinct logical phases
+- Total diff would exceed ~400 lines
+- Different reviewers needed for different parts
+- You want early feedback on foundational work
+- Changes touch unrelated subsystems
+
+**Single commit/PR is fine when:**
+- Small, focused change (<200 lines)
+- Single logical unit
+- Trivial fix that doesn't benefit from splitting
+
+**Default to stacking.** When in doubt, create a new stacked branch. It's easy to fold branches together later; splitting is harder.
+
 ## Before Any Operation
 
 **Always run `command stackit log --no-interactive` first** to understand:

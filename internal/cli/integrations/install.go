@@ -45,7 +45,7 @@ func InstallPrepush(runner git.Runner, out io.Writer) error {
 // InstallAgents installs AI agent integration files.
 // This is a convenience wrapper for use during init.
 func InstallAgents(runner git.Runner, local, force bool, version string, out io.Writer) error {
-	return runAgentInstall(runner, local, force, version, out)
+	return runAgentInstall(runner, local, force, false, version, out)
 }
 
 // stackitWorkflowMarker is a string that identifies a stackit-generated GitHub workflow.
