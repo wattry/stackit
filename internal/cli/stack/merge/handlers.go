@@ -698,8 +698,8 @@ func DisplayMergeStatus(out output.Output, result *shippable.AnalysisResult) {
 	if ready := result.GetShippable(); len(ready) > 0 {
 		out.Print(styles.Done.Render(fmt.Sprintf("Ready (%d):", len(ready))) + "\n")
 		for _, s := range ready {
-			out.Print(fmt.Sprintf("  ✅ %-25s %d branches  All approved, CI passing\n",
-				truncateBranchName(s.RootBranch()),
+			out.Print(fmt.Sprintf("  ✅ %-40s %d branches  All approved, CI passing\n",
+				truncateTitle(s.DisplayTitle()),
 				s.BranchCount()))
 		}
 		out.Print("\n")
@@ -710,8 +710,8 @@ func DisplayMergeStatus(out output.Output, result *shippable.AnalysisResult) {
 		out.Print(style.ColorYellow(fmt.Sprintf("Pending (%d):", len(pending))) + "\n")
 		for _, s := range pending {
 			reason := getPendingReason(s)
-			out.Print(fmt.Sprintf("  ⏳ %-25s %d branches  %s\n",
-				truncateBranchName(s.RootBranch()),
+			out.Print(fmt.Sprintf("  ⏳ %-40s %d branches  %s\n",
+				truncateTitle(s.DisplayTitle()),
 				s.BranchCount(),
 				reason))
 		}
@@ -723,8 +723,8 @@ func DisplayMergeStatus(out output.Output, result *shippable.AnalysisResult) {
 		out.Print(styles.Error.Render(fmt.Sprintf("Blocked (%d):", len(blocked))) + "\n")
 		for _, s := range blocked {
 			reason := getBlockedReason(s)
-			out.Print(fmt.Sprintf("  ❌ %-25s %d branches  %s\n",
-				truncateBranchName(s.RootBranch()),
+			out.Print(fmt.Sprintf("  ❌ %-40s %d branches  %s\n",
+				truncateTitle(s.DisplayTitle()),
 				s.BranchCount(),
 				reason))
 		}
@@ -736,8 +736,8 @@ func DisplayMergeStatus(out output.Output, result *shippable.AnalysisResult) {
 		out.Print(style.ColorDim(fmt.Sprintf("Incomplete (%d):", len(incomplete))) + "\n")
 		for _, s := range incomplete {
 			reason := getIncompleteReason(s)
-			out.Print(fmt.Sprintf("  ○ %-25s %d branches  %s\n",
-				truncateBranchName(s.RootBranch()),
+			out.Print(fmt.Sprintf("  ○ %-40s %d branches  %s\n",
+				truncateTitle(s.DisplayTitle()),
 				s.BranchCount(),
 				reason))
 		}
@@ -745,13 +745,13 @@ func DisplayMergeStatus(out output.Output, result *shippable.AnalysisResult) {
 	}
 }
 
-// truncateBranchName truncates a branch name to 25 chars with ellipsis
-func truncateBranchName(name string) string {
-	const maxLen = 25
-	if len(name) <= maxLen {
-		return name
+// truncateTitle truncates a title to 40 chars with ellipsis
+func truncateTitle(title string) string {
+	const maxLen = 40
+	if len(title) <= maxLen {
+		return title
 	}
-	return name[:maxLen-3] + "..."
+	return title[:maxLen-3] + "..."
 }
 
 // getPendingReason returns a human-readable reason for pending status

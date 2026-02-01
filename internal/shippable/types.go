@@ -50,9 +50,10 @@ type BlockingPR struct {
 
 // Stack represents a stack with its shippability analysis.
 type Stack struct {
-	Stack  merge.MultiStackInfo // The underlying stack
-	Status Status               // Overall shippability status
-	Author string               // GitHub username of stack author (from first PR)
+	Stack   merge.MultiStackInfo // The underlying stack
+	Status  Status               // Overall shippability status
+	Author  string               // GitHub username of stack author (from first PR)
+	PRTitle string               // PR title of the root branch (for display)
 
 	// Breakdown of shippability components
 	ApprovalOK bool  // All PRs have been approved
@@ -94,6 +95,16 @@ func (s *Stack) BranchCount() int {
 
 // RootBranch returns the root branch name of this stack.
 func (s *Stack) RootBranch() string {
+	return s.Stack.RootBranch
+}
+
+// DisplayTitle returns the best title for displaying this stack.
+// The analyzer populates PRTitle with: PR title > commit subject > branch name.
+// Falls back to branch name if PRTitle is empty (e.g., in tests).
+func (s *Stack) DisplayTitle() string {
+	if s.PRTitle != "" {
+		return s.PRTitle
+	}
 	return s.Stack.RootBranch
 }
 
