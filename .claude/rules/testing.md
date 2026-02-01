@@ -66,6 +66,20 @@ mise run test            # All tests
 mise run test-pkg ./internal/git  # Tests for a specific package
 ```
 
+### Choosing Validation Level
+
+**Don't always run `mise run check`.** Match validation scope to change scope:
+
+| Change | Validation | Why |
+|--------|------------|-----|
+| Comment/doc fix | `mise run compile` | Just verify it builds |
+| Variable rename | `mise run lint-only` | Catches style issues, no behavior change |
+| Bug fix in one pkg | `mise run test-pkg ./pkg` | Test only what changed |
+| Multi-pkg change | `mise run check` | Full fast validation |
+| Engine changes | `mise run test` | Need integration coverage |
+
+See `.claude/rules/validation.md` for the full decision guide.
+
 ## Integration Tests with TestShell
 
 Use `TestShell` for integration tests - it provides a fluent interface that reads like terminal sessions:

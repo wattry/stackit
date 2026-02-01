@@ -235,7 +235,6 @@ func executeStepWithProgress(ctx *app.Context, step PlanStep, stepIndex int, eng
 // executeStep executes a single step
 func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecuteEngine, opts ExecuteOptions) error {
 	trunk := eng.Trunk() // Cache trunk for this function scope
-	trunkName := trunk.GetName()
 	githubClient := ctx.GitHubClient
 	out := ctx.Output
 	repoRoot := ctx.RepoRoot
@@ -297,12 +296,7 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		actualParent := result.NewParent
 		if actualParent == "" {
 			branch := eng.GetBranch(step.BranchName)
-			parent := branch.GetParent()
-			if parent == nil {
-				actualParent = trunkName
-			} else {
-				actualParent = parent.GetName()
-			}
+			actualParent = branch.GetParentPrecondition()
 		}
 
 		switch result.Result {

@@ -141,6 +141,27 @@ mise run lint          # Run linter
 
 **Workflow:** Run `mise run check` during development for quick feedback. Run `mise run test` before submitting PRs to ensure all tests pass.
 
+## Validation Strategy
+
+**Use the lightest validation that covers your change.** Running full test suites for every edit wastes time.
+
+| Change Type | Command | Time |
+|-------------|---------|------|
+| Docs/comments only | `mise run compile` | ~2s |
+| Refactoring/style | `mise run lint-only` | ~5s |
+| Single package logic | `mise run test-pkg ./internal/foo` | ~10s |
+| Multi-package logic | `mise run check` | ~30s |
+| Engine/integration | `mise run test` | ~2min |
+
+**Decision guide:**
+- `compile` - Quick "does it build?" check for trivial changes
+- `lint-only` - Catches style issues without running tests
+- `test-pkg` - Targeted testing for isolated changes
+- `check` - Standard development workflow
+- `test` - Full suite before PRs or for engine changes
+
+See `.claude/rules/validation.md` for detailed guidance on when to use each level.
+
 ## Build
 
 ```bash

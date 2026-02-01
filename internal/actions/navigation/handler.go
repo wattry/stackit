@@ -1,6 +1,8 @@
 // Package navigation implements the stackit top/bottom commands for navigating stacked branches.
 package navigation
 
+import "stackit.dev/stackit/internal/actions/handler"
+
 // Handler receives events from navigation action
 type Handler interface {
 	// PromptSelectBranch prompts user to select a branch when multiple children exist
@@ -14,14 +16,11 @@ type Handler interface {
 	IsInteractive() bool
 }
 
-// NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds handler.NullBase for Cleanup() and IsInteractive().
+type NullHandler struct {
+	handler.NullBase
+}
 
 // PromptSelectBranch implements Handler. Returns empty string for null handler.
-func (h *NullHandler) PromptSelectBranch(_ string, _ []string) (string, error) { return "", nil }
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
+func (h *NullHandler) PromptSelectBranch(string, []string) (string, error) { return "", nil }

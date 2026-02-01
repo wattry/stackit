@@ -263,6 +263,13 @@ func (b Branch) IsBranchUpToDate() bool {
 	return b.reader.IsUpToDate(b)
 }
 
+// NeedsRestack returns true if the branch needs to be restacked onto its parent.
+// This is the inverse of IsBranchUpToDate - a branch needs restacking when its
+// parent has moved and the branch is no longer based on the current parent tip.
+func (b Branch) NeedsRestack() bool {
+	return !b.IsBranchUpToDate()
+}
+
 // GetCommitDate returns the commit date for this branch
 func (b Branch) GetCommitDate() (time.Time, error) {
 	return b.reader.GetCommitDate(b)
@@ -336,6 +343,24 @@ func (b Branch) IsWorktreeAnchor() bool {
 // CanModify checks if the branch can be modified (not locked, frozen, or a worktree anchor)
 func (b Branch) CanModify() bool {
 	return !b.IsLocked() && !b.IsFrozen() && !b.IsWorktreeAnchor()
+}
+
+// ModificationBlocker returns a human-readable reason why the branch cannot be modified,
+// or an empty string if the branch can be modified.
+// This is useful for displaying status in UIs or logs without throwing errors.
+func (b Branch) ModificationBlocker() string {
+	switch {
+	case b.IsWorktreeAnchor():
+		return "worktree anchor"
+	case b.IsLocked() && b.IsFrozen():
+		return fmt.Sprintf("locked (%s) and frozen", b.GetLockReason())
+	case b.IsLocked():
+		return fmt.Sprintf("locked (%s)", b.GetLockReason())
+	case b.IsFrozen():
+		return "frozen"
+	default:
+		return ""
+	}
 }
 
 // EnsureCanModify checks if the branch can be modified and returns an error if not

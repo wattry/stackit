@@ -28,16 +28,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if opts.Parent != "" {
 		parent := opts.Parent
 		// Validate parent exists
-		parentExists := parent == eng.Trunk().GetName()
-		if !parentExists {
-			for _, branch := range eng.AllBranches() {
-				if branch.GetName() == parent {
-					parentExists = true
-					break
-				}
-			}
-		}
-		if !parentExists {
+		if parent != eng.Trunk().GetName() && !eng.BranchNames().Contains(parent) {
 			return fmt.Errorf("parent branch %s does not exist", parent)
 		}
 

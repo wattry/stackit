@@ -4,6 +4,7 @@ package undo
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/timeutil"
@@ -16,16 +17,16 @@ type Options struct {
 }
 
 // Action performs the undo operation
-func Action(ctx *app.Context, opts Options, handler Handler) error {
+func Action(ctx *app.Context, opts Options, h Handler) error {
 	eng := ctx.Engine
 
 	// Use null handler if none provided
-	if handler == nil {
-		handler = &NullHandler{}
+	if h == nil {
+		h = &NullHandler{}
 	}
-	defer handler.Cleanup()
+	defer h.Cleanup()
 
-	handler.Start()
+	h.Start()
 
 	// Get all available snapshots
 	snapshots, err := eng.GetSnapshots()
@@ -34,11 +35,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	if len(snapshots) == 0 {
-		handler.Complete(true, "No undo history available.")
+		h.Complete(true, "No undo history available.")
 		return nil
 	}
 
-	handler.OnSnapshotList(snapshots)
+	h.OnSnapshotList(snapshots)
 
 	var selectedSnapshotID string
 
@@ -62,10 +63,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		case len(snapshots) == 1:
 			// Only one snapshot, use it directly
 			selectedSnapshotID = snapshots[0].ID
-			handler.OnStep(fmt.Sprintf("Restoring to: %s", snapshots[0].DisplayName), StepStarted)
-		case handler.IsInteractive():
+			h.OnStep(fmt.Sprintf("Restoring to: %s", snapshots[0].DisplayName), handler.StatusStarted)
+		case h.IsInteractive():
 			// Multiple snapshots - use handler for interactive selection
-			selected, err := handler.SelectSnapshot(snapshots)
+			selected, err := h.SelectSnapshot(snapshots)
 			if err != nil {
 				return fmt.Errorf("failed to select snapshot: %w", err)
 			}
@@ -73,7 +74,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		default:
 			// Non-interactive mode with multiple snapshots - use most recent
 			selectedSnapshotID = snapshots[0].ID
-			handler.OnStep(fmt.Sprintf("Using most recent snapshot: %s", snapshots[0].DisplayName), StepStarted)
+			h.OnStep(fmt.Sprintf("Using most recent snapshot: %s", snapshots[0].DisplayName), handler.StatusStarted)
 		}
 	}
 
@@ -110,41 +111,41 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	confirmMessage += " Are you sure?"
 
 	confirmed := opts.Force
-	if !opts.Force && handler.IsInteractive() {
-		confirmed, err = handler.PromptConfirm(confirmMessage, false)
+	if !opts.Force && h.IsInteractive() {
+		confirmed, err = h.PromptConfirm(confirmMessage, false)
 		if err != nil {
 			return fmt.Errorf("failed to get confirmation: %w", err)
 		}
 	}
 
 	if !confirmed {
-		handler.Complete(true, "Undo canceled.")
+		h.Complete(true, "Undo canceled.")
 		return nil
 	}
 
 	// Abort any in-progress Git operations that might interfere with restoration
 	if eng.Git().IsRebaseInProgress(ctx.Context) {
-		handler.OnStep("Aborting in-progress rebase before undo...", StepStarted)
+		h.OnStep("Aborting in-progress rebase before undo...", handler.StatusStarted)
 		if err := eng.Git().RebaseAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort rebase: %w", err)
 		}
-		handler.OnStep("Aborted in-progress rebase", StepCompleted)
+		h.OnStep("Aborted in-progress rebase", handler.StatusCompleted)
 	}
 	if eng.Git().IsMergeInProgress(ctx.Context) {
-		handler.OnStep("Aborting in-progress merge before undo...", StepStarted)
+		h.OnStep("Aborting in-progress merge before undo...", handler.StatusStarted)
 		if err := eng.Git().MergeAbort(ctx.Context); err != nil {
 			return fmt.Errorf("failed to abort merge: %w", err)
 		}
-		handler.OnStep("Aborted in-progress merge", StepCompleted)
+		h.OnStep("Aborted in-progress merge", handler.StatusCompleted)
 	}
 
 	// Perform the restoration
-	handler.OnStep("Restoring repository state...", StepStarted)
+	h.OnStep("Restoring repository state...", handler.StatusStarted)
 	if err := eng.RestoreSnapshot(ctx.Context, selectedSnapshotID); err != nil {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
 
-	handler.Complete(true, fmt.Sprintf("Successfully restored to state before '%s'.", selectedSnapshot.Command))
+	h.Complete(true, fmt.Sprintf("Successfully restored to state before '%s'.", selectedSnapshot.Command))
 
 	return nil
 }

@@ -1,13 +1,12 @@
 package branch
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/lock"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/utils"
 )
 
@@ -37,7 +36,7 @@ This operation can be undone with 'st unlock'.`,
 				} else {
 					current := ctx.Engine.CurrentBranch()
 					if current == nil {
-						return fmt.Errorf("not on a branch and no branch specified")
+						return errors.ErrNotOnBranchNoBranchSpecified
 					}
 					branchName = current.GetName()
 				}
@@ -73,7 +72,7 @@ to enable modifications.`,
 				} else {
 					current := ctx.Engine.CurrentBranch()
 					if current == nil {
-						return fmt.Errorf("not on a branch and no branch specified")
+						return errors.ErrNotOnBranchNoBranchSpecified
 					}
 					branchName = current.GetName()
 				}

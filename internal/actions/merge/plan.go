@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/output"
@@ -151,7 +152,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 	} else {
 		cb := eng.CurrentBranch()
 		if cb == nil {
-			return nil, nil, fmt.Errorf("not on a branch")
+			return nil, nil, errors.ErrNotOnBranch
 		}
 		targetBranch = *cb
 	}

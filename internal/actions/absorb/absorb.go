@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
@@ -39,20 +40,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	handler.Start(opts.DryRun)
 
-	// Get current branch
-	currentBranch := eng.CurrentBranch()
-	if currentBranch == nil {
-		return fmt.Errorf("not on a branch")
-	}
-
-	// Check if current branch is trunk
-	if currentBranch.IsTrunk() {
-		return fmt.Errorf("cannot absorb into trunk branch %s", currentBranch.GetName())
-	}
-
-	if err := currentBranch.EnsureCanModify(); err != nil {
+	// Validate preconditions
+	if err := validation.AbsorbChain(ctx.Context, eng, ctx.Git(), "absorb into").Validate(); err != nil {
 		return err
 	}
+	currentBranch := eng.CurrentBranch()
 
 	// Take snapshot before modifying the repository
 	snapshotOpts := actions.NewSnapshot("absorb",
@@ -64,11 +56,6 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
 		// Log but don't fail - snapshot is best effort
 		out.Debug("Failed to take snapshot: %v", err)
-	}
-
-	// Check if rebase is in progress
-	if err := ctx.Git().CheckRebaseInProgress(ctx.Context); err != nil {
-		return err
 	}
 
 	// Build a StackGraph for efficient traversals

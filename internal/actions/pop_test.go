@@ -84,7 +84,7 @@ func TestPopAction(t *testing.T) {
 		// Try to pop untracked branch
 		err := actions.PopAction(s.Context, actions.PopOptions{})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "cannot pop untracked branch")
+		require.Contains(t, err.Error(), "is not tracked by stackit")
 	})
 
 	t.Run("fails when rebase is in progress", func(t *testing.T) {

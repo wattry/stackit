@@ -2,6 +2,7 @@ package branch
 
 import (
 	"stackit.dev/stackit/internal/actions/fold"
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
@@ -41,7 +42,7 @@ func (h *SimpleFoldHandler) Start(currentBranch, parentBranch string, _ bool) {
 }
 
 // OnStep is called for each step in the fold process
-func (h *SimpleFoldHandler) OnStep(_ fold.Step, _ fold.StepStatus, _ string) {
+func (h *SimpleFoldHandler) OnStep(_ fold.Step, _ handler.StepStatus, _ string) {
 	// Steps are handled silently in simple handler
 }
 

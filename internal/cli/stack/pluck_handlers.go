@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/pluck"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/output"
@@ -44,7 +45,7 @@ func (h *SimplePluckHandler) Start(sourceBranch, oldParent, newParent string) {
 }
 
 // OnStep is called for each step in the pluck process
-func (h *SimplePluckHandler) OnStep(_ pluck.Step, _ pluck.StepStatus, _ string) {
+func (h *SimplePluckHandler) OnStep(_ pluck.Step, _ handler.StepStatus, _ string) {
 	// Steps are handled silently in simple handler
 }
 

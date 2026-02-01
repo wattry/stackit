@@ -3,9 +3,9 @@ package worktree
 
 import (
 	"context"
-	"fmt"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/output"
 )
 
@@ -70,7 +70,7 @@ func (e *Executor) CreateSession(ctx context.Context, opts CreateSessionOptions)
 	// Create temporary worktree
 	worktreePath, cleanup, err := e.eng.CreateTemporaryWorktree(ctx, ref, pattern)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create worktree: %w", err)
+		return nil, errors.FailedTo("create", "worktree", err)
 	}
 
 	e.output.Debug("Created worktree at %s", worktreePath)
@@ -83,7 +83,7 @@ func (e *Executor) CreateSession(ctx context.Context, opts CreateSessionOptions)
 	})
 	if err != nil {
 		cleanup()
-		return nil, fmt.Errorf("failed to initialize worktree engine: %w", err)
+		return nil, errors.FailedTo("initialize", "worktree engine", err)
 	}
 
 	session := &Session{
@@ -112,10 +112,10 @@ func (s *Session) pullTrunk(ctx context.Context) error {
 
 	pullResult, err := s.Engine.PullTrunk(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update trunk in worktree: %w", err)
+		return errors.FailedTo("update", "trunk in worktree", err)
 	}
 	if pullResult == engine.PullConflict {
-		return fmt.Errorf("trunk could not be fast-forwarded (diverged from remote)")
+		return errors.New("trunk could not be fast-forwarded (diverged from remote)")
 	}
 
 	// IMPORTANT: Use ResetHard instead of CheckoutBranch to stay at detached HEAD.
@@ -125,7 +125,7 @@ func (s *Session) pullTrunk(ctx context.Context) error {
 	// while keeping HEAD detached (since the worktree was created with --detach).
 	trunk := s.Engine.Trunk()
 	if err := s.Engine.ResetHard(ctx, trunk.GetName()); err != nil {
-		return fmt.Errorf("failed to reset to trunk in worktree: %w", err)
+		return errors.FailedTo("reset to", "trunk in worktree", err)
 	}
 
 	return nil

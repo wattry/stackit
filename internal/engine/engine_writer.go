@@ -119,6 +119,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 			return fmt.Errorf("failed to get branches: %w", err)
 		}
 		e.branches = branches
+		e.branchNamesSet = nil // invalidate cache
 		branchExists = false
 		for _, name := range e.branches {
 			if name == branchName {
@@ -149,6 +150,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 				return fmt.Errorf("failed to get branches: %w", err)
 			}
 			e.branches = branches
+			e.branchNamesSet = nil // invalidate cache
 			parentExists = false
 			for _, name := range e.branches {
 				if name == parentBranchName {
@@ -255,6 +257,7 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	// Remove from branches list
 	if i := slices.Index(e.branches, branchName); i >= 0 {
 		e.branches = slices.Delete(e.branches, i, i+1)
+		e.branchNamesSet = nil // invalidate cache
 	}
 
 	return nil
@@ -346,6 +349,7 @@ func (e *engineImpl) CreateAndCheckoutBranch(ctx context.Context, branch Branch)
 	}
 	if !found {
 		e.branches = append(e.branches, branchName)
+		e.branchNamesSet = nil // invalidate cache
 	}
 
 	return nil

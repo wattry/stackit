@@ -1,5 +1,7 @@
 package flatten
 
+import basehandler "stackit.dev/stackit/internal/actions/handler"
+
 // Step represents a step in the flatten process
 type Step string
 
@@ -9,17 +11,6 @@ const (
 	StepValidating Step = "validating"
 	StepFlattening Step = "flattening"
 	StepRestacking Step = "restacking"
-)
-
-// StepStatus represents the status of a step
-type StepStatus string
-
-// Step status constants
-const (
-	StatusStarted   StepStatus = "started"
-	StatusCompleted StepStatus = "completed"
-	StatusSkipped   StepStatus = "skipped"
-	StatusFailed    StepStatus = "failed"
 )
 
 // PlannedMove represents a single branch move in the flatten plan
@@ -54,7 +45,7 @@ type Handler interface {
 	Start(branchCount int)
 
 	// OnStep is called for each step in the flatten process
-	OnStep(step Step, status StepStatus, message string)
+	OnStep(step Step, status basehandler.StepStatus, message string)
 
 	// OnValidationProgress is called during branch validation to report progress
 	OnValidationProgress(current, total int, branchName string)
@@ -77,29 +68,25 @@ type Handler interface {
 	PromptConfirmFlatten(preview Preview) (bool, error)
 }
 
-// NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds basehandler.NullBase for Cleanup() and IsInteractive(),
+// and basehandler.NullProgress[Step] for OnStep().
+type NullHandler struct {
+	basehandler.NullBase
+	basehandler.NullProgress[Step]
+}
 
 // Start implements Handler.
-func (h *NullHandler) Start(_ int) {}
-
-// OnStep implements Handler.
-func (h *NullHandler) OnStep(_ Step, _ StepStatus, _ string) {}
+func (h *NullHandler) Start(int) {}
 
 // OnValidationProgress implements Handler.
-func (h *NullHandler) OnValidationProgress(_, _ int, _ string) {}
+func (h *NullHandler) OnValidationProgress(int, int, string) {}
 
 // OnBranchMoved implements Handler.
-func (h *NullHandler) OnBranchMoved(_, _, _ string) {}
+func (h *NullHandler) OnBranchMoved(string, string, string) {}
 
 // Complete implements Handler.
-func (h *NullHandler) Complete(_ Result) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
+func (h *NullHandler) Complete(Result) {}
 
 // PromptConfirmFlatten implements Handler. Returns true (auto-confirm) for null handler.
-func (h *NullHandler) PromptConfirmFlatten(_ Preview) (bool, error) { return true, nil }
+func (h *NullHandler) PromptConfirmFlatten(Preview) (bool, error) { return true, nil }

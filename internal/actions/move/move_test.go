@@ -303,7 +303,7 @@ func TestMoveAction(t *testing.T) {
 			Onto:   "", // Empty onto
 		}, nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "onto branch must be specified")
+		require.Contains(t, err.Error(), "target branch must be specified")
 	})
 
 	t.Run("moves branch downstack without pulling along intermediate commits", func(t *testing.T) {

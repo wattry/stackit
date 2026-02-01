@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	basehandler "stackit.dev/stackit/internal/actions/handler"
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
@@ -53,53 +55,19 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Debug("Failed to take snapshot: %v", err)
 	}
 
-	// Prevent plucking trunk
-	sourceBranch := eng.GetBranch(source)
-	if sourceBranch.IsTrunk() {
-		return fmt.Errorf("cannot pluck trunk branch")
+	// Validate source branch
+	if err := validation.ValidateSourceBranch(eng, source, "pluck"); err != nil {
+		return err
 	}
 
-	// Validate source exists and is tracked
-	if !sourceBranch.IsTracked() {
-		return fmt.Errorf("branch %s is not tracked by Stackit", source)
-	}
-
-	// Prevent plucking worktree anchor branches
-	if sourceBranch.IsWorktreeAnchor() {
-		return fmt.Errorf("cannot pluck worktree anchor branch %s", source)
-	}
-
-	// Validate onto is provided
+	// Validate target branch
 	onto := opts.Onto
-	if onto == "" {
-		return fmt.Errorf("onto branch must be specified")
+	if err := validation.ValidateTargetBranch(eng, source, onto, "pluck"); err != nil {
+		return err
 	}
 
-	// Validate onto exists
+	sourceBranch := eng.GetBranch(source)
 	ontoBranch := eng.GetBranch(onto)
-	if !ontoBranch.IsTrunk() && !ontoBranch.IsTracked() {
-		allBranches := eng.AllBranches()
-		found := false
-		for _, branch := range allBranches {
-			if branch.GetName() == onto {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("branch %s does not exist", onto)
-		}
-	}
-
-	// Prevent plucking onto worktree anchor branches
-	if ontoBranch.IsWorktreeAnchor() {
-		return fmt.Errorf("cannot pluck branch onto worktree anchor %s", onto)
-	}
-
-	// Prevent plucking onto itself
-	if source == onto {
-		return fmt.Errorf("cannot pluck branch onto itself")
-	}
 
 	// Get source's direct children (they will be reparented to grandparent)
 	children := graph.ChildBranches(sourceBranch)
@@ -195,10 +163,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	})
 
 	// Validate rebases before modifying any state
-	handler.OnStep(StepValidating, StatusStarted, "Validating rebases...")
+	handler.OnStep(StepValidating, basehandler.StatusStarted, "Validating rebases...")
 	validation, err := eng.ValidateRebases(gctx, rebaseSpecs)
 	if err != nil {
-		handler.OnStep(StepValidating, StatusFailed, err.Error())
+		handler.OnStep(StepValidating, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to validate rebases: %w", err)
 	}
 	if !validation.Success {
@@ -208,10 +176,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 				"branch", validation.FailedBranch,
 				"files", validation.ConflictingFiles)
 		}
-		handler.OnStep(StepValidating, StatusFailed, errorMsg)
+		handler.OnStep(StepValidating, basehandler.StatusFailed, errorMsg)
 		return fmt.Errorf("pluck would cause conflicts: %s on branch %s", errorMsg, validation.FailedBranch)
 	}
-	handler.OnStep(StepValidating, StatusCompleted, "Validation passed")
+	handler.OnStep(StepValidating, basehandler.StatusCompleted, "Validation passed")
 
 	// Start the operation
 	handler.Start(source, oldParentName, onto)
@@ -219,11 +187,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Step 1: Reparent children to grandparent
 	var reparentedChildren []string
 	if len(children) > 0 {
-		handler.OnStep(StepReparentingChild, StatusStarted, "Reparenting children...")
+		handler.OnStep(StepReparentingChild, basehandler.StatusStarted, "Reparenting children...")
 
 		for _, child := range children {
 			if err := eng.SetParent(gctx, child, grandparentBranch); err != nil {
-				handler.OnStep(StepReparentingChild, StatusFailed, err.Error())
+				handler.OnStep(StepReparentingChild, basehandler.StatusFailed, err.Error())
 				return fmt.Errorf("failed to reparent %s to %s: %w", child.GetName(), grandparentBranch.GetName(), err)
 			}
 			handler.OnChildReparented(child.GetName(), source, grandparentBranch.GetName())
@@ -234,15 +202,15 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 				style.ColorBranchName(grandparentBranch.GetName(), false))
 		}
 
-		handler.OnStep(StepReparentingChild, StatusCompleted, "Children reparented")
+		handler.OnStep(StepReparentingChild, basehandler.StatusCompleted, "Children reparented")
 	} else {
-		handler.OnStep(StepReparentingChild, StatusSkipped, "No children to reparent")
+		handler.OnStep(StepReparentingChild, basehandler.StatusSkipped, "No children to reparent")
 	}
 
 	// Step 2: Move source to new parent, preserving the divergence point
-	handler.OnStep(StepMovingSource, StatusStarted, "Moving source branch...")
+	handler.OnStep(StepMovingSource, basehandler.StatusStarted, "Moving source branch...")
 	if err := eng.SetParentPreservingDivergence(gctx, sourceBranch, ontoBranch, sourceOldParentRev); err != nil {
-		handler.OnStep(StepMovingSource, StatusFailed, err.Error())
+		handler.OnStep(StepMovingSource, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to set parent: %w", err)
 	}
 
@@ -250,10 +218,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		style.ColorBranchName(source, true),
 		style.ColorBranchName(oldParentName, false),
 		style.ColorBranchName(onto, false))
-	handler.OnStep(StepMovingSource, StatusCompleted, "Source branch moved")
+	handler.OnStep(StepMovingSource, basehandler.StatusCompleted, "Source branch moved")
 
 	// Step 3: Restack all affected branches
-	handler.OnStep(StepRestackingOrphans, StatusStarted, "Restacking branches...")
+	handler.OnStep(StepRestackingOrphans, basehandler.StatusStarted, "Restacking branches...")
 
 	// Rebuild graph after parent changes
 	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
@@ -278,10 +246,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	branchesToRestack = append(branchesToRestack, sourceBranch)
 
 	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
-		handler.OnStep(StepRestackingOrphans, StatusFailed, err.Error())
+		handler.OnStep(StepRestackingOrphans, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to restack branches: %w", err)
 	}
-	handler.OnStep(StepRestackingOrphans, StatusCompleted, "Branches restacked")
+	handler.OnStep(StepRestackingOrphans, basehandler.StatusCompleted, "Branches restacked")
 
 	handler.Complete(Result{
 		SourceBranch:       source,

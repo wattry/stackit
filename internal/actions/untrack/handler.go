@@ -1,6 +1,8 @@
 // Package untrack implements the stackit untrack command for stopping branch tracking.
 package untrack
 
+import "stackit.dev/stackit/internal/actions/handler"
+
 // Handler receives events from untrack action
 type Handler interface {
 	// PromptConfirmUntrackDescendants prompts user to confirm untracking descendants
@@ -15,16 +17,12 @@ type Handler interface {
 }
 
 // NullHandler is a no-op handler for when nil is passed
-type NullHandler struct{}
+type NullHandler struct {
+	handler.NullBase
+}
 
 // PromptConfirmUntrackDescendants implements Handler. Returns false (cancel) for null handler.
 // Use --force flag to untrack descendants without confirmation.
 func (h *NullHandler) PromptConfirmUntrackDescendants(_ string, _ int) (bool, error) {
 	return false, nil
 }
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }

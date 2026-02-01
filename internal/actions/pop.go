@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -17,42 +18,21 @@ func PopAction(ctx *app.Context, _ PopOptions) error {
 	eng := ctx.Engine
 	out := ctx.Output
 
-	// Validate we're on a branch
-	currentBranch, err := eng.ValidateOnBranch()
-	if err != nil {
+	// Validate preconditions
+	if err := (validation.Chain{
+		validation.MustBeOnBranch(eng),
+		validation.CurrentBranchMustNotBeTrunk(eng, "pop"),
+		validation.CurrentBranchMustBeTracked(eng),
+		validation.MustNotHaveRebaseInProgress(ctx.Context, ctx.Git()),
+		validation.MustNotHaveUncommittedChanges(ctx.Context, ctx.Git()),
+	}).Validate(); err != nil {
 		return err
 	}
-
-	// Check if on trunk
+	currentBranch := eng.CurrentBranch().GetName()
 	currentBranchObj := eng.GetBranch(currentBranch)
-	if currentBranchObj.IsTrunk() {
-		return fmt.Errorf("cannot pop trunk branch")
-	}
-
-	// Check if branch is tracked
-	if !currentBranchObj.IsTracked() {
-		return fmt.Errorf("cannot pop untracked branch %s", currentBranch)
-	}
-
-	// Check if rebase is in progress
-	if err := ctx.Git().CheckRebaseInProgress(ctx.Context); err != nil {
-		return err
-	}
-
-	// Check for uncommitted changes
-	if ctx.Git().HasUncommittedChanges(ctx.Context) {
-		return fmt.Errorf("cannot pop with uncommitted changes. Please commit or stash them first")
-	}
 
 	// Get parent branch
-	// currentBranchObj already declared above
-	parent := currentBranchObj.GetParent()
-	parentName := ""
-	if parent == nil {
-		parentName = eng.Trunk().GetName()
-	} else {
-		parentName = parent.GetName()
-	}
+	parentName := currentBranchObj.GetParentPrecondition()
 
 	// Get parent branch revision
 	parentBranch := eng.GetBranch(parentName)

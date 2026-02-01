@@ -88,6 +88,7 @@ type engineImpl struct {
 	trunk             string
 	currentBranch     string
 	branches          []string
+	branchNamesSet    *BranchSet           // cached set for O(1) lookups, lazily built
 	branchState       BranchStateMap       // branch -> consolidated state
 	childrenMap       map[string][]string  // branch -> children (computed from parents)
 	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata (can include non-local branches)

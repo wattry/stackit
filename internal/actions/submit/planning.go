@@ -5,6 +5,7 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/errors"
 )
 
 // prepareBranchesForSubmit prepares submission info for each branch, emitting events via handler
@@ -129,19 +130,15 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 	nav := ctx.Navigator()
 
 	// Get branch scope
-	branchName := opts.Branch
-	if branchName == "" {
-		currentBranch := nav.CurrentBranch()
-		if currentBranch == nil {
-			return nil, fmt.Errorf("not on a branch and no branch specified")
-		}
-		branchName = currentBranch.GetName()
+	branchName, err := resolveBranchNameFromNav(nav, opts.Branch)
+	if err != nil {
+		return nil, err
 	}
 
 	stackRange := opts.StackRange
 	// Default to downstack if StackRange is zero value (all fields false)
 	if !stackRange.RecursiveParents && !stackRange.IncludeCurrent && !stackRange.RecursiveChildren {
-		stackRange = StackRangeDownstack()
+		stackRange = engine.StackRangeDownstack(true)
 	}
 	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 	stackBranches := graph.Range(nav.GetBranch(branchName), stackRange)
@@ -162,4 +159,16 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 	}
 
 	return branches, nil
+}
+
+// resolveBranchNameFromNav resolves a branch name, defaulting to current branch if empty.
+func resolveBranchNameFromNav(nav engine.StackNavigator, branchName string) (string, error) {
+	if branchName != "" {
+		return branchName, nil
+	}
+	currentBranch := nav.CurrentBranch()
+	if currentBranch == nil {
+		return "", errors.ErrNotOnBranchNoBranchSpecified
+	}
+	return currentBranch.GetName(), nil
 }

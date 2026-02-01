@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	basehandler "stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/tui/style"
@@ -31,28 +32,20 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	defer handler.Cleanup()
 
 	// Resolve branch name
-	branchName := opts.BranchName
-	if branchName == "" {
-		currentBranch := eng.CurrentBranch()
-		if currentBranch == nil {
-			return fmt.Errorf("not on a branch and no branch specified")
-		}
-		branchName = currentBranch.GetName()
+	branchName, err := actions.ResolveBranchName(eng, opts.BranchName)
+	if err != nil {
+		return err
 	}
 
 	// Validate branch exists and is tracked
 	branch := eng.GetBranch(branchName)
 	if !branch.IsTracked() && !branch.IsTrunk() {
-		return fmt.Errorf("branch %q is not tracked by Stackit", branchName)
+		return fmt.Errorf("branch %q is not tracked by stackit", branchName)
 	}
 
 	// Build stack graph to get all related branches
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(branch, engine.StackRange{
-		RecursiveParents:  true,
-		RecursiveChildren: true,
-		IncludeCurrent:    true,
-	})
+	branches := graph.FullStack(branch)
 
 	if len(branches) == 0 {
 		out.Info("No branches to flatten.")
@@ -77,7 +70,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	handler.Start(len(featureBranches))
-	handler.OnStep(StepAnalyzing, StatusStarted, "Analyzing stack structure...")
+	handler.OnStep(StepAnalyzing, basehandler.StatusStarted, "Analyzing stack structure...")
 
 	// Take snapshot before any modifications
 	snapshotOpts := actions.NewSnapshot("flatten",
@@ -92,11 +85,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		handler.OnValidationProgress(current, total, branchName)
 	})
 	if err != nil {
-		handler.OnStep(StepAnalyzing, StatusFailed, err.Error())
+		handler.OnStep(StepAnalyzing, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to build flatten plan: %w", err)
 	}
 
-	handler.OnStep(StepAnalyzing, StatusCompleted, fmt.Sprintf("Found %d potential branches to move", len(plan.Moves)))
+	handler.OnStep(StepAnalyzing, basehandler.StatusCompleted, fmt.Sprintf("Found %d potential branches to move", len(plan.Moves)))
 
 	// If nothing to move, we're done
 	if len(plan.Moves) == 0 {
@@ -109,7 +102,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Validate all branches that will be restacked (moved branches + their descendants)
-	handler.OnStep(StepValidating, StatusStarted, "Validating moves and descendants...")
+	handler.OnStep(StepValidating, basehandler.StatusStarted, "Validating moves and descendants...")
 
 	// Collect all branches that will be affected by each move (including descendants)
 	allBranchesToValidate := collectAllBranchesToRestack(eng, graph, plan.Moves)
@@ -137,7 +130,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	conflicts := make(map[string]string) // branch -> error message
 	validation, err := eng.ValidateRebases(gctx, allRebaseSpecs)
 	if err != nil {
-		handler.OnStep(StepValidating, StatusFailed, err.Error())
+		handler.OnStep(StepValidating, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to validate rebases: %w", err)
 	}
 
@@ -157,13 +150,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	switch {
 	case len(conflicts) > 0 && len(filteredPlan.Moves) > 0:
-		handler.OnStep(StepValidating, StatusCompleted,
+		handler.OnStep(StepValidating, basehandler.StatusCompleted,
 			fmt.Sprintf("Validated: %d moves safe, %d excluded due to conflicts",
 				len(filteredPlan.Moves), len(excludedBranches)))
 	case len(conflicts) > 0:
-		handler.OnStep(StepValidating, StatusCompleted, "All moves would cause conflicts")
+		handler.OnStep(StepValidating, basehandler.StatusCompleted, "All moves would cause conflicts")
 	default:
-		handler.OnStep(StepValidating, StatusCompleted, "All moves validated successfully")
+		handler.OnStep(StepValidating, basehandler.StatusCompleted, "All moves validated successfully")
 	}
 
 	// Build preview
@@ -196,7 +189,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Execute the flatten
-	handler.OnStep(StepFlattening, StatusStarted, "Moving branches...")
+	handler.OnStep(StepFlattening, basehandler.StatusStarted, "Moving branches...")
 
 	// Build a map of branch -> oldUpstream from the rebase specs
 	// This is needed because SetParent may calculate a different value using merge-base,
@@ -212,7 +205,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		newParentBranch := eng.GetBranch(move.NewParent)
 
 		if err := eng.SetParent(gctx, moveBranch, newParentBranch); err != nil {
-			handler.OnStep(StepFlattening, StatusFailed, err.Error())
+			handler.OnStep(StepFlattening, basehandler.StatusFailed, err.Error())
 			return fmt.Errorf("failed to set parent for %s to %s: %w", move.Branch, move.NewParent, err)
 		}
 
@@ -232,10 +225,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			style.ColorBranchName(move.NewParent, false))
 	}
 
-	handler.OnStep(StepFlattening, StatusCompleted, "Parent pointers updated")
+	handler.OnStep(StepFlattening, basehandler.StatusCompleted, "Parent pointers updated")
 
 	// Restack all affected branches
-	handler.OnStep(StepRestacking, StatusStarted, "Restacking branches...")
+	handler.OnStep(StepRestacking, basehandler.StatusStarted, "Restacking branches...")
 
 	// Rebuild graph after parent changes
 	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
@@ -253,11 +246,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
-		handler.OnStep(StepRestacking, StatusFailed, err.Error())
+		handler.OnStep(StepRestacking, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to restack branches: %w", err)
 	}
 
-	handler.OnStep(StepRestacking, StatusCompleted, "Branches restacked")
+	handler.OnStep(StepRestacking, basehandler.StatusCompleted, "Branches restacked")
 
 	out.Info("\nFlatten complete: %d branches moved, %d unchanged.", len(filteredPlan.Moves), filteredPlan.UnchangedCount)
 
@@ -449,11 +442,7 @@ func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Bra
 		}
 
 		// Get current parent info
-		origParent := b.GetParent()
-		origParentName := trunk.GetName()
-		if origParent != nil {
-			origParentName = origParent.GetName()
-		}
+		origParentName := b.GetParentPrecondition()
 
 		// Get the branch's base (divergence point from parent)
 		oldUpstream, err := eng.GetDivergencePoint(bName)

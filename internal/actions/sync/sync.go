@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
@@ -378,32 +379,30 @@ type Handler interface {
 }
 
 // NullHandler is a no-op handler for testing or when output is not needed
-type NullHandler struct{}
+// NullHandler is a no-op handler for when nil is passed.
+// It embeds handler.NullBase for Cleanup() and IsInteractive().
+type NullHandler struct {
+	handler.NullBase
+}
 
 // Start implements Handler.
-func (h *NullHandler) Start(_ int) {}
+func (h *NullHandler) Start(int) {}
 
 // EmitEvent implements Handler.
-func (h *NullHandler) EmitEvent(_ Event) {}
+func (h *NullHandler) EmitEvent(Event) {}
 
 // Complete implements Handler.
-func (h *NullHandler) Complete(_ Summary) {}
+func (h *NullHandler) Complete(Summary) {}
 
 // OnRestackStart implements RestackHandler.
-func (h *NullHandler) OnRestackStart(_ int) {}
+func (h *NullHandler) OnRestackStart(int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullHandler) OnRestackBranch(_ string, _ RestackResult, _ string, _ *int, _ engine.LockReason, _ bool, _ bool, _ string, _ bool, _, _ string) {
+func (h *NullHandler) OnRestackBranch(string, RestackResult, string, *int, engine.LockReason, bool, bool, string, bool, string, string) {
 }
 
 // OnRestackComplete implements RestackHandler.
-func (h *NullHandler) OnRestackComplete(_, _ int, _ []string) {}
-
-// Cleanup implements Handler.
-func (h *NullHandler) Cleanup() {}
-
-// IsInteractive implements Handler.
-func (h *NullHandler) IsInteractive() bool { return false }
+func (h *NullHandler) OnRestackComplete(int, int, []string) {}
 
 // PromptMetadataConflict implements Handler. Returns false (keep local) in non-interactive mode.
 func (h *NullHandler) PromptMetadataConflict(_ *engine.MetadataDiff) (bool, error) {

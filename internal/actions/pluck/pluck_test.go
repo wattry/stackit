@@ -219,7 +219,7 @@ func TestPluckAction(t *testing.T) {
 			Onto:   "",
 		}, nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "onto branch must be specified")
+		require.Contains(t, err.Error(), "target branch must be specified")
 	})
 
 	t.Run("fails when not on branch and no source specified", func(t *testing.T) {

@@ -74,10 +74,10 @@ type InteractiveHandler interface {
 	// PromptBranchName asks the user to enter a branch name.
 	// defaultName is the auto-generated suggestion.
 	// sessionNames contains names already used in this split session.
-	// allBranchNames contains all existing branch names in the repo.
+	// allBranchNames contains all existing branch names in the repo (for O(1) lookup).
 	// originalBranchName is the name of the branch being split (allowed to reuse).
 	// Returns the final name or an error if canceled.
-	PromptBranchName(defaultName string, sessionNames []string, allBranchNames map[string]bool, originalBranchName string) (string, error)
+	PromptBranchName(defaultName string, sessionNames []string, allBranchNames *engine.BranchSet, originalBranchName string) (string, error)
 
 	// PromptContinueOrCancel asks user whether to continue after no changes were staged.
 	// Returns true to try again, false to cancel.

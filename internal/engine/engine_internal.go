@@ -38,6 +38,7 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 // The caller MUST hold the engine's write lock (e.mu).
 func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMeta map[string]*git.Meta, allLocalMeta map[string]*git.LocalMeta) {
 	e.branches = branches
+	e.branchNamesSet = nil // invalidate cache
 	if currentBranch != "" {
 		e.currentBranch = currentBranch
 	}

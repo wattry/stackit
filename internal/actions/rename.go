@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -20,19 +21,11 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 	eng := ctx.Engine
 	out := ctx.Output
 
-	currentBranch, err := eng.ValidateOnBranch()
-	if err != nil {
+	// Validate preconditions
+	if err := validation.ModifyBranchChain(eng, "rename").Validate(); err != nil {
 		return err
 	}
-
-	if currentBranch == eng.Trunk().GetName() {
-		return fmt.Errorf("cannot rename trunk branch %s", currentBranch)
-	}
-
-	branch := eng.GetBranch(currentBranch)
-	if err := branch.EnsureCanModify(); err != nil {
-		return err
-	}
+	currentBranch := eng.CurrentBranch().GetName()
 
 	newName := opts.NewName
 	if newName == "" {
@@ -40,6 +33,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 			return fmt.Errorf("branch name is required in non-interactive mode")
 		}
 
+		var err error
 		newName, err = tui.PromptTextInput("Enter new branch name:", currentBranch)
 		if err != nil {
 			return err
@@ -63,6 +57,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 		}
 	}
 
+	branch := eng.GetBranch(currentBranch)
 	prInfo, _ := branch.GetPrInfo()
 
 	if prInfo != nil && prInfo.Number() != nil {

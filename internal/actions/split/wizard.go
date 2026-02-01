@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"stackit.dev/stackit/internal/actions"
+	handlerBase "stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
@@ -34,7 +35,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	// Get current branch
 	currentBranch := eng.CurrentBranch()
 	if currentBranch == nil {
-		return fmt.Errorf("not on a branch")
+		return errors.ErrNotOnBranch
 	}
 
 	if err := currentBranch.EnsureCanModify(); err != nil {
@@ -53,13 +54,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	// Ensure branch is tracked
 	currentBranchObj := eng.GetBranch(currentBranch.GetName())
 	if !currentBranchObj.IsTracked() {
-		parent := currentBranch.GetParent()
-		parentName := ""
-		if parent == nil {
-			parentName = eng.Trunk().GetName()
-		} else {
-			parentName = parent.GetName()
-		}
+		parentName := currentBranch.GetParentPrecondition()
 		if err := eng.TrackBranch(ctx.Context, currentBranch.GetName(), parentName); err != nil {
 			return fmt.Errorf("failed to track branch: %w", err)
 		}
@@ -81,7 +76,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	for {
 		// Step 1: Choose split type (if not pre-selected)
 		if style == "" {
-			handler.OnStep(StepChoosingType, StatusStarted, "Choose split type")
+			handler.OnStep(StepChoosingType, handlerBase.StatusStarted, "Choose split type")
 
 			selectedStyle, err := handler.PromptSplitType(availableTypes)
 			if err != nil {
@@ -89,13 +84,13 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 			}
 			style = selectedStyle
 
-			handler.OnStep(StepChoosingType, StatusCompleted, string(style))
+			handler.OnStep(StepChoosingType, handlerBase.StatusCompleted, string(style))
 			out.Debug("split wizard: user selected style: %s", style)
 		}
 
 		// Step 2: Choose direction (if not pre-selected)
 		if direction == "" {
-			handler.OnStep(StepChoosingDirection, StatusStarted, "Choose direction")
+			handler.OnStep(StepChoosingDirection, handlerBase.StatusStarted, "Choose direction")
 
 			// Build context for direction prompt
 			parentName := ""
@@ -128,7 +123,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 			}
 			direction = selectedDirection
 
-			handler.OnStep(StepChoosingDirection, StatusCompleted, string(direction))
+			handler.OnStep(StepChoosingDirection, handlerBase.StatusCompleted, string(direction))
 			out.Debug("split wizard: user selected direction: %s", direction)
 		}
 
@@ -176,7 +171,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		}
 
 		// Prompt for commit message with context (shows files being extracted)
-		handler.OnStep(StepCommitMessage, StatusStarted, "Enter commit message")
+		handler.OnStep(StepCommitMessage, handlerBase.StatusStarted, "Enter commit message")
 		commitMsgCtx := CommitMessageContext{
 			Files:                 pathspecs,
 			Direction:             direction,
@@ -187,7 +182,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		if err != nil {
 			return err
 		}
-		handler.OnStep(StepCommitMessage, StatusCompleted, "Commit message set")
+		handler.OnStep(StepCommitMessage, handlerBase.StatusCompleted, "Commit message set")
 
 		// Generate default branch name from commit message using the branch pattern
 		cfg, _ := config.LoadConfig(ctx.RepoRoot)
@@ -202,19 +197,13 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 			defaultBranchName = currentBranch.GetName() + "_split"
 		}
 
-		// Build list of existing branch names for validation
-		existingBranchNames := make(map[string]bool)
-		for _, b := range eng.AllBranches() {
-			existingBranchNames[b.GetName()] = true
-		}
-
 		// Prompt for branch name
-		handler.OnStep(StepBranchName, StatusStarted, "Enter branch name")
-		branchName, err := handler.PromptBranchName(defaultBranchName, []string{}, existingBranchNames, currentBranch.GetName())
+		handler.OnStep(StepBranchName, handlerBase.StatusStarted, "Enter branch name")
+		branchName, err := handler.PromptBranchName(defaultBranchName, []string{}, eng.BranchNames(), currentBranch.GetName())
 		if err != nil {
 			return err
 		}
-		handler.OnStep(StepBranchName, StatusCompleted, branchName)
+		handler.OnStep(StepBranchName, handlerBase.StatusCompleted, branchName)
 
 		// Execute the file split with the provided name and message
 		fileResult, err := splitByFile(ctx.Context, *currentBranch, pathspecs, eng, splitByFileOptions{

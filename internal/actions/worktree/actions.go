@@ -307,10 +307,8 @@ func CreateAction(ctx *app.Context, opts CreateOptions) (*CreateResult, error) {
 	}
 
 	// Check if branch already exists
-	for _, b := range eng.AllBranches() {
-		if b.GetName() == anchorBranchName {
-			return nil, fmt.Errorf("branch %s already exists", anchorBranchName)
-		}
+	if eng.BranchNames().Contains(anchorBranchName) {
+		return nil, fmt.Errorf("branch %s already exists", anchorBranchName)
 	}
 
 	// Get trunk SHA for the anchor branch

@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 
+	"stackit.dev/stackit/internal/actions/validation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
@@ -35,28 +36,20 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	out := ctx.Output
 	gctx := ctx.Context
 
-	currentBranch, err := eng.ValidateOnBranch()
-	if err != nil {
+	// Validate preconditions
+	if err := validation.ModifyBranchChain(eng, "modify").Validate(); err != nil {
 		return err
 	}
-
-	// Check if we're on trunk
+	currentBranch := eng.CurrentBranch().GetName()
 	currentBranchObj := eng.GetBranch(currentBranch)
-	if currentBranchObj.IsTrunk() {
-		return fmt.Errorf("cannot modify trunk branch %s", currentBranch)
-	}
-
-	if err := currentBranchObj.EnsureCanModify(); err != nil {
-		return err
-	}
 
 	// Handle interactive rebase separately
 	if opts.InteractiveRebase {
 		return interactiveRebaseAction(ctx, opts)
 	}
 
-	// Check if rebase is in progress
-	if err := ctx.Git().CheckRebaseInProgress(gctx); err != nil {
+	// Check if rebase is in progress (only for non-interactive mode)
+	if err := validation.MustNotHaveRebaseInProgress(gctx, ctx.Git()).Validate(); err != nil {
 		return err
 	}
 

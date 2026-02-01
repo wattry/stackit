@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/split"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
@@ -54,7 +55,7 @@ func (h *SimpleSplitHandler) Start(branchName string, _ split.Style) {
 }
 
 // OnStep is called for each step in the split process
-func (h *SimpleSplitHandler) OnStep(_ split.Step, _ split.StepStatus, _ string) {
+func (h *SimpleSplitHandler) OnStep(_ split.Step, _ handler.StepStatus, _ string) {
 	// Steps are handled silently in simple handler
 }
 
@@ -247,7 +248,7 @@ func (h *TUISplitHandler) PromptCommitMessageWithContext(ctx split.CommitMessage
 }
 
 // PromptBranchName asks the user to enter a branch name
-func (h *TUISplitHandler) PromptBranchName(defaultName string, sessionNames []string, allBranchNames map[string]bool, originalBranchName string) (string, error) {
+func (h *TUISplitHandler) PromptBranchName(defaultName string, sessionNames []string, allBranchNames *engine.BranchSet, originalBranchName string) (string, error) {
 	if !utils.IsInteractive() {
 		return defaultName, nil
 	}
@@ -286,7 +287,7 @@ func (h *TUISplitHandler) PromptBranchName(defaultName string, sessionNames []st
 	}
 
 	// Validate: don't allow existing branch names (except the original being split)
-	if branchName != originalBranchName && allBranchNames[branchName] {
+	if branchName != originalBranchName && allBranchNames.Contains(branchName) {
 		return "", fmt.Errorf("branch name %q already exists in the repository", branchName)
 	}
 
