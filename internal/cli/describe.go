@@ -30,7 +30,7 @@ When run without flags, opens your configured editor (like git commit).
 
 Examples:
   stackit describe                              # Opens editor to set/edit description
-  stackit describe -m "Auth Feature"            # Set title only
+  stackit describe -m "Auth Feature"            # Set title only (short flag like git commit)
   stackit describe -m "Auth" -d "OAuth2 impl"   # Set title and description
   stackit describe --show                       # Display current description
   stackit describe --clear                      # Remove description`,
@@ -57,7 +57,7 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVarP(&message, "message", "m", "", "Set the stack title (non-interactive)")
+	cmd.Flags().StringVarP(&message, "title", "m", "", "Set the stack title (non-interactive)")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "Set the stack description body (requires -m)")
 	cmd.Flags().BoolVar(&clearFlag, "clear", false, "Remove the stack description")
 	cmd.Flags().BoolVar(&show, "show", false, "Display the current stack description")

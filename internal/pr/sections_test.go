@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -188,6 +189,34 @@ func TestShouldShowNavigation(t *testing.T) {
 }
 
 func TestCreatePRBodyFooterWithOptions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes stack description when set", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		// Set stack description
+		err = s.Engine.SetStackDescription(context.Background(), branch, &git.StackDescription{
+			Title:       "Auth Feature",
+			Description: "OAuth2 implementation with JWT tokens",
+		})
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "always", Marker: "👈"}
+		footer := CreatePRBodyFooterWithOptions("feature-a", s.Engine, opts)
+		assert.Contains(t, footer, "**Auth Feature**")
+		assert.Contains(t, footer, "OAuth2 implementation with JWT tokens")
+	})
+
 	t.Run("uses custom marker", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit().
@@ -265,6 +294,34 @@ func TestIsStackitComment(t *testing.T) {
 }
 
 func TestCreateNavigationComment(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes stack description when set", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main")
+
+		branch := s.Engine.GetBranch("feature-a")
+		prNum := 1
+		err := s.Engine.UpsertPrInfo(context.Background(), branch, engine.NewPrInfo(&prNum, "Title", "Body", "OPEN", "main", "http://pr/1", false))
+		require.NoError(t, err)
+
+		// Set stack description
+		err = s.Engine.SetStackDescription(context.Background(), branch, &git.StackDescription{
+			Title:       "Auth Feature",
+			Description: "OAuth2 implementation with JWT tokens",
+		})
+		require.NoError(t, err)
+
+		opts := NavigationOptions{When: "always", Marker: "👈"}
+		comment := CreateNavigationComment("feature-a", s.Engine, opts)
+		assert.Contains(t, comment, "**Auth Feature**")
+		assert.Contains(t, comment, "OAuth2 implementation with JWT tokens")
+	})
+
 	t.Run("includes comment marker", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit().

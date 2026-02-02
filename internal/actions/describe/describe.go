@@ -241,7 +241,7 @@ func TruncateDescription(s string, maxLen int) string {
 	lines := strings.Split(s, "\n")
 	first := lines[0]
 	if len(first) > maxLen {
-		if maxLen <= 3 {
+		if maxLen < 0 || maxLen <= 3 {
 			return "..."
 		}
 		return first[:maxLen-3] + "..."

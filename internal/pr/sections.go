@@ -2,12 +2,26 @@ package pr
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 )
+
+// writeStackDescription writes the stack description to the writer if present.
+func writeStackDescription(w io.Writer, desc *git.StackDescription) {
+	if desc == nil || desc.Title == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "**%s**", desc.Title)
+	if desc.Description != "" {
+		_, _ = fmt.Fprint(w, "\n\n")
+		_, _ = fmt.Fprint(w, desc.Description)
+	}
+	_, _ = fmt.Fprint(w, "\n\n")
+}
 
 const (
 	// SectionStart marks the beginning of the stackit-generated section in PR body.
@@ -110,16 +124,8 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 
 	var tree strings.Builder
 
-	// Add stack description if present (require non-empty title to avoid "****" artifact)
-	stackDesc := eng.GetStackDescription(branchObj)
-	if stackDesc != nil && !stackDesc.IsEmpty() && stackDesc.Title != "" {
-		fmt.Fprintf(&tree, "**%s**", stackDesc.Title)
-		if stackDesc.Description != "" {
-			tree.WriteString("\n\n")
-			tree.WriteString(stackDesc.Description)
-		}
-		tree.WriteString("\n\n")
-	}
+	// Add stack description if present
+	writeStackDescription(&tree, eng.GetStackDescription(branchObj))
 
 	// Add scope if present
 	scope := eng.GetScope(branchObj)
@@ -323,16 +329,8 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 	tree.WriteString(CommentMarker + "\n")
 	tree.WriteString("#### Stack\n\n")
 
-	// Add stack description if present (require non-empty title to avoid "****" artifact)
-	stackDesc := eng.GetStackDescription(branchObj)
-	if stackDesc != nil && !stackDesc.IsEmpty() && stackDesc.Title != "" {
-		fmt.Fprintf(&tree, "**%s**", stackDesc.Title)
-		if stackDesc.Description != "" {
-			tree.WriteString("\n\n")
-			tree.WriteString(stackDesc.Description)
-		}
-		tree.WriteString("\n\n")
-	}
+	// Add stack description if present
+	writeStackDescription(&tree, eng.GetStackDescription(branchObj))
 
 	// Add scope if present
 	scope := eng.GetScope(branchObj)
