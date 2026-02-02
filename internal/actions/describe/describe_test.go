@@ -176,6 +176,80 @@ func TestDescribeAction(t *testing.T) {
 	})
 }
 
+func TestTruncateDescription(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{
+			name:   "short string unchanged",
+			input:  "hello",
+			maxLen: 10,
+			want:   "hello",
+		},
+		{
+			name:   "exact length unchanged",
+			input:  "hello",
+			maxLen: 5,
+			want:   "hello",
+		},
+		{
+			name:   "long string truncated",
+			input:  "hello world this is long",
+			maxLen: 10,
+			want:   "hello w...",
+		},
+		{
+			name:   "multiline adds ellipsis",
+			input:  "line1\nline2\nline3",
+			maxLen: 100,
+			want:   "line1...",
+		},
+		{
+			name:   "empty string",
+			input:  "",
+			maxLen: 10,
+			want:   "",
+		},
+		{
+			name:   "maxLen 3 returns just ellipsis",
+			input:  "hello",
+			maxLen: 3,
+			want:   "...",
+		},
+		{
+			name:   "maxLen 2 returns just ellipsis",
+			input:  "hello",
+			maxLen: 2,
+			want:   "...",
+		},
+		{
+			name:   "maxLen 0 returns just ellipsis",
+			input:  "hello",
+			maxLen: 0,
+			want:   "...",
+		},
+		{
+			name:   "maxLen 4 truncates to 1 char",
+			input:  "hello",
+			maxLen: 4,
+			want:   "h...",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := describe.TruncateDescription(tt.input, tt.maxLen)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestParseEditorContent(t *testing.T) {
 	t.Parallel()
 

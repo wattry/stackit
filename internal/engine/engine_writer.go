@@ -1039,7 +1039,7 @@ func (e *engineImpl) GetStackDescription(branch Branch) *git.StackDescription {
 	if rootName == "" {
 		// Not on a tracked stack, check current branch's MergedDownstack
 		meta, err := e.git.ReadMetadata(branch.GetName())
-		if err != nil || meta == nil {
+		if err != nil {
 			return nil
 		}
 		return findDescriptionInHistory(meta.MergedDownstack)
@@ -1060,6 +1060,8 @@ func (e *engineImpl) GetStackDescription(branch Branch) *git.StackDescription {
 }
 
 // findDescriptionInHistory searches MergedDownstack for the most recent description.
+// This is used to preserve stack descriptions when root branches are deleted/merged,
+// since the description is captured in MergedDownstack history during reparenting.
 // MergedDownstack is ordered oldest to newest, so we iterate from end to find most recent.
 func findDescriptionInHistory(history []git.MergedParent) *git.StackDescription {
 	for i := len(history) - 1; i >= 0; i-- {
@@ -1081,6 +1083,9 @@ func (e *engineImpl) SetStackDescription(_ context.Context, branch Branch, desc 
 	meta, err := e.git.ReadMetadata(rootName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata for %s: %w", rootName, err)
+	}
+	if meta == nil {
+		meta = &git.Meta{}
 	}
 
 	meta.StackDescription = desc

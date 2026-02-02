@@ -106,7 +106,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	if newDesc == nil {
-		out.Info("Aborting due to empty description.")
+		out.Info("Aborting: at least a title is required. Use -m to set inline.")
 		return nil
 	}
 
@@ -117,7 +117,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	out.Info("Set stack description for stack rooted at %s:", style.ColorBranchName(stackRoot, false))
 	out.Info("  Title: %s", style.ColorDim(newDesc.Title))
 	if newDesc.Description != "" {
-		out.Info("  Description: %s", style.ColorDim(truncateDescription(newDesc.Description, 60)))
+		out.Info("  Description: %s", style.ColorDim(TruncateDescription(newDesc.Description, 60)))
 	}
 
 	// Push metadata changes
@@ -128,7 +128,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	return nil
 }
 
-func showDescription(ctx *app.Context, branch engine.Branch, stackRoot string) error { //nolint:unparam
+func showDescription(ctx *app.Context, branch engine.Branch, stackRoot string) error { //nolint:unparam // error return for API consistency
 	out := ctx.Output
 	desc := ctx.Engine.GetStackDescription(branch)
 
@@ -185,7 +185,7 @@ func buildEditorTemplate(existing *git.StackDescription) string {
 // Returns nil if the content is empty (abort).
 func ParseEditorContent(content string) *git.StackDescription {
 	lines := strings.Split(content, "\n")
-	titleLines := make([]string, 0)
+	titleLines := make([]string, 0, 5)
 	descLines := make([]string, 0, len(lines))
 	foundBlank := false
 	foundContent := false
@@ -234,11 +234,16 @@ func ParseEditorContent(content string) *git.StackDescription {
 	}
 }
 
-func truncateDescription(s string, maxLen int) string {
+// TruncateDescription truncates a description string for display.
+// It returns the first line, truncated to maxLen characters if needed.
+func TruncateDescription(s string, maxLen int) string {
 	// Get first line or truncate
 	lines := strings.Split(s, "\n")
 	first := lines[0]
 	if len(first) > maxLen {
+		if maxLen <= 3 {
+			return "..."
+		}
 		return first[:maxLen-3] + "..."
 	}
 	if len(lines) > 1 {

@@ -110,9 +110,9 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 
 	var tree strings.Builder
 
-	// Add stack description if present
+	// Add stack description if present (require non-empty title to avoid "****" artifact)
 	stackDesc := eng.GetStackDescription(branchObj)
-	if stackDesc != nil && !stackDesc.IsEmpty() {
+	if stackDesc != nil && !stackDesc.IsEmpty() && stackDesc.Title != "" {
 		fmt.Fprintf(&tree, "**%s**", stackDesc.Title)
 		if stackDesc.Description != "" {
 			tree.WriteString("\n\n")
@@ -323,9 +323,9 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 	tree.WriteString(CommentMarker + "\n")
 	tree.WriteString("#### Stack\n\n")
 
-	// Add stack description if present
+	// Add stack description if present (require non-empty title to avoid "****" artifact)
 	stackDesc := eng.GetStackDescription(branchObj)
-	if stackDesc != nil && !stackDesc.IsEmpty() {
+	if stackDesc != nil && !stackDesc.IsEmpty() && stackDesc.Title != "" {
 		fmt.Fprintf(&tree, "**%s**", stackDesc.Title)
 		if stackDesc.Description != "" {
 			tree.WriteString("\n\n")
@@ -335,7 +335,7 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 	}
 
 	// Add scope if present
-	scope := eng.GetScope(eng.GetBranch(branch))
+	scope := eng.GetScope(branchObj)
 	if !scope.IsEmpty() {
 		fmt.Fprintf(&tree, "**Scope**: %s\n\n", scope.String())
 	}
