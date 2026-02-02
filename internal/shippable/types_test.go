@@ -144,6 +144,32 @@ func TestStack_RootBranch(t *testing.T) {
 	assert.Equal(t, "feature/my-stack", s.RootBranch())
 }
 
+func TestStack_DisplayTitle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns PR title when available", func(t *testing.T) {
+		t.Parallel()
+		s := &Stack{
+			Stack: merge.MultiStackInfo{
+				RootBranch: "jonnii/20260131/feature",
+			},
+			PRTitle: "feat: add user authentication",
+		}
+		assert.Equal(t, "feat: add user authentication", s.DisplayTitle())
+	})
+
+	t.Run("falls back to branch name when no PR title", func(t *testing.T) {
+		t.Parallel()
+		s := &Stack{
+			Stack: merge.MultiStackInfo{
+				RootBranch: "jonnii/20260131/feature",
+			},
+			PRTitle: "",
+		}
+		assert.Equal(t, "jonnii/20260131/feature", s.DisplayTitle())
+	})
+}
+
 func TestAnalysisResult_GetShippable(t *testing.T) {
 	t.Parallel()
 
