@@ -1090,7 +1090,7 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		// Then show commit messages
 		for _, msg := range annotation.CommitMessages {
 			// Color the SHA (first word), rest dimmed
-			formattedMsg := msg
+			var formattedMsg string
 			if spaceIdx := strings.Index(msg, " "); spaceIdx > 0 {
 				sha := msg[:spaceIdx]
 				rest := msg[spaceIdx:]
