@@ -54,13 +54,29 @@ type Meta struct {
 	// MergedDownstack preserves historical parent relationships when branches are reparented
 	// due to merge/deletion. Ordered oldest to newest, limited to 5 entries max.
 	MergedDownstack []MergedParent `json:"mergedDownstack,omitempty"`
+
+	// StackDescription holds stack-level title and description (stored on root branch only)
+	StackDescription *StackDescription `json:"stackDescription,omitempty"`
+}
+
+// StackDescription holds stack-level title and description.
+// This is stored on the root branch of a stack.
+type StackDescription struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// IsEmpty returns true if both title and description are empty.
+func (sd *StackDescription) IsEmpty() bool {
+	return sd == nil || (sd.Title == "" && sd.Description == "")
 }
 
 // MergedParent represents a historical parent that was merged or deleted
 type MergedParent struct {
-	BranchName string  `json:"branchName"`
-	PRNumber   *int    `json:"prNumber,omitempty"`
-	PRState    *string `json:"prState,omitempty"` // "MERGED", "CLOSED"
+	BranchName       string            `json:"branchName"`
+	PRNumber         *int              `json:"prNumber,omitempty"`
+	PRState          *string           `json:"prState,omitempty"`          // "MERGED", "CLOSED"
+	StackDescription *StackDescription `json:"stackDescription,omitempty"` // Captured from deleted root
 }
 
 // LocalMeta represents branch metadata that is strictly local and never pushed

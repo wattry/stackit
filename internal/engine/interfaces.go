@@ -36,6 +36,7 @@ type BranchStatus interface {
 	IsBranchEmpty(ctx context.Context, branchName string) (bool, error)
 	GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error)
 	GetScope(branch Branch) Scope
+	GetStackDescription(branch Branch) *git.StackDescription
 	IsLocked(branch Branch) bool
 	GetLockReason(branch Branch) LockReason
 	IsFrozen(branch Branch) bool
@@ -132,6 +133,15 @@ type BranchTracking interface {
 	ClearNeedsPRBodyUpdate(branchName string) error
 	// GetBranchesNeedingPRBodyUpdate returns all branches that need PR body updates
 	GetBranchesNeedingPRBodyUpdate() []string
+
+	// GetStackDescription returns the stack description for a branch's stack.
+	// It first checks the stack root's metadata, then falls back to MergedDownstack history.
+	GetStackDescription(branch Branch) *git.StackDescription
+	// SetStackDescription sets the stack description on the stack root for a branch.
+	// Returns an error if the branch is not part of a tracked stack.
+	SetStackDescription(ctx context.Context, branch Branch, desc *git.StackDescription) error
+	// ClearStackDescription removes the stack description from the stack root.
+	ClearStackDescription(ctx context.Context, branch Branch) error
 }
 
 // BranchMutations handles branch lifecycle operations

@@ -113,6 +113,16 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		}
 		ctx.Output.Info("%s", string(data))
 	} else {
+		// Show stack description if present
+		stackDesc := eng.GetStackDescription(*currentBranch)
+		if stackDesc != nil && !stackDesc.IsEmpty() {
+			ctx.Output.Info("Stack: %s", stackDesc.Title)
+			if stackDesc.Description != "" {
+				ctx.Output.Info("%s", stackDesc.Description)
+			}
+			ctx.Output.Info("")
+		}
+
 		// Build tree data structure for rendering
 		trunkName := eng.Trunk().GetName()
 		stackTree := tree.NewStackTree(stackBranches, currentBranch.GetName(), trunkName)

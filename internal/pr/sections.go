@@ -106,18 +106,29 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 	// Build StackGraph for efficient traversals
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
+	branchObj := eng.GetBranch(branch)
+
 	var tree strings.Builder
 
+	// Add stack description if present
+	stackDesc := eng.GetStackDescription(branchObj)
+	if stackDesc != nil && !stackDesc.IsEmpty() {
+		fmt.Fprintf(&tree, "**%s**", stackDesc.Title)
+		if stackDesc.Description != "" {
+			tree.WriteString("\n\n")
+			tree.WriteString(stackDesc.Description)
+		}
+		tree.WriteString("\n\n")
+	}
+
 	// Add scope if present
-	scope := eng.GetScope(eng.GetBranch(branch))
+	scope := eng.GetScope(branchObj)
 	if !scope.IsEmpty() {
 		fmt.Fprintf(&tree, "**Scope**: %s\n\n", scope.String())
 	}
 
 	// Note: Lock message is now handled independently via CreateLockSection()
 	// to ensure it's shown even when navigation is hidden
-
-	branchObj := eng.GetBranch(branch)
 
 	// Add notice if present in PrInfo
 	// Error is intentionally ignored: if PR info cannot be retrieved, we simply skip
@@ -306,9 +317,22 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 	terminalParent := eng.GetBranch(terminalParentName)
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
+	branchObj := eng.GetBranch(branch)
+
 	var tree strings.Builder
 	tree.WriteString(CommentMarker + "\n")
 	tree.WriteString("#### Stack\n\n")
+
+	// Add stack description if present
+	stackDesc := eng.GetStackDescription(branchObj)
+	if stackDesc != nil && !stackDesc.IsEmpty() {
+		fmt.Fprintf(&tree, "**%s**", stackDesc.Title)
+		if stackDesc.Description != "" {
+			tree.WriteString("\n\n")
+			tree.WriteString(stackDesc.Description)
+		}
+		tree.WriteString("\n\n")
+	}
 
 	// Add scope if present
 	scope := eng.GetScope(eng.GetBranch(branch))
@@ -318,8 +342,6 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 
 	// Note: Lock message is now handled independently via CreateLockSection()
 	// to ensure it's shown even when navigation is hidden
-
-	branchObj := eng.GetBranch(branch)
 
 	// Add notice if present in PrInfo
 	prInfo, _ := branchObj.GetPrInfo()
