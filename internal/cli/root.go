@@ -83,6 +83,7 @@ Commit:  ` + commit + `
 	rootCmd.AddCommand(newContinueCmd())
 	rootCmd.AddCommand(branch.NewCreateCmd())
 	rootCmd.AddCommand(newDebugCmd())
+	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newDocsCmd())
 	rootCmd.AddCommand(branch.NewDeleteCmd())
 	rootCmd.AddCommand(newDoctorCmd())

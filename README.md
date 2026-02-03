@@ -239,6 +239,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit pop` | Delete current branch but keep its changes in working tree |
 | `stackit delete` | Delete the current branch and its metadata |
 | `stackit rename [name]` | Rename the current branch and update metadata |
+| `stackit describe` | Set a title and description for the current stack |
 | `stackit scope [name]` | Manage logical scope (Jira ticket, Linear ID) for current branch |
 | `stackit lock [branch]` | Lock a branch and its downstack (prevent local changes) |
 | `stackit unlock [branch]` | Unlock a branch and its upstack (allow local changes) |

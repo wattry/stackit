@@ -4,7 +4,33 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"stackit.dev/stackit/internal/git"
 )
+
+func TestFormatMergeTitleWithDescription(t *testing.T) {
+	t.Parallel()
+
+	t.Run("uses description title when present", func(t *testing.T) {
+		t.Parallel()
+		desc := &git.StackDescription{Title: "Add user authentication"}
+		result := FormatMergeTitleWithDescription(desc, []string{"PROJ-123"}, 2)
+		assert.Equal(t, "Add user authentication", result)
+	})
+
+	t.Run("falls back when description is nil", func(t *testing.T) {
+		t.Parallel()
+		result := FormatMergeTitleWithDescription(nil, []string{"PROJ-123"}, 1)
+		assert.Equal(t, "Merging PROJ-123", result)
+	})
+
+	t.Run("falls back when description title is empty", func(t *testing.T) {
+		t.Parallel()
+		desc := &git.StackDescription{Title: "", Description: "Some description"}
+		result := FormatMergeTitleWithDescription(desc, []string{}, 3)
+		assert.Equal(t, "Merging 3 PRs", result)
+	})
+}
 
 func TestFormatMergeTitle(t *testing.T) {
 	tests := []struct {
@@ -182,6 +208,87 @@ main
 		expected := `This PR merges the following changes:
 
 1. **#1** Add feature A
+`
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("with stack description", func(t *testing.T) {
+		result := FormatMergeBody(MergeBodyParams{
+			Branches: []MergeBranch{
+				{Name: "feature-a", PRNumber: 1, PRTitle: "Add feature A"},
+			},
+			StackTree: "main\n  └─ feature-a (#1)\n",
+			StackDescription: &git.StackDescription{
+				Title:       "Add user authentication",
+				Description: "This stack implements JWT-based auth.",
+			},
+		})
+
+		expected := `**Add user authentication**
+
+This stack implements JWT-based auth.
+
+This PR merges the following changes:
+
+1. **#1** Add feature A
+
+### Stack
+
+` + "```" + `
+main
+  └─ feature-a (#1)
+` + "```" + `
+`
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("with stack description title only", func(t *testing.T) {
+		result := FormatMergeBody(MergeBodyParams{
+			Branches: []MergeBranch{
+				{Name: "feature-a", PRNumber: 1, PRTitle: "Add feature A"},
+			},
+			StackTree: "main\n  └─ feature-a (#1)\n",
+			StackDescription: &git.StackDescription{
+				Title: "Add user authentication",
+			},
+		})
+
+		expected := `**Add user authentication**
+
+This PR merges the following changes:
+
+1. **#1** Add feature A
+
+### Stack
+
+` + "```" + `
+main
+  └─ feature-a (#1)
+` + "```" + `
+`
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("with empty stack description", func(t *testing.T) {
+		result := FormatMergeBody(MergeBodyParams{
+			Branches: []MergeBranch{
+				{Name: "feature-a", PRNumber: 1, PRTitle: "Add feature A"},
+			},
+			StackTree:        "main\n  └─ feature-a (#1)\n",
+			StackDescription: &git.StackDescription{},
+		})
+
+		// Should fall back to no description
+		expected := `This PR merges the following changes:
+
+1. **#1** Add feature A
+
+### Stack
+
+` + "```" + `
+main
+  └─ feature-a (#1)
+` + "```" + `
 `
 		assert.Equal(t, expected, result)
 	})

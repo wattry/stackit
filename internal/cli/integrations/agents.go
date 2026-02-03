@@ -131,10 +131,10 @@ func runAgentInstall(runner git.Runner, local, force bool, version string, out i
 			templateDir: "agents/templates/commands",
 			destDir:     filepath.Join(".claude", "commands"),
 			files: []string{
-				"stack-absorb.md", "stack-create.md", "stack-extract.md", "stack-fix.md",
-				"stack-fold.md", "stack-plan.md", "stack-restack.md", "stack-review.md",
-				"stack-split.md", "stack-status.md", "stack-submit.md", "stack-sync.md",
-				"stack-verify.md",
+				"stack-absorb.md", "stack-create.md", "stack-describe.md", "stack-extract.md",
+				"stack-fix.md", "stack-fold.md", "stack-plan.md", "stack-restack.md",
+				"stack-review.md", "stack-split.md", "stack-status.md", "stack-submit.md",
+				"stack-sync.md", "stack-verify.md",
 			},
 		},
 		{
@@ -236,8 +236,8 @@ func printSuccessMessage(out io.Writer, local, workflowBlockInstalled bool, work
 	}
 
 	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "Available commands: /stack-absorb, /stack-create, /stack-extract, /stack-fix,")
-	_, _ = fmt.Fprintln(out, "/stack-fold, /stack-plan, /stack-restack, /stack-review, /stack-split,")
+	_, _ = fmt.Fprintln(out, "Available commands: /stack-absorb, /stack-create, /stack-describe, /stack-extract,")
+	_, _ = fmt.Fprintln(out, "/stack-fix, /stack-fold, /stack-plan, /stack-restack, /stack-review, /stack-split,")
 	_, _ = fmt.Fprintln(out, "/stack-status, /stack-submit, /stack-sync, /stack-verify")
 
 	if !local {

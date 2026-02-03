@@ -32,16 +32,16 @@ func TestStackInfoAction(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, output)
 
-		var info []StackBranchInfo
+		var info StackInfoOutput
 		err = json.Unmarshal([]byte(output), &info)
 		require.NoError(t, err)
 
 		// Check branches
-		require.Len(t, info, 2)
+		require.Len(t, info.Branches, 2)
 
 		// Map by name for easier checking
 		branchMap := make(map[string]StackBranchInfo)
-		for _, b := range info {
+		for _, b := range info.Branches {
 			branchMap[b.Name] = b
 		}
 
@@ -106,11 +106,11 @@ func TestStackInfoAction(t *testing.T) {
 
 		require.NoError(t, err)
 
-		var info []StackBranchInfo
+		var info StackInfoOutput
 		err = json.Unmarshal([]byte(output), &info)
 		require.NoError(t, err)
-		require.Len(t, info, 1)
-		require.True(t, info[0].IsLocked)
-		require.True(t, info[0].IsFrozen)
+		require.Len(t, info.Branches, 1)
+		require.True(t, info.Branches[0].IsLocked)
+		require.True(t, info.Branches[0].IsFrozen)
 	})
 }

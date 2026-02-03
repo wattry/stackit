@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -59,6 +60,71 @@ func TestPRContentGenerator_GenerateConsolidationPR(t *testing.T) {
 
 		assert.Equal(t, "Merging PROJ-123", content.Title)
 		assert.Contains(t, content.Body, "#1")
+	})
+}
+
+func TestPRContentGenerator_GenerateConsolidationPR_WithStackDescription(t *testing.T) {
+	t.Run("with_stack_description_uses_title", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithStack(map[string]string{
+			"feature-a": "main",
+		})
+
+		// Set stack description
+		_ = s.Engine.SetStackDescription(context.Background(), s.Engine.GetBranch("feature-a"), &git.StackDescription{
+			Title:       "Auth Feature",
+			Description: "Implements authentication",
+		})
+
+		gen := NewPRContentGenerator(s.Engine)
+		content := gen.GenerateConsolidationPR([]BranchMergeInfo{
+			{BranchName: "feature-a", PRNumber: 1},
+		})
+
+		assert.Equal(t, "Auth Feature", content.Title)
+		assert.Contains(t, content.Body, "**Auth Feature**")
+		assert.Contains(t, content.Body, "Implements authentication")
+	})
+
+	t.Run("with_stack_description_title_only", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithStack(map[string]string{
+			"feature-a":   "main",
+			"feature-a-1": "feature-a",
+		})
+
+		// Set stack description with title only
+		_ = s.Engine.SetStackDescription(context.Background(), s.Engine.GetBranch("feature-a"), &git.StackDescription{
+			Title: "My Feature Stack",
+		})
+
+		gen := NewPRContentGenerator(s.Engine)
+		content := gen.GenerateConsolidationPR([]BranchMergeInfo{
+			{BranchName: "feature-a", PRNumber: 1},
+			{BranchName: "feature-a-1", PRNumber: 2},
+		})
+
+		assert.Equal(t, "My Feature Stack", content.Title)
+		assert.Contains(t, content.Body, "**My Feature Stack**")
+	})
+
+	t.Run("no_description_fallback", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithStack(map[string]string{
+			"feature-a": "main",
+		})
+
+		// No stack description set
+
+		gen := NewPRContentGenerator(s.Engine)
+		content := gen.GenerateConsolidationPR([]BranchMergeInfo{
+			{BranchName: "feature-a", PRNumber: 1},
+		})
+
+		// Should fall back to default title
+		assert.Equal(t, "Merging 1 PRs", content.Title)
+		// Body should not contain description formatting
+		assert.NotContains(t, content.Body, "**Auth")
 	})
 }
 
