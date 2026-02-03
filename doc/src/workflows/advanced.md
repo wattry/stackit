@@ -10,13 +10,47 @@ Power-user operations for reorganizing and managing complex stacks.
 
 ## Splitting Commits into Branches
 
-If you have multiple commits on a branch and want to split them into separate branches:
+Split commits from the current branch into separate branches using different modes:
+
+### By Commit (default)
 
 ```bash
 stackit split
 ```
 
-This launches an interactive UI where you can reorganize commits into multiple branches.
+Launches an interactive UI to select which commits to extract into a new branch.
+
+### By Hunk
+
+```bash
+stackit split --by-hunk
+```
+
+Interactively select individual hunks (portions of files) to extract.
+
+### By File
+
+```bash
+stackit split --by-file
+```
+
+Select entire files to extract into the new branch.
+
+### Split Direction
+
+By default, split creates a new branch **below** (as a parent). Use `--above` to create the branch **above** (as a child):
+
+```bash
+stackit split --above -m "extract feature"
+```
+
+### Preview Changes
+
+Use `--dry-run` to see what would happen without making changes:
+
+```bash
+stackit split --dry-run
+```
 
 ## Reorganizing a Stack
 
