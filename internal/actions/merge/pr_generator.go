@@ -2,6 +2,7 @@ package merge
 
 import (
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/pr"
 )
 
@@ -10,6 +11,7 @@ type PRContentGenerator struct {
 	engine interface {
 		GetBranch(name string) engine.Branch
 		GetScope(branch engine.Branch) engine.Scope
+		GetStackDescription(branch engine.Branch) *git.StackDescription
 		Trunk() engine.Branch
 	}
 }
@@ -18,6 +20,7 @@ type PRContentGenerator struct {
 func NewPRContentGenerator(engine interface {
 	GetBranch(name string) engine.Branch
 	GetScope(branch engine.Branch) engine.Scope
+	GetStackDescription(branch engine.Branch) *git.StackDescription
 	Trunk() engine.Branch
 }) *PRContentGenerator {
 	return &PRContentGenerator{engine: engine}
@@ -39,14 +42,26 @@ func (g *PRContentGenerator) GenerateConsolidationPR(branches []BranchMergeInfo)
 	mergeBranches := g.convertBranchMergeInfo(branches)
 	scopes := g.collectScopes(mergeBranches)
 
-	title := pr.FormatMergeTitle(scopes, len(mergeBranches))
-	body := g.generateBody(mergeBranches, nil)
+	// Get stack description from the root branch (first branch in the list)
+	var stackDesc *git.StackDescription
+	if len(branches) > 0 {
+		rootBranch := g.engine.GetBranch(branches[0].BranchName)
+		stackDesc = g.engine.GetStackDescription(rootBranch)
+	}
+
+	title := pr.FormatMergeTitleWithDescription(stackDesc, scopes, len(mergeBranches))
+	body := g.generateBodyWithDescription(mergeBranches, nil, stackDesc)
 
 	return pr.Content{Title: title, Body: body}
 }
 
 // generateBody creates the PR body with branches, exclusions, and stack tree.
 func (g *PRContentGenerator) generateBody(branches []pr.MergeBranch, excluded []pr.ExcludedBranch) string {
+	return g.generateBodyWithDescription(branches, excluded, nil)
+}
+
+// generateBodyWithDescription creates the PR body with branches, exclusions, stack tree, and optional description.
+func (g *PRContentGenerator) generateBodyWithDescription(branches []pr.MergeBranch, excluded []pr.ExcludedBranch, stackDesc *git.StackDescription) string {
 	// Build stack tree
 	treeBranches := make([]pr.StackTreeBranch, len(branches))
 	for i, branch := range branches {
@@ -65,9 +80,10 @@ func (g *PRContentGenerator) generateBody(branches []pr.MergeBranch, excluded []
 	})
 
 	return pr.FormatMergeBody(pr.MergeBodyParams{
-		Branches:  branches,
-		Excluded:  excluded,
-		StackTree: stackTree,
+		Branches:         branches,
+		Excluded:         excluded,
+		StackTree:        stackTree,
+		StackDescription: stackDesc,
 	})
 }
 

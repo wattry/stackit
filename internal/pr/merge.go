@@ -3,7 +3,18 @@ package pr
 import (
 	"fmt"
 	"strings"
+
+	"stackit.dev/stackit/internal/git"
 )
+
+// FormatMergeTitleWithDescription formats a merge PR title, using the stack description if present.
+// If the description has a title, it is used directly. Otherwise, falls back to FormatMergeTitle.
+func FormatMergeTitleWithDescription(desc *git.StackDescription, scopes []string, totalCount int) string {
+	if desc != nil && desc.Title != "" {
+		return desc.Title
+	}
+	return FormatMergeTitle(scopes, totalCount)
+}
 
 // FormatMergeTitle formats a unified title for merge PRs (both multi-stack and consolidation).
 // scopes contains the scope values for each branch (may include empty strings for unscoped branches).
@@ -51,6 +62,10 @@ type MergeBodyParams struct {
 	// StackTree is the ASCII tree representation of the stack structure.
 	// Optional - if empty, no tree section is rendered.
 	StackTree string
+
+	// StackDescription is the description of the stack being merged.
+	// Optional - if present, it appears at the top of the body.
+	StackDescription *git.StackDescription
 }
 
 // MergeBranch represents a branch being merged.
@@ -70,6 +85,15 @@ type ExcludedBranch struct {
 // This unified format works for both consolidation and multi-stack merges.
 func FormatMergeBody(params MergeBodyParams) string {
 	var body strings.Builder
+
+	// Stack description (if present)
+	if params.StackDescription != nil && !params.StackDescription.IsEmpty() {
+		descContent := formatStackDescription(params.StackDescription)
+		if descContent != "" {
+			body.WriteString(descContent)
+			body.WriteString("\n\n")
+		}
+	}
 
 	// Header
 	body.WriteString("This PR merges the following changes:\n\n")
