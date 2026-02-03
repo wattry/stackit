@@ -13,19 +13,21 @@ import (
 
 // SingleBranchInfo represents JSON-serializable info for a single branch (used by info --json)
 type SingleBranchInfo struct {
-	Name           string              `json:"name"`
-	IsCurrent      bool                `json:"is_current"`
-	IsTrunk        bool                `json:"is_trunk"`
-	IsLocked       bool                `json:"is_locked"`
-	IsFrozen       bool                `json:"is_frozen"`
-	NeedsRestack   bool                `json:"needs_restack"`
-	Scope          string              `json:"scope"`
-	CommitDate     string              `json:"commit_date,omitempty"`
-	Parent         string              `json:"parent,omitempty"`
-	Children       []string            `json:"children,omitempty"`
-	PR             *SingleBranchPRInfo `json:"pr,omitempty"`
-	CommitMessages []string            `json:"commit_messages"`
-	DiffStats      SingleBranchStats   `json:"diff_stats"`
+	Name             string              `json:"name"`
+	IsCurrent        bool                `json:"is_current"`
+	IsTrunk          bool                `json:"is_trunk"`
+	IsLocked         bool                `json:"is_locked"`
+	IsFrozen         bool                `json:"is_frozen"`
+	NeedsRestack     bool                `json:"needs_restack"`
+	Scope            string              `json:"scope"`
+	CommitDate       string              `json:"commit_date,omitempty"`
+	Parent           string              `json:"parent,omitempty"`
+	Children         []string            `json:"children,omitempty"`
+	PR               *SingleBranchPRInfo `json:"pr,omitempty"`
+	CommitMessages   []string            `json:"commit_messages"`
+	DiffStats        SingleBranchStats   `json:"diff_stats"`
+	StackTitle       string              `json:"stack_title,omitempty"`
+	StackDescription string              `json:"stack_description,omitempty"`
 }
 
 // SingleBranchPRInfo represents PR information for JSON output
@@ -127,6 +129,16 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	}
 
 	outputLines = append(outputLines, coloredBranchName)
+
+	// Show stack description if present
+	stackDesc := eng.GetStackDescription(branch)
+	if stackDesc != nil && !stackDesc.IsEmpty() {
+		outputLines = append(outputLines, "")
+		outputLines = append(outputLines, fmt.Sprintf("Stack: %s", stackDesc.Title))
+		if stackDesc.Description != "" {
+			outputLines = append(outputLines, stackDesc.Description)
+		}
+	}
 
 	commitDate, err := branch.GetCommitDate()
 	if err == nil {
@@ -346,6 +358,13 @@ func outputBranchInfoJSON(ctx *app.Context, branch engine.Branch) error {
 				}
 			}
 		}
+	}
+
+	// Stack description
+	stackDesc := eng.GetStackDescription(branch)
+	if stackDesc != nil && !stackDesc.IsEmpty() {
+		info.StackTitle = stackDesc.Title
+		info.StackDescription = stackDesc.Description
 	}
 
 	data, err := json.MarshalIndent(info, "", "  ")

@@ -31,6 +31,13 @@ type DiffStats struct {
 	Deletions    int `json:"deletions"`
 }
 
+// StackInfoOutput represents JSON-serializable output for the stack info command
+type StackInfoOutput struct {
+	StackTitle       string            `json:"stack_title,omitempty"`
+	StackDescription string            `json:"stack_description,omitempty"`
+	Branches         []StackBranchInfo `json:"branches"`
+}
+
 // StackInfoOptions contains options for the stack info logic
 type StackInfoOptions struct {
 	JSON bool
@@ -107,7 +114,15 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 	}
 
 	if opts.JSON {
-		data, err := json.MarshalIndent(result, "", "  ")
+		output := StackInfoOutput{
+			Branches: result,
+		}
+		stackDesc := eng.GetStackDescription(*currentBranch)
+		if stackDesc != nil && !stackDesc.IsEmpty() {
+			output.StackTitle = stackDesc.Title
+			output.StackDescription = stackDesc.Description
+		}
+		data, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal stack info to JSON: %w", err)
 		}
