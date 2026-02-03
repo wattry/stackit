@@ -10,6 +10,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/shippable"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
@@ -29,6 +30,9 @@ const (
 type renderCache struct {
 	// stackTitles maps stack root branch to the display title (computed from commit subject)
 	stackTitles map[string]string
+
+	// stackDescriptions maps stack root branch to the stack description (from metadata)
+	stackDescriptions map[string]*git.StackDescription
 
 	// branchAnnotations maps branch name to its tree annotation
 	branchAnnotations map[string]tree.BranchAnnotation
@@ -309,9 +313,10 @@ func (m *shippableModel) updateSelectionCache() {
 func (m *shippableModel) rebuildCache() {
 	// Initialize maps
 	m.cache.stackTitles = make(map[string]string)
+	m.cache.stackDescriptions = make(map[string]*git.StackDescription)
 	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
 
-	// Precompute titles and annotations for all stacks
+	// Precompute titles, descriptions, and annotations for all stacks
 	for _, stack := range m.stacks {
 		rootBranch := stack.RootBranch()
 
@@ -323,6 +328,13 @@ func (m *shippableModel) rebuildCache() {
 			}
 		}
 		m.cache.stackTitles[rootBranch] = title
+
+		// Get stack description from metadata
+		if branch := m.engine.GetBranch(rootBranch); branch.GetName() != "" {
+			if desc := m.engine.GetStackDescription(branch); desc != nil && !desc.IsEmpty() {
+				m.cache.stackDescriptions[rootBranch] = desc
+			}
+		}
 
 		// Compute annotations for all branches in the stack
 		for _, branchName := range stack.Stack.AllBranches {

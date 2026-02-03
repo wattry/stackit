@@ -343,6 +343,20 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 	var sb strings.Builder
 
+	// Show stack description if present (matches st info --stack)
+	if desc := m.cache.stackDescriptions[stack.RootBranch()]; desc != nil {
+		// Render title and description together through glamour for consistent formatting
+		var markdown string
+		if desc.Description != "" {
+			markdown = "# " + desc.Title + "\n\n" + desc.Description
+		} else {
+			markdown = "# " + desc.Title
+		}
+		rendered := style.RenderMarkdown(markdown)
+		sb.WriteString(rendered + "\n")
+		sb.WriteString(strings.Repeat("─", 40) + "\n\n")
+	}
+
 	// Header: show commit title with status badge, branch name dimmed below
 	statusBadge := m.renderStatusBadge(stack.Status)
 	// Use cached title (computed at refresh time)
