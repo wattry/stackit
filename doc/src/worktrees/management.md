@@ -48,6 +48,37 @@ This removes:
 - The worktree registration in stackit
 
 The stack's branches remain intact. Use `--force` to remove even if there are errors.
+Use `--keep-branch` to preserve the anchor branch when removing the worktree.
+
+## Attaching to an Existing Stack
+
+Attach an existing branch/stack to a new worktree:
+
+```bash
+stackit worktree attach my-feature
+```
+
+This creates a worktree for an existing stack that wasn't originally created with `-w`. Useful when you want to work on an existing stack in isolation.
+
+## Detaching a Worktree
+
+Detach a worktree without removing it from disk:
+
+```bash
+stackit worktree detach my-feature
+```
+
+This unregisters the worktree from stackit tracking while leaving the directory intact. Use `--force` if there are uncommitted changes.
+
+## Pruning Stale Worktrees
+
+Clean up worktrees that no longer exist on disk:
+
+```bash
+stackit worktree prune
+```
+
+Use `--dry-run` to preview what would be cleaned up without making changes.
 
 ## Automatic Cleanup
 

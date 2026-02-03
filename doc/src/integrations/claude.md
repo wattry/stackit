@@ -103,6 +103,16 @@ stack-fix
 
 **When to use**: Resolving compilation errors or structural problems.
 
+### stack-describe
+
+Generate or update an AI-powered description for the current stack.
+
+```bash
+stack-describe
+```
+
+**When to use**: Documenting what your stack does for PRs. Descriptions appear in `stackit info` output and are included in consolidated PR bodies.
+
 ## Example workflow
 
 Here's a typical Claude-assisted workflow:

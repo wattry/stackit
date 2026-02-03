@@ -76,7 +76,7 @@ Stacks naturally form a tree structure—a single branch can have multiple child
 brew install getstackit/tap/stackit
 ```
 
-After installation, you can use either `stackit` or `st` (short alias).
+After installation, you can use either `stackit` or `st`, and `worktree` or `wt`.
 
 ### Shell Integration (Recommended)
 
@@ -187,6 +187,7 @@ Stackit includes specialized commands designed for Claude Code, providing intell
 | `stack-restack` | Rebase all branches to ensure proper ancestry | Fixing branch relationships after changes |
 | `stack-absorb` | Intelligently absorb working changes into correct commits | Applying fixes across multiple stack branches, with conflict resolution guidance |
 | `stack-fix` | Diagnose and fix common stack issues | Resolving compilation errors or structural problems |
+| `stack-describe` | Generate or update stack description from changes | Documenting your stack for PRs |
 
 ### Setting Up Claude Integration
 
@@ -233,7 +234,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit create [name]` | Create a new branch on top of current (use `-w` to create with worktree) |
 | `stackit modify` | Amend the current commit (like `git commit --amend`) |
 | `stackit absorb` | Intelligently amend changes to the correct commits in the stack |
-| `stackit split` | Split the current branch's commits into multiple branches |
+| `stackit split` | Split commits into branches (by commit, hunk, or file; use `--above` for upstack) |
 | `stackit squash` | Squash all commits on the current branch |
 | `stackit fold` | Merge the current branch into its parent |
 | `stackit pop` | Delete current branch but keep its changes in working tree |
@@ -253,6 +254,9 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit worktree list` | List all managed worktrees |
 | `stackit worktree remove <stack>` | Remove a worktree and unregister it |
 | `stackit worktree open <stack>` | Open a worktree (auto-cd with shell integration, or print path for `cd $(...)`) |
+| `stackit worktree attach <branch>` | Attach an existing stack to a worktree |
+| `stackit worktree detach <name>` | Detach a stack from a worktree |
+| `stackit worktree prune` | Clean up stale worktrees |
 
 ### Stack Operations
 | Command | Description |
