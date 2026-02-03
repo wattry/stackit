@@ -1030,3 +1030,74 @@ func (e *engineImpl) GetBranchesNeedingPRBodyUpdate() []string {
 	}
 	return result
 }
+
+// GetStackDescription returns the stack description for a branch's stack.
+// It first checks the stack root's metadata, then falls back to MergedDownstack history.
+func (e *engineImpl) GetStackDescription(branch Branch) *git.StackDescription {
+	// Find stack root
+	rootName := e.GetStackRootForBranch(branch)
+	if rootName == "" {
+		// Not on a tracked stack, check current branch's MergedDownstack
+		meta, err := e.git.ReadMetadata(branch.GetName())
+		if err != nil {
+			return nil
+		}
+		return findDescriptionInHistory(meta.MergedDownstack)
+	}
+
+	// Check root's StackDescription
+	meta, err := e.git.ReadMetadata(rootName)
+	if err != nil || meta == nil {
+		return nil
+	}
+
+	if meta.StackDescription != nil && !meta.StackDescription.IsEmpty() {
+		return meta.StackDescription
+	}
+
+	// Check MergedDownstack for historical description
+	return findDescriptionInHistory(meta.MergedDownstack)
+}
+
+// findDescriptionInHistory searches MergedDownstack for the most recent description.
+// This is used to preserve stack descriptions when root branches are deleted/merged,
+// since the description is captured in MergedDownstack history during reparenting.
+// MergedDownstack is ordered oldest to newest, so we iterate from end to find most recent.
+func findDescriptionInHistory(history []git.MergedParent) *git.StackDescription {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].StackDescription != nil && !history[i].StackDescription.IsEmpty() {
+			return history[i].StackDescription
+		}
+	}
+	return nil
+}
+
+// SetStackDescription sets the stack description on the stack root for a branch.
+// Returns an error if the branch is not part of a tracked stack.
+func (e *engineImpl) SetStackDescription(_ context.Context, branch Branch, desc *git.StackDescription) error {
+	rootName := e.GetStackRootForBranch(branch)
+	if rootName == "" {
+		return fmt.Errorf("branch %s is not part of a tracked stack", branch.GetName())
+	}
+
+	meta, err := e.git.ReadMetadata(rootName)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata for %s: %w", rootName, err)
+	}
+	if meta == nil {
+		meta = &git.Meta{}
+	}
+
+	meta.StackDescription = desc
+
+	if err := e.git.WriteMetadata(rootName, meta); err != nil {
+		return fmt.Errorf("failed to write metadata for %s: %w", rootName, err)
+	}
+
+	return nil
+}
+
+// ClearStackDescription removes the stack description from the stack root.
+func (e *engineImpl) ClearStackDescription(ctx context.Context, branch Branch) error {
+	return e.SetStackDescription(ctx, branch, nil)
+}

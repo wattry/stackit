@@ -9,6 +9,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // StackBranchInfo represents JSON-serializable info for a single branch in a stack
@@ -29,6 +30,13 @@ type DiffStats struct {
 	FilesChanged int `json:"files_changed"`
 	Additions    int `json:"additions"`
 	Deletions    int `json:"deletions"`
+}
+
+// StackInfoOutput represents JSON-serializable output for the stack info command
+type StackInfoOutput struct {
+	StackTitle       string            `json:"stack_title,omitempty"`
+	StackDescription string            `json:"stack_description,omitempty"`
+	Branches         []StackBranchInfo `json:"branches"`
 }
 
 // StackInfoOptions contains options for the stack info logic
@@ -107,12 +115,37 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 	}
 
 	if opts.JSON {
-		data, err := json.MarshalIndent(result, "", "  ")
+		output := StackInfoOutput{
+			Branches: result,
+		}
+		stackDesc := eng.GetStackDescription(*currentBranch)
+		if stackDesc != nil && !stackDesc.IsEmpty() {
+			output.StackTitle = stackDesc.Title
+			output.StackDescription = stackDesc.Description
+		}
+		data, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal stack info to JSON: %w", err)
 		}
 		ctx.Output.Info("%s", string(data))
 	} else {
+		// Show stack description if present
+		stackDesc := eng.GetStackDescription(*currentBranch)
+		if stackDesc != nil && !stackDesc.IsEmpty() {
+			// Render title and description together through glamour for consistent formatting
+			var markdown string
+			if stackDesc.Description != "" {
+				markdown = "# " + stackDesc.Title + "\n\n" + stackDesc.Description
+			} else {
+				markdown = "# " + stackDesc.Title
+			}
+			rendered := style.RenderMarkdown(markdown)
+			ctx.Output.Info("%s", rendered)
+			ctx.Output.Info("")
+			ctx.Output.Info(strings.Repeat("─", 40))
+			ctx.Output.Info("")
+		}
+
 		// Build tree data structure for rendering
 		trunkName := eng.Trunk().GetName()
 		stackTree := tree.NewStackTree(stackBranches, currentBranch.GetName(), trunkName)
