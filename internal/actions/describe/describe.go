@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // Options contains options for the describe command
@@ -94,8 +95,28 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return nil
 	}
 
-	// Interactive mode - open editor
+	// Try reading from stdin when not interactive
 	if !handler.IsInteractive() {
+		stdinContent, err := utils.ReadFromStdin()
+		if err == nil && stdinContent != "" {
+			desc := ParseEditorContent(stdinContent)
+			if desc != nil {
+				if err := eng.SetStackDescription(ctx.Context, *currentBranch, desc); err != nil {
+					return fmt.Errorf("failed to set stack description: %w", err)
+				}
+				out.Info("Set stack description for stack rooted at %s:", style.ColorBranchName(stackRoot, false))
+				out.Info("  Title: %s", style.ColorDim(desc.Title))
+				if desc.Description != "" {
+					out.Info("  Description: %s", style.ColorDim(TruncateDescription(desc.Description, 60)))
+				}
+
+				// Push metadata changes
+				if err := actions.PushMetadataAndSyncPRs(ctx, []string{stackRoot}); err != nil {
+					out.Debug("Failed to push metadata changes: %v", err)
+				}
+				return nil
+			}
+		}
 		return fmt.Errorf("must specify --message or run in interactive mode")
 	}
 
