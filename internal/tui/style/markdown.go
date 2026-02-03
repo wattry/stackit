@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/styles"
 )
 
 // RenderMarkdown renders markdown content for terminal display.
@@ -13,10 +14,14 @@ func RenderMarkdown(content string) string {
 		return ""
 	}
 
+	// Start with dark style and remove document margin for tighter formatting
+	customStyle := styles.DarkStyleConfig
+	customStyle.Document.Margin = uintPtr(0)
+
 	// Use dark style for consistent formatting - WithAutoStyle() falls back to
 	// plain text when terminal detection fails (common in non-interactive contexts)
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStylePath("dark"),
+		glamour.WithStyles(customStyle),
 		glamour.WithWordWrap(80),
 	)
 	if err != nil {
@@ -31,4 +36,8 @@ func RenderMarkdown(content string) string {
 	}
 
 	return strings.TrimSpace(rendered)
+}
+
+func uintPtr(v uint) *uint {
+	return &v
 }
