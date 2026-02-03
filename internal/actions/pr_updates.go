@@ -59,12 +59,8 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 	lockSection := pr.CreateLockSection(name, ctx.Engine)
 	updatedBody := pr.UpdatePRBodyLockSection(currentBody, lockSection)
 
-	// 2. Always handle description section independently of navigation settings
-	// This ensures the stack description is shown even when navigation is hidden
-	descSection := pr.CreateDescriptionSection(name, ctx.Engine)
-	updatedBody = pr.UpdatePRBodyDescriptionSection(updatedBody, descSection)
-
-	// 3. Then handle navigation footer based on settings
+	// 2. Handle navigation footer based on settings
+	// The footer now includes both the description and navigation tree in a combined section
 	if navOpts.Location == config.NavigationLocationBody {
 		footer := pr.CreatePRBodyFooterWithOptions(name, ctx.Engine, navOpts)
 		updatedBody = pr.UpdatePRBodyFooter(updatedBody, footer)
