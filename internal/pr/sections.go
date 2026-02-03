@@ -2,7 +2,6 @@ package pr
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	"stackit.dev/stackit/internal/config"
@@ -10,17 +9,18 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-// writeStackDescription writes the stack description to the writer if present.
-func writeStackDescription(w io.Writer, desc *git.StackDescription) {
+// formatStackDescription formats a stack description for display in PR body.
+func formatStackDescription(desc *git.StackDescription) string {
 	if desc == nil || desc.Title == "" {
-		return
+		return ""
 	}
-	_, _ = fmt.Fprintf(w, "**%s**", desc.Title)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**%s**", desc.Title))
 	if desc.Description != "" {
-		_, _ = fmt.Fprint(w, "\n\n")
-		_, _ = fmt.Fprint(w, desc.Description)
+		sb.WriteString("\n\n")
+		sb.WriteString(desc.Description)
 	}
-	_, _ = fmt.Fprint(w, "\n\n")
+	return sb.String()
 }
 
 const (
@@ -33,6 +33,11 @@ const (
 	LockSectionStart = "<!-- STACKIT-LOCK-START -->"
 	// LockSectionEnd marks the end of the lock status section in PR body.
 	LockSectionEnd = "<!-- STACKIT-LOCK-END -->"
+
+	// DescSectionStart marks the beginning of the stack description section in PR body.
+	DescSectionStart = "<!-- STACKIT-DESC-START -->"
+	// DescSectionEnd marks the end of the stack description section in PR body.
+	DescSectionEnd = "<!-- STACKIT-DESC-END -->"
 
 	// CommentMarker is used to identify stackit-generated navigation comments.
 	CommentMarker = "<!-- STACKIT-NAV-COMMENT -->"
@@ -124,8 +129,8 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 
 	var tree strings.Builder
 
-	// Add stack description if present
-	writeStackDescription(&tree, eng.GetStackDescription(branchObj))
+	// Note: Stack description is now handled independently via CreateDescriptionSection()
+	// to ensure it's shown even when navigation is hidden
 
 	// Add scope if present
 	scope := eng.GetScope(branchObj)
@@ -311,6 +316,87 @@ func StripLockSection(body string) string {
 	return result + "\n" + after
 }
 
+// CreateDescriptionSection creates an independent stack description section for the PR body.
+// Returns empty string if no description is set.
+// This section is independent of navigation settings and appears after lock section but before user content.
+func CreateDescriptionSection(branch string, eng engine.BranchReader) string {
+	branchObj := eng.GetBranch(branch)
+	desc := eng.GetStackDescription(branchObj)
+	content := formatStackDescription(desc)
+	if content == "" {
+		return ""
+	}
+	return DescSectionStart + "\n" + content + "\n" + DescSectionEnd
+}
+
+// UpdatePRBodyDescriptionSection adds, updates, or removes the description section in a PR body.
+// If descSection is empty, any existing description section is removed.
+// The description section appears after the lock section but before user content.
+func UpdatePRBodyDescriptionSection(existingBody, descSection string) string {
+	// First strip any existing description section
+	body := StripDescriptionSection(existingBody)
+
+	// If no description section to add, return the stripped body
+	if descSection == "" {
+		return body
+	}
+
+	// Add description section after lock section (if present) or at the top
+	if body == "" {
+		return descSection
+	}
+
+	// If there's a lock section, insert after it
+	if strings.Contains(body, LockSectionEnd) {
+		endIdx := strings.Index(body, LockSectionEnd)
+		insertPoint := endIdx + len(LockSectionEnd)
+		// Skip any newlines after lock section
+		for insertPoint < len(body) && body[insertPoint] == '\n' {
+			insertPoint++
+		}
+		before := strings.TrimRight(body[:insertPoint], "\n")
+		after := body[insertPoint:]
+		if after == "" {
+			return before + "\n\n" + descSection
+		}
+		return before + "\n\n" + descSection + "\n\n" + after
+	}
+
+	// No lock section, add at the top
+	return descSection + "\n\n" + body
+}
+
+// StripDescriptionSection removes the stack description section from a PR body.
+func StripDescriptionSection(body string) string {
+	if body == "" || !strings.Contains(body, DescSectionStart) {
+		return body
+	}
+
+	startIdx := strings.Index(body, DescSectionStart)
+	endIdx := strings.Index(body, DescSectionEnd)
+	if endIdx < 0 {
+		return body
+	}
+
+	// Remove the description section and any trailing newlines
+	before := body[:startIdx]
+	after := body[endIdx+len(DescSectionEnd):]
+
+	// Trim leading newlines from the part after the section
+	after = strings.TrimPrefix(after, "\n")
+	after = strings.TrimPrefix(after, "\n")
+
+	// Combine, trimming any trailing newlines from before
+	result := strings.TrimRight(before, "\n")
+	if result == "" {
+		return strings.TrimLeft(after, "\n")
+	}
+	if after == "" {
+		return result
+	}
+	return result + "\n\n" + after
+}
+
 // CreateNavigationComment creates the content for a navigation comment.
 // This uses the same content as the body footer but with a comment marker.
 func CreateNavigationComment(branch string, eng engine.BranchReader, opts NavigationOptions) string {
@@ -329,8 +415,8 @@ func CreateNavigationComment(branch string, eng engine.BranchReader, opts Naviga
 	tree.WriteString(CommentMarker + "\n")
 	tree.WriteString("#### Stack\n\n")
 
-	// Add stack description if present
-	writeStackDescription(&tree, eng.GetStackDescription(branchObj))
+	// Note: Stack description is now handled independently via CreateDescriptionSection()
+	// to ensure it's shown even when navigation is hidden
 
 	// Add scope if present
 	scope := eng.GetScope(branchObj)
