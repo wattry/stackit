@@ -134,10 +134,15 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 	stackDesc := eng.GetStackDescription(branch)
 	if stackDesc != nil && !stackDesc.IsEmpty() {
 		outputLines = append(outputLines, "")
-		outputLines = append(outputLines, fmt.Sprintf("Stack: %s", stackDesc.Title))
+		// Render title and description together through glamour for consistent formatting
+		var markdown string
 		if stackDesc.Description != "" {
-			outputLines = append(outputLines, stackDesc.Description)
+			markdown = "# " + stackDesc.Title + "\n\n" + stackDesc.Description
+		} else {
+			markdown = "# " + stackDesc.Title
 		}
+		rendered := style.RenderMarkdown(markdown)
+		outputLines = append(outputLines, rendered)
 	}
 
 	commitDate, err := branch.GetCommitDate()

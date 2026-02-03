@@ -9,6 +9,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui/components/tree"
+	"stackit.dev/stackit/internal/tui/style"
 )
 
 // StackBranchInfo represents JSON-serializable info for a single branch in a stack
@@ -131,10 +132,17 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		// Show stack description if present
 		stackDesc := eng.GetStackDescription(*currentBranch)
 		if stackDesc != nil && !stackDesc.IsEmpty() {
-			ctx.Output.Info("Stack: %s", stackDesc.Title)
+			// Render title and description together through glamour for consistent formatting
+			var markdown string
 			if stackDesc.Description != "" {
-				ctx.Output.Info("%s", stackDesc.Description)
+				markdown = "# " + stackDesc.Title + "\n\n" + stackDesc.Description
+			} else {
+				markdown = "# " + stackDesc.Title
 			}
+			rendered := style.RenderMarkdown(markdown)
+			ctx.Output.Info("%s", rendered)
+			ctx.Output.Info("")
+			ctx.Output.Info(strings.Repeat("─", 40))
 			ctx.Output.Info("")
 		}
 

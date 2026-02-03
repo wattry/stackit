@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/google/go-github/v62 v62.0.0
@@ -17,7 +17,20 @@ require (
 	golang.org/x/sync v0.19.0
 )
 
-require github.com/charmbracelet/harmonica v0.2.0 // indirect
+require (
+	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/charmbracelet/glamour v0.10.0 // indirect
+	github.com/charmbracelet/harmonica v0.2.0 // indirect
+	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
+	github.com/dlclark/regexp2 v1.11.0 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
+	github.com/muesli/reflow v0.3.0 // indirect
+	github.com/yuin/goldmark v1.7.8 // indirect
+	github.com/yuin/goldmark-emoji v1.0.5 // indirect
+	golang.org/x/term v0.39.0 // indirect
+)
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
