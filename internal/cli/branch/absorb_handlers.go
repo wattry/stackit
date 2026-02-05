@@ -13,9 +13,10 @@ import (
 // The runner manages terminal state; the handler processes events.
 // Caller must defer runner.Cleanup() to restore terminal on exit.
 // Currently returns nil runner as there's no TUI component yet.
-func NewAbsorbUI(out output.Output, _ output.Logger) (*tui.Runner, absorb.Handler) {
-	// TODO: Add interactive TUI handler when needed
-	// For now, use simple handler for both TTY and non-TTY
+func NewAbsorbUI(out output.Output, _ output.Logger, interactive bool) (*tui.Runner, absorb.Handler) {
+	if interactive {
+		return nil, NewInteractiveAbsorbHandler(out)
+	}
 	return nil, NewSimpleAbsorbHandler(out)
 }
 
@@ -69,4 +70,26 @@ func (h *SimpleAbsorbHandler) Complete(_ absorb.Result) {
 // PromptConfirm returns false for simple handler (non-interactive)
 func (h *SimpleAbsorbHandler) PromptConfirm(_ string) (bool, error) {
 	return false, nil
+}
+
+// InteractiveAbsorbHandler provides interactive prompts for absorb operations
+type InteractiveAbsorbHandler struct {
+	SimpleAbsorbHandler
+}
+
+// NewInteractiveAbsorbHandler creates a new InteractiveAbsorbHandler
+func NewInteractiveAbsorbHandler(out output.Output) *InteractiveAbsorbHandler {
+	return &InteractiveAbsorbHandler{
+		SimpleAbsorbHandler: *NewSimpleAbsorbHandler(out),
+	}
+}
+
+// IsInteractive returns true for interactive handler
+func (h *InteractiveAbsorbHandler) IsInteractive() bool {
+	return true
+}
+
+// PromptConfirm prompts the user for confirmation
+func (h *InteractiveAbsorbHandler) PromptConfirm(prompt string) (bool, error) {
+	return tui.PromptConfirm(prompt, true)
 }
