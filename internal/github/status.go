@@ -241,9 +241,8 @@ func parseBranchStatus(data interface{}) *CheckStatus {
 
 // parseCheckRollup parses the statusCheckRollup data from the GraphQL response
 func parseCheckRollup(rollup map[string]interface{}, reviewDecision, author string) *CheckStatus {
-	hasPending := false
-	hasFailing := false
-	var checks []CheckDetail
+	// First pass: collect all checks and deduplicate by name, keeping the most recent
+	checksByName := make(map[string]*CheckDetail)
 
 	contexts, ok := rollup["contexts"].(map[string]interface{})
 	if ok && contexts != nil {
@@ -264,15 +263,29 @@ func parseCheckRollup(rollup map[string]interface{}, reviewDecision, author stri
 					continue
 				}
 
-				if detail.Status == "QUEUED" || detail.Status == checkStatusInProgress {
-					hasPending = true
+				// Deduplicate by name: keep the most recently finished check
+				// This handles re-runs where an older run failed but a newer one succeeded
+				existing, exists := checksByName[detail.Name]
+				if !exists || detail.FinishedAt.After(existing.FinishedAt) {
+					checksByName[detail.Name] = detail
 				}
-				if detail.Conclusion == checkConclusionFailure || detail.Conclusion == checkConclusionCanceled || detail.Conclusion == checkConclusionTimedOut || detail.Conclusion == checkConclusionActionRequired {
-					hasFailing = true
-				}
-				checks = append(checks, *detail)
 			}
 		}
+	}
+
+	// Second pass: evaluate status based on deduplicated checks
+	hasPending := false
+	hasFailing := false
+	checks := make([]CheckDetail, 0, len(checksByName))
+
+	for _, detail := range checksByName {
+		if detail.Status == "QUEUED" || detail.Status == checkStatusInProgress {
+			hasPending = true
+		}
+		if detail.Conclusion == checkConclusionFailure || detail.Conclusion == checkConclusionCanceled || detail.Conclusion == checkConclusionTimedOut || detail.Conclusion == checkConclusionActionRequired {
+			hasFailing = true
+		}
+		checks = append(checks, *detail)
 	}
 
 	return &CheckStatus{
