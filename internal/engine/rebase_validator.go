@@ -339,8 +339,9 @@ func (e *engineImpl) validateSingleSpec(
 	}
 	defer cleanup()
 
-	// Create a git runner for the worktree
-	wtGit := git.NewRunnerWithPath(worktreePath, nil)
+	// Create a command-only git runner for the worktree — validation only uses CLI
+	// operations (rebase, rev-parse, status), so skip go-git initialization (~2-5ms)
+	wtGit := git.NewRunnerCommandOnly(worktreePath)
 
 	// Resolve NewParent to handle rebased parents
 	newParent := spec.NewParent

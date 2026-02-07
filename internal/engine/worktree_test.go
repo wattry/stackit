@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,4 +88,43 @@ func TestCreateTemporaryWorktree(t *testing.T) {
 	tmpDir := worktreePath[:len(worktreePath)-9] // "/worktree" is 9 chars
 	_, err = os.Stat(tmpDir)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestCreateTemporaryWorktree_FastCleanup_AllowsNextCreate(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	s.CreateBranch("feature").
+		Commit("feature change").
+		Checkout("main")
+
+	ctx := context.Background()
+	worktreePath, cleanup, err := s.Engine.CreateTemporaryWorktree(ctx, "feature", "stackit-test-*")
+	require.NoError(t, err)
+	require.NotEmpty(t, worktreePath)
+	cleanup()
+
+	worktreePath2, cleanup2, err := s.Engine.CreateTemporaryWorktree(ctx, "feature", "stackit-test-*")
+	require.NoError(t, err)
+	require.NotEmpty(t, worktreePath2)
+	cleanup2()
+}
+
+func TestCreateTemporaryWorktree_RetryAfterStaleEntry(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	s.CreateBranch("feature").
+		Commit("feature change").
+		Checkout("main")
+
+	ctx := context.Background()
+	worktreePath, _, err := s.Engine.CreateTemporaryWorktree(ctx, "feature", "stackit-test-*")
+	require.NoError(t, err)
+	require.NotEmpty(t, worktreePath)
+
+	// Simulate an abrupt deletion without cleanup to leave a stale git worktree entry.
+	tmpDir := filepath.Dir(worktreePath)
+	require.NoError(t, os.RemoveAll(tmpDir))
+
+	worktreePath2, cleanup2, err := s.Engine.CreateTemporaryWorktreeSkipPrune(ctx, "feature", "stackit-test-*")
+	require.NoError(t, err)
+	require.NotEmpty(t, worktreePath2)
+	cleanup2()
 }
