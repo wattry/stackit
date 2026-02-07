@@ -13,6 +13,39 @@ import (
 	"stackit.dev/stackit/internal/utils"
 )
 
+// RemoteMetadataView provides read-only access to the remote metadata cache.
+// It is a lightweight snapshot — no map copying is needed because the underlying
+// map is replaced atomically on each LoadRemoteMetadataCache call.
+type RemoteMetadataView struct {
+	entries map[string]*git.Meta
+}
+
+// Get returns the remote metadata for a branch, or nil if not present.
+func (v RemoteMetadataView) Get(branch string) *git.Meta {
+	return v.entries[branch]
+}
+
+// Has returns true if the branch has remote metadata.
+func (v RemoteMetadataView) Has(branch string) bool {
+	_, ok := v.entries[branch]
+	return ok
+}
+
+// Range iterates over all entries. The callback receives each branch name and its metadata.
+// Return false from the callback to stop iteration.
+func (v RemoteMetadataView) Range(fn func(branch string, meta *git.Meta) bool) {
+	for k, m := range v.entries {
+		if !fn(k, m) {
+			return
+		}
+	}
+}
+
+// Len returns the number of entries in the cache.
+func (v RemoteMetadataView) Len() int {
+	return len(v.entries)
+}
+
 // IsRemoteSyncEnabled checks if metadata compatibility has been verified and sync is enabled
 func (e *engineImpl) IsRemoteSyncEnabled() bool {
 	val, err := e.git.GetConfig("stackit.metadata-sync-enabled")
@@ -182,17 +215,15 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	return e.git.WriteMetadata(branchName, local)
 }
 
-// GetRemoteMetadataCache returns the current remote metadata cache
-func (e *engineImpl) GetRemoteMetadataCache() map[string]*git.Meta {
+// GetRemoteMetadataCache returns a read-only view of the remote metadata cache.
+// The returned view is safe for concurrent reads and prevents external mutation.
+func (e *engineImpl) GetRemoteMetadataCache() RemoteMetadataView {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	// Return a copy to avoid external modification
-	cacheCopy := make(map[string]*git.Meta)
-	for k, v := range e.remoteMetaCache {
-		cacheCopy[k] = v
-	}
-	return cacheCopy
+	// Snapshot the map reference — the map itself is replaced atomically
+	// in LoadRemoteMetadataCache, so this reference is stable.
+	return RemoteMetadataView{entries: e.remoteMetaCache}
 }
 
 // ComputeMetadataDiff compares local and remote metadata for a branch

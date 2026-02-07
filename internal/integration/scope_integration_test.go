@@ -118,7 +118,7 @@ func TestScopeSubmitSyncFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	cache := eng.GetRemoteMetadataCache()
-	require.NotNil(t, cache["feature"], "Remote metadata for 'feature' should exist in cache")
-	require.NotNil(t, cache["feature"].Scope, "Scope should be set in remote metadata")
-	require.Equal(t, "JIRA-123", *cache["feature"].Scope, "Remote metadata scope should match JIRA-123")
+	require.NotNil(t, cache.Get("feature"), "Remote metadata for 'feature' should exist in cache")
+	require.NotNil(t, cache.Get("feature").Scope, "Scope should be set in remote metadata")
+	require.Equal(t, "JIRA-123", *cache.Get("feature").Scope, "Remote metadata scope should match JIRA-123")
 }

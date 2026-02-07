@@ -8,6 +8,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 )
 
 // DebugOptions contains options for the debug command
@@ -221,7 +222,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 		remoteRefs := make(map[string]RemoteRefInfo)
 		// We need to list the actual refs to get SHAs and potentially modification info
 		// But for now, let's just use the cache
-		for branch, meta := range remoteCache {
+		remoteCache.Range(func(branch string, meta *git.Meta) bool {
 			info := RemoteRefInfo{}
 			if meta.LastModifiedAt != nil {
 				info.LastModified = meta.LastModifiedAt.Format(time.RFC3339)
@@ -233,7 +234,8 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 				info.Scope = *meta.Scope
 			}
 			remoteRefs[branch] = info
-		}
+			return true
+		})
 
 		remoteMetadataState = &RemoteMetadataStateInfo{
 			RemoteStateAvailable: eng.IsRemoteSyncEnabled(),

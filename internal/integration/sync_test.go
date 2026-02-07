@@ -371,9 +371,9 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
-		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
-		require.Equal(t, git.LockReasonUser, cache["feature-a"].LockReason, "Remote metadata should show lock reason")
-		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
+		require.NotNil(t, cache.Get("feature-a"), "Remote metadata should be in cache")
+		require.Equal(t, git.LockReasonUser, cache.Get("feature-a").LockReason, "Remote metadata should show lock reason")
+		require.Equal(t, "remote-scope", *cache.Get("feature-a").Scope, "Remote metadata should have scope")
 	})
 
 	t.Run("detects metadata conflicts", func(t *testing.T) {

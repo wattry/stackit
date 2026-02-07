@@ -80,7 +80,7 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 	if err != nil {
 		return fmt.Errorf("atomic ref update failed: %w", err)
 	}
-	r.invalidateMetadataCacheForRefs(updates)
+	r.metadataCache.InvalidateForRefs(updates)
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate
 	if err != nil {
 		return fmt.Errorf("atomic ref update failed: %w", err)
 	}
-	r.invalidateMetadataCacheForRefs(updates)
+	r.metadataCache.InvalidateForRefs(updates)
 	return nil
 }
 
@@ -128,11 +128,7 @@ func (r *runner) DeleteRefsBatch(ctx context.Context, refNames []string) error {
 	if err != nil {
 		return fmt.Errorf("atomic ref delete failed: %w", err)
 	}
-	for _, refName := range refNames {
-		if branchName, ok := strings.CutPrefix(refName, MetadataRefPrefix); ok {
-			r.metadataCache.Delete(branchName)
-		}
-	}
+	r.metadataCache.InvalidateForRefNames(refNames)
 	return nil
 }
 
@@ -401,7 +397,7 @@ type runner struct {
 
 	// Cached metadata to avoid redundant ReadMetadata calls (each spawns 2 git processes).
 	// Thread-safe: sync.Map handles concurrent reads from worker pools.
-	metadataCache sync.Map // map[string]*Meta
+	metadataCache metadataCache
 
 	// Cached git version info
 	gitVersionOnce   sync.Once

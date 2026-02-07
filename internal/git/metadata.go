@@ -169,12 +169,10 @@ func (r *runner) BatchReadLocalMetadata(branchNames []string) map[string]*LocalM
 }
 
 func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
-	// Check cache first to avoid redundant git process spawns
-	if cached, ok := r.metadataCache.Load(branchName); ok {
-		// Return a shallow copy so callers can't mutate the cached value
-		original := cached.(*Meta)
-		cloned := *original
-		return &cloned, nil
+	// Check cache first to avoid redundant git process spawns.
+	// Get returns a deep copy so callers can freely mutate the result.
+	if cached := r.metadataCache.Get(branchName); cached != nil {
+		return cached, nil
 	}
 
 	refName := fmt.Sprintf("%s%s", MetadataRefPrefix, branchName)
@@ -182,7 +180,7 @@ func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
 	sha, err := r.GetRef(refName)
 	if err != nil {
 		// If ref doesn't exist, it's not an error, just means no metadata
-		r.metadataCache.Store(branchName, &Meta{})
+		r.metadataCache.Put(branchName, &Meta{})
 		return &Meta{}, nil //nolint:nilerr
 	}
 
@@ -192,7 +190,7 @@ func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
 	}
 
 	if content == "" {
-		r.metadataCache.Store(branchName, &Meta{})
+		r.metadataCache.Put(branchName, &Meta{})
 		return &Meta{}, nil
 	}
 
@@ -201,10 +199,8 @@ func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
 		return nil, fmt.Errorf("failed to unmarshal metadata for %s: %w", branchName, err)
 	}
 
-	r.metadataCache.Store(branchName, &meta)
-	// Return a copy so callers can't mutate the cached value
-	cloned := meta
-	return &cloned, nil
+	r.metadataCache.Put(branchName, &meta)
+	return deepCopyMeta(&meta), nil
 }
 
 func (r *runner) WriteMetadata(branchName string, meta *Meta) error {
@@ -223,7 +219,7 @@ func (r *runner) WriteMetadata(branchName string, meta *Meta) error {
 		return fmt.Errorf("failed to write metadata ref: %w", err)
 	}
 
-	r.metadataCache.Store(branchName, meta)
+	r.metadataCache.Put(branchName, meta)
 	return nil
 }
 
@@ -363,17 +359,6 @@ func (r *runner) GetLocalMetadataRefSHA(branchName string) string {
 		return ""
 	}
 	return sha
-}
-
-// invalidateMetadataCacheForRefs clears cached metadata for any refs
-// in the given batch that are metadata refs. This ensures that batch
-// operations (transactions) don't leave stale cache entries.
-func (r *runner) invalidateMetadataCacheForRefs(updates []RefUpdate) {
-	for _, update := range updates {
-		if branchName, ok := strings.CutPrefix(update.RefName, MetadataRefPrefix); ok {
-			r.metadataCache.Delete(branchName)
-		}
-	}
 }
 
 // MetadataRefName returns the full ref name for a branch's metadata.
