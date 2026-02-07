@@ -54,14 +54,14 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 		}
 	}
 
-	// Detect empty worktrees (worktree anchors with no children)
-	emptyWorktrees := tui.GetEmptyWorktrees(ctx.Engine)
+	// Detect worktrees (builds both empty and stack-root maps in one call)
+	wtData := tui.GetWorktreeData(ctx.Engine)
 
 	// Create tree renderer - use empty worktrees-aware version if we have any
 	var renderer *tree.StackTreeRenderer
-	if len(emptyWorktrees) > 0 {
+	if len(wtData.EmptyWorktrees) > 0 {
 		emptyWorktreeNames := make(map[string]bool)
-		for name := range emptyWorktrees {
+		for name := range wtData.EmptyWorktrees {
 			emptyWorktreeNames[name] = true
 		}
 		renderer = tui.NewStackTreeRendererWithEmptyWorktrees(ctx.Engine, emptyWorktreeNames)
@@ -89,8 +89,9 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	}
 
 	enrichment := &tui.AnnotationEnrichment{
-		CIStatuses:     ciStatuses,
-		EmptyWorktrees: emptyWorktrees,
+		CIStatuses:          ciStatuses,
+		EmptyWorktrees:      wtData.EmptyWorktrees,
+		WorktreeByStackRoot: wtData.WorktreeByStackRoot,
 	}
 
 	type result struct {

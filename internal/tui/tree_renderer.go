@@ -109,19 +109,32 @@ func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortS
 	return tree.NewRenderer(data)
 }
 
-// GetEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
-// for worktrees that have no child branches (empty worktrees).
-func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
-	emptyWorktrees := make(map[string]*engine.WorktreeInfo)
+// WorktreeData holds pre-computed worktree information from a single ListManagedWorktrees call.
+type WorktreeData struct {
+	EmptyWorktrees      map[string]*engine.WorktreeInfo // Anchor branches with no children
+	WorktreeByStackRoot map[string]*engine.WorktreeInfo // Stack root -> worktree info
+}
+
+// GetWorktreeData builds both empty worktree and stack-root worktree maps from a single
+// ListManagedWorktrees call, avoiding redundant lookups.
+func GetWorktreeData(eng engine.Engine) *WorktreeData {
+	data := &WorktreeData{
+		EmptyWorktrees:      make(map[string]*engine.WorktreeInfo),
+		WorktreeByStackRoot: make(map[string]*engine.WorktreeInfo),
+	}
 
 	worktrees, err := eng.ListManagedWorktrees()
 	if err != nil {
-		return emptyWorktrees
+		return data
 	}
 
 	for i := range worktrees {
 		wt := &worktrees[i]
 		anchor := eng.GetBranch(wt.AnchorBranch)
+
+		// Build stack-root map for all worktrees (used by addWorktreeInfo)
+		data.WorktreeByStackRoot[wt.AnchorBranch] = wt
+
 		if !anchor.IsTracked() || !anchor.IsWorktreeAnchor() {
 			continue
 		}
@@ -136,18 +149,24 @@ func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
 		}
 
 		if !hasChildren {
-			emptyWorktrees[wt.AnchorBranch] = wt
+			data.EmptyWorktrees[wt.AnchorBranch] = wt
 		}
 	}
 
-	return emptyWorktrees
+	return data
+}
+
+// GetEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
+// for worktrees that have no child branches (empty worktrees).
+func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
+	return GetWorktreeData(eng).EmptyWorktrees
 }
 
 // GetMinimalAnnotationWithWorktreeAndEmpty returns minimal annotations plus worktree info,
 // with support for marking empty worktrees.
 // This is used for fast initial rendering before full data is loaded.
 // Only includes cached/instant fields - no git or network calls.
-func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.Branch, emptyWorktrees map[string]*engine.WorktreeInfo) tree.BranchAnnotation {
+func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.Branch, wtData *WorktreeData) tree.BranchAnnotation {
 	ann := tree.BranchAnnotation{
 		IsLocked:      branch.IsLocked(),
 		IsFrozen:      branch.IsFrozen(),
@@ -155,7 +174,13 @@ func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.B
 		ExplicitScope: branch.GetExplicitScope().String(),
 	}
 
-	addWorktreeInfo(eng, branch, &ann, emptyWorktrees)
+	var emptyWorktrees map[string]*engine.WorktreeInfo
+	var worktreeByRoot map[string]*engine.WorktreeInfo
+	if wtData != nil {
+		emptyWorktrees = wtData.EmptyWorktrees
+		worktreeByRoot = wtData.WorktreeByStackRoot
+	}
+	addWorktreeInfo(eng, branch, &ann, emptyWorktrees, worktreeByRoot)
 
 	return ann
 }
@@ -163,7 +188,8 @@ func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.B
 // addWorktreeInfo populates worktree-related fields on a BranchAnnotation.
 // If the branch is an empty worktree anchor, it sets IsEmptyWorktree and WorktreePath.
 // Otherwise, if the branch is a stack root with a managed worktree, it sets WorktreePath.
-func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAnnotation, emptyWorktrees map[string]*engine.WorktreeInfo) {
+// When worktreeByRoot is provided, uses O(1) map lookup instead of calling GetWorktreeForStack.
+func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAnnotation, emptyWorktrees map[string]*engine.WorktreeInfo, worktreeByRoot map[string]*engine.WorktreeInfo) {
 	if emptyWorktrees != nil {
 		if wtInfo, ok := emptyWorktrees[branch.GetName()]; ok {
 			ann.IsEmptyWorktree = true
@@ -174,7 +200,12 @@ func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAn
 
 	stackRoot := eng.GetStackRootForBranch(branch)
 	if stackRoot == branch.GetName() {
-		if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+		// Use pre-built map if available, otherwise fall back to engine call
+		if worktreeByRoot != nil {
+			if wtInfo, ok := worktreeByRoot[stackRoot]; ok {
+				ann.WorktreePath = wtInfo.Path
+			}
+		} else if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
 			ann.WorktreePath = wtInfo.Path
 		}
 	}
@@ -184,8 +215,9 @@ func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAn
 // This allows CI statuses and worktree info to be computed once and shared
 // across all branches, avoiding redundant lookups.
 type AnnotationEnrichment struct {
-	CIStatuses     map[string]*github.CheckStatus
-	EmptyWorktrees map[string]*engine.WorktreeInfo
+	CIStatuses          map[string]*github.CheckStatus
+	EmptyWorktrees      map[string]*engine.WorktreeInfo
+	WorktreeByStackRoot map[string]*engine.WorktreeInfo
 }
 
 // BuildFullAnnotation returns a fully populated BranchAnnotation including
@@ -220,7 +252,7 @@ func BuildFullAnnotation(eng engine.Engine, branch engine.Branch, enrichment *An
 	}
 
 	// Apply worktree info
-	addWorktreeInfo(eng, branch, &ann, enrichment.EmptyWorktrees)
+	addWorktreeInfo(eng, branch, &ann, enrichment.EmptyWorktrees, enrichment.WorktreeByStackRoot)
 
 	return ann
 }
@@ -252,6 +284,7 @@ func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.Bra
 		// Commit messages for detailed view
 		if commits, err := branch.GetAllCommits(engine.CommitFormatReadable); err == nil {
 			ann.CommitMessages = commits
+			ann.CommitCount = len(commits)
 		}
 
 		// Merged downstack history
@@ -269,9 +302,6 @@ func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.Bra
 		}
 
 		// Local stats
-		if count, err := branch.GetCommitCount(); err == nil {
-			ann.CommitCount = count
-		}
 		if added, deleted, err := branch.GetDiffStats(); err == nil {
 			ann.LinesAdded = added
 			ann.LinesDeleted = deleted

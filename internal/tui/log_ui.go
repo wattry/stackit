@@ -108,17 +108,17 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 		}
 	}
 
-	// Detect empty worktrees
+	// Detect worktrees (builds both empty and stack-root maps in one call)
 	start := time.Now()
-	emptyWorktrees := GetEmptyWorktrees(eng)
+	wtData := GetWorktreeData(eng)
 	var emptyWorktreeNames map[string]bool
-	if len(emptyWorktrees) > 0 {
+	if len(wtData.EmptyWorktrees) > 0 {
 		emptyWorktreeNames = make(map[string]bool)
-		for name := range emptyWorktrees {
+		for name := range wtData.EmptyWorktrees {
 			emptyWorktreeNames[name] = true
 		}
 	}
-	logDebug("GetEmptyWorktrees completed in %v, found %d", time.Since(start), len(emptyWorktrees))
+	logDebug("GetWorktreeData completed in %v, found %d empty worktrees", time.Since(start), len(wtData.EmptyWorktrees))
 
 	// Create renderer synchronously for instant display
 	start = time.Now()
@@ -129,7 +129,7 @@ func NewLogModel(ctx context.Context, eng engine.Engine, ghClient github.Client,
 	start = time.Now()
 	annotations := make(map[string]tree.BranchAnnotation)
 	for _, b := range eng.AllBranches() {
-		annotations[b.GetName()] = GetMinimalAnnotationWithWorktreeAndEmpty(eng, b, emptyWorktrees)
+		annotations[b.GetName()] = GetMinimalAnnotationWithWorktreeAndEmpty(eng, b, wtData)
 	}
 	// Apply annotation overrides (e.g., custom labels for move operation)
 	if opts.AnnotationOverrides != nil {
@@ -319,14 +319,15 @@ func (m *LogModel) enrichData() tea.Cmd {
 		}
 		ciStatuses := ciRes.statuses
 
-		// Detect empty worktrees
-		emptyWorktrees := GetEmptyWorktrees(eng)
+		// Detect worktrees (builds both empty and stack-root maps in one call)
+		wtData := GetWorktreeData(eng)
 
 		// Collect full annotations
 		start := time.Now()
 		enrichment := &AnnotationEnrichment{
-			CIStatuses:     ciStatuses,
-			EmptyWorktrees: emptyWorktrees,
+			CIStatuses:          ciStatuses,
+			EmptyWorktrees:      wtData.EmptyWorktrees,
+			WorktreeByStackRoot: wtData.WorktreeByStackRoot,
 		}
 		annotations := make(map[string]tree.BranchAnnotation)
 		utils.Run(allBranches, func(b engine.Branch) {

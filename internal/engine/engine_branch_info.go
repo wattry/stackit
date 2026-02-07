@@ -170,32 +170,7 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 		baseRevision = *meta.ParentBranchRevision
 	}
 
-	// Get SHAs first
-	shas, err := e.git.GetCommitRangeSHAs(baseRevision, branchRevision)
-	if err != nil {
-		return nil, err
-	}
-
-	if format == CommitFormatSHA {
-		return shas, nil
-	}
-
-	// Format results
-	result := make([]string, len(shas))
-	for i, sha := range shas {
-		var formatted string
-		switch format {
-		case CommitFormatSubject:
-			formatted, _ = e.git.GetCommitLog(sha, "%s")
-		case CommitFormatMessage:
-			formatted, _ = e.git.GetCommitLog(sha, "%B")
-		case CommitFormatReadable:
-			formatted, _ = e.git.GetCommitLog(sha, "%h %s")
-		default:
-			return nil, fmt.Errorf("unknown commit format: %s", format)
-		}
-		result[i] = strings.TrimSpace(formatted)
-	}
-
-	return result, nil
+	// Use GetCommitRange directly — handles formatting in-process via go-git
+	// (with CLI fallback), avoiding per-commit git process spawns
+	return e.git.GetCommitRange(baseRevision, branchRevision, string(format))
 }

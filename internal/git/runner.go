@@ -80,6 +80,7 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 	if err != nil {
 		return fmt.Errorf("atomic ref update failed: %w", err)
 	}
+	r.invalidateMetadataCacheForRefs(updates)
 	return nil
 }
 
@@ -108,6 +109,7 @@ func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate
 	if err != nil {
 		return fmt.Errorf("atomic ref update failed: %w", err)
 	}
+	r.invalidateMetadataCacheForRefs(updates)
 	return nil
 }
 
@@ -125,6 +127,11 @@ func (r *runner) DeleteRefsBatch(ctx context.Context, refNames []string) error {
 	_, err := r.runGitInternal(ctx, stdin.String(), nil, true, "update-ref", "--stdin")
 	if err != nil {
 		return fmt.Errorf("atomic ref delete failed: %w", err)
+	}
+	for _, refName := range refNames {
+		if branchName, ok := strings.CutPrefix(refName, MetadataRefPrefix); ok {
+			r.metadataCache.Delete(branchName)
+		}
 	}
 	return nil
 }
@@ -391,6 +398,10 @@ type runner struct {
 	repoMu   sync.Mutex
 	loggerMu sync.RWMutex
 	logger   DebugLogger
+
+	// Cached metadata to avoid redundant ReadMetadata calls (each spawns 2 git processes).
+	// Thread-safe: sync.Map handles concurrent reads from worker pools.
+	metadataCache sync.Map // map[string]*Meta
 
 	// Cached git version info
 	gitVersionOnce   sync.Once
@@ -716,7 +727,7 @@ func formatCommits(commits []*object.Commit, format string) ([]string, error) {
 			// Oneline format: short SHA + subject
 			shortHash := commit.Hash.String()[:7]
 			subject := strings.Split(strings.TrimSpace(commit.Message), "\n")[0]
-			formatted = fmt.Sprintf("%s - %s", shortHash, subject)
+			formatted = fmt.Sprintf("%s %s", shortHash, subject)
 		case "MESSAGE":
 			formatted = strings.TrimSpace(commit.Message)
 		case "SUBJECT":
@@ -752,7 +763,7 @@ func (r *runner) getCommitRangeWithFallback(base, head, format string) ([]string
 		switch format {
 		case "READABLE":
 			// Oneline format: short SHA + subject
-			formatted, err = r.GetCommitLog(sha, "%h - %s")
+			formatted, err = r.GetCommitLog(sha, "%h %s")
 		case "MESSAGE":
 			formatted, err = r.GetCommitLog(sha, "%B")
 		case "SUBJECT":
