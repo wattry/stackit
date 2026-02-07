@@ -75,7 +75,7 @@ type RemoteMetadataManager interface {
 	BatchSetLastModifiedBy(branchNames []string) error
 	LoadRemoteMetadataCache() error
 	ApplyRemoteMetadataIfExists(branchName string) error
-	GetRemoteMetadataCache() map[string]*git.Meta
+	GetRemoteMetadataCache() RemoteMetadataView
 	ComputeMetadataDiff(branch string) (*MetadataDiff, error)
 	ComputeAllMetadataDiffs() ([]*MetadataDiff, error)
 	AcceptRemoteMetadata(branch string) error

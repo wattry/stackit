@@ -2,6 +2,7 @@ package tui
 
 import (
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/components/tree"
 )
 
@@ -108,19 +109,32 @@ func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortS
 	return tree.NewRenderer(data)
 }
 
-// GetEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
-// for worktrees that have no child branches (empty worktrees).
-func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
-	emptyWorktrees := make(map[string]*engine.WorktreeInfo)
+// WorktreeData holds pre-computed worktree information from a single ListManagedWorktrees call.
+type WorktreeData struct {
+	EmptyWorktrees      map[string]*engine.WorktreeInfo // Anchor branches with no children
+	WorktreeByStackRoot map[string]*engine.WorktreeInfo // Stack root -> worktree info
+}
+
+// GetWorktreeData builds both empty worktree and stack-root worktree maps from a single
+// ListManagedWorktrees call, avoiding redundant lookups.
+func GetWorktreeData(eng engine.Engine) *WorktreeData {
+	data := &WorktreeData{
+		EmptyWorktrees:      make(map[string]*engine.WorktreeInfo),
+		WorktreeByStackRoot: make(map[string]*engine.WorktreeInfo),
+	}
 
 	worktrees, err := eng.ListManagedWorktrees()
 	if err != nil {
-		return emptyWorktrees
+		return data
 	}
 
 	for i := range worktrees {
 		wt := &worktrees[i]
 		anchor := eng.GetBranch(wt.AnchorBranch)
+
+		// Build stack-root map for all worktrees (used by addWorktreeInfo)
+		data.WorktreeByStackRoot[wt.AnchorBranch] = wt
+
 		if !anchor.IsTracked() || !anchor.IsWorktreeAnchor() {
 			continue
 		}
@@ -135,23 +149,24 @@ func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
 		}
 
 		if !hasChildren {
-			emptyWorktrees[wt.AnchorBranch] = wt
+			data.EmptyWorktrees[wt.AnchorBranch] = wt
 		}
 	}
 
-	return emptyWorktrees
+	return data
 }
 
-// GetMinimalAnnotationWithWorktree returns minimal annotations plus worktree info.
-// This is used for fast initial rendering before full data is loaded.
-// Only includes cached/instant fields - no git or network calls.
-func GetMinimalAnnotationWithWorktree(eng engine.Engine, branch engine.Branch) tree.BranchAnnotation {
-	return GetMinimalAnnotationWithWorktreeAndEmpty(eng, branch, nil)
+// GetEmptyWorktrees returns a map of worktree anchor branch names to their WorktreeInfo
+// for worktrees that have no child branches (empty worktrees).
+func GetEmptyWorktrees(eng engine.Engine) map[string]*engine.WorktreeInfo {
+	return GetWorktreeData(eng).EmptyWorktrees
 }
 
 // GetMinimalAnnotationWithWorktreeAndEmpty returns minimal annotations plus worktree info,
 // with support for marking empty worktrees.
-func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.Branch, emptyWorktrees map[string]*engine.WorktreeInfo) tree.BranchAnnotation {
+// This is used for fast initial rendering before full data is loaded.
+// Only includes cached/instant fields - no git or network calls.
+func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.Branch, wtData *WorktreeData) tree.BranchAnnotation {
 	ann := tree.BranchAnnotation{
 		IsLocked:      branch.IsLocked(),
 		IsFrozen:      branch.IsFrozen(),
@@ -159,22 +174,82 @@ func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.B
 		ExplicitScope: branch.GetExplicitScope().String(),
 	}
 
-	// Check if this is an empty worktree anchor
-	if emptyWorktrees != nil {
-		if wtInfo, ok := emptyWorktrees[branch.GetName()]; ok {
+	addWorktreeInfo(eng, branch, &ann, wtData)
+
+	return ann
+}
+
+// addWorktreeInfo populates worktree-related fields on a BranchAnnotation.
+// If the branch is an empty worktree anchor, it sets IsEmptyWorktree and WorktreePath.
+// Otherwise, if the branch is a stack root with a managed worktree, it sets WorktreePath.
+// When wtData is provided, uses O(1) map lookups instead of calling GetWorktreeForStack.
+func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAnnotation, wtData *WorktreeData) {
+	if wtData != nil {
+		if wtInfo, ok := wtData.EmptyWorktrees[branch.GetName()]; ok {
 			ann.IsEmptyWorktree = true
 			ann.WorktreePath = wtInfo.Path
-			return ann
+			return
 		}
 	}
 
-	// Add worktree info if this branch is a stack root with a managed worktree
 	stackRoot := eng.GetStackRootForBranch(branch)
 	if stackRoot == branch.GetName() {
-		if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+		// Use pre-built map if available, otherwise fall back to engine call
+		if wtData != nil {
+			if wtInfo, ok := wtData.WorktreeByStackRoot[stackRoot]; ok {
+				ann.WorktreePath = wtInfo.Path
+			}
+		} else if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
 			ann.WorktreePath = wtInfo.Path
 		}
 	}
+}
+
+// AnnotationEnrichment holds pre-fetched data for enriching branch annotations.
+// This allows CI statuses and worktree info to be computed once and shared
+// across all branches, avoiding redundant lookups.
+type AnnotationEnrichment struct {
+	CIStatuses          map[string]*github.CheckStatus
+	EmptyWorktrees      map[string]*engine.WorktreeInfo
+	WorktreeByStackRoot map[string]*engine.WorktreeInfo
+}
+
+// BuildFullAnnotation returns a fully populated BranchAnnotation including
+// git operations (SHA, commits, diff stats), CI status, review status, and worktree info.
+// Pass nil for enrichment to get just the base annotation without CI/worktree enrichment.
+func BuildFullAnnotation(eng engine.Engine, branch engine.Branch, enrichment *AnnotationEnrichment) tree.BranchAnnotation {
+	ann := GetBranchAnnotation(eng, branch)
+
+	if enrichment == nil {
+		return ann
+	}
+
+	// Apply CI status and review status
+	if !branch.IsTrunk() && enrichment.CIStatuses != nil {
+		if status := enrichment.CIStatuses[branch.GetName()]; status != nil {
+			ann.CheckStatus = tree.CheckStatusPassing
+			if status.Pending {
+				ann.CheckStatus = tree.CheckStatusPending
+			} else if !status.Passing {
+				ann.CheckStatus = tree.CheckStatusFailing
+			}
+
+			switch status.ReviewDecision {
+			case "APPROVED":
+				ann.ReviewStatus = "Approved"
+			case "CHANGES_REQUESTED":
+				ann.ReviewStatus = "Changes Requested"
+			case "REVIEW_REQUIRED":
+				ann.ReviewStatus = "Awaiting Review"
+			}
+		}
+	}
+
+	// Apply worktree info
+	addWorktreeInfo(eng, branch, &ann, &WorktreeData{
+		EmptyWorktrees:      enrichment.EmptyWorktrees,
+		WorktreeByStackRoot: enrichment.WorktreeByStackRoot,
+	})
 
 	return ann
 }
@@ -206,6 +281,7 @@ func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.Bra
 		// Commit messages for detailed view
 		if commits, err := branch.GetAllCommits(engine.CommitFormatReadable); err == nil {
 			ann.CommitMessages = commits
+			ann.CommitCount = len(commits)
 		}
 
 		// Merged downstack history
@@ -223,9 +299,6 @@ func GetBranchAnnotation(eng engine.BranchReader, branch engine.Branch) tree.Bra
 		}
 
 		// Local stats
-		if count, err := branch.GetCommitCount(); err == nil {
-			ann.CommitCount = count
-		}
 		if added, deleted, err := branch.GetDiffStats(); err == nil {
 			ann.LinesAdded = added
 			ann.LinesDeleted = deleted

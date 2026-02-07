@@ -329,9 +329,9 @@ func (tx *MetadataTx) IsCommitted() bool {
 func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 	state := e.branchState.GetOrCreate(branch)
 
-	if meta.ParentBranchName != nil {
+	if parentName := meta.GetParentBranchName(); parentName != nil {
 		// Update children map for old parent
-		if state.Parent != "" && state.Parent != *meta.ParentBranchName {
+		if state.Parent != "" && state.Parent != *parentName {
 			oldChildren := e.childrenMap[state.Parent]
 			for i, c := range oldChildren {
 				if c == branch {
@@ -341,7 +341,7 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 			}
 		}
 
-		state.Parent = *meta.ParentBranchName
+		state.Parent = *parentName
 
 		// Update children map for new parent
 		if state.Parent != "" {
@@ -351,14 +351,14 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 		}
 	}
 
-	if meta.Scope != nil {
-		state.Scope = *meta.Scope
+	if meta.GetScope() != nil {
+		state.Scope = *meta.GetScope()
 	} else {
 		state.Scope = ""
 	}
 
-	state.LockReason = meta.LockReason
-	state.BranchType = meta.BranchType
+	state.LockReason = meta.GetLockReason()
+	state.BranchType = meta.GetBranchType()
 }
 
 // updateBranchStateFromLocalMeta updates the in-memory branch state from local metadata.

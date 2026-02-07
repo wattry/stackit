@@ -1208,7 +1208,7 @@ func TestSetParentScenarios(t *testing.T) {
 		// VERIFY: ParentBranchRevision should still be branch1OriginalSHA
 		// because it's a valid ancestor and the old parent (branch1) was merged into main.
 		meta, _ := s.Engine.Git().ReadMetadata("branch2")
-		require.Equal(t, branch1OriginalSHA, *meta.ParentBranchRevision, "Divergence point should be preserved to avoid conflicts during restack")
+		require.Equal(t, branch1OriginalSHA, *meta.GetParentBranchRevision(), "Divergence point should be preserved to avoid conflicts during restack")
 	})
 
 	t.Run("updates divergence point when parent is folded into child (upward merge)", func(t *testing.T) {
@@ -1239,7 +1239,7 @@ func TestSetParentScenarios(t *testing.T) {
 		// try to re-apply branch1's changes which are already in branch2.
 		mainSHA, _ := s.Engine.Trunk().GetRevision()
 		meta, _ := s.Engine.Git().ReadMetadata("branch2")
-		require.Equal(t, mainSHA, *meta.ParentBranchRevision, "Divergence point should be updated to new parent when folding upward")
+		require.Equal(t, mainSHA, *meta.GetParentBranchRevision(), "Divergence point should be updated to new parent when folding upward")
 	})
 
 	t.Run("updates divergence point after manual rebase onto same parent", func(t *testing.T) {
@@ -1269,8 +1269,8 @@ func TestSetParentScenarios(t *testing.T) {
 		// VERIFY: ParentBranchRevision should be updated to mainNewSHA
 		// because the branch has moved forward relative to its parent.
 		meta, _ := s.Engine.Git().ReadMetadata("branch1")
-		require.Equal(t, mainNewSHA, *meta.ParentBranchRevision)
-		require.NotEqual(t, *originalMeta.ParentBranchRevision, *meta.ParentBranchRevision)
+		require.Equal(t, mainNewSHA, *meta.GetParentBranchRevision())
+		require.NotEqual(t, *originalMeta.GetParentBranchRevision(), *meta.GetParentBranchRevision())
 	})
 }
 

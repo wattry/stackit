@@ -71,7 +71,9 @@ func TestRestackBranch_CapturesMergedHistory(t *testing.T) {
 		meta, err := s.Engine.Git().ReadMetadata("branch1")
 		require.NoError(t, err)
 		mergedState := prStateMerged
-		meta.PrInfo.State = &mergedState
+		metaPrInfo := meta.GetPrInfo()
+		metaPrInfo.State = &mergedState
+		meta = meta.WithPrInfo(metaPrInfo)
 		err = s.Engine.Git().WriteMetadata("branch1", meta)
 		require.NoError(t, err)
 
@@ -109,7 +111,7 @@ func TestRestackBranch_InheritsMergedHistory(t *testing.T) {
 		// First: merge branch1 and reparent branch2 to main
 		meta1, _ := s.Engine.Git().ReadMetadata("branch1")
 		mergedState := prStateMerged
-		meta1.PrInfo = &git.PrInfoPersistence{State: &mergedState}
+		meta1 = meta1.WithPrInfo(&git.PrInfoPersistence{State: &mergedState})
 		_ = s.Engine.Git().WriteMetadata("branch1", meta1)
 
 		// Rebuild and restack branch2
@@ -124,7 +126,7 @@ func TestRestackBranch_InheritsMergedHistory(t *testing.T) {
 
 		// Second: merge branch2 and reparent branch3 to main
 		meta2, _ := s.Engine.Git().ReadMetadata("branch2")
-		meta2.PrInfo = &git.PrInfoPersistence{State: &mergedState}
+		meta2 = meta2.WithPrInfo(&git.PrInfoPersistence{State: &mergedState})
 		_ = s.Engine.Git().WriteMetadata("branch2", meta2)
 
 		// Rebuild and restack branch3
@@ -169,7 +171,7 @@ func TestRestackBranch_LimitsHistoryGrowth(t *testing.T) {
 
 			// Mark branch as merged
 			meta, _ := s.Engine.Git().ReadMetadata(branchToMerge)
-			meta.PrInfo = &git.PrInfoPersistence{State: &mergedState}
+			meta = meta.WithPrInfo(&git.PrInfoPersistence{State: &mergedState})
 			_ = s.Engine.Git().WriteMetadata(branchToMerge, meta)
 
 			// Rebuild and restack child
@@ -239,7 +241,7 @@ func TestRestackBranch_PreventsDuplicateHistory(t *testing.T) {
 		// Mark branch1 as merged
 		meta1, _ := s.Engine.Git().ReadMetadata("branch1")
 		mergedState := prStateMerged
-		meta1.PrInfo = &git.PrInfoPersistence{State: &mergedState}
+		meta1 = meta1.WithPrInfo(&git.PrInfoPersistence{State: &mergedState})
 		_ = s.Engine.Git().WriteMetadata("branch1", meta1)
 
 		// Rebuild and restack branch2 (first time)

@@ -25,11 +25,9 @@ type DebugLogger interface {
 	Debug(msg string, args ...any)
 }
 
-var (
-	// goGitMu synchronizes go-git operations that access packfiles to prevent
-	// "concurrent map iteration and map write" panics
-	goGitMu sync.Mutex
-)
+// Note: goGitMu was previously a package-level var, now moved to per-runner
+// and per-repository instances. This allows operations on different repositories
+// (e.g., main repo vs worktree) to proceed in parallel.
 
 // DefaultCommandTimeout is the default timeout for git commands
 const DefaultCommandTimeout = 5 * time.Minute
@@ -80,6 +78,8 @@ func (r *runner) UpdateRefsBatch(ctx context.Context, updates []RefUpdate) error
 	if err != nil {
 		return fmt.Errorf("atomic ref update failed: %w", err)
 	}
+	r.metadataCache.InvalidateForRefs(updates)
+	r.invalidateRevisionCacheForRefs(updates)
 	return nil
 }
 
@@ -108,6 +108,8 @@ func (r *runner) UpdateRefsBatchWithLog(ctx context.Context, updates []RefUpdate
 	if err != nil {
 		return fmt.Errorf("atomic ref update failed: %w", err)
 	}
+	r.metadataCache.InvalidateForRefs(updates)
+	r.invalidateRevisionCacheForRefs(updates)
 	return nil
 }
 
@@ -126,7 +128,29 @@ func (r *runner) DeleteRefsBatch(ctx context.Context, refNames []string) error {
 	if err != nil {
 		return fmt.Errorf("atomic ref delete failed: %w", err)
 	}
+	r.metadataCache.InvalidateForRefNames(refNames)
+	r.invalidateRevisionCacheForRefNames(refNames)
 	return nil
+}
+
+// invalidateRevisionCacheForRefs invalidates revision cache entries for any
+// refs/heads/* updates in the given ref updates.
+func (r *runner) invalidateRevisionCacheForRefs(updates []RefUpdate) {
+	for _, update := range updates {
+		if branchName, ok := strings.CutPrefix(update.RefName, "refs/heads/"); ok {
+			r.revisionCache.Delete(branchName)
+		}
+	}
+}
+
+// invalidateRevisionCacheForRefNames invalidates revision cache entries for any
+// refs/heads/* ref names in the given list.
+func (r *runner) invalidateRevisionCacheForRefNames(refNames []string) {
+	for _, refName := range refNames {
+		if branchName, ok := strings.CutPrefix(refName, "refs/heads/"); ok {
+			r.revisionCache.Delete(branchName)
+		}
+	}
 }
 
 func (r *runner) RunGitCommandWithEnv(ctx context.Context, env []string, args ...string) (string, error) {
@@ -389,8 +413,22 @@ type runner struct {
 	repo     *Repository
 	repoRoot string
 	repoMu   sync.Mutex
+	// goGitMu synchronizes go-git operations that access packfiles to prevent
+	// "concurrent map iteration and map write" panics. Per-runner (per-repository)
+	// so that operations on different repos (e.g., main repo vs worktree) are independent.
+	goGitMu  sync.Mutex
 	loggerMu sync.RWMutex
 	logger   DebugLogger
+
+	// Cached metadata to avoid redundant ReadMetadata calls (each spawns 2 git processes).
+	// Thread-safe: sync.Map handles concurrent reads from worker pools.
+	metadataCache metadataCache
+
+	// Cached branch revisions to avoid redundant go-git ref resolution.
+	// Thread-safe: sync.Map handles concurrent reads from worker pools.
+	// Keyed by branch name (e.g. "main"), values are SHA strings.
+	// Invalidated by any operation that mutates branch tips.
+	revisionCache revisionCache
 
 	// Cached git version info
 	gitVersionOnce   sync.Once
@@ -449,6 +487,7 @@ func (r *runner) ReloadRepository() error {
 	r.repoMu.Lock()
 	r.repo = nil // Clearing the cache forces the next ensureRepo() to re-open the repo
 	r.repoMu.Unlock()
+	r.revisionCache.InvalidateAll()
 	_, err := r.ensureRepo()
 	return err
 }
@@ -677,8 +716,8 @@ func (r *runner) GetCommitRange(base, head, format string) ([]string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	headHash, err := r.resolveRefHashInternal(repo, head)
 	if err != nil {
@@ -716,7 +755,7 @@ func formatCommits(commits []*object.Commit, format string) ([]string, error) {
 			// Oneline format: short SHA + subject
 			shortHash := commit.Hash.String()[:7]
 			subject := strings.Split(strings.TrimSpace(commit.Message), "\n")[0]
-			formatted = fmt.Sprintf("%s - %s", shortHash, subject)
+			formatted = fmt.Sprintf("%s %s", shortHash, subject)
 		case "MESSAGE":
 			formatted = strings.TrimSpace(commit.Message)
 		case "SUBJECT":
@@ -752,7 +791,7 @@ func (r *runner) getCommitRangeWithFallback(base, head, format string) ([]string
 		switch format {
 		case "READABLE":
 			// Oneline format: short SHA + subject
-			formatted, err = r.GetCommitLog(sha, "%h - %s")
+			formatted, err = r.GetCommitLog(sha, "%h %s")
 		case "MESSAGE":
 			formatted, err = r.GetCommitLog(sha, "%B")
 		case "SUBJECT":
@@ -790,8 +829,8 @@ func (r *runner) GetCommitSHA(branchName string, offset int) (string, error) {
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	// Resolve branch reference
 	hash, err := r.resolveRefHashInternal(repo, branchName)
@@ -1040,8 +1079,8 @@ func (r *runner) GetParentCommitSHA(commitSHA string) (string, error) {
 		return "", fmt.Errorf("failed to resolve commit: %w", err)
 	}
 
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	commit, err := repo.CommitObject(hash)
 	if err != nil {

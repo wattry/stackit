@@ -373,16 +373,16 @@ func (e *engineImpl) SetParent(ctx context.Context, branch Branch, parentBranch 
 
 		// Get old parent
 		oldParent := ""
-		if meta.ParentBranchName != nil {
-			oldParent = *meta.ParentBranchName
+		if meta.GetParentBranchName() != nil {
+			oldParent = *meta.GetParentBranchName()
 		}
 
 		// Only update ParentBranchRevision if it's currently nil, invalid, or if we're not
 		// in a "parent merged into trunk" situation.
 		shouldUpdateRevision := true
-		if oldParent != "" && oldParent != parentBranchName && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
+		if oldParent != "" && oldParent != parentBranchName && meta.GetParentBranchRevision() != nil && *meta.GetParentBranchRevision() != "" {
 			// Check if existing revision is still a valid ancestor of the branch
-			if isAncestor, _ := e.git.IsAncestor(*meta.ParentBranchRevision, branchName); isAncestor {
+			if isAncestor, _ := e.git.IsAncestor(*meta.GetParentBranchRevision(), branchName); isAncestor {
 				// Check if the old parent was merged into the new parent (the "merge" case)
 				if merged, _ := e.git.IsMerged(ctx, oldParent, parentBranchName); merged {
 					shouldUpdateRevision = false
@@ -390,9 +390,9 @@ func (e *engineImpl) SetParent(ctx context.Context, branch Branch, parentBranch 
 			}
 		}
 
-		meta.ParentBranchName = &parentBranchName
+		meta = meta.WithParentBranchName(&parentBranchName)
 		if shouldUpdateRevision {
-			meta.ParentBranchRevision = &parentRev
+			meta = meta.WithParentBranchRevision(&parentRev)
 		}
 
 		// Use transaction for atomic update (Commit handles in-memory cache updates)
@@ -434,7 +434,7 @@ func (e *engineImpl) UpdateParentRevision(ctx context.Context, branchName string
 			return fmt.Errorf("failed to read metadata: %w", err)
 		}
 
-		meta.ParentBranchRevision = &parentRev
+		meta = meta.WithParentBranchRevision(&parentRev)
 
 		// Use transaction for atomic update
 		tx := e.BeginTx(fmt.Sprintf("update parent revision: %s", branchName))
@@ -458,10 +458,10 @@ func (e *engineImpl) SetScope(ctx context.Context, branch Branch, scope Scope) e
 
 		// Update scope
 		if scope.IsEmpty() {
-			meta.Scope = nil
+			meta = meta.WithScope(nil)
 		} else {
 			scopeStr := scope.String()
-			meta.Scope = &scopeStr
+			meta = meta.WithScope(&scopeStr)
 		}
 
 		// Use transaction for atomic update
@@ -519,9 +519,9 @@ func (e *engineImpl) SetLocked(ctx context.Context, branches []Branch, reason Lo
 				continue // Skip branches that had read errors
 			}
 			if meta == nil {
-				meta = &git.Meta{}
+				meta = git.NewMeta()
 			}
-			meta.LockReason = reason
+			meta = meta.WithLockReason(reason)
 			if stageErr := tx.UpdateMeta(name, meta); stageErr != nil {
 				result.Errors[name] = fmt.Errorf("failed to stage update: %w", stageErr)
 			}
@@ -669,7 +669,7 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 		if err != nil {
 			continue
 		}
-		childMeta.ParentBranchName = &newName
+		childMeta = childMeta.WithParentBranchName(&newName)
 		if err := e.git.WriteMetadata(child, childMeta); err != nil {
 			continue
 		}
@@ -982,14 +982,37 @@ func (e *engineImpl) IsInManagedWorktree() (bool, *WorktreeInfo, error) {
 	return false, nil, nil
 }
 
-// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
-func (e *engineImpl) MarkNeedsPRBodyUpdate(branchName string) error {
-	localMeta, err := e.git.ReadLocalMetadata(branchName)
-	if err != nil {
-		localMeta = &git.LocalMeta{}
+// BatchMarkNeedsPRBodyUpdate marks multiple branches as needing PR body update in a single atomic operation.
+// It batch-reads local metadata, sets the flag, creates blobs, and atomically updates all refs.
+func (e *engineImpl) BatchMarkNeedsPRBodyUpdate(branchNames []string) error {
+	if len(branchNames) == 0 {
+		return nil
 	}
-	localMeta.NeedsPRBodyUpdate = true
-	return e.git.WriteLocalMetadata(branchName, localMeta)
+
+	// Batch read all local metadata in parallel
+	allMeta := e.git.BatchReadLocalMetadata(branchNames)
+
+	// Create blobs and collect ref updates
+	updates := make([]git.RefUpdate, 0, len(branchNames))
+	for _, name := range branchNames {
+		meta := allMeta[name]
+		if meta == nil {
+			meta = &git.LocalMeta{}
+		}
+		meta.NeedsPRBodyUpdate = true
+
+		sha, err := e.git.WriteLocalMetadataBlob(meta)
+		if err != nil {
+			return fmt.Errorf("failed to create local metadata blob for %s: %w", name, err)
+		}
+		updates = append(updates, git.RefUpdate{
+			RefName: git.LocalMetadataRefName(name),
+			NewSHA:  sha,
+		})
+	}
+
+	// Atomic batch update all refs
+	return e.git.UpdateRefsBatch(context.Background(), updates)
 }
 
 // ClearNeedsPRBodyUpdate clears the PR body update flag for a branch
@@ -1157,8 +1180,8 @@ func (e *engineImpl) GetStackID(branch Branch) string {
 	}
 
 	// Return explicit StackID if present
-	if meta.StackID != nil && *meta.StackID != "" {
-		return *meta.StackID
+	if meta.GetStackID() != nil && *meta.GetStackID() != "" {
+		return *meta.GetStackID()
 	}
 
 	// Legacy fallback: derive stack ID from stack root
@@ -1168,11 +1191,11 @@ func (e *engineImpl) GetStackID(branch Branch) string {
 	}
 
 	rootMeta, err := e.git.ReadMetadata(rootName)
-	if err != nil || rootMeta == nil || rootMeta.StackID == nil {
+	if err != nil || rootMeta == nil || rootMeta.GetStackID() == nil {
 		return ""
 	}
 
-	return *rootMeta.StackID
+	return *rootMeta.GetStackID()
 }
 
 // EnsureStackID returns the stack ID for a branch, creating one if it doesn't exist.
@@ -1250,10 +1273,10 @@ func (e *engineImpl) SetStackID(ctx context.Context, branch Branch, stackID stri
 			return fmt.Errorf("failed to read metadata: %w", err)
 		}
 		if meta == nil {
-			meta = &git.Meta{}
+			meta = git.NewMeta()
 		}
 
-		meta.StackID = &stackID
+		meta = meta.WithStackID(&stackID)
 
 		tx := e.BeginTx(fmt.Sprintf("set stack ID: %s -> %s", branchName, stackID))
 		if err := tx.UpdateMeta(branchName, meta); err != nil {

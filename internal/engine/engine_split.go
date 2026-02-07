@@ -23,18 +23,18 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
 
-	if meta.ParentBranchName == nil {
+	if meta.GetParentBranchName() == nil {
 		return fmt.Errorf("branch %s has no parent", opts.BranchToSplit)
 	}
 
 	// Capture the original stack ID to preserve it on new branches
 	var originalStackID string
-	if meta.StackID != nil {
-		originalStackID = *meta.StackID
+	if meta.GetStackID() != nil {
+		originalStackID = *meta.GetStackID()
 	}
 
-	parentBranchName := *meta.ParentBranchName
-	parentRevision := *meta.ParentBranchRevision
+	parentBranchName := *meta.GetParentBranchName()
+	parentRevision := *meta.GetParentBranchRevision()
 	children := e.childrenMap[opts.BranchToSplit]
 
 	// Reverse branch points (newest to oldest -> oldest to newest)
@@ -80,19 +80,19 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 		}
 
 		// Track branch with parent
-		newMeta := &git.Meta{
+		newMeta := git.NewMetaFrom(git.MetaFields{
 			ParentBranchName:     &branchParentName,
 			ParentBranchRevision: &branchParentRevision,
-		}
+		})
 
 		// Preserve stack ID from original branch
 		if originalStackID != "" {
-			newMeta.StackID = &originalStackID
+			newMeta = newMeta.WithStackID(&originalStackID)
 		}
 
 		// Preserve PR info if applicable
 		if prInfo != nil {
-			newMeta.PrInfo = &git.PrInfoPersistence{
+			newMeta = newMeta.WithPrInfo(&git.PrInfoPersistence{
 				Number:  prInfo.Number(),
 				Title:   stringPtr(prInfo.Title()),
 				Body:    stringPtr(prInfo.Body()),
@@ -100,7 +100,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 				State:   stringPtr(prInfo.State()),
 				Base:    stringPtr(prInfo.Base()),
 				URL:     stringPtr(prInfo.URL()),
-			}
+			})
 		}
 
 		if err := e.git.WriteMetadata(branchName, newMeta); err != nil {

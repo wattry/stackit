@@ -115,7 +115,7 @@ func (e *engineImpl) SetBranchType(branch Branch, branchType git.BranchType) err
 	}
 
 	// Update branch type
-	meta.BranchType = branchType
+	meta = meta.WithBranchType(branchType)
 
 	// Write metadata
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {
@@ -174,12 +174,12 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 		return false // No metadata, assume needs restack
 	}
 
-	if meta.ParentBranchRevision == nil {
+	if meta.GetParentBranchRevision() == nil {
 		return false // No stored revision, needs restack
 	}
 
 	// Branch is fixed if stored revision matches current parent revision
-	return *meta.ParentBranchRevision == parentRev
+	return *meta.GetParentBranchRevision() == parentRev
 }
 
 // GetBranchRemoteStatus returns the relationship between a local branch and its remote

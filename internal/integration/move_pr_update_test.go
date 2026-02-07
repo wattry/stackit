@@ -5,7 +5,9 @@ import (
 )
 
 func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
+	t.Parallel()
 	t.Run("marks moved branch for PR body update", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack: main → A → B
@@ -27,6 +29,7 @@ func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
 	})
 
 	t.Run("does not mark trunk as old parent", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create two branches off main: main → A and main → B
@@ -46,6 +49,7 @@ func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
 	})
 
 	t.Run("marks old parent when moving off non-trunk branch", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack: main → A → B → C
@@ -67,6 +71,7 @@ func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
 	})
 
 	t.Run("flag persists across operations", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack: main → A → B

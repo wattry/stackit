@@ -16,7 +16,9 @@ import (
 )
 
 func TestRemoteMetadataSync(t *testing.T) {
+	t.Parallel()
 	t.Run("detects and resolves metadata conflicts", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a branch with local metadata
@@ -38,14 +40,14 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// 2. Simulate remote metadata with different values (locked=true, scope="remote-scope")
 		// This simulates what would happen after `git fetch origin refs/stackit/metadata/*:refs/stackit/remote-metadata/*`
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      strPtr("remote-scope"),
 			LastModifiedBy: &git.ModifiedBy{
 				GitName:  "Remote User",
 				GitEmail: "remote@example.com",
 			},
-		}
+		})
 		createRemoteMetadataRef(t, sh, "feature-a", remoteMeta)
 
 		// 3. Load remote metadata cache
@@ -77,6 +79,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("no conflict when local equals remote", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-b").
@@ -92,10 +95,10 @@ func TestRemoteMetadataSync(t *testing.T) {
 		require.NoError(t, eng.SetScope(context.Background(), branch, engine.NewScope("same-scope")))
 
 		// Create identical remote metadata
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      strPtr("same-scope"),
-		}
+		})
 		createRemoteMetadataRef(t, sh, "feature-b", remoteMeta)
 
 		// Load remote cache
@@ -111,6 +114,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("detects orphaned local metadata", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-c").
@@ -140,6 +144,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("HasLocalModifications detects changes since sync", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-d").
@@ -168,14 +173,15 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("ignores remote metadata for non-existent local branches", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		eng := sh.Engine
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      strPtr("remote-scope"),
-		}
+		})
 		createRemoteMetadataRef(t, sh, "non-existent-branch", remoteMeta)
 
 		// 2. Load remote metadata cache
@@ -189,6 +195,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("identifies orphaned metadata when local branch is gone", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		eng := sh.Engine
 

@@ -5,7 +5,9 @@ import (
 )
 
 func TestMergeNext(t *testing.T) {
+	t.Parallel()
 	t.Run("dry-run shows plan for bottom PR", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with PRs
@@ -37,6 +39,7 @@ func TestMergeNext(t *testing.T) {
 	})
 
 	t.Run("errors when on trunk", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Stay on main
@@ -48,6 +51,7 @@ func TestMergeNext(t *testing.T) {
 	})
 
 	t.Run("errors when branch is not tracked", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create an untracked branch
@@ -62,6 +66,7 @@ func TestMergeNext(t *testing.T) {
 	})
 
 	t.Run("shows success message when no PRs to merge", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack without PRs
@@ -76,6 +81,7 @@ func TestMergeNext(t *testing.T) {
 	})
 
 	t.Run("skips already merged PRs", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack
@@ -107,6 +113,7 @@ func TestMergeNext(t *testing.T) {
 	})
 
 	t.Run("shows draft PR in plan", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with a draft PR
@@ -129,7 +136,9 @@ func TestMergeNext(t *testing.T) {
 }
 
 func TestMergeSquash(t *testing.T) {
+	t.Parallel()
 	t.Run("dry-run shows consolidation plan", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with PRs
@@ -162,6 +171,7 @@ func TestMergeSquash(t *testing.T) {
 	})
 
 	t.Run("errors when on trunk", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Stay on main
@@ -173,6 +183,7 @@ func TestMergeSquash(t *testing.T) {
 	})
 
 	t.Run("shows all branches in plan", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a longer stack
@@ -200,6 +211,7 @@ func TestMergeSquash(t *testing.T) {
 	})
 
 	t.Run("scope flag errors when no branches match", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack without scope
@@ -216,7 +228,9 @@ func TestMergeSquash(t *testing.T) {
 }
 
 func TestMergeCommand(t *testing.T) {
+	t.Parallel()
 	t.Run("shows help with subcommands", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Run merge --help
@@ -228,6 +242,7 @@ func TestMergeCommand(t *testing.T) {
 	})
 
 	t.Run("next subcommand is accessible", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Run merge next --help
@@ -239,6 +254,7 @@ func TestMergeCommand(t *testing.T) {
 	})
 
 	t.Run("squash subcommand is accessible", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Run merge squash --help
@@ -250,6 +266,7 @@ func TestMergeCommand(t *testing.T) {
 	})
 
 	t.Run("parent command requires TTY in non-interactive mode", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack
@@ -263,7 +280,9 @@ func TestMergeCommand(t *testing.T) {
 }
 
 func TestMergeNextUpstackCalculation(t *testing.T) {
+	t.Parallel()
 	t.Run("includes upstack info in output", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a deep stack
@@ -294,6 +313,7 @@ func TestMergeNextUpstackCalculation(t *testing.T) {
 	})
 
 	t.Run("handles mid-stack position correctly", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack
@@ -321,7 +341,9 @@ func TestMergeNextUpstackCalculation(t *testing.T) {
 }
 
 func TestMergeSquashValidation(t *testing.T) {
+	t.Parallel()
 	t.Run("shows all PRs in consolidation plan", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with multiple PRs
@@ -343,6 +365,7 @@ func TestMergeSquashValidation(t *testing.T) {
 	})
 
 	t.Run("errors when no open PRs found", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with all merged PRs
@@ -359,7 +382,9 @@ func TestMergeSquashValidation(t *testing.T) {
 }
 
 func TestMergeFlags(t *testing.T) {
+	t.Parallel()
 	t.Run("yes flag skips confirmation in merge next", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with PRs
@@ -374,6 +399,7 @@ func TestMergeFlags(t *testing.T) {
 	})
 
 	t.Run("yes flag works with merge squash", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a stack with PRs
@@ -388,6 +414,7 @@ func TestMergeFlags(t *testing.T) {
 	})
 
 	t.Run("force flag is available", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create a PR
@@ -403,7 +430,9 @@ func TestMergeFlags(t *testing.T) {
 }
 
 func TestMergeSingleBranchStack(t *testing.T) {
+	t.Parallel()
 	t.Run("merge next works for single branch", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create single branch stack
@@ -418,6 +447,7 @@ func TestMergeSingleBranchStack(t *testing.T) {
 	})
 
 	t.Run("merge squash works for single branch", func(t *testing.T) {
+		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
 		// Create single branch stack

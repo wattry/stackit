@@ -30,11 +30,11 @@ func (e *engineImpl) SquashCurrentBranch(ctx context.Context, opts SquashOptions
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
 
-	if meta.ParentBranchRevision == nil {
+	if meta.GetParentBranchRevision() == nil {
 		return fmt.Errorf("branch has no parent revision")
 	}
 
-	parentBranchRevision := *meta.ParentBranchRevision
+	parentBranchRevision := *meta.GetParentBranchRevision()
 
 	// Get current branch revision
 	branch := e.GetBranch(branchName)

@@ -95,7 +95,7 @@ func NewTestShellInProcess(t *testing.T, opts ...TestShellOption) *TestShell {
 		sh := newTestShellWithRemote(t, "", inprocess.NewInProcessCLI())
 		// Force non-interactive mode for in-process execution
 		utils.SetInteractive(false)
-		sh.Run("init").Run("config tips false")
+		sh.ensureTrunkConfig()
 		return sh
 	}
 
@@ -110,8 +110,8 @@ func NewTestShellInProcess(t *testing.T, opts ...TestShellOption) *TestShell {
 	// Force non-interactive mode for in-process execution to match behavior
 	// of spawning binary with --no-interactive
 	utils.SetInteractive(false)
-	// Pre-init config for in-process
-	sh.Run("init").Run("config tips false")
+	// Pre-seed git config to avoid per-test init overhead.
+	sh.ensureTrunkConfig()
 	return sh
 }
 
@@ -155,9 +155,28 @@ func newTestShellWithRemote(t *testing.T, binaryPath string, inProcessCLI *inpro
 	return &TestShell{t: t, scene: scene, binaryPath: binaryPath, inProcessCLI: inProcessCLI}
 }
 
+// ensureTrunkConfig sets the trunk config directly to avoid calling `stackit init`
+// for every test. This keeps tests fast and still marks the repo as initialized.
+func (s *TestShell) ensureTrunkConfig() {
+	s.t.Helper()
+	// Default trunk branch for test repos is main.
+	require.NoError(s.t, s.scene.Repo.RunGitCommand("config", "--local", "stackit.trunk", "main"))
+}
+
 // Scene returns the underlying test scene for direct access when needed.
 func (s *TestShell) Scene() *testhelpers.Scene {
 	return s.scene
+}
+
+// WithT returns a shallow copy of the shell that reports assertions against the provided test.
+func (s *TestShell) WithT(t *testing.T) *TestShell {
+	t.Helper()
+	return &TestShell{
+		t:            t,
+		scene:        s.scene,
+		binaryPath:   s.binaryPath,
+		inProcessCLI: s.inProcessCLI,
+	}
 }
 
 // Dir returns the working directory of the test shell.
@@ -273,6 +292,67 @@ func (s *TestShell) WriteFile(filename, content string) *TestShell {
 	err := os.WriteFile(filePath, []byte(content), 0644)
 	require.NoError(s.t, err, "failed to write file %s", filename)
 	return s.Git("add " + filename)
+}
+
+// SetWorktreeBasePath sets the worktree base path for this repo.
+func (s *TestShell) SetWorktreeBasePath(path string) *TestShell {
+	s.t.Helper()
+	path = canonicalPath(path)
+	return s.Git("config --local stackit.worktree.basePath " + path)
+}
+
+// ResetRepo resets the repo to a clean state for reuse across scenarios.
+// This removes worktrees, stackit refs, extra branches, and resets main to the root commit.
+func (s *TestShell) ResetRepo() *TestShell {
+	s.t.Helper()
+
+	// Remove stale index.lock files that can be left behind by interrupted git operations.
+	lockPath := filepath.Join(s.scene.Dir, ".git", "index.lock")
+	_ = os.Remove(lockPath)
+
+	// Clean any leftover working tree changes before switching branches.
+	s.Git("reset --hard")
+	s.Git("clean -fd")
+	s.Git("checkout -f main")
+	s.Git("rev-parse --show-toplevel")
+	mainPath := canonicalPath(strings.TrimSpace(s.lastOutput))
+
+	// Remove all worktrees except the main worktree
+	s.Git("worktree list --porcelain")
+	for _, path := range parseWorktreePaths(s.lastOutput) {
+		if path != "" && !samePath(path, mainPath) && !isMainWorktree(path) {
+			s.Git("worktree remove --force " + path)
+		}
+	}
+	// Prune any stale worktrees
+	s.Git("worktree prune")
+
+	// Delete stackit refs (metadata, local metadata, worktree registrations)
+	s.Git("for-each-ref --format=%(refname) refs/stackit")
+	for _, ref := range splitLines(s.lastOutput) {
+		if ref != "" {
+			s.Git("update-ref -d " + ref)
+		}
+	}
+
+	// Delete local branches except main
+	s.Git("for-each-ref --format=%(refname:short) refs/heads")
+	for _, branch := range splitLines(s.lastOutput) {
+		if branch != "" && branch != "main" {
+			s.Git("branch -D " + branch)
+		}
+	}
+
+	// Reset main back to the root commit
+	s.Git("rev-list --max-parents=0 main")
+	root := strings.TrimSpace(s.lastOutput)
+	if root != "" {
+		s.Git("reset --hard " + root)
+	}
+	s.Git("clean -fd")
+
+	s.resetOrigin(root)
+	return s
 }
 
 // Amend modifies a file and amends the last commit using raw git
@@ -449,6 +529,91 @@ func countNonEmptyLines(s string) int {
 		}
 	}
 	return count
+}
+
+func splitLines(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\n")
+}
+
+func canonicalPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	return filepath.Clean(path)
+}
+
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return canonicalPath(a) == canonicalPath(b)
+}
+
+func isMainWorktree(path string) bool {
+	info, err := os.Stat(filepath.Join(path, ".git"))
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+func parseWorktreePaths(output string) []string {
+	var paths []string
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "worktree ") {
+			paths = append(paths, strings.TrimSpace(strings.TrimPrefix(line, "worktree ")))
+		}
+	}
+	return paths
+}
+
+func (s *TestShell) resetOrigin(root string) {
+	if root == "" {
+		return
+	}
+	remotePath := s.remotePath()
+	if remotePath == "" {
+		return
+	}
+
+	refs := runGitInDir(s.t, remotePath, "--git-dir", remotePath, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/stackit")
+	for _, ref := range splitLines(refs) {
+		if ref != "" && ref != "refs/heads/main" {
+			_ = runGitInDir(s.t, remotePath, "--git-dir", remotePath, "update-ref", "-d", ref)
+		}
+	}
+	_ = runGitInDir(s.t, remotePath, "--git-dir", remotePath, "update-ref", "refs/heads/main", root)
+	_ = runGitInDir(s.t, remotePath, "--git-dir", remotePath, "symbolic-ref", "HEAD", "refs/heads/main")
+}
+
+func (s *TestShell) remotePath() string {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = s.scene.Dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func runGitInDir(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s failed: %s", strings.Join(args, " "), string(output))
+	return strings.TrimSpace(string(output))
 }
 
 // =============================================================================

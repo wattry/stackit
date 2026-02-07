@@ -12,7 +12,9 @@ import (
 )
 
 func TestSyncUIReporting(t *testing.T) {
+	t.Parallel()
 	t.Run("reports locked and frozen branches during sync", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithInProcess(true)
 

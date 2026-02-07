@@ -67,6 +67,10 @@ type BranchInfo interface {
 	// GetDivergencePoint returns the divergence point of a branch from its parent.
 	// Returns the ParentBranchRevision from metadata if valid, otherwise the parent's current revision.
 	GetDivergencePoint(branchName string) (string, error)
+	// PreloadBranchData batch-loads metadata and revisions for all branches
+	// into their respective caches. Call before parallel annotation building
+	// to eliminate per-branch cache misses and mutex contention.
+	PreloadBranchData()
 }
 
 // GitDiffer handles diff and merge operations
@@ -127,8 +131,8 @@ type BranchTracking interface {
 	SetLocked(ctx context.Context, branches []Branch, reason LockReason) (BatchLockResult, error)
 	SetFrozen(ctx context.Context, branches []Branch, frozen bool) (BatchFreezeResult, error)
 
-	// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
-	MarkNeedsPRBodyUpdate(branchName string) error
+	// BatchMarkNeedsPRBodyUpdate marks multiple branches as needing PR body update in a single atomic operation
+	BatchMarkNeedsPRBodyUpdate(branchNames []string) error
 	// ClearNeedsPRBodyUpdate clears the PR body update flag for a branch
 	ClearNeedsPRBodyUpdate(branchName string) error
 	// GetBranchesNeedingPRBodyUpdate returns all branches that need PR body updates

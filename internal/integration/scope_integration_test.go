@@ -76,6 +76,7 @@ func TestScopeRequiredInPattern(t *testing.T) {
 }
 
 func TestScopeSubmitSyncFlow(t *testing.T) {
+	t.Parallel()
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// 1. Create a branch
@@ -118,7 +119,7 @@ func TestScopeSubmitSyncFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	cache := eng.GetRemoteMetadataCache()
-	require.NotNil(t, cache["feature"], "Remote metadata for 'feature' should exist in cache")
-	require.NotNil(t, cache["feature"].Scope, "Scope should be set in remote metadata")
-	require.Equal(t, "JIRA-123", *cache["feature"].Scope, "Remote metadata scope should match JIRA-123")
+	require.NotNil(t, cache.Get("feature"), "Remote metadata for 'feature' should exist in cache")
+	require.NotNil(t, cache.Get("feature").GetScope(), "Scope should be set in remote metadata")
+	require.Equal(t, "JIRA-123", *cache.Get("feature").GetScope(), "Remote metadata scope should match JIRA-123")
 }

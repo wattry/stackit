@@ -37,27 +37,29 @@ const (
 	BranchTypeWorktreeAnchor BranchType = "worktree-anchor" // Anchor branch for worktree, has no commits
 )
 
-// Meta represents branch metadata stored in Git refs
+// Meta represents branch metadata stored in Git refs.
+// Fields are unexported to enforce immutability — use getters to read
+// and With* methods to create modified copies. Construct via NewMeta()
+// or NewMetaFrom(MetaFields{...}).
 type Meta struct {
-	ParentBranchName     *string            `json:"parentBranchName,omitempty"`
-	ParentBranchRevision *string            `json:"parentBranchRevision,omitempty"`
-	PrInfo               *PrInfoPersistence `json:"prInfo,omitempty"`
-	Scope                *string            `json:"scope,omitempty"`
-	LockReason           LockReason         `json:"lockReason,omitempty"`
+	parentBranchName     *string
+	parentBranchRevision *string
+	prInfo               *PrInfoPersistence
+	scope                *string
+	lockReason           LockReason
 
 	// Fields for remote sync
-	BranchType     BranchType  `json:"branchType,omitempty"`     // Type of branch (regular, consolidated)
-	LastModifiedBy *ModifiedBy `json:"lastModifiedBy,omitempty"` // Who last changed this metadata
-	LastModifiedAt *time.Time  `json:"lastModifiedAt,omitempty"` // When metadata was last changed
-	LocalOnlyHash  *string     `json:"localOnlyHash,omitempty"`  // Hash of local-only state for change detection
+	branchType     BranchType
+	lastModifiedBy *ModifiedBy
+	lastModifiedAt *time.Time
+	localOnlyHash  *string
 
-	// MergedDownstack preserves historical parent relationships when branches are reparented
+	// mergedDownstack preserves historical parent relationships when branches are reparented
 	// due to merge/deletion. Ordered oldest to newest, limited to 5 entries max.
-	MergedDownstack []MergedParent `json:"mergedDownstack,omitempty"`
+	mergedDownstack []MergedParent
 
-	// StackID links this branch to a stack ref (refs/stackit/stacks/{stack-id}).
-	// Generated when creating a new stack off trunk, inherited when creating off tracked branch.
-	StackID *string `json:"stackId,omitempty"`
+	// stackID links this branch to a stack ref (refs/stackit/stacks/{stack-id}).
+	stackID *string
 }
 
 // StackDescription holds stack-level title and description.
@@ -169,12 +171,20 @@ func (r *runner) BatchReadLocalMetadata(branchNames []string) map[string]*LocalM
 }
 
 func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
+	// Check cache first to avoid redundant git process spawns.
+	// Meta is immutable, so returning the cached pointer is safe.
+	if cached := r.metadataCache.Get(branchName); cached != nil {
+		return cached, nil
+	}
+
 	refName := fmt.Sprintf("%s%s", MetadataRefPrefix, branchName)
 
 	sha, err := r.GetRef(refName)
 	if err != nil {
 		// If ref doesn't exist, it's not an error, just means no metadata
-		return &Meta{}, nil //nolint:nilerr
+		empty := NewMeta()
+		r.metadataCache.Put(branchName, empty)
+		return empty, nil //nolint:nilerr
 	}
 
 	content, err := r.ReadBlob(sha)
@@ -183,7 +193,9 @@ func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
 	}
 
 	if content == "" {
-		return &Meta{}, nil
+		empty := NewMeta()
+		r.metadataCache.Put(branchName, empty)
+		return empty, nil
 	}
 
 	var meta Meta
@@ -191,6 +203,7 @@ func (r *runner) ReadMetadata(branchName string) (*Meta, error) {
 		return nil, fmt.Errorf("failed to unmarshal metadata for %s: %w", branchName, err)
 	}
 
+	r.metadataCache.Put(branchName, &meta)
 	return &meta, nil
 }
 
@@ -210,12 +223,15 @@ func (r *runner) WriteMetadata(branchName string, meta *Meta) error {
 		return fmt.Errorf("failed to write metadata ref: %w", err)
 	}
 
+	r.metadataCache.Put(branchName, meta)
 	return nil
 }
 
 func (r *runner) DeleteMetadata(branchName string) error {
 	refName := fmt.Sprintf("%s%s", MetadataRefPrefix, branchName)
-	return r.DeleteRef(refName)
+	err := r.DeleteRef(refName)
+	r.metadataCache.Delete(branchName)
+	return err
 }
 
 func (r *runner) RenameMetadata(oldName, newName string) error {
@@ -232,6 +248,8 @@ func (r *runner) RenameMetadata(oldName, newName string) error {
 		return fmt.Errorf("failed to create new metadata ref: %w", err)
 	}
 
+	r.metadataCache.Delete(oldName)
+	r.metadataCache.Delete(newName)
 	return nil
 }
 

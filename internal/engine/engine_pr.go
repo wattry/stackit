@@ -19,25 +19,26 @@ func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
 
 // NewPrInfoFromMeta creates a PrInfo from git.Meta
 func NewPrInfoFromMeta(meta *git.Meta) *PrInfo {
-	if meta == nil || meta.PrInfo == nil {
+	prInfo := meta.GetPrInfo()
+	if meta == nil || prInfo == nil {
 		return nil
 	}
 
 	lockReason := ""
-	if meta.PrInfo.LockReason != nil {
-		lockReason = string(*meta.PrInfo.LockReason)
+	if prInfo.LockReason != nil {
+		lockReason = string(*prInfo.LockReason)
 	}
 
 	return NewPrInfoFull(
-		meta.PrInfo.Number,
-		getStringValue(meta.PrInfo.Title),
-		getStringValue(meta.PrInfo.Body),
-		getStringValue(meta.PrInfo.State),
-		getStringValue(meta.PrInfo.Base),
-		getStringValue(meta.PrInfo.URL),
-		getBoolValue(meta.PrInfo.IsDraft),
+		prInfo.Number,
+		getStringValue(prInfo.Title),
+		getStringValue(prInfo.Body),
+		getStringValue(prInfo.State),
+		getStringValue(prInfo.Base),
+		getStringValue(prInfo.URL),
+		getBoolValue(prInfo.IsDraft),
 		LockReason(lockReason),
-		getStringValue(meta.PrInfo.MergeBranch),
+		getStringValue(prInfo.MergeBranch),
 	)
 }
 
@@ -52,7 +53,7 @@ func (e *engineImpl) GetMergedDownstack(branch Branch) []git.MergedParent {
 	if err != nil {
 		return nil
 	}
-	return meta.MergedDownstack
+	return meta.GetMergedDownstack()
 }
 
 // getMergedDownstack is an internal method for Branch type
@@ -69,46 +70,48 @@ func (e *engineImpl) UpsertPrInfo(ctx context.Context, branch Branch, prInfo *Pr
 		// Read existing metadata (outside lock for performance)
 		meta, err := e.git.ReadMetadata(branchName)
 		if err != nil {
-			meta = &git.Meta{}
+			meta = git.NewMeta()
 		}
 
 		if prInfo == nil {
-			meta.PrInfo = nil
+			meta = meta.WithPrInfo(nil)
 		} else {
-			if meta.PrInfo == nil {
-				meta.PrInfo = &git.PrInfoPersistence{}
+			existing := meta.GetPrInfo()
+			if existing == nil {
+				existing = &git.PrInfoPersistence{}
 			}
 
 			// Update PR info fields
 			if prInfo.Number() != nil {
-				meta.PrInfo.Number = prInfo.Number()
+				existing.Number = prInfo.Number()
 			}
 			if prInfo.Title() != "" {
 				title := prInfo.Title()
-				meta.PrInfo.Title = &title
+				existing.Title = &title
 			}
 			if prInfo.Body() != "" {
 				body := prInfo.Body()
-				meta.PrInfo.Body = &body
+				existing.Body = &body
 			}
 			isDraft := prInfo.IsDraft()
-			meta.PrInfo.IsDraft = &isDraft
+			existing.IsDraft = &isDraft
 			if prInfo.State() != "" {
 				state := prInfo.State()
-				meta.PrInfo.State = &state
+				existing.State = &state
 			}
 			if prInfo.Base() != "" {
 				base := prInfo.Base()
-				meta.PrInfo.Base = &base
+				existing.Base = &base
 			}
 			if prInfo.URL() != "" {
 				url := prInfo.URL()
-				meta.PrInfo.URL = &url
+				existing.URL = &url
 			}
 			lr := prInfo.LockReason()
-			meta.PrInfo.LockReason = &lr
+			existing.LockReason = &lr
 			mergeBranch := prInfo.MergeBranch()
-			meta.PrInfo.MergeBranch = &mergeBranch
+			existing.MergeBranch = &mergeBranch
+			meta = meta.WithPrInfo(existing)
 		}
 
 		// Use transaction for atomic update
@@ -155,20 +158,26 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 	lockStatusChanged := false
 	meta, err := e.git.ReadMetadata(branch.GetName())
 	if err == nil {
-		if meta.LockReason != prInfo.LockReason() {
+		if meta.GetLockReason() != prInfo.LockReason() {
 			lockStatusChanged = true
-		} else if meta.PrInfo != nil && meta.PrInfo.LockReason != nil && *meta.PrInfo.LockReason != prInfo.LockReason() {
-			lockStatusChanged = true
+		} else {
+			metaPrInfo := meta.GetPrInfo()
+			if metaPrInfo != nil && metaPrInfo.LockReason != nil && *metaPrInfo.LockReason != prInfo.LockReason() {
+				lockStatusChanged = true
+			}
 		}
 	}
 
 	// Check if merge branch changed
 	mergeBranchChanged := false
-	if err == nil && meta.PrInfo != nil {
-		oldBranch := getStringValue(meta.PrInfo.MergeBranch)
-		newBranch := prInfo.MergeBranch()
-		if oldBranch != newBranch {
-			mergeBranchChanged = true
+	if err == nil {
+		metaPrInfo := meta.GetPrInfo()
+		if metaPrInfo != nil {
+			oldBranch := getStringValue(metaPrInfo.MergeBranch)
+			newBranch := prInfo.MergeBranch()
+			if oldBranch != newBranch {
+				mergeBranchChanged = true
+			}
 		}
 	}
 
