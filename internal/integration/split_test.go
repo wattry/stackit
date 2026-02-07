@@ -30,6 +30,7 @@ func TestSplitWorkflow(t *testing.T) {
 	}
 
 	t.Run("split mid-stack branch with multiple children restacks all descendants", func(t *testing.T) {
+		t.Parallel()
 		// Scenario - Structure with multiple children:
 		//
 		// Before split:
@@ -105,7 +106,7 @@ func TestSplitWorkflow(t *testing.T) {
 	})
 
 	t.Run("split at stack bottom updates all upstack branches", func(t *testing.T) {
-
+		t.Parallel()
 		// Scenario:
 		// 1. Build: main → feature-a (has shared file) → feature-b → feature-c
 		// 2. Split feature-a to extract file to new parent
@@ -160,7 +161,7 @@ func TestSplitWorkflow(t *testing.T) {
 	})
 
 	t.Run("split preserves commit history correctly", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		// Create feature with two files
@@ -180,7 +181,7 @@ func TestSplitWorkflow(t *testing.T) {
 	})
 
 	t.Run("split --by-commit accepts the flag and shows interactive prompt", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		// Create a feature branch with multiple commits on the same branch
@@ -201,7 +202,7 @@ func TestSplitWorkflow(t *testing.T) {
 	})
 
 	t.Run("split --by-commit validates branch has commits to split", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		// Create a feature branch with only one commit
@@ -227,6 +228,7 @@ func TestSplitAsSibling(t *testing.T) {
 	}
 
 	t.Run("split --by-file --as-sibling creates sibling branch without modifying original", func(t *testing.T) {
+		t.Parallel()
 		// Scenario:
 		// Before: main -> feature (has file1, file2)
 		// After:  main -> feature (has file1, file2 - unchanged)
@@ -267,7 +269,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split --by-file --as-sibling with custom name", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("extract", "content").
@@ -284,7 +286,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split --by-file --as-sibling with custom message", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file", "content").
@@ -299,7 +301,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split rejects --name with --by-commit", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content").
@@ -312,7 +314,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split rejects --message with --by-commit", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content").
@@ -325,7 +327,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split --as-sibling preserves children on original branch", func(t *testing.T) {
-
+		t.Parallel()
 		// Scenario:
 		// Before: main -> feature (file1, file2) -> child
 		// After:  main -> feature (file1, file2 - unchanged) -> child
@@ -355,7 +357,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split rejects --name without explicit --by-file", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content").
@@ -368,7 +370,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split rejects --message without explicit --by-file", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content").
@@ -380,7 +382,7 @@ func TestSplitAsSibling(t *testing.T) {
 	})
 
 	t.Run("split --by-file --as-sibling rejects duplicate custom branch name", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content").
@@ -409,6 +411,7 @@ func TestSplitUndo(t *testing.T) {
 	}
 
 	t.Run("undo split --by-file restores original branch and removes split branch", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// 1. Setup
@@ -433,6 +436,7 @@ func TestSplitUndo(t *testing.T) {
 	})
 
 	t.Run("undo split --by-commit restores original branch", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: feature branch with 2 commits
@@ -511,6 +515,7 @@ func TestSplitByFileExtractsChanges(t *testing.T) {
 	}
 
 	t.Run("by-file extracts changes not whole file for modified files", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: create a file with existing content
@@ -545,6 +550,7 @@ func TestSplitByFileExtractsChanges(t *testing.T) {
 	})
 
 	t.Run("by-file extracts whole file for new files", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: create a base branch
@@ -575,6 +581,7 @@ func TestSplitByFileExtractsChanges(t *testing.T) {
 	})
 
 	t.Run("by-file with mixed new and modified files", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: create a base file
@@ -623,6 +630,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	}
 
 	t.Run("split by hunk with patch file extracts hunks to child branch", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -674,7 +682,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch file uses default branch name when not provided", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -707,7 +715,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch fails on empty patch", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -727,7 +735,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch fails on nonexistent patch file", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: Create a file with multiple lines
@@ -743,7 +751,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch fails when branch already exists", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -776,7 +784,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch reparents existing children", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -816,7 +824,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch file defaults to below direction", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -869,7 +877,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch file below direction creates parent branch", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -914,7 +922,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with patch fails when all changes staged", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -943,7 +951,7 @@ func TestSplitByHunkWithPatch(t *testing.T) {
 	})
 
 	t.Run("split by hunk with malformed patch fails gracefully", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -967,7 +975,7 @@ just some random text
 	})
 
 	t.Run("split by hunk with multi-file patch extracts changes from multiple files", func(t *testing.T) {
-
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -1015,6 +1023,7 @@ just some random text
 	})
 
 	t.Run("split by hunk with patch includes new files - above direction", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -1058,6 +1067,7 @@ new file mode 100644
 	})
 
 	t.Run("split by hunk with patch includes deleted files - above direction", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -1104,6 +1114,7 @@ deleted file mode 100644
 	})
 
 	t.Run("split by hunk with patch includes new files - below direction", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 		tmpDir := t.TempDir()
 
@@ -1166,6 +1177,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	}
 
 	t.Run("by-file works with multi-commit branch", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup
@@ -1201,6 +1213,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	})
 
 	t.Run("by-file with deleted file", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup with two files (add trailing newlines to match patch format)
@@ -1228,6 +1241,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	})
 
 	t.Run("split creates snapshot for undo recovery", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content1").
@@ -1257,6 +1271,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	})
 
 	t.Run("by-file with special characters in filename", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("normal", "normal content").
@@ -1281,6 +1296,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	})
 
 	t.Run("sibling mode extracts changes not whole files", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup with existing file
@@ -1310,6 +1326,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	})
 
 	t.Run("split returns to original branch on error", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup with a single file
@@ -1325,6 +1342,7 @@ func TestSplitEdgeCases(t *testing.T) {
 	})
 
 	t.Run("split fails gracefully with nonexistent file", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file1", "content1").
@@ -1360,6 +1378,7 @@ func TestSplitByFileAbove(t *testing.T) {
 	}
 
 	t.Run("split --by-file --above creates child branch with extracted files", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: create branch with multiple files
@@ -1389,6 +1408,7 @@ func TestSplitByFileAbove(t *testing.T) {
 	})
 
 	t.Run("split --by-file --above reparents existing children", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: feature -> existing-child
@@ -1411,6 +1431,7 @@ func TestSplitByFileAbove(t *testing.T) {
 	})
 
 	t.Run("split --by-file --above incompatible with --as-sibling", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("file", "content").
@@ -1421,6 +1442,7 @@ func TestSplitByFileAbove(t *testing.T) {
 	})
 
 	t.Run("split --by-file --above with new file", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: base with one file, then feature adds another
@@ -1446,6 +1468,7 @@ func TestSplitByFileAbove(t *testing.T) {
 	})
 
 	t.Run("split --by-file --above reparents multiple existing children", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: feature -> [child1, child2, child3]
@@ -1478,6 +1501,7 @@ func TestSplitByFileAbove(t *testing.T) {
 	})
 
 	t.Run("split --by-file --above fails when all files selected", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		// Setup: feature with only one file changed
@@ -1509,6 +1533,7 @@ func TestSplitDryRun(t *testing.T) {
 	}
 
 	t.Run("split --by-file --dry-run shows preview without executing", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("keep", "keep content").
@@ -1529,6 +1554,7 @@ func TestSplitDryRun(t *testing.T) {
 	})
 
 	t.Run("split --by-file --above --dry-run shows child direction", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("keep", "keep content").
@@ -1546,6 +1572,7 @@ func TestSplitDryRun(t *testing.T) {
 	})
 
 	t.Run("split --by-file --as-sibling --dry-run shows sibling direction", func(t *testing.T) {
+		t.Parallel()
 		sh := newShell(t)
 
 		sh.Write("keep", "keep content").

@@ -76,7 +76,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		})
 	}
 
-	run("restack worktree branch after sibling stack merged", func(t *testing.T, sh *TestShell) {
+	run("restack worktree branch after sibling stack merged", func(_ *testing.T, sh *TestShell) {
 		// This test reproduces the bug where running st sync from main
 		// causes unexpected conflicts when restacking branches in worktrees.
 		//
@@ -165,7 +165,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 			OnBranch("stackB-grandchild")
 	})
 
-	run("restack deep stack in worktree from main repo", func(t *testing.T, sh *TestShell) {
+	run("restack deep stack in worktree from main repo", func(_ *testing.T, sh *TestShell) {
 		// Test that a deep stack in a worktree can be restacked from the main repo
 		// when main advances.
 
@@ -212,7 +212,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		})
 	})
 
-	run("sync from worktree context", func(t *testing.T, sh *TestShell) {
+	run("sync from worktree context", func(_ *testing.T, sh *TestShell) {
 		// Test that sync works correctly when run from within a worktree
 		// (the opposite direction of the main bug)
 
