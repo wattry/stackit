@@ -306,6 +306,10 @@ func (s *TestShell) SetWorktreeBasePath(path string) *TestShell {
 func (s *TestShell) ResetRepo() *TestShell {
 	s.t.Helper()
 
+	// Remove stale index.lock files that can be left behind by interrupted git operations.
+	lockPath := filepath.Join(s.scene.Dir, ".git", "index.lock")
+	_ = os.Remove(lockPath)
+
 	// Clean any leftover working tree changes before switching branches.
 	s.Git("reset --hard")
 	s.Git("clean -fd")
