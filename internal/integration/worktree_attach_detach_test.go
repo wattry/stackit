@@ -13,10 +13,18 @@ import (
 func TestWorktreeAttach(t *testing.T) {
 	t.Parallel()
 
-	t.Run("attach existing stack to worktree", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("attach existing stack to worktree", func(t *testing.T, sh *TestShell) {
 		// Create a regular stack (not in a worktree)
 		sh.WriteFile("feature.txt", "feature content").
 			Run("create feature -m 'feature branch'")
@@ -45,9 +53,7 @@ func TestWorktreeAttach(t *testing.T) {
 		shW.OnBranch("feature")
 	})
 
-	t.Run("attach with custom name", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("attach with custom name", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack
 		sh.WriteFile("feature.txt", "feature").
@@ -72,9 +78,7 @@ func TestWorktreeAttach(t *testing.T) {
 		}
 	})
 
-	t.Run("attach child branch attaches entire stack", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("attach child branch attaches entire stack", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack with multiple branches
 		sh.WriteFile("root.txt", "root").
@@ -98,9 +102,7 @@ func TestWorktreeAttach(t *testing.T) {
 		sh.HasBranches("main", "stack-root", "child")
 	})
 
-	t.Run("attach fails for untracked branch", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("attach fails for untracked branch", func(t *testing.T, sh *TestShell) {
 
 		// Create a regular git branch (not tracked by stackit)
 		sh.Git("checkout -b untracked-branch")
@@ -112,16 +114,12 @@ func TestWorktreeAttach(t *testing.T) {
 		sh.RunExpectError("worktree attach untracked-branch")
 	})
 
-	t.Run("attach fails for non-existent branch", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("attach fails for non-existent branch", func(t *testing.T, sh *TestShell) {
 
 		sh.RunExpectError("worktree attach nonexistent")
 	})
 
-	t.Run("attach fails for branch already in worktree", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("attach fails for branch already in worktree", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack with worktree
 		sh.WriteFile("feature.txt", "feature").
@@ -131,9 +129,7 @@ func TestWorktreeAttach(t *testing.T) {
 		sh.RunExpectError("worktree attach feature")
 	})
 
-	t.Run("attach fails from inside worktree", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("attach fails from inside worktree", func(t *testing.T, sh *TestShell) {
 
 		// Create a worktree
 		sh.WriteFile("wt1.txt", "wt1").
@@ -158,10 +154,18 @@ func TestWorktreeAttach(t *testing.T) {
 func TestWorktreeDetach(t *testing.T) {
 	t.Parallel()
 
-	t.Run("detach preserves branches from attached worktree", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("detach preserves branches from attached worktree", func(t *testing.T, sh *TestShell) {
 		// Create a regular stack
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -m 'feature branch'")
@@ -198,9 +202,7 @@ func TestWorktreeDetach(t *testing.T) {
 		})
 	})
 
-	t.Run("detach created worktree reparents children and deletes anchor", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("detach created worktree reparents children and deletes anchor", func(t *testing.T, sh *TestShell) {
 
 		// Create worktree with wt create (creates anchor branch)
 		sh.Run("worktree create my-wt")
@@ -235,9 +237,7 @@ func TestWorktreeDetach(t *testing.T) {
 		sh.ExpectBranchParent("feature", "main")
 	})
 
-	t.Run("detach fails with uncommitted changes without force", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("detach fails with uncommitted changes without force", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack and attach
 		sh.WriteFile("feature.txt", "feature").
@@ -261,9 +261,7 @@ func TestWorktreeDetach(t *testing.T) {
 		}
 	})
 
-	t.Run("detach with force removes worktree with uncommitted changes", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("detach with force removes worktree with uncommitted changes", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack and attach
 		sh.WriteFile("feature.txt", "feature").
@@ -290,9 +288,7 @@ func TestWorktreeDetach(t *testing.T) {
 		sh.HasBranches("main", "feature")
 	})
 
-	t.Run("detach fails from inside worktree", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("detach fails from inside worktree", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack and attach
 		sh.WriteFile("feature.txt", "feature").
@@ -306,9 +302,7 @@ func TestWorktreeDetach(t *testing.T) {
 		shW.RunExpectError("worktree detach feature")
 	})
 
-	t.Run("detach non-existent worktree fails", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("detach non-existent worktree fails", func(t *testing.T, sh *TestShell) {
 
 		sh.RunExpectError("worktree detach nonexistent")
 	})
@@ -321,10 +315,18 @@ func TestWorktreeDetach(t *testing.T) {
 func TestWorktreeAttachDetachRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	t.Run("attach detach attach cycle works", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("attach detach attach cycle works", func(t *testing.T, sh *TestShell) {
 		// Create a stack
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -m 'feature branch'")
@@ -347,9 +349,7 @@ func TestWorktreeAttachDetachRoundTrip(t *testing.T) {
 		shW.OnBranch("feature")
 	})
 
-	t.Run("work in attached worktree then detach preserves work", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("work in attached worktree then detach preserves work", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack
 		sh.WriteFile("feature.txt", "feature").
@@ -389,10 +389,18 @@ func TestWorktreeAttachDetachRoundTrip(t *testing.T) {
 func TestWorktreeAttachDetachEdgeCases(t *testing.T) {
 	t.Parallel()
 
-	t.Run("attach stack with deep hierarchy", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("attach stack with deep hierarchy", func(t *testing.T, sh *TestShell) {
 		// Create deep stack
 		sh.WriteFile("a.txt", "a").Run("create a -m 'branch a'")
 		sh.WriteFile("b.txt", "b").Run("create b -m 'branch b'")
@@ -414,9 +422,7 @@ func TestWorktreeAttachDetachEdgeCases(t *testing.T) {
 		shW.Run("down").OnBranch("a")
 	})
 
-	t.Run("detach worktree with branch checked out elsewhere fails gracefully", func(t *testing.T) {
-		t.Parallel()
-		sh := NewTestShellInProcess(t)
+	run("detach worktree with branch checked out elsewhere fails gracefully", func(t *testing.T, sh *TestShell) {
 
 		// Create a stack
 		sh.WriteFile("feature.txt", "feature").

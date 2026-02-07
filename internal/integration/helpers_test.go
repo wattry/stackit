@@ -591,8 +591,13 @@ func (s *TestShell) resetOrigin(root string) {
 }
 
 func (s *TestShell) remotePath() string {
-	output := runGitInDir(s.t, s.scene.Dir, "remote", "get-url", "origin")
-	return strings.TrimSpace(output)
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = s.scene.Dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func runGitInDir(t *testing.T, dir string, args ...string) string {
