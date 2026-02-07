@@ -48,6 +48,7 @@ func NewMetaFrom(f MetaFields) *Meta {
 // Simple value types (*string, LockReason, BranchType) return raw values.
 // Complex types (*PrInfoPersistence, *ModifiedBy, *time.Time, []MergedParent) return copies.
 
+// GetParentBranchName returns the parent branch name, or nil if the receiver is nil.
 func (m *Meta) GetParentBranchName() *string {
 	if m == nil {
 		return nil
@@ -55,6 +56,7 @@ func (m *Meta) GetParentBranchName() *string {
 	return m.ParentBranchName
 }
 
+// GetParentBranchRevision returns the parent branch revision, or nil if the receiver is nil.
 func (m *Meta) GetParentBranchRevision() *string {
 	if m == nil {
 		return nil
@@ -62,6 +64,7 @@ func (m *Meta) GetParentBranchRevision() *string {
 	return m.ParentBranchRevision
 }
 
+// GetPrInfo returns a copy of the PR info, or nil if the receiver or field is nil.
 func (m *Meta) GetPrInfo() *PrInfoPersistence {
 	if m == nil || m.PrInfo == nil {
 		return nil
@@ -70,6 +73,7 @@ func (m *Meta) GetPrInfo() *PrInfoPersistence {
 	return &cp
 }
 
+// GetScope returns the scope, or nil if the receiver is nil.
 func (m *Meta) GetScope() *string {
 	if m == nil {
 		return nil
@@ -77,6 +81,7 @@ func (m *Meta) GetScope() *string {
 	return m.Scope
 }
 
+// GetLockReason returns the lock reason, or LockReasonNone if the receiver is nil.
 func (m *Meta) GetLockReason() LockReason {
 	if m == nil {
 		return LockReasonNone
@@ -84,6 +89,7 @@ func (m *Meta) GetLockReason() LockReason {
 	return m.LockReason
 }
 
+// GetBranchType returns the branch type, or empty string if the receiver is nil.
 func (m *Meta) GetBranchType() BranchType {
 	if m == nil {
 		return ""
@@ -91,6 +97,7 @@ func (m *Meta) GetBranchType() BranchType {
 	return m.BranchType
 }
 
+// GetLastModifiedBy returns a copy of the last modified by info, or nil if the receiver or field is nil.
 func (m *Meta) GetLastModifiedBy() *ModifiedBy {
 	if m == nil || m.LastModifiedBy == nil {
 		return nil
@@ -99,6 +106,7 @@ func (m *Meta) GetLastModifiedBy() *ModifiedBy {
 	return &cp
 }
 
+// GetLastModifiedAt returns a copy of the last modified time, or nil if the receiver or field is nil.
 func (m *Meta) GetLastModifiedAt() *time.Time {
 	if m == nil || m.LastModifiedAt == nil {
 		return nil
@@ -107,6 +115,7 @@ func (m *Meta) GetLastModifiedAt() *time.Time {
 	return &cp
 }
 
+// GetLocalOnlyHash returns the local-only hash, or nil if the receiver is nil.
 func (m *Meta) GetLocalOnlyHash() *string {
 	if m == nil {
 		return nil
@@ -114,6 +123,7 @@ func (m *Meta) GetLocalOnlyHash() *string {
 	return m.LocalOnlyHash
 }
 
+// GetMergedDownstack returns a copy of the merged downstack slice, or nil if the receiver or field is nil.
 func (m *Meta) GetMergedDownstack() []MergedParent {
 	if m == nil || m.MergedDownstack == nil {
 		return nil
@@ -123,6 +133,7 @@ func (m *Meta) GetMergedDownstack() []MergedParent {
 	return cp
 }
 
+// GetStackID returns the stack ID, or nil if the receiver is nil.
 func (m *Meta) GetStackID() *string {
 	if m == nil {
 		return nil
@@ -133,66 +144,77 @@ func (m *Meta) GetStackID() *string {
 // --- With* methods ---
 // Each returns a new Meta with the specified field changed (shallow struct copy).
 
+// WithParentBranchName returns a new Meta with the parent branch name set to v.
 func (m *Meta) WithParentBranchName(v *string) *Meta {
 	c := *m
 	c.ParentBranchName = v
 	return &c
 }
 
+// WithParentBranchRevision returns a new Meta with the parent branch revision set to v.
 func (m *Meta) WithParentBranchRevision(v *string) *Meta {
 	c := *m
 	c.ParentBranchRevision = v
 	return &c
 }
 
+// WithPrInfo returns a new Meta with the PR info set to v.
 func (m *Meta) WithPrInfo(v *PrInfoPersistence) *Meta {
 	c := *m
 	c.PrInfo = v
 	return &c
 }
 
+// WithScope returns a new Meta with the scope set to v.
 func (m *Meta) WithScope(v *string) *Meta {
 	c := *m
 	c.Scope = v
 	return &c
 }
 
+// WithLockReason returns a new Meta with the lock reason set to v.
 func (m *Meta) WithLockReason(v LockReason) *Meta {
 	c := *m
 	c.LockReason = v
 	return &c
 }
 
+// WithBranchType returns a new Meta with the branch type set to v.
 func (m *Meta) WithBranchType(v BranchType) *Meta {
 	c := *m
 	c.BranchType = v
 	return &c
 }
 
+// WithLastModifiedBy returns a new Meta with the last modified by set to v.
 func (m *Meta) WithLastModifiedBy(v *ModifiedBy) *Meta {
 	c := *m
 	c.LastModifiedBy = v
 	return &c
 }
 
+// WithLastModifiedAt returns a new Meta with the last modified time set to v.
 func (m *Meta) WithLastModifiedAt(v *time.Time) *Meta {
 	c := *m
 	c.LastModifiedAt = v
 	return &c
 }
 
+// WithLocalOnlyHash returns a new Meta with the local-only hash set to v.
 func (m *Meta) WithLocalOnlyHash(v *string) *Meta {
 	c := *m
 	c.LocalOnlyHash = v
 	return &c
 }
 
+// WithMergedDownstack returns a new Meta with the merged downstack set to v.
 func (m *Meta) WithMergedDownstack(v []MergedParent) *Meta {
 	c := *m
 	c.MergedDownstack = v
 	return &c
 }
 
+// WithStackID returns a new Meta with the stack ID set to v.
 func (m *Meta) WithStackID(v *string) *Meta {
 	c := *m
 	c.StackID = v
@@ -220,19 +242,7 @@ type metaJSON struct {
 
 // MarshalJSON implements json.Marshaler for Meta.
 func (m Meta) MarshalJSON() ([]byte, error) {
-	return json.Marshal(metaJSON{
-		ParentBranchName:     m.ParentBranchName,
-		ParentBranchRevision: m.ParentBranchRevision,
-		PrInfo:               m.PrInfo,
-		Scope:                m.Scope,
-		LockReason:           m.LockReason,
-		BranchType:           m.BranchType,
-		LastModifiedBy:       m.LastModifiedBy,
-		LastModifiedAt:       m.LastModifiedAt,
-		LocalOnlyHash:        m.LocalOnlyHash,
-		MergedDownstack:      m.MergedDownstack,
-		StackID:              m.StackID,
-	})
+	return json.Marshal(metaJSON(m))
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Meta.

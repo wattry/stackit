@@ -10,6 +10,12 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
+const (
+	testBranchMain = "main"
+	testScopeAPI   = "api"
+	testStackID    = "stack-1"
+)
+
 func TestNewMeta(t *testing.T) {
 	t.Parallel()
 	m := git.NewMeta()
@@ -21,10 +27,10 @@ func TestNewMeta(t *testing.T) {
 func TestNewMetaFrom(t *testing.T) {
 	t.Parallel()
 
-	name := "main"
+	name := testBranchMain
 	rev := "abc123"
-	scope := "api"
-	stackID := "stack-1"
+	scope := testScopeAPI
+	stackID := testStackID
 
 	m := git.NewMetaFrom(git.MetaFields{
 		ParentBranchName:     &name,
@@ -65,11 +71,11 @@ func TestMetaGetters(t *testing.T) {
 
 	t.Run("returns field values", func(t *testing.T) {
 		t.Parallel()
-		name := "main"
+		name := testBranchMain
 		rev := "abc"
-		scope := "api"
+		scope := testScopeAPI
 		hash := "xyz"
-		stackID := "stack-1"
+		stackID := testStackID
 		now := time.Now().Truncate(time.Second)
 
 		m := git.NewMetaFrom(git.MetaFields{
@@ -132,7 +138,7 @@ func TestMetaWithMethods(t *testing.T) {
 
 	t.Run("With returns new Meta without mutating original", func(t *testing.T) {
 		t.Parallel()
-		name := "main"
+		name := testBranchMain
 		original := git.NewMetaFrom(git.MetaFields{
 			ParentBranchName: &name,
 			LockReason:       git.LockReasonNone,
@@ -152,9 +158,9 @@ func TestMetaWithMethods(t *testing.T) {
 
 	t.Run("chaining multiple With calls", func(t *testing.T) {
 		t.Parallel()
-		name := "main"
+		name := testBranchMain
 		rev := "abc"
-		scope := "api"
+		scope := testScopeAPI
 
 		m := git.NewMeta().
 			WithParentBranchName(&name).
@@ -230,11 +236,11 @@ func TestMetaJSONRoundTrip(t *testing.T) {
 
 	t.Run("full meta round trip", func(t *testing.T) {
 		t.Parallel()
-		name := "main"
+		name := testBranchMain
 		rev := "abc123"
-		scope := "api"
+		scope := testScopeAPI
 		hash := "hash"
-		stackID := "stack-1"
+		stackID := testStackID
 		now := time.Now().Truncate(time.Second)
 		num := 42
 		url := "https://github.com/test/pr/42"
