@@ -324,43 +324,13 @@ func (m *LogModel) enrichData() tea.Cmd {
 
 		// Collect full annotations
 		start := time.Now()
+		enrichment := &AnnotationEnrichment{
+			CIStatuses:     ciStatuses,
+			EmptyWorktrees: emptyWorktrees,
+		}
 		annotations := make(map[string]tree.BranchAnnotation)
 		utils.Run(allBranches, func(b engine.Branch) {
-			ann := GetBranchAnnotation(eng, b)
-			// Add CI status and review status if available
-			if style == logStyleFull && !b.IsTrunk() && ciStatuses != nil {
-				if status := ciStatuses[b.GetName()]; status != nil {
-					ann.CheckStatus = tree.CheckStatusPassing
-					if status.Pending {
-						ann.CheckStatus = tree.CheckStatusPending
-					} else if !status.Passing {
-						ann.CheckStatus = tree.CheckStatusFailing
-					}
-
-					// Map review decision to display format
-					switch status.ReviewDecision {
-					case "APPROVED":
-						ann.ReviewStatus = "Approved"
-					case "CHANGES_REQUESTED":
-						ann.ReviewStatus = "Changes Requested"
-					}
-				}
-			}
-
-			// Check if this is an empty worktree anchor
-			if wtInfo, ok := emptyWorktrees[b.GetName()]; ok {
-				ann.IsEmptyWorktree = true
-				ann.WorktreePath = wtInfo.Path
-			} else {
-				// Check if this branch is a stack root with a managed worktree
-				stackRoot := eng.GetStackRootForBranch(b)
-				if stackRoot == b.GetName() {
-					if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
-						ann.WorktreePath = wtInfo.Path
-					}
-				}
-			}
-			annotations[b.GetName()] = ann
+			annotations[b.GetName()] = BuildFullAnnotation(eng, b, enrichment)
 		})
 		logDebug("Collected full annotations for %d branches in %v", len(allBranches), time.Since(start))
 
