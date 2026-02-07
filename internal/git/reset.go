@@ -10,6 +10,7 @@ func (r *runner) ResetMerge(ctx context.Context, revision string) error {
 	if err != nil {
 		return fmt.Errorf("failed to reset --merge to %s: %w", revision, err)
 	}
+	r.revisionCache.InvalidateAll()
 	return nil
 }
 
@@ -18,6 +19,7 @@ func (r *runner) HardReset(ctx context.Context, revision string) error {
 	if err != nil {
 		return fmt.Errorf("failed to hard reset to %s: %w", revision, err)
 	}
+	r.revisionCache.InvalidateAll()
 	return nil
 }
 
@@ -26,10 +28,14 @@ func (r *runner) SoftReset(ctx context.Context, revision string) error {
 	if err != nil {
 		return fmt.Errorf("failed to soft reset to %s: %w", revision, err)
 	}
+	r.revisionCache.InvalidateAll()
 	return nil
 }
 
 func (r *runner) MixedReset(ctx context.Context, revision string) error {
 	_, err := r.RunGitCommandWithContext(ctx, "reset", revision)
+	if err == nil {
+		r.revisionCache.InvalidateAll()
+	}
 	return err
 }

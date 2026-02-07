@@ -15,8 +15,8 @@ const DefaultRemote = "origin"
 
 func (r *runner) getRemote(repo *Repository) string {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	// Try to get current branch
 	head, err := repo.Head()
@@ -47,17 +47,17 @@ func (r *runner) fetchRemoteShas(ctx context.Context, repo *Repository, remote s
 	}
 
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
+	r.goGitMu.Lock()
 	rem, err := repo.Remote(remote)
-	goGitMu.Unlock()
+	r.goGitMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote %s: %w", remote, err)
 	}
 
 	// List remote references with context for timeout support
-	goGitMu.Lock()
+	r.goGitMu.Lock()
 	refs, err := rem.ListContext(ctx, &gogit.ListOptions{})
-	goGitMu.Unlock()
+	r.goGitMu.Unlock()
 	if err != nil {
 		if errors.Is(err, transport.ErrEmptyRemoteRepository) || errors.Is(err, gogit.NoErrAlreadyUpToDate) {
 			return make(map[string]string), nil
@@ -79,8 +79,8 @@ func (r *runner) fetchRemoteShas(ctx context.Context, repo *Repository, remote s
 
 func (r *runner) getRemoteSha(repo *Repository, remote, branchName string) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	refName := plumbing.ReferenceName(fmt.Sprintf("refs/remotes/%s/%s", remote, branchName))
 	ref, err := repo.Reference(refName, true)

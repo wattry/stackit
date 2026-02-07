@@ -322,6 +322,10 @@ func (m *LogModel) enrichData() tea.Cmd {
 		// Detect worktrees (builds both empty and stack-root maps in one call)
 		wtData := GetWorktreeData(eng)
 
+		// Pre-load metadata and revisions for all branches to eliminate per-branch
+		// cache misses during parallel annotation building.
+		eng.PreloadBranchData()
+
 		// Collect full annotations
 		start := time.Now()
 		enrichment := &AnnotationEnrichment{

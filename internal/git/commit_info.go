@@ -15,8 +15,8 @@ import (
 
 func (r *runner) getCommitDate(repo *Repository, branchName string) (time.Time, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	hash, err := r.resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -33,8 +33,8 @@ func (r *runner) getCommitDate(repo *Repository, branchName string) (time.Time, 
 
 func (r *runner) getCommitAuthor(repo *Repository, branchName string) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	hash, err := r.resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -50,9 +50,16 @@ func (r *runner) getCommitAuthor(repo *Repository, branchName string) (string, e
 }
 
 func (r *runner) getRevision(repo *Repository, branchName string) (string, error) {
+	// Check revision cache first to avoid go-git mutex contention.
+	// The cache is populated by LoadAllBranchRevisions (batch preload)
+	// but not on individual misses, to avoid stale entries from external mutations.
+	if cached, ok := r.revisionCache.Get(branchName); ok {
+		return cached, nil
+	}
+
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	hash, err := r.resolveRefHashInternal(repo, branchName)
 	if err != nil {
@@ -64,8 +71,8 @@ func (r *runner) getRevision(repo *Repository, branchName string) (string, error
 
 func (r *runner) getRemoteRevision(repo *Repository, branchName string) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	// Try refs/remotes/origin/branchName
 	hash, err := r.resolveRefHashInternal(repo, "origin/"+branchName)
@@ -136,8 +143,8 @@ func (r *runner) getCommitRangeGitFallback(base, head string) ([]string, error) 
 // resolveRefHash resolves a ref (branch name, SHA, or ref path) to a hash
 func (r *runner) resolveRefHash(repo *Repository, ref string) (plumbing.Hash, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	return r.resolveRefHashInternal(repo, ref)
 }
@@ -181,6 +188,35 @@ func (r *runner) resolveRefHashInternal(repo *Repository, ref string) (plumbing.
 	}
 
 	return plumbing.ZeroHash, fmt.Errorf("failed to resolve ref %s: reference not found", ref)
+}
+
+// LoadAllBranchRevisions populates the revision cache for all local branches
+// using a single `git show-ref --heads` call. This replaces N individual
+// go-git ref resolutions (each requiring goGitMu) with one subprocess call.
+func (r *runner) LoadAllBranchRevisions() error {
+	output, err := r.RunGitCommandWithContext(context.Background(), "show-ref", "--heads")
+	if err != nil {
+		// show-ref returns exit code 1 if no refs found (empty repo)
+		return nil //nolint:nilerr
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		// Format: "SHA refs/heads/branchname"
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		sha := parts[0]
+		ref := parts[1]
+		if branchName, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+			r.revisionCache.Put(branchName, sha)
+		}
+	}
+	return nil
 }
 
 func (r *runner) batchGetRevisions(repo *Repository, branchNames []string) (map[string]string, []error) {

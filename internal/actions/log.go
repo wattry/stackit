@@ -69,6 +69,10 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 		renderer = tui.NewStackTreeRenderer(ctx.Engine)
 	}
 
+	// Pre-load metadata and revisions for all branches to eliminate per-branch
+	// cache misses during parallel annotation building.
+	ctx.Engine.PreloadBranchData()
+
 	// Render the stack
 	// First, collect annotations for all branches in the stack using a worker pool
 	annotations := make(map[string]tree.BranchAnnotation)

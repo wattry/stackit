@@ -140,6 +140,31 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	return added, deleted, nil
 }
 
+// PreloadBranchData batch-loads metadata and revisions for all tracked branches
+// into their respective caches. This replaces N individual lookups (each requiring
+// mutex acquisition or subprocess spawning) with two bulk operations:
+//   - git show-ref --heads (one subprocess for all branch SHAs)
+//   - BatchReadMetadata (parallel metadata reads, cached via sync.Map)
+//
+// After calling this, parallel annotation building via utils.Run will find all
+// data cached, eliminating go-git mutex contention for revision lookups.
+func (e *engineImpl) PreloadBranchData() {
+	e.mu.RLock()
+	branches := make([]string, 0, len(e.branchState))
+	for name := range e.branchState {
+		branches = append(branches, name)
+	}
+	e.mu.RUnlock()
+
+	// Batch load all branch revisions via single git show-ref --heads call
+	_ = e.git.LoadAllBranchRevisions()
+
+	// Batch load all metadata (populates metadataCache via sync.Map)
+	if len(branches) > 0 {
+		e.git.BatchReadMetadata(branches)
+	}
+}
+
 // GetAllCommits returns commits for a branch in various formats
 func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string, error) {
 	branchName := branch.GetName()
