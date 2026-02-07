@@ -241,7 +241,7 @@ func TestMetaJSONRoundTrip(t *testing.T) {
 		scope := testScopeAPI
 		hash := "hash"
 		stackID := testStackID
-		now := time.Now().Truncate(time.Second)
+		now := time.Now().UTC().Truncate(time.Second)
 		num := 42
 		url := "https://github.com/test/pr/42"
 		ghUser := "testuser"
@@ -283,7 +283,7 @@ func TestMetaJSONRoundTrip(t *testing.T) {
 		require.Equal(t, git.BranchTypeUtility, restored.GetBranchType())
 		require.Equal(t, hash, *restored.GetLocalOnlyHash())
 		require.Equal(t, stackID, *restored.GetStackID())
-		require.Equal(t, now, *restored.GetLastModifiedAt())
+		require.Equal(t, now, restored.GetLastModifiedAt().UTC())
 		require.Equal(t, "Test User", restored.GetLastModifiedBy().GitName)
 		require.Equal(t, "test@example.com", restored.GetLastModifiedBy().GitEmail)
 		require.Equal(t, ghUser, *restored.GetLastModifiedBy().GitHubUsername)
