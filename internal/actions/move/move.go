@@ -264,10 +264,8 @@ func Action(ctx *app.Context, opts Options, h Handler) error {
 	if oldParentName != eng.Trunk().GetName() {
 		affectedBranches = append(affectedBranches, oldParentName)
 	}
-	for _, branchName := range affectedBranches {
-		if err := eng.MarkNeedsPRBodyUpdate(branchName); err != nil {
-			out.Debug("Failed to mark %s for PR body update: %v", branchName, err)
-		}
+	if err := eng.BatchMarkNeedsPRBodyUpdate(affectedBranches); err != nil {
+		out.Debug("Failed to mark branches for PR body update: %v", err)
 	}
 
 	newName := ""

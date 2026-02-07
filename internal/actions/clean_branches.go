@@ -241,7 +241,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 				mu.Lock()
 				deleteStatuses[name] = reason
 				// Track if this is a utility branch (e.g., consolidated merge branch)
-				if meta != nil && meta.BranchType == git.BranchTypeUtility {
+				if meta != nil && meta.GetBranchType() == git.BranchTypeUtility {
 					utilityBranches[name] = true
 				}
 				mu.Unlock()

@@ -169,10 +169,10 @@ func (e *engineImpl) restackBranch(
 			// Prepare metadata update
 			meta, err := e.git.ReadMetadata(branchName)
 			if err != nil {
-				meta = &git.Meta{}
+				meta = git.NewMeta()
 			}
 			if parentRev != "" {
-				meta.ParentBranchRevision = &parentRev
+				meta = meta.WithParentBranchRevision(&parentRev)
 			}
 			metadataJSON, err := json.Marshal(meta)
 			if err != nil {
@@ -242,9 +242,9 @@ func (e *engineImpl) restackBranch(
 		// Prepare metadata update with new parent revision
 		meta, err := e.git.ReadMetadata(branchName)
 		if err != nil {
-			meta = &git.Meta{}
+			meta = git.NewMeta()
 		}
-		meta.ParentBranchRevision = &trunkRev
+		meta = meta.WithParentBranchRevision(&trunkRev)
 		metadataJSON, err := json.Marshal(meta)
 		if err != nil {
 			return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to marshal metadata for anchor %s: %w", branchName, err)
@@ -341,8 +341,8 @@ func (e *engineImpl) restackBranch(
 
 	// Get oldParentRev from metadata (or use parentRev as default)
 	oldParentRev := parentRev
-	if meta.ParentBranchRevision != nil {
-		oldParentRev = *meta.ParentBranchRevision
+	if meta.GetParentBranchRevision() != nil {
+		oldParentRev = *meta.GetParentBranchRevision()
 	}
 
 	// RESILIENCY: If oldParentRev is no longer an ancestor of branchName,
@@ -415,9 +415,9 @@ func (e *engineImpl) restackBranch(
 	// Prepare metadata update
 	meta, metaReadErr := e.git.ReadMetadata(branchName)
 	if metaReadErr != nil {
-		meta = &git.Meta{}
+		meta = git.NewMeta()
 	}
-	meta.ParentBranchRevision = &parentRev
+	meta = meta.WithParentBranchRevision(&parentRev)
 	metadataJSON, err := json.Marshal(meta)
 	if err != nil {
 		return RestackBranchResult{

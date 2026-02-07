@@ -12,9 +12,19 @@ import (
 // =============================================================================
 
 func TestWorktreeBasicOperations(t *testing.T) {
-	t.Run("create branch with worktree flag", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("create branch with worktree flag", func(t *testing.T, sh *TestShell) {
 		// Create a branch with the -w (worktree) flag
 		sh.WriteFile("feature.txt", "feature content").
 			Run("create feature -w -m 'feature branch'")
@@ -37,9 +47,7 @@ func TestWorktreeBasicOperations(t *testing.T) {
 		shW.OnBranch("feature")
 	})
 
-	t.Run("worktree list shows all registered worktrees", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree list shows all registered worktrees", func(_ *testing.T, sh *TestShell) {
 		// Create multiple worktrees
 		sh.WriteFile("a.txt", "a").Run("create stack-a -w -m 'stack a'")
 		sh.WriteFile("b.txt", "b").Run("create stack-b -w -m 'stack b'")
@@ -52,9 +60,7 @@ func TestWorktreeBasicOperations(t *testing.T) {
 			OutputContains("stack-c")
 	})
 
-	t.Run("worktree open returns correct path", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree open returns correct path", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -66,9 +72,7 @@ func TestWorktreeBasicOperations(t *testing.T) {
 			OutputContains(worktreePath)
 	})
 
-	t.Run("worktree remove cleans up worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree remove cleans up worktree", func(t *testing.T, sh *TestShell) {
 		sh.WriteFile("mystack.txt", "mystack").
 			Run("create mystack -w -m 'mystack branch'")
 
@@ -96,9 +100,19 @@ func TestWorktreeBasicOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeCreateBranches(t *testing.T) {
-	t.Run("create child branch in worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("create child branch in worktree", func(_ *testing.T, sh *TestShell) {
 		// Create stack root in worktree
 		sh.WriteFile("root.txt", "root").
 			Run("create stack-root -w -m 'stack root'")
@@ -124,9 +138,7 @@ func TestWorktreeCreateBranches(t *testing.T) {
 		})
 	})
 
-	t.Run("create parallel branches in worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("create parallel branches in worktree", func(_ *testing.T, sh *TestShell) {
 		// Create stack root
 		sh.WriteFile("root.txt", "root").
 			Run("create stack-root -w -m 'stack root'")
@@ -152,9 +164,7 @@ func TestWorktreeCreateBranches(t *testing.T) {
 		})
 	})
 
-	t.Run("cannot create worktree from within worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("cannot create worktree from within worktree", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("root.txt", "root").
 			Run("create stack-root -w -m 'stack root'")
 
@@ -173,9 +183,19 @@ func TestWorktreeCreateBranches(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeSyncOperations(t *testing.T) {
-	t.Run("sync from main updates worktree branches", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
+	t.Parallel()
+	shared := NewTestShellInProcess(t, WithRemote())
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("sync from main updates worktree branches", func(t *testing.T, sh *TestShell) {
 		// Create a stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -215,9 +235,7 @@ func TestWorktreeSyncOperations(t *testing.T) {
 		}
 	})
 
-	t.Run("sync from worktree updates main repo branches", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	run("sync from worktree updates main repo branches", func(_ *testing.T, sh *TestShell) {
 		// Create a stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -245,9 +263,7 @@ func TestWorktreeSyncOperations(t *testing.T) {
 		})
 	})
 
-	t.Run("sync cleans orphaned worktrees when branches deleted", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	run("sync cleans orphaned worktrees when branches deleted", func(t *testing.T, sh *TestShell) {
 		// Create a stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -291,9 +307,19 @@ func TestWorktreeSyncOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeRestackOperations(t *testing.T) {
-	t.Run("restack from main updates worktree branches", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("restack from main updates worktree branches", func(t *testing.T, sh *TestShell) {
 		// Create stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -330,9 +356,7 @@ func TestWorktreeRestackOperations(t *testing.T) {
 		}
 	})
 
-	t.Run("restack from worktree works correctly", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("restack from worktree works correctly", func(t *testing.T, sh *TestShell) {
 		// Create stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -365,9 +389,19 @@ func TestWorktreeRestackOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeModifyOperations(t *testing.T) {
-	t.Run("modify in worktree triggers restack of children", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("modify in worktree triggers restack of children", func(t *testing.T, sh *TestShell) {
 		// Create stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -392,9 +426,7 @@ func TestWorktreeModifyOperations(t *testing.T) {
 		}
 	})
 
-	t.Run("modify parent from main repo restacks worktree children", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("modify parent from main repo restacks worktree children", func(t *testing.T, sh *TestShell) {
 		// Create stack in worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -431,9 +463,19 @@ func TestWorktreeModifyOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeNavigation(t *testing.T) {
-	t.Run("checkout within worktree stays in worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("checkout within worktree stays in worktree", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -450,9 +492,7 @@ func TestWorktreeNavigation(t *testing.T) {
 		shW.Top().OnBranch("child")
 	})
 
-	t.Run("up and down navigation works in worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("up and down navigation works in worktree", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -474,9 +514,7 @@ func TestWorktreeNavigation(t *testing.T) {
 		shW.Run("up").OnBranch("c")
 	})
 
-	t.Run("log command works in worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("log command works in worktree", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -498,9 +536,29 @@ func TestWorktreeNavigation(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeEdgeCases(t *testing.T) {
-	t.Run("worktree with uncommitted changes during restack", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
+	sharedRemote := NewTestShellInProcess(t, WithRemote())
+	sharedRemote.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	runRemote := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := sharedRemote.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("worktree with uncommitted changes during restack", func(t *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -529,9 +587,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple worktrees with same parent", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	runRemote("multiple worktrees with same parent", func(t *testing.T, sh *TestShell) {
 		// Create multiple stacks from main, each in own worktree
 		sh.WriteFile("stack1.txt", "stack1").
 			Run("create stack1 -w -m 'stack 1'")
@@ -565,9 +621,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("worktree uses default stacks directory", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	run("worktree uses default stacks directory", func(t *testing.T, sh *TestShell) {
 		// Create worktree
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -583,9 +637,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("worktree survives git gc", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	run("worktree survives git gc", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -608,9 +660,19 @@ func TestWorktreeEdgeCases(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeMoveOperations(t *testing.T) {
-	t.Run("move branch in worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("move branch in worktree", func(_ *testing.T, sh *TestShell) {
 		// Create two stacks in worktrees
 		sh.WriteFile("stack1.txt", "stack1").
 			Run("create stack1 -w -m 'stack 1'")
@@ -638,9 +700,19 @@ func TestWorktreeMoveOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeSubmitOperations(t *testing.T) {
-	t.Run("submit from worktree creates PRs", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
+	t.Parallel()
+	shared := NewTestShellInProcess(t, WithRemote())
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("submit from worktree creates PRs", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -666,9 +738,19 @@ func TestWorktreeSubmitOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeUndoOperations(t *testing.T) {
-	t.Run("undo create in worktree removes branch", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("undo create in worktree removes branch", func(_ *testing.T, sh *TestShell) {
 		// Create a stack without worktree first to avoid worktree complexity
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -m 'feature branch'")
@@ -688,9 +770,7 @@ func TestWorktreeUndoOperations(t *testing.T) {
 			OnBranch("feature")
 	})
 
-	t.Run("worktree branches visible from main repo", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree branches visible from main repo", func(_ *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -717,9 +797,29 @@ func TestWorktreeUndoOperations(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeComplexScenarios(t *testing.T) {
-	t.Run("interleaved commits across worktrees and main", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
+	sharedRemote := NewTestShellInProcess(t, WithRemote())
+	sharedRemote.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	runRemote := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := sharedRemote.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	runRemote("interleaved commits across worktrees and main", func(t *testing.T, sh *TestShell) {
 		// Create two stacks
 		sh.WriteFile("a.txt", "a").Run("create stack-a -w -m 'stack a'")
 		sh.WriteFile("b.txt", "b").Run("create stack-b -w -m 'stack b'")
@@ -766,9 +866,7 @@ func TestWorktreeComplexScenarios(t *testing.T) {
 		}
 	})
 
-	t.Run("one stack merged while working in another worktree", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	runRemote("one stack merged while working in another worktree", func(t *testing.T, sh *TestShell) {
 		// Create two stacks
 		sh.WriteFile("merged.txt", "merged").Run("create to-be-merged -w -m 'to be merged'")
 		sh.WriteFile("active.txt", "active").Run("create active-work -w -m 'active work'")
@@ -806,9 +904,7 @@ func TestWorktreeComplexScenarios(t *testing.T) {
 		shActive.Checkout("more-work").OnBranch("more-work")
 	})
 
-	t.Run("modify in main while worktree has different branch checked out", func(t *testing.T) {
-		sh := NewTestShellInProcess(t, WithRemote())
-
+	run("modify in main while worktree has different branch checked out", func(t *testing.T, sh *TestShell) {
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
 
@@ -848,21 +944,27 @@ func TestWorktreeComplexScenarios(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeErrorHandling(t *testing.T) {
-	t.Run("worktree open with non-existent stack fails gracefully", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("worktree open with non-existent stack fails gracefully", func(_ *testing.T, sh *TestShell) {
 		sh.RunExpectError("worktree open nonexistent")
 	})
 
-	t.Run("worktree remove with non-existent stack fails gracefully", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree remove with non-existent stack fails gracefully", func(_ *testing.T, sh *TestShell) {
 		sh.RunExpectError("worktree remove nonexistent")
 	})
 
-	t.Run("creating worktree for non-trunk branch fails", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("creating worktree for non-trunk branch fails", func(_ *testing.T, sh *TestShell) {
 		// Create a regular branch first
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -m 'feature branch'")
@@ -878,9 +980,19 @@ func TestWorktreeErrorHandling(t *testing.T) {
 // =============================================================================
 
 func TestWorktreeAnchorBranchCleanup(t *testing.T) {
-	t.Run("worktree remove deletes anchor branch", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
+	t.Parallel()
+	shared := NewTestShellInProcess(t)
+	shared.SetWorktreeBasePath(t.TempDir())
 
+	run := func(name string, fn func(t *testing.T, sh *TestShell)) {
+		t.Run(name, func(t *testing.T) {
+			sh := shared.WithT(t)
+			sh.ResetRepo()
+			fn(t, sh)
+		})
+	}
+
+	run("worktree remove deletes anchor branch", func(t *testing.T, sh *TestShell) {
 		// Create worktree
 		sh.WriteFile("mystack.txt", "mystack").
 			Run("create mystack -w -m 'mystack branch'")
@@ -902,9 +1014,7 @@ func TestWorktreeAnchorBranchCleanup(t *testing.T) {
 		sh.HasBranches("main")
 	})
 
-	t.Run("worktree remove with --keep-branch preserves anchor", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree remove with --keep-branch preserves anchor", func(t *testing.T, sh *TestShell) {
 		// Create worktree
 		sh.WriteFile("mystack.txt", "mystack").
 			Run("create mystack -w -m 'mystack branch'")
@@ -926,9 +1036,7 @@ func TestWorktreeAnchorBranchCleanup(t *testing.T) {
 		sh.HasBranches("main", "mystack")
 	})
 
-	t.Run("worktree remove skips deletion when anchor has children", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree remove skips deletion when anchor has children", func(_ *testing.T, sh *TestShell) {
 		// Create worktree with child branches
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -950,9 +1058,7 @@ func TestWorktreeAnchorBranchCleanup(t *testing.T) {
 		sh.HasBranches("main", "feature", "child")
 	})
 
-	t.Run("worktree prune cleans up missing directories", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree prune cleans up missing directories", func(t *testing.T, sh *TestShell) {
 		// Create worktree
 		sh.WriteFile("test-wt.txt", "test-wt").
 			Run("create test-wt -w -m 'test worktree'")
@@ -982,9 +1088,7 @@ func TestWorktreeAnchorBranchCleanup(t *testing.T) {
 		sh.HasBranches("main")
 	})
 
-	t.Run("worktree prune dry-run shows what would be cleaned", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree prune dry-run shows what would be cleaned", func(t *testing.T, sh *TestShell) {
 		// Create worktree
 		sh.WriteFile("test-wt.txt", "test-wt").
 			Run("create test-wt -w -m 'test worktree'")
@@ -1005,9 +1109,7 @@ func TestWorktreeAnchorBranchCleanup(t *testing.T) {
 		sh.HasBranches("main", "test-wt")
 	})
 
-	t.Run("worktree prune skips missing worktrees with children", func(t *testing.T) {
-		sh := NewTestShellInProcess(t)
-
+	run("worktree prune skips missing worktrees with children", func(t *testing.T, sh *TestShell) {
 		// Create worktree with child branches
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")

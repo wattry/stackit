@@ -40,8 +40,8 @@ func (r *runner) getMergeBaseByRef(repo *Repository, ref1Name, ref2Name string) 
 
 func (r *runner) getMergeBaseGoGit(repo *Repository, hash1, hash2 plumbing.Hash) (string, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	commit1, err := repo.CommitObject(hash1)
 	if err != nil {
@@ -104,8 +104,8 @@ func (r *runner) isAncestor(repo *Repository, ancestor, descendant string) (bool
 
 func (r *runner) isAncestorGoGit(repo *Repository, ancestorHash, descendantHash plumbing.Hash) (bool, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
-	goGitMu.Lock()
-	defer goGitMu.Unlock()
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
 
 	// Get commit objects
 	ancestorCommit, err := repo.CommitObject(ancestorHash)

@@ -107,11 +107,11 @@ func (h *SimpleSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMetadataI
 	h.Output.Warn("Orphaned metadata for %s (accepting deletion):",
 		style.ColorBranchName(info.BranchName, false))
 	if info.LocalMeta != nil {
-		if info.LocalMeta.LockReason.IsLocked() {
-			h.Output.Warn("  lockReason: %s", info.LocalMeta.LockReason)
+		if info.LocalMeta.GetLockReason().IsLocked() {
+			h.Output.Warn("  lockReason: %s", info.LocalMeta.GetLockReason())
 		}
-		if info.LocalMeta.Scope != nil {
-			h.Output.Warn("  scope: %s", *info.LocalMeta.Scope)
+		if info.LocalMeta.GetScope() != nil {
+			h.Output.Warn("  scope: %s", *info.LocalMeta.GetScope())
 		}
 	}
 	h.Output.Info("  Use interactive mode to push local changes")
@@ -652,10 +652,12 @@ func (h *InteractiveSyncHandler) PromptMetadataConflict(diff *engine.MetadataDif
 	for _, fd := range diff.Differences {
 		h.output.Info("  %s: %v (local) → %v (remote)", fd.Field, fd.LocalValue, fd.RemoteValue)
 	}
-	if diff.RemoteMeta != nil && diff.RemoteMeta.LastModifiedBy != nil {
-		h.output.Info("  Last modified by: %s <%s>",
-			diff.RemoteMeta.LastModifiedBy.GitName,
-			diff.RemoteMeta.LastModifiedBy.GitEmail)
+	if diff.RemoteMeta != nil {
+		if modBy := diff.RemoteMeta.GetLastModifiedBy(); modBy != nil {
+			h.output.Info("  Last modified by: %s <%s>",
+				modBy.GitName,
+				modBy.GitEmail)
+		}
 	}
 
 	return tui.PromptConfirm("Accept remote metadata?", false)
@@ -669,11 +671,11 @@ func (h *InteractiveSyncHandler) PromptOrphanedMetadata(info engine.OrphanedMeta
 	h.output.Info("\nRemote metadata for '%s' was deleted, but you have local changes:",
 		style.ColorBranchName(info.BranchName, false))
 	if info.LocalMeta != nil {
-		if info.LocalMeta.LockReason.IsLocked() {
-			h.output.Info("  lockReason: %s", info.LocalMeta.LockReason)
+		if info.LocalMeta.GetLockReason().IsLocked() {
+			h.output.Info("  lockReason: %s", info.LocalMeta.GetLockReason())
 		}
-		if info.LocalMeta.Scope != nil {
-			h.output.Info("  scope: %s", *info.LocalMeta.Scope)
+		if info.LocalMeta.GetScope() != nil {
+			h.output.Info("  scope: %s", *info.LocalMeta.GetScope())
 		}
 	}
 

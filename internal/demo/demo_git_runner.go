@@ -172,6 +172,10 @@ func (d *demoGitRunner) BatchGetRevisions(branchNames []string) (map[string]stri
 	return results, nil
 }
 
+func (d *demoGitRunner) LoadAllBranchRevisions() error {
+	return nil
+}
+
 func (d *demoGitRunner) GetMergeBase(_, _ string) (string, error) {
 	return "merge-base-sha", nil
 }
@@ -565,7 +569,7 @@ func (d *demoGitRunner) ListRefs(_ string) (map[string]string, error) {
 }
 
 func (d *demoGitRunner) ReadMetadata(_ string) (*git.Meta, error) {
-	return &git.Meta{}, nil
+	return git.NewMeta(), nil
 }
 
 func (d *demoGitRunner) WriteMetadata(_ string, _ *git.Meta) error {

@@ -53,11 +53,11 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 			continue // Trunk branches should never be tracked
 		}
 
-		if meta.ParentBranchName == nil {
+		if meta.GetParentBranchName() == nil {
 			continue // No parent means not tracked
 		}
 
-		parent := *meta.ParentBranchName
+		parent := *meta.GetParentBranchName()
 		if parent == name {
 			continue // Skip self-parenting to avoid cycles
 		}
@@ -65,11 +65,11 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 		// Create or get branch state
 		state := &BranchState{
 			Parent:     parent,
-			LockReason: meta.LockReason,
-			BranchType: meta.BranchType,
+			LockReason: meta.GetLockReason(),
+			BranchType: meta.GetBranchType(),
 		}
-		if meta.Scope != nil {
-			state.Scope = *meta.Scope
+		if meta.GetScope() != nil {
+			state.Scope = *meta.GetScope()
 		}
 
 		e.branchState.Set(name, state)
@@ -120,8 +120,8 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 
 	// Determine new parent
 	newParent := ""
-	if meta.ParentBranchName != nil {
-		newParent = *meta.ParentBranchName
+	if meta.GetParentBranchName() != nil {
+		newParent = *meta.GetParentBranchName()
 	}
 
 	// If no parent, branch is not tracked - remove it
@@ -136,11 +136,11 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 	// Create or update branch state
 	state := &BranchState{
 		Parent:     newParent,
-		LockReason: meta.LockReason,
-		BranchType: meta.BranchType,
+		LockReason: meta.GetLockReason(),
+		BranchType: meta.GetBranchType(),
 	}
-	if meta.Scope != nil {
-		state.Scope = *meta.Scope
+	if meta.GetScope() != nil {
+		state.Scope = *meta.GetScope()
 	}
 	if localMeta != nil {
 		state.Frozen = localMeta.Frozen
@@ -232,8 +232,9 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 
 	// Check if parent has "MERGED" PR state in metadata
 	if metaMap != nil {
-		if meta, ok := metaMap[parentBranchName]; ok && meta != nil && meta.PrInfo != nil {
-			if meta.PrInfo.State != nil && *meta.PrInfo.State == "MERGED" {
+		if meta, ok := metaMap[parentBranchName]; ok && meta != nil {
+			prInfo := meta.GetPrInfo()
+			if prInfo != nil && prInfo.State != nil && *prInfo.State == "MERGED" {
 				return true
 			}
 			// If metadata exists but state isn't MERGED, we don't need to check further
@@ -299,22 +300,25 @@ func (e *engineImpl) appendMergedDownstack(
 
 	// Build MergedParent from old parent
 	mp := git.MergedParent{BranchName: oldParent}
-	if oldParentMeta != nil && oldParentMeta.PrInfo != nil {
-		mp.PRNumber = oldParentMeta.PrInfo.Number
-		mp.PRState = oldParentMeta.PrInfo.State
+	if oldParentMeta != nil {
+		oldParentPrInfo := oldParentMeta.GetPrInfo()
+		if oldParentPrInfo != nil {
+			mp.PRNumber = oldParentPrInfo.Number
+			mp.PRState = oldParentPrInfo.State
+		}
 	}
 
 	// Inherit old parent's history (for multi-level: A→B→C, if B merges)
 	var history []git.MergedParent
 	if oldParentMeta != nil {
-		history = append(history, oldParentMeta.MergedDownstack...)
+		history = append(history, oldParentMeta.GetMergedDownstack()...)
 	}
 
 	// Check if oldParent already in history (prevent duplicates from retried operations)
 	for _, existing := range history {
 		if existing.BranchName == oldParent {
 			// Already captured, skip adding duplicate
-			meta.MergedDownstack = history
+			meta = meta.WithMergedDownstack(history)
 			if err := e.git.WriteMetadata(branchName, meta); err != nil {
 				return err
 			}
@@ -333,7 +337,7 @@ func (e *engineImpl) appendMergedDownstack(
 		history = history[len(history)-maxHistoryEntries:]
 	}
 
-	meta.MergedDownstack = history
+	meta = meta.WithMergedDownstack(history)
 
 	// Write and update cache
 	if err := e.git.WriteMetadata(branchName, meta); err != nil {

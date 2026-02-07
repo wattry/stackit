@@ -290,8 +290,8 @@ func (e *engineImpl) BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, in
 func (e *engineImpl) GetDivergencePoint(branchName string) (string, error) {
 	// First, try to get from metadata
 	meta, err := e.git.ReadMetadata(branchName)
-	if err == nil && meta.ParentBranchRevision != nil && *meta.ParentBranchRevision != "" {
-		return *meta.ParentBranchRevision, nil
+	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil && *rev != "" {
+		return *rev, nil
 	}
 
 	// Get the parent branch

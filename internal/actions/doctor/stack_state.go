@@ -79,7 +79,7 @@ func checkStackState(ctx context.Context, eng engine.Engine, handler Handler, wa
 			errors++
 		} else if meta := allMeta[branchName]; meta != nil {
 			// Validate that if parent is set, it's not empty
-			if meta.ParentBranchName != nil && *meta.ParentBranchName == "" {
+			if meta.GetParentBranchName() != nil && *meta.GetParentBranchName() == "" {
 				corruptedCount++
 				errors++
 			}

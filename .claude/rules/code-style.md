@@ -31,6 +31,32 @@ const (
 )
 ```
 
+## Batch Operations (N+1 Prevention)
+
+**Always use batch APIs for git and GitHub operations.** Calling individual operations in a loop creates N+1 performance problems — each call spawns a separate git process or HTTP request.
+
+| Instead of | Use |
+|------------|-----|
+| `MarkNeedsPRBodyUpdate` in a loop | `BatchMarkNeedsPRBodyUpdate(branchNames)` |
+| `ReadLocalMetadata` in a loop | `BatchReadLocalMetadata(branchNames)` |
+| `UpdateRef` in a loop | `UpdateRefsBatch(ctx, updates)` |
+| `DeleteRef` in a loop | `DeleteRefsBatch(ctx, refNames)` |
+| `PushBranch` in a loop | `PushMetadataRefs(ctx, branches)` |
+
+**Why:** Each git command spawns a process (~2-5ms overhead). Each GitHub API call takes ~200-500ms. For N branches, a loop costs O(N × overhead) while a batch costs O(1) or O(N) with parallelism.
+
+```go
+// BAD - N git processes for N branches
+for _, name := range branchNames {
+    _ = eng.MarkNeedsPRBodyUpdate(name)
+}
+
+// GOOD - parallel reads + single atomic ref update
+_ = eng.BatchMarkNeedsPRBodyUpdate(branchNames)
+```
+
+When adding new operations that touch multiple branches or refs, prefer designing batch APIs from the start. Use `UpdateRefsBatch` for atomic multi-ref writes and `BatchReadLocalMetadata` / `BatchReadMetadata` for parallel reads.
+
 ## Error Handling
 
 - Always handle errors explicitly (never `_`)

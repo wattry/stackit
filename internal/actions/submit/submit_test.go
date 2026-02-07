@@ -55,9 +55,9 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		// Verify that metadata was updated with LastModifiedBy after submit
 		meta, err := s.Engine.Git().ReadMetadata("feature")
 		require.NoError(t, err, "Should be able to read metadata ref after submit")
-		require.NotNil(t, meta.LastModifiedBy, "LastModifiedBy should be set after submit")
-		require.NotEmpty(t, meta.LastModifiedBy.GitName, "LastModifiedBy.GitName should not be empty")
-		require.NotEmpty(t, meta.LastModifiedBy.GitEmail, "LastModifiedBy.GitEmail should not be empty")
+		require.NotNil(t, meta.GetLastModifiedBy(), "LastModifiedBy should be set after submit")
+		require.NotEmpty(t, meta.GetLastModifiedBy().GitName, "LastModifiedBy.GitName should not be empty")
+		require.NotEmpty(t, meta.GetLastModifiedBy().GitEmail, "LastModifiedBy.GitEmail should not be empty")
 	})
 
 	t.Run("updates existing PR", func(t *testing.T) {
@@ -163,7 +163,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		for _, branchName := range []string{"P", "C1", "C2"} {
 			meta, err := s.Engine.Git().ReadMetadata(branchName)
 			require.NoError(t, err, "Should be able to read metadata for %s", branchName)
-			require.NotNil(t, meta.LastModifiedBy, "LastModifiedBy should be set for %s", branchName)
+			require.NotNil(t, meta.GetLastModifiedBy(), "LastModifiedBy should be set for %s", branchName)
 		}
 	})
 
@@ -281,5 +281,5 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	meta, err := s.Engine.Git().ReadMetadata("feature")
 	require.NoError(t, err)
-	require.Equal(t, git.LockReasonUser, meta.LockReason, "Metadata LockReason field should be set")
+	require.Equal(t, git.LockReasonUser, meta.GetLockReason(), "Metadata LockReason field should be set")
 }

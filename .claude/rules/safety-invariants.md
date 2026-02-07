@@ -110,10 +110,12 @@ if err := actions.PushMetadataAndSyncPRs(ctx, branches); err != nil {
     out.Debug("Failed: %v", err)
 }
 
-// CORRECT - mark for update, sync handles GitHub
-for _, branch := range branches {
-    _ = eng.MarkNeedsPRBodyUpdate(branch.GetName())
+// CORRECT - batch mark for update, sync handles GitHub
+branchNames := make([]string, len(branches))
+for i, b := range branches {
+    branchNames[i] = b.GetName()
 }
+_ = eng.BatchMarkNeedsPRBodyUpdate(branchNames)
 if err := pushMetadataOnly(ctx, eng, branchName); err != nil {
     out.Debug("Failed: %v", err)
 }

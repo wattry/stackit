@@ -70,7 +70,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Info("Unset explicit scope for branch %s. It will now inherit from its parent.", style.ColorBranchName(currentBranch, false))
 
 		// Mark branch for PR update and push metadata (defer GitHub API calls to sync)
-		_ = eng.MarkNeedsPRBodyUpdate(currentBranch)
+		_ = eng.BatchMarkNeedsPRBodyUpdate([]string{currentBranch})
 		if err := actions.PushMetadataOnly(ctx, eng, []string{currentBranch}); err != nil {
 			out.Debug("Failed to push metadata changes: %v", err)
 		}
@@ -115,7 +115,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Mark branch for PR update and push metadata (defer GitHub API calls to sync)
-	_ = eng.MarkNeedsPRBodyUpdate(currentBranch)
+	_ = eng.BatchMarkNeedsPRBodyUpdate([]string{currentBranch})
 	if err := actions.PushMetadataOnly(ctx, eng, []string{currentBranch}); err != nil {
 		out.Debug("Failed to push metadata changes: %v", err)
 	}

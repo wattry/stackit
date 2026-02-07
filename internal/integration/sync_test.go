@@ -20,7 +20,9 @@ import (
 const prStateMerged = "MERGED"
 
 func TestSync(t *testing.T) {
+	t.Parallel()
 	t.Run("local parent is authoritative over GitHub PR base", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a diamond-like structure:
@@ -46,11 +48,13 @@ func TestSync(t *testing.T) {
 		meta, err := eng.Git().ReadMetadata("feature-b")
 		require.NoError(t, err)
 
-		if meta.PrInfo == nil {
-			meta.PrInfo = &git.PrInfoPersistence{}
+		prInfo := meta.GetPrInfo()
+		if prInfo == nil {
+			prInfo = &git.PrInfoPersistence{}
 		}
 		newBase := mainBranchName
-		meta.PrInfo.Base = &newBase
+		prInfo.Base = &newBase
+		meta = meta.WithPrInfo(prInfo)
 
 		err = eng.Git().WriteMetadata("feature-b", meta)
 		require.NoError(t, err)
@@ -68,6 +72,7 @@ func TestSync(t *testing.T) {
 	})
 
 	t.Run("handles consolidation and deletion of merged branches", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a chain of branches: main -> branch-a -> branch-b -> branch-c
@@ -93,17 +98,19 @@ func TestSync(t *testing.T) {
 		for i, branch := range branchNames {
 			meta := metas[branch]
 			if meta == nil {
-				meta = &git.Meta{}
+				meta = git.NewMeta()
 			}
-			if meta.PrInfo == nil {
-				meta.PrInfo = &git.PrInfoPersistence{}
+			prInfo := meta.GetPrInfo()
+			if prInfo == nil {
+				prInfo = &git.PrInfoPersistence{}
 			}
 			prNum := i + 1
 			state := prStateMerged
 			base := mainBranchName
-			meta.PrInfo.Number = &prNum
-			meta.PrInfo.State = &state
-			meta.PrInfo.Base = &base
+			prInfo.Number = &prNum
+			prInfo.State = &state
+			prInfo.Base = &base
+			meta = meta.WithPrInfo(prInfo)
 			err := eng.Git().WriteMetadata(branch, meta)
 			require.NoError(t, err)
 		}
@@ -118,15 +125,14 @@ func TestSync(t *testing.T) {
 		// Mark merge branch as merged
 		meta, err := eng.Git().ReadMetadata(mergeBranch)
 		require.NoError(t, err)
-		if meta.PrInfo == nil {
-			meta.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 100
 		state := "CLOSED"
 		base := mainBranchName
-		meta.PrInfo.Number = &prNum
-		meta.PrInfo.State = &state
-		meta.PrInfo.Base = &base
+		meta = meta.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata(mergeBranch, meta)
 		require.NoError(t, err)
 
@@ -143,6 +149,7 @@ func TestSync(t *testing.T) {
 	})
 
 	t.Run("handles diamond dependency during sync", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Create: main -> a -> b
@@ -158,28 +165,26 @@ func TestSync(t *testing.T) {
 
 		// a: MERGED into main
 		metaA, _ := eng.Git().ReadMetadata("a")
-		if metaA.PrInfo == nil {
-			metaA.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNumA := 1
 		stateA := prStateMerged
 		baseA := mainBranchName
-		metaA.PrInfo.Number = &prNumA
-		metaA.PrInfo.State = &stateA
-		metaA.PrInfo.Base = &baseA
+		metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNumA,
+			State:  &stateA,
+			Base:   &baseA,
+		})
 		_ = eng.Git().WriteMetadata("a", metaA)
 
 		// b: OPEN pointing to main
 		metaB, _ := eng.Git().ReadMetadata("b")
-		if metaB.PrInfo == nil {
-			metaB.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNumB := 2
 		stateB := "OPEN"
 		baseB := mainBranchName
-		metaB.PrInfo.Number = &prNumB
-		metaB.PrInfo.State = &stateB
-		metaB.PrInfo.Base = &baseB
+		metaB = metaB.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNumB,
+			State:  &stateB,
+			Base:   &baseB,
+		})
 		_ = eng.Git().WriteMetadata("b", metaB)
 
 		// 1. Run sync
@@ -199,6 +204,7 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncDraftPRs(t *testing.T) {
+	t.Parallel()
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// Create branch-a on main
@@ -214,17 +220,16 @@ func TestSyncDraftPRs(t *testing.T) {
 	meta, err := eng.Git().ReadMetadata("branch-a")
 	require.NoError(t, err)
 
-	if meta.PrInfo == nil {
-		meta.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNum := 1
 	state := "OPEN"
 	base := mainBranchName
 	isDraft := true
-	meta.PrInfo.Number = &prNum
-	meta.PrInfo.State = &state
-	meta.PrInfo.Base = &base
-	meta.PrInfo.IsDraft = &isDraft
+	meta = meta.WithPrInfo(&git.PrInfoPersistence{
+		Number:  &prNum,
+		State:   &state,
+		Base:    &base,
+		IsDraft: &isDraft,
+	})
 
 	err = eng.Git().WriteMetadata("branch-a", meta)
 	require.NoError(t, err)
@@ -244,6 +249,7 @@ func TestSyncDraftPRs(t *testing.T) {
 }
 
 func TestSyncCleanupDiamond(t *testing.T) {
+	t.Parallel()
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// Create: main -> a -> b
@@ -258,28 +264,26 @@ func TestSyncCleanupDiamond(t *testing.T) {
 
 	// Mark 'a' as merged
 	metaA, _ := eng.Git().ReadMetadata("a")
-	if metaA.PrInfo == nil {
-		metaA.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNum := 1
 	state := prStateMerged
 	base := mainBranchName
-	metaA.PrInfo.Number = &prNum
-	metaA.PrInfo.State = &state
-	metaA.PrInfo.Base = &base
+	metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNum,
+		State:  &state,
+		Base:   &base,
+	})
 	_ = eng.Git().WriteMetadata("a", metaA)
 
 	// Mark 'b' as merged
 	metaB, _ := eng.Git().ReadMetadata("b")
-	if metaB.PrInfo == nil {
-		metaB.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNumB := 2
 	stateB := "MERGED"
 	baseB := mainBranchName
-	metaB.PrInfo.Number = &prNumB
-	metaB.PrInfo.State = &stateB
-	metaB.PrInfo.Base = &baseB
+	metaB = metaB.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNumB,
+		State:  &stateB,
+		Base:   &baseB,
+	})
 	_ = eng.Git().WriteMetadata("b", metaB)
 
 	// Run sync
@@ -297,6 +301,7 @@ func TestSyncCleanupDiamond(t *testing.T) {
 }
 
 func TestSyncStaleDraftCleanup(t *testing.T) {
+	t.Parallel()
 	// Tests the fix for the "stale draft" bug where empty branches
 	// weren't being cleaned up if they were ancestors of other branches.
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
@@ -315,15 +320,14 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 
 	// Mark 'a' as merged in metadata
 	metaA, _ := eng.Git().ReadMetadata("a")
-	if metaA.PrInfo == nil {
-		metaA.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNum := 1
 	state := prStateMerged
 	base := mainBranchName
-	metaA.PrInfo.Number = &prNum
-	metaA.PrInfo.State = &state
-	metaA.PrInfo.Base = &base
+	metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNum,
+		State:  &state,
+		Base:   &base,
+	})
 	_ = eng.Git().WriteMetadata("a", metaA)
 
 	// 'a' is now empty relative to main
@@ -343,7 +347,9 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 }
 
 func TestSyncRemoteMetadata(t *testing.T) {
+	t.Parallel()
 	t.Run("loads remote metadata cache", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Create a branch
@@ -359,10 +365,10 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create remote metadata refs (simulating a successful fetch)
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      scopePtr("remote-scope"),
-		}
+		})
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
 
 		// Load remote metadata cache (this is what sync does after fetching)
@@ -371,12 +377,14 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
-		require.NotNil(t, cache["feature-a"], "Remote metadata should be in cache")
-		require.Equal(t, git.LockReasonUser, cache["feature-a"].LockReason, "Remote metadata should show lock reason")
-		require.Equal(t, "remote-scope", *cache["feature-a"].Scope, "Remote metadata should have scope")
+		cachedMeta := cache.Get("feature-a")
+		require.NotNil(t, cachedMeta, "Remote metadata should be in cache")
+		require.Equal(t, git.LockReasonUser, cachedMeta.GetLockReason(), "Remote metadata should show lock reason")
+		require.Equal(t, "remote-scope", *cachedMeta.GetScope(), "Remote metadata should have scope")
 	})
 
 	t.Run("detects metadata conflicts", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-b").
@@ -391,9 +399,9 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create remote metadata refs: locked=true (conflict)
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
-		}
+		})
 		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
 
 		// Load remote metadata cache
@@ -448,7 +456,9 @@ func scopePtr(s string) *string {
 // with no staged changes. This is a regression test for the bug where the Git index
 // would retain stale state after multiple rebase operations during RestackBranches.
 func TestSyncDoesNotLeaveIndexState(t *testing.T) {
+	t.Parallel()
 	t.Run("sync from main does not leave staged changes after cleanup and restack", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a chain: main -> branch-a -> branch-b
@@ -471,15 +481,14 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 		// 3. Mark branch-a as merged
 		metaA, err := eng.Git().ReadMetadata("branch-a")
 		require.NoError(t, err)
-		if metaA.PrInfo == nil {
-			metaA.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 1
 		state := prStateMerged
 		base := mainBranchName
-		metaA.PrInfo.Number = &prNum
-		metaA.PrInfo.State = &state
-		metaA.PrInfo.Base = &base
+		metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata("branch-a", metaA)
 		require.NoError(t, err)
 
@@ -508,6 +517,7 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 	})
 
 	t.Run("sync from detached HEAD does not leave staged changes", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Create a simple stack
@@ -521,15 +531,14 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 		// Mark feature as merged
 		meta, err := eng.Git().ReadMetadata("feature")
 		require.NoError(t, err)
-		if meta.PrInfo == nil {
-			meta.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 1
 		state := prStateMerged
 		base := mainBranchName
-		meta.PrInfo.Number = &prNum
-		meta.PrInfo.State = &state
-		meta.PrInfo.Base = &base
+		meta = meta.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata("feature", meta)
 		require.NoError(t, err)
 
@@ -550,6 +559,7 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 	})
 
 	t.Run("sync with rebase that moves commits does not leave staged changes", func(t *testing.T) {
+		t.Parallel()
 		// This test creates a scenario where the rebase actually moves commits,
 		// which is more likely to trigger index state issues.
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
@@ -576,15 +586,14 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 
 		metaF, err := eng.Git().ReadMetadata("feature")
 		require.NoError(t, err)
-		if metaF.PrInfo == nil {
-			metaF.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 1
 		state := prStateMerged
 		base := mainBranchName
-		metaF.PrInfo.Number = &prNum
-		metaF.PrInfo.State = &state
-		metaF.PrInfo.Base = &base
+		metaF = metaF.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata("feature", metaF)
 		require.NoError(t, err)
 

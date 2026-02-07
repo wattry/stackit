@@ -57,10 +57,10 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	if err != nil {
 		return fmt.Errorf("failed to read metadata for %s: %w", branchName, err)
 	}
-	if meta.ParentBranchRevision == nil {
+	if meta.GetParentBranchRevision() == nil {
 		return fmt.Errorf("branch %s has no parent revision", branchName)
 	}
-	currentBase := *meta.ParentBranchRevision
+	currentBase := *meta.GetParentBranchRevision()
 
 	// Checkout base in detached HEAD
 	if err := e.git.CheckoutDetached(ctx, currentBase); err != nil {

@@ -38,7 +38,7 @@ func TestSetLocked_SingleBranch(t *testing.T) {
 	impl := s.Engine.(interface{ Git() git.Runner })
 	readMeta, err := impl.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, readMeta.LockReason)
+	assert.Equal(t, git.LockReasonUser, readMeta.GetLockReason())
 
 	// Verify in-memory cache is updated
 	assert.True(t, branch.IsLocked())
@@ -75,11 +75,11 @@ func TestSetLocked_UsesTransaction(t *testing.T) {
 	impl := s.Engine.(interface{ Git() git.Runner })
 	meta1, err := impl.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, meta1.LockReason)
+	assert.Equal(t, git.LockReasonUser, meta1.GetLockReason())
 
 	meta2, err := impl.Git().ReadMetadata("feature-2")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, meta2.LockReason)
+	assert.Equal(t, git.LockReasonUser, meta2.GetLockReason())
 }
 
 func TestSetFrozen_UsesTransaction(t *testing.T) {
@@ -162,7 +162,7 @@ func TestSetLocked_UnlockBranches(t *testing.T) {
 	impl := s.Engine.(interface{ Git() git.Runner })
 	meta, err := impl.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, meta.LockReason)
+	assert.Equal(t, git.LockReasonUser, meta.GetLockReason())
 
 	// Unlock the branch
 	_, err = s.Engine.SetLocked(context.Background(), []engine.Branch{branch}, engine.LockReasonNone)
@@ -171,7 +171,7 @@ func TestSetLocked_UnlockBranches(t *testing.T) {
 	// Verify unlocked
 	meta, err = impl.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonNone, meta.LockReason)
+	assert.Equal(t, git.LockReasonNone, meta.GetLockReason())
 }
 
 func TestSetFrozen_UnfreezeBranches(t *testing.T) {
@@ -323,9 +323,9 @@ func TestTransaction_RollbackOnCommitFailure(t *testing.T) {
 
 	// Begin transaction and stage an update
 	tx := eng.BeginTx("test transaction")
-	newMeta := &git.Meta{
+	newMeta := git.NewMetaFrom(git.MetaFields{
 		LockReason: git.LockReasonUser,
-	}
+	})
 	err = tx.UpdateMeta("feature-1", newMeta)
 	require.NoError(t, err)
 
@@ -335,7 +335,7 @@ func TestTransaction_RollbackOnCommitFailure(t *testing.T) {
 	// Verify original metadata is unchanged (rollback is a no-op for uncommitted transactions)
 	currentMeta, err := eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, originalMeta.LockReason, currentMeta.LockReason)
+	assert.Equal(t, originalMeta.GetLockReason(), currentMeta.GetLockReason())
 }
 
 func TestTransaction_DoubleCommitFails(t *testing.T) {
@@ -356,7 +356,7 @@ func TestTransaction_DoubleCommitFails(t *testing.T) {
 
 	// Begin transaction and stage an update
 	tx := eng.BeginTx("test transaction")
-	meta := &git.Meta{LockReason: git.LockReasonUser}
+	meta := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 	err = tx.UpdateMeta("feature-1", meta)
 	require.NoError(t, err)
 
@@ -436,15 +436,15 @@ func TestTransaction_ConcurrentModification(t *testing.T) {
 
 	// Begin transaction and stage an update (this captures the original SHA)
 	tx := eng.BeginTx("test transaction")
-	meta1 := &git.Meta{LockReason: git.LockReasonUser}
+	meta1 := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 	err = tx.UpdateMeta("feature-1", meta1)
 	require.NoError(t, err)
 
 	// Simulate another process modifying the metadata
 	// This changes the ref SHA, causing CAS to fail
-	meta2 := &git.Meta{
+	meta2 := git.NewMetaFrom(git.MetaFields{
 		LockReason: git.LockReasonConsolidating,
-	}
+	})
 	err = eng.Git().WriteMetadata("feature-1", meta2)
 	require.NoError(t, err)
 
@@ -522,7 +522,7 @@ func TestWithRetry_RetriesOnConcurrentModification(t *testing.T) {
 		attemptCount++
 
 		tx := eng.BeginTx("retry test")
-		meta := &git.Meta{LockReason: git.LockReasonUser}
+		meta := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 		if stageErr := tx.UpdateMeta("feature-1", meta); stageErr != nil {
 			return stageErr
 		}
@@ -531,7 +531,7 @@ func TestWithRetry_RetriesOnConcurrentModification(t *testing.T) {
 		// Use different scope values to ensure different blob SHAs
 		if attemptCount <= maxFailures {
 			scope := fmt.Sprintf("conflict-%d", attemptCount)
-			otherMeta := &git.Meta{Scope: &scope}
+			otherMeta := git.NewMetaFrom(git.MetaFields{Scope: &scope})
 			if writeErr := eng.Git().WriteMetadata("feature-1", otherMeta); writeErr != nil {
 				return writeErr
 			}
@@ -567,14 +567,14 @@ func TestWithRetry_ExhaustsRetries(t *testing.T) {
 		attemptCount++
 
 		tx := eng.BeginTx("exhaustion test")
-		meta := &git.Meta{LockReason: git.LockReasonUser}
+		meta := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 		if stageErr := tx.UpdateMeta("feature-1", meta); stageErr != nil {
 			return stageErr
 		}
 
 		// Always cause concurrent modification with unique content - never succeed
 		scope := fmt.Sprintf("conflict-%d", attemptCount)
-		otherMeta := &git.Meta{Scope: &scope}
+		otherMeta := git.NewMetaFrom(git.MetaFields{Scope: &scope})
 		if writeErr := eng.Git().WriteMetadata("feature-1", otherMeta); writeErr != nil {
 			return writeErr
 		}
@@ -624,7 +624,7 @@ func TestTransaction_UpdateAfterRollback(t *testing.T) {
 	tx.Rollback()
 
 	// Trying to update after rollback should fail
-	err := tx.UpdateMeta("any-branch", &git.Meta{})
+	err := tx.UpdateMeta("any-branch", git.NewMeta())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, engine.ErrTransactionRolledBack)
 
@@ -679,7 +679,7 @@ func TestSetLocked_LargeBatch(t *testing.T) {
 	for _, name := range branchNames {
 		meta, err := impl.Git().ReadMetadata(name)
 		require.NoError(t, err)
-		assert.Equal(t, git.LockReasonUser, meta.LockReason, "branch %s should be locked", name)
+		assert.Equal(t, git.LockReasonUser, meta.GetLockReason(), "branch %s should be locked", name)
 	}
 }
 
@@ -704,7 +704,7 @@ func TestTransaction_MixedMetaAndLocalMeta(t *testing.T) {
 	tx := eng.BeginTx("mixed update")
 
 	// Update meta for feature-1
-	meta1 := &git.Meta{LockReason: git.LockReasonUser}
+	meta1 := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 	require.NoError(t, tx.UpdateMeta("feature-1", meta1))
 
 	// Update local meta for feature-2
@@ -718,7 +718,7 @@ func TestTransaction_MixedMetaAndLocalMeta(t *testing.T) {
 	// Verify both updates persisted
 	readMeta1, err := eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, readMeta1.LockReason)
+	assert.Equal(t, git.LockReasonUser, readMeta1.GetLockReason())
 
 	readLocalMeta2, err := eng.Git().ReadLocalMetadata("feature-2")
 	require.NoError(t, err)
@@ -741,7 +741,7 @@ func TestTransaction_DeleteMeta(t *testing.T) {
 	// Verify metadata exists
 	meta, err := eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.NotNil(t, meta.ParentBranchName)
+	assert.NotNil(t, meta.GetParentBranchName())
 
 	// Delete metadata via transaction
 	tx := eng.BeginTx("delete metadata")
@@ -751,7 +751,7 @@ func TestTransaction_DeleteMeta(t *testing.T) {
 	// Verify metadata is gone (ReadMetadata returns empty Meta for missing refs)
 	meta, err = eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Nil(t, meta.ParentBranchName) // Empty meta has nil parent
+	assert.Nil(t, meta.GetParentBranchName()) // Empty meta has nil parent
 }
 
 func TestTransaction_DeleteLocalMeta(t *testing.T) {
@@ -820,14 +820,14 @@ func TestTransaction_UpdateAfterDelete(t *testing.T) {
 	// Stage delete then update - update should take precedence
 	tx := eng.BeginTx("update after delete")
 	require.NoError(t, tx.DeleteMeta("feature-1"))
-	newMeta := &git.Meta{LockReason: git.LockReasonUser}
+	newMeta := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 	require.NoError(t, tx.UpdateMeta("feature-1", newMeta))
 	require.NoError(t, tx.Commit(context.Background()))
 
 	// Verify update won (not deleted)
 	meta, err := eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, meta.LockReason)
+	assert.Equal(t, git.LockReasonUser, meta.GetLockReason())
 }
 
 func TestTransaction_DeleteAfterUpdate(t *testing.T) {
@@ -845,7 +845,7 @@ func TestTransaction_DeleteAfterUpdate(t *testing.T) {
 
 	// Stage update then delete - delete should take precedence
 	tx := eng.BeginTx("delete after update")
-	newMeta := &git.Meta{LockReason: git.LockReasonUser}
+	newMeta := git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})
 	require.NoError(t, tx.UpdateMeta("feature-1", newMeta))
 	require.NoError(t, tx.DeleteMeta("feature-1"))
 	require.NoError(t, tx.Commit(context.Background()))
@@ -853,7 +853,7 @@ func TestTransaction_DeleteAfterUpdate(t *testing.T) {
 	// Verify delete won (metadata gone)
 	meta, err := eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Nil(t, meta.ParentBranchName) // Empty meta
+	assert.Nil(t, meta.GetParentBranchName()) // Empty meta
 }
 
 func TestTransaction_MixedUpdatesAndDeletes(t *testing.T) {
@@ -877,25 +877,25 @@ func TestTransaction_MixedUpdatesAndDeletes(t *testing.T) {
 
 	// Mixed transaction: update feature-1, delete feature-2, update feature-3
 	tx := eng.BeginTx("mixed operations")
-	require.NoError(t, tx.UpdateMeta("feature-1", &git.Meta{LockReason: git.LockReasonUser}))
+	require.NoError(t, tx.UpdateMeta("feature-1", git.NewMetaFrom(git.MetaFields{LockReason: git.LockReasonUser})))
 	require.NoError(t, tx.DeleteMeta("feature-2"))
 	scope := "test-scope"
-	require.NoError(t, tx.UpdateMeta("feature-3", &git.Meta{Scope: &scope}))
+	require.NoError(t, tx.UpdateMeta("feature-3", git.NewMetaFrom(git.MetaFields{Scope: &scope})))
 	require.NoError(t, tx.Commit(context.Background()))
 
 	// Verify results
 	meta1, err := eng.Git().ReadMetadata("feature-1")
 	require.NoError(t, err)
-	assert.Equal(t, git.LockReasonUser, meta1.LockReason)
+	assert.Equal(t, git.LockReasonUser, meta1.GetLockReason())
 
 	meta2, err := eng.Git().ReadMetadata("feature-2")
 	require.NoError(t, err)
-	assert.Nil(t, meta2.ParentBranchName) // Deleted
+	assert.Nil(t, meta2.GetParentBranchName()) // Deleted
 
 	meta3, err := eng.Git().ReadMetadata("feature-3")
 	require.NoError(t, err)
-	require.NotNil(t, meta3.Scope)
-	assert.Equal(t, "test-scope", *meta3.Scope)
+	require.NotNil(t, meta3.GetScope())
+	assert.Equal(t, "test-scope", *meta3.GetScope())
 }
 
 func TestTransaction_DeleteLocalMetaClearsFrozenState(t *testing.T) {

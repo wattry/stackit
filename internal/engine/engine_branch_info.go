@@ -50,8 +50,8 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	// Get base revision (stored parent revision)
 	meta, err := e.git.ReadMetadata(branchName)
 	var base string
-	if err == nil && meta.ParentBranchRevision != nil {
-		base = *meta.ParentBranchRevision
+	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
+		base = *rev
 	} else {
 		// Fallback to current parent branch tip if metadata is missing
 		baseRev, err := e.git.GetRevision(parent)
@@ -95,8 +95,8 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	// Get base revision (stored parent revision)
 	meta, err := e.git.ReadMetadata(branchName)
 	var base string
-	if err == nil && meta.ParentBranchRevision != nil {
-		base = *meta.ParentBranchRevision
+	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
+		base = *rev
 	} else {
 		baseRev, err := e.git.GetRevision(parent)
 		if err != nil {
@@ -140,6 +140,31 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	return added, deleted, nil
 }
 
+// PreloadBranchData batch-loads metadata and revisions for all tracked branches
+// into their respective caches. This replaces N individual lookups (each requiring
+// mutex acquisition or subprocess spawning) with two bulk operations:
+//   - git show-ref --heads (one subprocess for all branch SHAs)
+//   - BatchReadMetadata (parallel metadata reads, cached via sync.Map)
+//
+// After calling this, parallel annotation building via utils.Run will find all
+// data cached, eliminating go-git mutex contention for revision lookups.
+func (e *engineImpl) PreloadBranchData() {
+	e.mu.RLock()
+	branches := make([]string, 0, len(e.branchState))
+	for name := range e.branchState {
+		branches = append(branches, name)
+	}
+	e.mu.RUnlock()
+
+	// Batch load all branch revisions via single git show-ref --heads call
+	_ = e.git.LoadAllBranchRevisions()
+
+	// Batch load all metadata (populates metadataCache via sync.Map)
+	if len(branches) > 0 {
+		e.git.BatchReadMetadata(branches)
+	}
+}
+
 // GetAllCommits returns commits for a branch in various formats
 func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string, error) {
 	branchName := branch.GetName()
@@ -166,36 +191,11 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 
 	// Get parent revision (base)
 	var baseRevision string
-	if meta.ParentBranchRevision != nil {
-		baseRevision = *meta.ParentBranchRevision
+	if rev := meta.GetParentBranchRevision(); rev != nil {
+		baseRevision = *rev
 	}
 
-	// Get SHAs first
-	shas, err := e.git.GetCommitRangeSHAs(baseRevision, branchRevision)
-	if err != nil {
-		return nil, err
-	}
-
-	if format == CommitFormatSHA {
-		return shas, nil
-	}
-
-	// Format results
-	result := make([]string, len(shas))
-	for i, sha := range shas {
-		var formatted string
-		switch format {
-		case CommitFormatSubject:
-			formatted, _ = e.git.GetCommitLog(sha, "%s")
-		case CommitFormatMessage:
-			formatted, _ = e.git.GetCommitLog(sha, "%B")
-		case CommitFormatReadable:
-			formatted, _ = e.git.GetCommitLog(sha, "%h %s")
-		default:
-			return nil, fmt.Errorf("unknown commit format: %s", format)
-		}
-		result[i] = strings.TrimSpace(formatted)
-	}
-
-	return result, nil
+	// Use GetCommitRange directly — handles formatting in-process via go-git
+	// (with CLI fallback), avoiding per-commit git process spawns
+	return e.git.GetCommitRange(baseRevision, branchRevision, string(format))
 }
