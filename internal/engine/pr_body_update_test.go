@@ -24,7 +24,7 @@ func TestPRBodyUpdateTracking(t *testing.T) {
 		require.Empty(t, needsUpdate)
 
 		// Mark branch as needing update
-		err := eng.MarkNeedsPRBodyUpdate("feature")
+		err := eng.BatchMarkNeedsPRBodyUpdate([]string{"feature"})
 		require.NoError(t, err)
 
 		// Now it should be in the list
@@ -42,7 +42,7 @@ func TestPRBodyUpdateTracking(t *testing.T) {
 		eng := s.Engine
 
 		// Mark and then clear
-		err := eng.MarkNeedsPRBodyUpdate("feature")
+		err := eng.BatchMarkNeedsPRBodyUpdate([]string{"feature"})
 		require.NoError(t, err)
 
 		err = eng.ClearNeedsPRBodyUpdate("feature")
@@ -77,7 +77,7 @@ func TestPRBodyUpdateTracking(t *testing.T) {
 		eng := s.Engine
 
 		// Mark branch
-		err := eng.MarkNeedsPRBodyUpdate("feature")
+		err := eng.BatchMarkNeedsPRBodyUpdate([]string{"feature"})
 		require.NoError(t, err)
 
 		// Rebuild engine to simulate fresh state
@@ -103,7 +103,7 @@ func TestPRBodyUpdateTracking(t *testing.T) {
 		eng := s.Engine
 
 		// Mark only feature-a
-		err := eng.MarkNeedsPRBodyUpdate("feature-a")
+		err := eng.BatchMarkNeedsPRBodyUpdate([]string{"feature-a"})
 		require.NoError(t, err)
 
 		needsUpdate := eng.GetBranchesNeedingPRBodyUpdate()
@@ -111,7 +111,7 @@ func TestPRBodyUpdateTracking(t *testing.T) {
 		require.NotContains(t, needsUpdate, "feature-b")
 
 		// Mark feature-b too
-		err = eng.MarkNeedsPRBodyUpdate("feature-b")
+		err = eng.BatchMarkNeedsPRBodyUpdate([]string{"feature-b"})
 		require.NoError(t, err)
 
 		needsUpdate = eng.GetBranchesNeedingPRBodyUpdate()
@@ -125,5 +125,40 @@ func TestPRBodyUpdateTracking(t *testing.T) {
 		needsUpdate = eng.GetBranchesNeedingPRBodyUpdate()
 		require.NotContains(t, needsUpdate, "feature-a")
 		require.Contains(t, needsUpdate, "feature-b")
+	})
+
+	t.Run("batch marks multiple branches atomically", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit().
+			CreateBranch("feature-a").
+			Commit("a1").
+			TrackBranch("feature-a", "main").
+			Checkout("main").
+			CreateBranch("feature-b").
+			Commit("b1").
+			TrackBranch("feature-b", "main")
+
+		eng := s.Engine
+
+		// Mark both at once
+		err := eng.BatchMarkNeedsPRBodyUpdate([]string{"feature-a", "feature-b"})
+		require.NoError(t, err)
+
+		needsUpdate := eng.GetBranchesNeedingPRBodyUpdate()
+		require.Contains(t, needsUpdate, "feature-a")
+		require.Contains(t, needsUpdate, "feature-b")
+	})
+
+	t.Run("batch with empty list is no-op", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithInitialCommit()
+
+		eng := s.Engine
+
+		err := eng.BatchMarkNeedsPRBodyUpdate([]string{})
+		require.NoError(t, err)
+
+		err = eng.BatchMarkNeedsPRBodyUpdate(nil)
+		require.NoError(t, err)
 	})
 }

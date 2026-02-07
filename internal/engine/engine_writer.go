@@ -982,14 +982,37 @@ func (e *engineImpl) IsInManagedWorktree() (bool, *WorktreeInfo, error) {
 	return false, nil, nil
 }
 
-// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
-func (e *engineImpl) MarkNeedsPRBodyUpdate(branchName string) error {
-	localMeta, err := e.git.ReadLocalMetadata(branchName)
-	if err != nil {
-		localMeta = &git.LocalMeta{}
+// BatchMarkNeedsPRBodyUpdate marks multiple branches as needing PR body update in a single atomic operation.
+// It batch-reads local metadata, sets the flag, creates blobs, and atomically updates all refs.
+func (e *engineImpl) BatchMarkNeedsPRBodyUpdate(branchNames []string) error {
+	if len(branchNames) == 0 {
+		return nil
 	}
-	localMeta.NeedsPRBodyUpdate = true
-	return e.git.WriteLocalMetadata(branchName, localMeta)
+
+	// Batch read all local metadata in parallel
+	allMeta := e.git.BatchReadLocalMetadata(branchNames)
+
+	// Create blobs and collect ref updates
+	updates := make([]git.RefUpdate, 0, len(branchNames))
+	for _, name := range branchNames {
+		meta := allMeta[name]
+		if meta == nil {
+			meta = &git.LocalMeta{}
+		}
+		meta.NeedsPRBodyUpdate = true
+
+		sha, err := e.git.WriteLocalMetadataBlob(meta)
+		if err != nil {
+			return fmt.Errorf("failed to create local metadata blob for %s: %w", name, err)
+		}
+		updates = append(updates, git.RefUpdate{
+			RefName: git.LocalMetadataRefName(name),
+			NewSHA:  sha,
+		})
+	}
+
+	// Atomic batch update all refs
+	return e.git.UpdateRefsBatch(context.Background(), updates)
 }
 
 // ClearNeedsPRBodyUpdate clears the PR body update flag for a branch

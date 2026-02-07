@@ -156,9 +156,12 @@ func markStackAndPushMetadata(ctx *app.Context, eng engine.Engine, stackRoot str
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 	root := eng.GetBranch(stackRoot)
 	if root.IsTracked() {
-		for _, branch := range graph.CollectBranches(root) {
-			_ = eng.MarkNeedsPRBodyUpdate(branch.GetName())
+		branches := graph.CollectBranches(root)
+		branchNames := make([]string, len(branches))
+		for i, b := range branches {
+			branchNames[i] = b.GetName()
 		}
+		_ = eng.BatchMarkNeedsPRBodyUpdate(branchNames)
 	}
 
 	// Push metadata refs (fast git operation)

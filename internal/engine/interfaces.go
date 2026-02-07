@@ -131,8 +131,8 @@ type BranchTracking interface {
 	SetLocked(ctx context.Context, branches []Branch, reason LockReason) (BatchLockResult, error)
 	SetFrozen(ctx context.Context, branches []Branch, frozen bool) (BatchFreezeResult, error)
 
-	// MarkNeedsPRBodyUpdate marks a branch as needing PR body update during next sync
-	MarkNeedsPRBodyUpdate(branchName string) error
+	// BatchMarkNeedsPRBodyUpdate marks multiple branches as needing PR body update in a single atomic operation
+	BatchMarkNeedsPRBodyUpdate(branchNames []string) error
 	// ClearNeedsPRBodyUpdate clears the PR body update flag for a branch
 	ClearNeedsPRBodyUpdate(branchName string) error
 	// GetBranchesNeedingPRBodyUpdate returns all branches that need PR body updates
