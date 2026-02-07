@@ -36,17 +36,14 @@ func (m *shippableModel) renderMain() string {
 	headerHeight := lipgloss.Height(header)
 	footerHeight := lipgloss.Height(footer)
 
-	// Cart panel height (only if items selected)
-	// Height: 1 header + N stacks + 1 summary + 2 padding/border
-	cartHeight := 0
+	// Action bar height (only if items selected)
+	// Fixed height: border(1) + content(1) + padding(1)
+	actionBarHeight := 0
 	if m.cache.selectedCount > 0 {
-		cartHeight = 4 + m.cache.selectedCount // Dynamic based on selection count
-		if cartHeight > 10 {
-			cartHeight = 10 // Cap at reasonable max
-		}
+		actionBarHeight = 3
 	}
 
-	contentHeight := m.Height - headerHeight - footerHeight - cartHeight
+	contentHeight := m.Height - headerHeight - footerHeight - actionBarHeight
 	if contentHeight < 5 {
 		contentHeight = 5
 	}
@@ -65,10 +62,10 @@ func (m *shippableModel) renderMain() string {
 	var sections []string
 	sections = append(sections, header, stackViewer)
 
-	// Add cart panel if items selected (bottom row)
+	// Add action bar if items selected (bottom row)
 	if m.cache.selectedCount > 0 {
-		cartPane := m.renderCartPanel(m.Width, cartHeight)
-		sections = append(sections, cartPane)
+		bar := m.renderActionBar(m.Width)
+		sections = append(sections, bar)
 	}
 
 	sections = append(sections, footer)
@@ -106,13 +103,15 @@ func (m *shippableModel) renderHeader() string {
 
 // renderStackList renders the list of stacks.
 func (m *shippableModel) renderStackList(width, height int) string {
+	// Width/Height include padding but not borders, so subtract border size only
+	borderW := leftPaneStyle.GetHorizontalBorderSize()
+	borderH := leftPaneStyle.GetVerticalBorderSize()
 	paneStyle := leftPaneStyle.
-		Width(width).
-		Height(height)
+		Width(width - borderW).
+		Height(height - borderH)
 
 	var sb strings.Builder
-	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n")
-	sb.WriteString(strings.Repeat("─", max(width-4, 0)) + "\n")
+	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n\n")
 
 	// Show appropriate content based on state
 	if len(m.stacks) == 0 {
@@ -156,6 +155,7 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	root := stack.RootBranch()
 
 	// Selection checkbox - show lock icon if locked
+	// Pad to fixed width so columns align regardless of emoji width
 	var checkbox string
 	switch {
 	case m.isLocked(root):
@@ -165,9 +165,10 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	default:
 		checkbox = "[ ]"
 	}
+	checkbox = style.PadToWidth(checkbox, style.CheckboxColumnWidth)
 
-	// Status icon
-	statusIcon := m.getStatusIcon(stack.Status)
+	// Status icon - pad to fixed width for alignment
+	statusIcon := style.PadToWidth(m.getStatusIcon(stack.Status), style.StatusIconColumnWidth)
 
 	// Stack title: use cached title (computed at refresh time)
 	name := m.cache.stackTitles[root]
@@ -191,9 +192,9 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	}
 
 	// Calculate max name length based on available pane width
-	// Account for: cursor(2) + checkbox(3) + space(1) + icon(2) + space(1) + branchCount + expandIndicator + padding(4)
+	// Use lipgloss.Width() for accurate unicode measurement
 	paneWidth := m.Width / 2
-	overhead := 2 + 3 + 1 + 2 + 1 + len(branchCount) + len(expandIndicator) + 4
+	overhead := 2 + style.CheckboxColumnWidth + 1 + style.StatusIconColumnWidth + 1 + lipgloss.Width(branchCount) + lipgloss.Width(expandIndicator) + 6
 	maxNameLen := paneWidth - overhead
 	if maxNameLen < 20 {
 		maxNameLen = 20 // Minimum readable length
@@ -254,13 +255,14 @@ func (m *shippableModel) getStatusIcon(status shippable.Status) string {
 
 // renderDetailsPanel renders the right-side details panel (always shows stack details).
 func (m *shippableModel) renderDetailsPanel(width, height int) string {
+	borderW := rightPaneStyle.GetHorizontalBorderSize()
+	borderH := rightPaneStyle.GetVerticalBorderSize()
 	paneStyle := rightPaneStyle.
-		Width(width).
-		Height(height)
+		Width(width - borderW).
+		Height(height - borderH)
 
 	var sb strings.Builder
-	sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n")
-	sb.WriteString(strings.Repeat("─", max(width-4, 0)) + "\n")
+	sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n\n")
 
 	if m.focusedStack != nil {
 		sb.WriteString(m.renderStackDetails(m.focusedStack))
@@ -271,11 +273,9 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	return paneStyle.Render(sb.String())
 }
 
-// renderCartPanel renders the bottom cart panel when stacks are selected.
-func (m *shippableModel) renderCartPanel(width, height int) string {
-	paneStyle := cartPaneStyle.
-		Width(width).
-		Height(height)
+// renderActionBar renders the compact action bar when stacks are selected.
+func (m *shippableModel) renderActionBar(width int) string {
+	barStyle := actionBarStyle.Width(width - actionBarStyle.GetHorizontalBorderSize())
 
 	// Use cached selected stacks
 	selected := m.cache.selectedStacks
@@ -284,59 +284,25 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 		totalBranches += s.BranchCount()
 	}
 
-	var sb strings.Builder
+	// Summary text
+	summary := fmt.Sprintf("%d stacks selected (%d branches)", len(selected), totalBranches)
 
-	// Header row: title, count badge, and actions
-	cartHeader := paneHeaderStyle.Render("SHIPPING")
-	countBadge := countBadgeStyle.Render(fmt.Sprintf("%d stacks", len(selected)))
-
-	// Ship button (all selected stacks are shippable by design now)
+	// Actions
 	shipAction := buttonPrimary.Render("[s] Ship")
 
-	// Combination status
-	var analysisStatus string
+	var analysisAction string
 	if m.combination != nil {
 		if m.combination.Combinable {
-			analysisStatus = style.ColorGreen("✓ Compatible")
+			analysisAction = style.ColorGreen("✓ Compatible")
 		} else {
-			analysisStatus = style.ColorRed("✗ Conflicts")
+			analysisAction = style.ColorRed("✗ Conflicts")
 		}
 	} else if len(selected) > 1 {
-		analysisStatus = style.ColorDim("[a] analyze compatibility")
+		analysisAction = style.ColorDim("[a] Analyze")
 	}
 
-	// Header line
-	headerLine := fmt.Sprintf("%s %s  %s  %s", cartHeader, countBadge, shipAction, analysisStatus)
-	sb.WriteString(headerLine + "\n")
-
-	// Vertical list of selected stacks
-	for _, s := range selected {
-		statusIcon := m.getStatusIcon(s.Status)
-		// Use cached title
-		title := m.cache.stackTitles[s.RootBranch()]
-		if title == "" {
-			title = s.RootBranch()
-		}
-		// Truncate if needed
-		maxLen := width - 10
-		if maxLen > 60 {
-			maxLen = 60
-		}
-		if len(title) > maxLen {
-			title = title[:maxLen-3] + "..."
-		}
-
-		branchInfo := ""
-		if s.BranchCount() > 1 {
-			branchInfo = style.ColorDim(fmt.Sprintf(" (%d branches)", s.BranchCount()))
-		}
-		sb.WriteString(fmt.Sprintf("  %s %s%s\n", statusIcon, title, branchInfo))
-	}
-
-	// Summary line
-	sb.WriteString(style.ColorDim(fmt.Sprintf("  Total: %d branches", totalBranches)))
-
-	return paneStyle.Render(sb.String())
+	line := fmt.Sprintf("%s  %s  %s", summary, shipAction, analysisAction)
+	return barStyle.Render(line)
 }
 
 // renderStackDetails renders detailed info about a stack with tree view.
@@ -354,7 +320,6 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 		}
 		rendered := style.RenderMarkdown(markdown)
 		sb.WriteString(rendered + "\n")
-		sb.WriteString(strings.Repeat("─", 40) + "\n\n")
 	}
 
 	// Header: show commit title with status badge, branch name dimmed below
@@ -649,7 +614,7 @@ func (m *shippableModel) renderConfirmation() string {
 	sb.WriteString("  - Create/update PR to main\n")
 	sb.WriteString("  - Merge when CI passes\n")
 
-	sb.WriteString("\n" + strings.Repeat("─", 40) + "\n")
+	sb.WriteString("\n" + style.ColorDim(strings.Repeat("─", 40)) + "\n")
 	sb.WriteString("[Enter/y] Confirm  [Esc/n] Cancel\n")
 
 	return dialogStyle.Render(sb.String())
