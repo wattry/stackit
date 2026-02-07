@@ -129,11 +129,7 @@ func (r *runner) DeleteRefsBatch(ctx context.Context, refNames []string) error {
 		return fmt.Errorf("atomic ref delete failed: %w", err)
 	}
 	r.metadataCache.InvalidateForRefNames(refNames)
-	for _, refName := range refNames {
-		if branchName, ok := strings.CutPrefix(refName, "refs/heads/"); ok {
-			r.revisionCache.Delete(branchName)
-		}
-	}
+	r.invalidateRevisionCacheForRefNames(refNames)
 	return nil
 }
 
@@ -142,6 +138,16 @@ func (r *runner) DeleteRefsBatch(ctx context.Context, refNames []string) error {
 func (r *runner) invalidateRevisionCacheForRefs(updates []RefUpdate) {
 	for _, update := range updates {
 		if branchName, ok := strings.CutPrefix(update.RefName, "refs/heads/"); ok {
+			r.revisionCache.Delete(branchName)
+		}
+	}
+}
+
+// invalidateRevisionCacheForRefNames invalidates revision cache entries for any
+// refs/heads/* ref names in the given list.
+func (r *runner) invalidateRevisionCacheForRefNames(refNames []string) {
+	for _, refName := range refNames {
+		if branchName, ok := strings.CutPrefix(refName, "refs/heads/"); ok {
 			r.revisionCache.Delete(branchName)
 		}
 	}

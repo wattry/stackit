@@ -174,13 +174,7 @@ func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.B
 		ExplicitScope: branch.GetExplicitScope().String(),
 	}
 
-	var emptyWorktrees map[string]*engine.WorktreeInfo
-	var worktreeByRoot map[string]*engine.WorktreeInfo
-	if wtData != nil {
-		emptyWorktrees = wtData.EmptyWorktrees
-		worktreeByRoot = wtData.WorktreeByStackRoot
-	}
-	addWorktreeInfo(eng, branch, &ann, emptyWorktrees, worktreeByRoot)
+	addWorktreeInfo(eng, branch, &ann, wtData)
 
 	return ann
 }
@@ -188,10 +182,10 @@ func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.B
 // addWorktreeInfo populates worktree-related fields on a BranchAnnotation.
 // If the branch is an empty worktree anchor, it sets IsEmptyWorktree and WorktreePath.
 // Otherwise, if the branch is a stack root with a managed worktree, it sets WorktreePath.
-// When worktreeByRoot is provided, uses O(1) map lookup instead of calling GetWorktreeForStack.
-func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAnnotation, emptyWorktrees map[string]*engine.WorktreeInfo, worktreeByRoot map[string]*engine.WorktreeInfo) {
-	if emptyWorktrees != nil {
-		if wtInfo, ok := emptyWorktrees[branch.GetName()]; ok {
+// When wtData is provided, uses O(1) map lookups instead of calling GetWorktreeForStack.
+func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAnnotation, wtData *WorktreeData) {
+	if wtData != nil {
+		if wtInfo, ok := wtData.EmptyWorktrees[branch.GetName()]; ok {
 			ann.IsEmptyWorktree = true
 			ann.WorktreePath = wtInfo.Path
 			return
@@ -201,8 +195,8 @@ func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAn
 	stackRoot := eng.GetStackRootForBranch(branch)
 	if stackRoot == branch.GetName() {
 		// Use pre-built map if available, otherwise fall back to engine call
-		if worktreeByRoot != nil {
-			if wtInfo, ok := worktreeByRoot[stackRoot]; ok {
+		if wtData != nil {
+			if wtInfo, ok := wtData.WorktreeByStackRoot[stackRoot]; ok {
 				ann.WorktreePath = wtInfo.Path
 			}
 		} else if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
@@ -246,13 +240,16 @@ func BuildFullAnnotation(eng engine.Engine, branch engine.Branch, enrichment *An
 			case "CHANGES_REQUESTED":
 				ann.ReviewStatus = "Changes Requested"
 			case "REVIEW_REQUIRED":
-				ann.ReviewStatus = "In Review"
+				ann.ReviewStatus = "Awaiting Review"
 			}
 		}
 	}
 
 	// Apply worktree info
-	addWorktreeInfo(eng, branch, &ann, enrichment.EmptyWorktrees, enrichment.WorktreeByStackRoot)
+	addWorktreeInfo(eng, branch, &ann, &WorktreeData{
+		EmptyWorktrees:      enrichment.EmptyWorktrees,
+		WorktreeByStackRoot: enrichment.WorktreeByStackRoot,
+	})
 
 	return ann
 }

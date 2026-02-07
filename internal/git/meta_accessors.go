@@ -143,80 +143,88 @@ func (m *Meta) GetStackID() *string {
 
 // --- With* methods ---
 // Each returns a new Meta with the specified field changed (shallow struct copy).
+// All With* methods handle nil receivers by starting from a zero-value Meta.
+
+func (m *Meta) withCopy() Meta {
+	if m == nil {
+		return Meta{}
+	}
+	return *m
+}
 
 // WithParentBranchName returns a new Meta with the parent branch name set.
 func (m *Meta) WithParentBranchName(v *string) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.parentBranchName = v
 	return &c
 }
 
 // WithParentBranchRevision returns a new Meta with the parent branch revision set.
 func (m *Meta) WithParentBranchRevision(v *string) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.parentBranchRevision = v
 	return &c
 }
 
 // WithPrInfo returns a new Meta with the PR info set.
 func (m *Meta) WithPrInfo(v *PrInfoPersistence) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.prInfo = v
 	return &c
 }
 
 // WithScope returns a new Meta with the scope set.
 func (m *Meta) WithScope(v *string) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.scope = v
 	return &c
 }
 
 // WithLockReason returns a new Meta with the lock reason set.
 func (m *Meta) WithLockReason(v LockReason) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.lockReason = v
 	return &c
 }
 
 // WithBranchType returns a new Meta with the branch type set.
 func (m *Meta) WithBranchType(v BranchType) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.branchType = v
 	return &c
 }
 
 // WithLastModifiedBy returns a new Meta with the last-modified-by info set.
 func (m *Meta) WithLastModifiedBy(v *ModifiedBy) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.lastModifiedBy = v
 	return &c
 }
 
 // WithLastModifiedAt returns a new Meta with the last-modified-at timestamp set.
 func (m *Meta) WithLastModifiedAt(v *time.Time) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.lastModifiedAt = v
 	return &c
 }
 
 // WithLocalOnlyHash returns a new Meta with the local-only hash set.
 func (m *Meta) WithLocalOnlyHash(v *string) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.localOnlyHash = v
 	return &c
 }
 
 // WithMergedDownstack returns a new Meta with the merged downstack history set.
 func (m *Meta) WithMergedDownstack(v []MergedParent) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.mergedDownstack = v
 	return &c
 }
 
 // WithStackID returns a new Meta with the stack ID set.
 func (m *Meta) WithStackID(v *string) *Meta {
-	c := *m
+	c := m.withCopy()
 	c.stackID = v
 	return &c
 }

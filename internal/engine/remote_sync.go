@@ -216,7 +216,9 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 }
 
 // GetRemoteMetadataCache returns a read-only view of the remote metadata cache.
-// The returned view is safe for concurrent reads and prevents external mutation.
+// Returns RemoteMetadataView instead of a raw map to prevent external mutation
+// and provide a stable snapshot even if the cache is reloaded concurrently.
+// Use Get/Has/Range methods to access entries.
 func (e *engineImpl) GetRemoteMetadataCache() RemoteMetadataView {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

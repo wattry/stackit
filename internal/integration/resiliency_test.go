@@ -60,6 +60,7 @@ func TestRestackWithStaleMetadataButMatchingParentRev(t *testing.T) {
 }
 
 func TestResiliencyStaleParentSHA(t *testing.T) {
+	t.Parallel()
 	shell := NewTestShellInProcess(t)
 
 	// 1. Create a stack: main -> branch-a -> branch-b

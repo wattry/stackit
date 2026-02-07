@@ -20,7 +20,9 @@ import (
 const prStateMerged = "MERGED"
 
 func TestSync(t *testing.T) {
+	t.Parallel()
 	t.Run("local parent is authoritative over GitHub PR base", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a diamond-like structure:
@@ -70,6 +72,7 @@ func TestSync(t *testing.T) {
 	})
 
 	t.Run("handles consolidation and deletion of merged branches", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a chain of branches: main -> branch-a -> branch-b -> branch-c
@@ -146,6 +149,7 @@ func TestSync(t *testing.T) {
 	})
 
 	t.Run("handles diamond dependency during sync", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Create: main -> a -> b
@@ -200,6 +204,7 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncDraftPRs(t *testing.T) {
+	t.Parallel()
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// Create branch-a on main
@@ -244,6 +249,7 @@ func TestSyncDraftPRs(t *testing.T) {
 }
 
 func TestSyncCleanupDiamond(t *testing.T) {
+	t.Parallel()
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// Create: main -> a -> b
@@ -295,6 +301,7 @@ func TestSyncCleanupDiamond(t *testing.T) {
 }
 
 func TestSyncStaleDraftCleanup(t *testing.T) {
+	t.Parallel()
 	// Tests the fix for the "stale draft" bug where empty branches
 	// weren't being cleaned up if they were ancestors of other branches.
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
@@ -340,7 +347,9 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 }
 
 func TestSyncRemoteMetadata(t *testing.T) {
+	t.Parallel()
 	t.Run("loads remote metadata cache", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Create a branch
@@ -375,6 +384,7 @@ func TestSyncRemoteMetadata(t *testing.T) {
 	})
 
 	t.Run("detects metadata conflicts", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-b").
@@ -446,7 +456,9 @@ func scopePtr(s string) *string {
 // with no staged changes. This is a regression test for the bug where the Git index
 // would retain stale state after multiple rebase operations during RestackBranches.
 func TestSyncDoesNotLeaveIndexState(t *testing.T) {
+	t.Parallel()
 	t.Run("sync from main does not leave staged changes after cleanup and restack", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a chain: main -> branch-a -> branch-b
@@ -505,6 +517,7 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 	})
 
 	t.Run("sync from detached HEAD does not leave staged changes", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Create a simple stack
@@ -546,6 +559,7 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 	})
 
 	t.Run("sync with rebase that moves commits does not leave staged changes", func(t *testing.T) {
+		t.Parallel()
 		// This test creates a scenario where the rebase actually moves commits,
 		// which is more likely to trigger index state issues.
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)

@@ -18,7 +18,8 @@ func (c *metadataCache) Get(branchName string) *Meta {
 	if !ok {
 		return nil
 	}
-	return value.(*Meta)
+	meta, _ := value.(*Meta)
+	return meta
 }
 
 // Put stores the metadata in the cache.

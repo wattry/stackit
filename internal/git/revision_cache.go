@@ -15,7 +15,8 @@ func (c *revisionCache) Get(branchName string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return value.(string), true
+	sha, ok := value.(string)
+	return sha, ok
 }
 
 // Put stores the revision in the cache.
@@ -31,8 +32,5 @@ func (c *revisionCache) Delete(branchName string) {
 // InvalidateAll clears all cached revisions.
 // Used after bulk mutation operations (rebase, reset, etc.).
 func (c *revisionCache) InvalidateAll() {
-	c.entries.Range(func(key, _ any) bool {
-		c.entries.Delete(key)
-		return true
-	})
+	c.entries.Clear()
 }

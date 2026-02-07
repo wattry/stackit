@@ -95,7 +95,7 @@ func NewTestShellInProcess(t *testing.T, opts ...TestShellOption) *TestShell {
 		sh := newTestShellWithRemote(t, "", inprocess.NewInProcessCLI())
 		// Force non-interactive mode for in-process execution
 		utils.SetInteractive(false)
-		sh.Run("init").Run("config tips false")
+		sh.ensureTrunkConfig()
 		return sh
 	}
 
@@ -110,8 +110,8 @@ func NewTestShellInProcess(t *testing.T, opts ...TestShellOption) *TestShell {
 	// Force non-interactive mode for in-process execution to match behavior
 	// of spawning binary with --no-interactive
 	utils.SetInteractive(false)
-	// Pre-init config for in-process
-	sh.Run("init").Run("config tips false")
+	// Pre-seed git config to avoid per-test init overhead.
+	sh.ensureTrunkConfig()
 	return sh
 }
 
@@ -153,6 +153,14 @@ func newTestShellWithRemote(t *testing.T, binaryPath string, inProcessCLI *inpro
 		return nil
 	})
 	return &TestShell{t: t, scene: scene, binaryPath: binaryPath, inProcessCLI: inProcessCLI}
+}
+
+// ensureTrunkConfig sets the trunk config directly to avoid calling `stackit init`
+// for every test. This keeps tests fast and still marks the repo as initialized.
+func (s *TestShell) ensureTrunkConfig() {
+	s.t.Helper()
+	// Default trunk branch for test repos is main.
+	require.NoError(s.t, s.scene.Repo.RunGitCommand("config", "--local", "stackit.trunk", "main"))
 }
 
 // Scene returns the underlying test scene for direct access when needed.

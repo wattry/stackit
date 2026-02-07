@@ -15,7 +15,9 @@ import (
 )
 
 func TestMergedDownstackHistory(t *testing.T) {
+	t.Parallel()
 	t.Run("restack captures merged history when parent is merged", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -54,6 +56,7 @@ func TestMergedDownstackHistory(t *testing.T) {
 	})
 
 	t.Run("log displays merged history in annotations", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -97,6 +100,7 @@ func TestMergedDownstackHistory(t *testing.T) {
 	})
 
 	t.Run("multi-level merge inherits history", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -146,6 +150,7 @@ func TestMergedDownstackHistory(t *testing.T) {
 	})
 
 	t.Run("metadata persists across rebuild", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch1": "main",
@@ -188,7 +193,9 @@ func TestMergedDownstackHistory(t *testing.T) {
 }
 
 func TestMergedDownstackDisplayFormat(t *testing.T) {
+	t.Parallel()
 	t.Run("renders merged history line with PR number", func(t *testing.T) {
+		t.Parallel()
 		// Create a mock renderer
 		data := &mockTreeData{
 			currentBranch: "branch2",

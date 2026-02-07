@@ -76,6 +76,7 @@ func TestScopeRequiredInPattern(t *testing.T) {
 }
 
 func TestScopeSubmitSyncFlow(t *testing.T) {
+	t.Parallel()
 	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 	// 1. Create a branch

@@ -16,7 +16,9 @@ import (
 )
 
 func TestRemoteMetadataSync(t *testing.T) {
+	t.Parallel()
 	t.Run("detects and resolves metadata conflicts", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Create a branch with local metadata
@@ -77,6 +79,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("no conflict when local equals remote", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-b").
@@ -111,6 +114,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("detects orphaned local metadata", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-c").
@@ -140,6 +144,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("HasLocalModifications detects changes since sync", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		sh.CreateBranch("feature-d").
@@ -168,6 +173,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("ignores remote metadata for non-existent local branches", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		eng := sh.Engine
 
@@ -189,6 +195,7 @@ func TestRemoteMetadataSync(t *testing.T) {
 	})
 
 	t.Run("identifies orphaned metadata when local branch is gone", func(t *testing.T) {
+		t.Parallel()
 		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		eng := sh.Engine
 
