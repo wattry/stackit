@@ -306,7 +306,10 @@ func (s *TestShell) SetWorktreeBasePath(path string) *TestShell {
 func (s *TestShell) ResetRepo() *TestShell {
 	s.t.Helper()
 
-	s.Git("checkout main")
+	// Clean any leftover working tree changes before switching branches.
+	s.Git("reset --hard")
+	s.Git("clean -fd")
+	s.Git("checkout -f main")
 	s.Git("rev-parse --show-toplevel")
 	mainPath := canonicalPath(strings.TrimSpace(s.lastOutput))
 
