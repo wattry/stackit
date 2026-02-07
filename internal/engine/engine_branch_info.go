@@ -50,8 +50,8 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	// Get base revision (stored parent revision)
 	meta, err := e.git.ReadMetadata(branchName)
 	var base string
-	if err == nil && meta.ParentBranchRevision != nil {
-		base = *meta.ParentBranchRevision
+	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
+		base = *rev
 	} else {
 		// Fallback to current parent branch tip if metadata is missing
 		baseRev, err := e.git.GetRevision(parent)
@@ -95,8 +95,8 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	// Get base revision (stored parent revision)
 	meta, err := e.git.ReadMetadata(branchName)
 	var base string
-	if err == nil && meta.ParentBranchRevision != nil {
-		base = *meta.ParentBranchRevision
+	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
+		base = *rev
 	} else {
 		baseRev, err := e.git.GetRevision(parent)
 		if err != nil {
@@ -166,8 +166,8 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 
 	// Get parent revision (base)
 	var baseRevision string
-	if meta.ParentBranchRevision != nil {
-		baseRevision = *meta.ParentBranchRevision
+	if rev := meta.GetParentBranchRevision(); rev != nil {
+		baseRevision = *rev
 	}
 
 	// Use GetCommitRange directly — handles formatting in-process via go-git

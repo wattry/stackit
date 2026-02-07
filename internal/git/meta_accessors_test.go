@@ -20,8 +20,8 @@ func TestNewMeta(t *testing.T) {
 	t.Parallel()
 	m := git.NewMeta()
 	require.NotNil(t, m)
-	require.Nil(t, m.ParentBranchName)
-	require.Equal(t, git.LockReasonNone, m.LockReason)
+	require.Nil(t, m.GetParentBranchName())
+	require.Equal(t, git.LockReasonNone, m.GetLockReason())
 }
 
 func TestNewMetaFrom(t *testing.T) {
@@ -41,13 +41,13 @@ func TestNewMetaFrom(t *testing.T) {
 		StackID:              &stackID,
 	})
 
-	require.Equal(t, &name, m.ParentBranchName)
-	require.Equal(t, &rev, m.ParentBranchRevision)
-	require.Equal(t, &scope, m.Scope)
-	require.Equal(t, git.LockReasonUser, m.LockReason)
-	require.Equal(t, git.BranchTypeUser, m.BranchType)
-	require.Equal(t, &stackID, m.StackID)
-	require.Nil(t, m.PrInfo)
+	require.Equal(t, &name, m.GetParentBranchName())
+	require.Equal(t, &rev, m.GetParentBranchRevision())
+	require.Equal(t, &scope, m.GetScope())
+	require.Equal(t, git.LockReasonUser, m.GetLockReason())
+	require.Equal(t, git.BranchTypeUser, m.GetBranchType())
+	require.Equal(t, &stackID, m.GetStackID())
+	require.Nil(t, m.GetPrInfo())
 }
 
 func TestMetaGetters(t *testing.T) {

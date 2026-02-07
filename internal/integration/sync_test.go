@@ -46,11 +46,13 @@ func TestSync(t *testing.T) {
 		meta, err := eng.Git().ReadMetadata("feature-b")
 		require.NoError(t, err)
 
-		if meta.PrInfo == nil {
-			meta.PrInfo = &git.PrInfoPersistence{}
+		prInfo := meta.GetPrInfo()
+		if prInfo == nil {
+			prInfo = &git.PrInfoPersistence{}
 		}
 		newBase := mainBranchName
-		meta.PrInfo.Base = &newBase
+		prInfo.Base = &newBase
+		meta = meta.WithPrInfo(prInfo)
 
 		err = eng.Git().WriteMetadata("feature-b", meta)
 		require.NoError(t, err)
@@ -120,15 +122,14 @@ func TestSync(t *testing.T) {
 		// Mark merge branch as merged
 		meta, err := eng.Git().ReadMetadata(mergeBranch)
 		require.NoError(t, err)
-		if meta.PrInfo == nil {
-			meta.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 100
 		state := "CLOSED"
 		base := mainBranchName
-		meta.PrInfo.Number = &prNum
-		meta.PrInfo.State = &state
-		meta.PrInfo.Base = &base
+		meta = meta.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata(mergeBranch, meta)
 		require.NoError(t, err)
 
@@ -160,28 +161,26 @@ func TestSync(t *testing.T) {
 
 		// a: MERGED into main
 		metaA, _ := eng.Git().ReadMetadata("a")
-		if metaA.PrInfo == nil {
-			metaA.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNumA := 1
 		stateA := prStateMerged
 		baseA := mainBranchName
-		metaA.PrInfo.Number = &prNumA
-		metaA.PrInfo.State = &stateA
-		metaA.PrInfo.Base = &baseA
+		metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNumA,
+			State:  &stateA,
+			Base:   &baseA,
+		})
 		_ = eng.Git().WriteMetadata("a", metaA)
 
 		// b: OPEN pointing to main
 		metaB, _ := eng.Git().ReadMetadata("b")
-		if metaB.PrInfo == nil {
-			metaB.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNumB := 2
 		stateB := "OPEN"
 		baseB := mainBranchName
-		metaB.PrInfo.Number = &prNumB
-		metaB.PrInfo.State = &stateB
-		metaB.PrInfo.Base = &baseB
+		metaB = metaB.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNumB,
+			State:  &stateB,
+			Base:   &baseB,
+		})
 		_ = eng.Git().WriteMetadata("b", metaB)
 
 		// 1. Run sync
@@ -216,17 +215,16 @@ func TestSyncDraftPRs(t *testing.T) {
 	meta, err := eng.Git().ReadMetadata("branch-a")
 	require.NoError(t, err)
 
-	if meta.PrInfo == nil {
-		meta.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNum := 1
 	state := "OPEN"
 	base := mainBranchName
 	isDraft := true
-	meta.PrInfo.Number = &prNum
-	meta.PrInfo.State = &state
-	meta.PrInfo.Base = &base
-	meta.PrInfo.IsDraft = &isDraft
+	meta = meta.WithPrInfo(&git.PrInfoPersistence{
+		Number:  &prNum,
+		State:   &state,
+		Base:    &base,
+		IsDraft: &isDraft,
+	})
 
 	err = eng.Git().WriteMetadata("branch-a", meta)
 	require.NoError(t, err)
@@ -260,28 +258,26 @@ func TestSyncCleanupDiamond(t *testing.T) {
 
 	// Mark 'a' as merged
 	metaA, _ := eng.Git().ReadMetadata("a")
-	if metaA.PrInfo == nil {
-		metaA.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNum := 1
 	state := prStateMerged
 	base := mainBranchName
-	metaA.PrInfo.Number = &prNum
-	metaA.PrInfo.State = &state
-	metaA.PrInfo.Base = &base
+	metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNum,
+		State:  &state,
+		Base:   &base,
+	})
 	_ = eng.Git().WriteMetadata("a", metaA)
 
 	// Mark 'b' as merged
 	metaB, _ := eng.Git().ReadMetadata("b")
-	if metaB.PrInfo == nil {
-		metaB.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNumB := 2
 	stateB := "MERGED"
 	baseB := mainBranchName
-	metaB.PrInfo.Number = &prNumB
-	metaB.PrInfo.State = &stateB
-	metaB.PrInfo.Base = &baseB
+	metaB = metaB.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNumB,
+		State:  &stateB,
+		Base:   &baseB,
+	})
 	_ = eng.Git().WriteMetadata("b", metaB)
 
 	// Run sync
@@ -317,15 +313,14 @@ func TestSyncStaleDraftCleanup(t *testing.T) {
 
 	// Mark 'a' as merged in metadata
 	metaA, _ := eng.Git().ReadMetadata("a")
-	if metaA.PrInfo == nil {
-		metaA.PrInfo = &git.PrInfoPersistence{}
-	}
 	prNum := 1
 	state := prStateMerged
 	base := mainBranchName
-	metaA.PrInfo.Number = &prNum
-	metaA.PrInfo.State = &state
-	metaA.PrInfo.Base = &base
+	metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNum,
+		State:  &state,
+		Base:   &base,
+	})
 	_ = eng.Git().WriteMetadata("a", metaA)
 
 	// 'a' is now empty relative to main
@@ -474,15 +469,14 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 		// 3. Mark branch-a as merged
 		metaA, err := eng.Git().ReadMetadata("branch-a")
 		require.NoError(t, err)
-		if metaA.PrInfo == nil {
-			metaA.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 1
 		state := prStateMerged
 		base := mainBranchName
-		metaA.PrInfo.Number = &prNum
-		metaA.PrInfo.State = &state
-		metaA.PrInfo.Base = &base
+		metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata("branch-a", metaA)
 		require.NoError(t, err)
 
@@ -524,15 +518,14 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 		// Mark feature as merged
 		meta, err := eng.Git().ReadMetadata("feature")
 		require.NoError(t, err)
-		if meta.PrInfo == nil {
-			meta.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 1
 		state := prStateMerged
 		base := mainBranchName
-		meta.PrInfo.Number = &prNum
-		meta.PrInfo.State = &state
-		meta.PrInfo.Base = &base
+		meta = meta.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata("feature", meta)
 		require.NoError(t, err)
 
@@ -579,15 +572,14 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 
 		metaF, err := eng.Git().ReadMetadata("feature")
 		require.NoError(t, err)
-		if metaF.PrInfo == nil {
-			metaF.PrInfo = &git.PrInfoPersistence{}
-		}
 		prNum := 1
 		state := prStateMerged
 		base := mainBranchName
-		metaF.PrInfo.Number = &prNum
-		metaF.PrInfo.State = &state
-		metaF.PrInfo.Base = &base
+		metaF = metaF.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
 		err = eng.Git().WriteMetadata("feature", metaF)
 		require.NoError(t, err)
 

@@ -271,7 +271,7 @@ func TestFlattenAction(t *testing.T) {
 		// Verify metadata was cleared
 		meta, err = s.Engine.Git().ReadMetadata("B")
 		require.NoError(t, err)
-		require.Nil(t, meta.ParentBranchRevision)
+		require.Nil(t, meta.GetParentBranchRevision())
 
 		// Run flatten
 		err = flatten.Action(s.Context, flatten.Options{BranchName: "B"}, nil)

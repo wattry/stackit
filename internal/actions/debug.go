@@ -170,8 +170,8 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 		}
 
 		if meta, ok := allMeta[branchName]; ok && meta != nil {
-			if meta.ParentBranchRevision != nil {
-				branchInfo.ParentRevision = *meta.ParentBranchRevision
+			if rev := meta.GetParentBranchRevision(); rev != nil {
+				branchInfo.ParentRevision = *rev
 			}
 
 			branch := eng.GetBranch(branchName)

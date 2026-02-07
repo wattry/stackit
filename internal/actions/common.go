@@ -411,8 +411,8 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 		}
 
 		var oldParentRev string
-		if meta.ParentBranchRevision != nil {
-			oldParentRev = *meta.ParentBranchRevision
+		if rev := meta.GetParentBranchRevision(); rev != nil {
+			oldParentRev = *rev
 		}
 
 		// RESILIENCY: If oldParentRev is no longer an ancestor of branchName,

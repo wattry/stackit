@@ -120,8 +120,10 @@ func interactiveOntoSelection(ctx *app.Context, sourceBranch string) (string, er
 	// Get info needed for validation
 	oldParent := source.GetParent()
 	var oldParentRev string
-	if meta, err := eng.Git().ReadMetadata(sourceBranch); err == nil && meta.ParentBranchRevision != nil {
-		oldParentRev = *meta.ParentBranchRevision
+	if meta, err := eng.Git().ReadMetadata(sourceBranch); err == nil {
+		if rev := meta.GetParentBranchRevision(); rev != nil {
+			oldParentRev = *rev
+		}
 	}
 
 	// Create validation function that checks for conflicts when moving to a branch

@@ -163,7 +163,7 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		for _, branchName := range []string{"P", "C1", "C2"} {
 			meta, err := s.Engine.Git().ReadMetadata(branchName)
 			require.NoError(t, err, "Should be able to read metadata for %s", branchName)
-			require.NotNil(t, meta.LastModifiedBy, "LastModifiedBy should be set for %s", branchName)
+			require.NotNil(t, meta.GetLastModifiedBy(), "LastModifiedBy should be set for %s", branchName)
 		}
 	})
 
@@ -281,5 +281,5 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 
 	meta, err := s.Engine.Git().ReadMetadata("feature")
 	require.NoError(t, err)
-	require.Equal(t, git.LockReasonUser, meta.LockReason, "Metadata LockReason field should be set")
+	require.Equal(t, git.LockReasonUser, meta.GetLockReason(), "Metadata LockReason field should be set")
 }

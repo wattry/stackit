@@ -329,9 +329,9 @@ func (tx *MetadataTx) IsCommitted() bool {
 func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 	state := e.branchState.GetOrCreate(branch)
 
-	if meta.ParentBranchName != nil {
+	if parentName := meta.GetParentBranchName(); parentName != nil {
 		// Update children map for old parent
-		if state.Parent != "" && state.Parent != *meta.ParentBranchName {
+		if state.Parent != "" && state.Parent != *parentName {
 			oldChildren := e.childrenMap[state.Parent]
 			for i, c := range oldChildren {
 				if c == branch {
@@ -341,7 +341,7 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 			}
 		}
 
-		state.Parent = *meta.GetParentBranchName()
+		state.Parent = *parentName
 
 		// Update children map for new parent
 		if state.Parent != "" {
