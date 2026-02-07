@@ -517,24 +517,27 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 	}
 
 	// 1. Check PR info from cached metadata
-	if meta != nil && meta.PrInfo != nil {
-		const (
-			prStateClosed = "CLOSED"
-			prStateMerged = "MERGED"
-		)
-		if meta.PrInfo.State != nil {
-			if *meta.PrInfo.State == prStateClosed {
-				return true, "closed on GitHub"
-			}
-			if *meta.PrInfo.State == prStateMerged {
-				base := ""
-				if meta.PrInfo.Base != nil {
-					base = *meta.PrInfo.Base
+	if meta != nil {
+		prInfo := meta.GetPrInfo()
+		if prInfo != nil {
+			const (
+				prStateClosed = "CLOSED"
+				prStateMerged = "MERGED"
+			)
+			if prInfo.State != nil {
+				if *prInfo.State == prStateClosed {
+					return true, "closed on GitHub"
 				}
-				if base == "" {
-					base = eng.Trunk().GetName()
+				if *prInfo.State == prStateMerged {
+					base := ""
+					if prInfo.Base != nil {
+						base = *prInfo.Base
+					}
+					if base == "" {
+						base = eng.Trunk().GetName()
+					}
+					return true, fmt.Sprintf("merged into %s", base)
 				}
-				return true, fmt.Sprintf("merged into %s", base)
 			}
 		}
 	}
@@ -569,7 +572,8 @@ func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng delete
 		empty, err := eng.IsDiffEmpty(ctx, branchName, parentRev)
 		if err == nil && empty { // IsDiffEmpty returns true if no diff
 			// Only delete empty branches if they have a PR
-			if meta != nil && meta.PrInfo != nil && meta.PrInfo.Number != nil && *meta.PrInfo.Number != 0 {
+			metaPrInfo := meta.GetPrInfo()
+			if meta != nil && metaPrInfo != nil && metaPrInfo.Number != nil && *metaPrInfo.Number != 0 {
 				return true, "empty"
 			}
 		}

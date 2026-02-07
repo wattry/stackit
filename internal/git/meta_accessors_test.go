@@ -13,7 +13,7 @@ import (
 const (
 	testBranchMain = "main"
 	testScopeAPI   = "api"
-	testStackID    = "stack-1"
+	testStackID1   = "stack-1"
 )
 
 func TestNewMeta(t *testing.T) {
@@ -30,7 +30,7 @@ func TestNewMetaFrom(t *testing.T) {
 	name := testBranchMain
 	rev := "abc123"
 	scope := testScopeAPI
-	stackID := testStackID
+	stackID := testStackID1
 
 	m := git.NewMetaFrom(git.MetaFields{
 		ParentBranchName:     &name,
@@ -75,7 +75,7 @@ func TestMetaGetters(t *testing.T) {
 		rev := "abc"
 		scope := testScopeAPI
 		hash := "xyz"
-		stackID := testStackID
+		stackID := testStackID1
 		now := time.Now().Truncate(time.Second)
 
 		m := git.NewMetaFrom(git.MetaFields{
@@ -240,7 +240,7 @@ func TestMetaJSONRoundTrip(t *testing.T) {
 		rev := "abc123"
 		scope := testScopeAPI
 		hash := "hash"
-		stackID := testStackID
+		stackID := testStackID1
 		now := time.Now().UTC().Truncate(time.Second)
 		num := 42
 		url := "https://github.com/test/pr/42"

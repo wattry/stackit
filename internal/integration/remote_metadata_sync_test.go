@@ -38,14 +38,14 @@ func TestRemoteMetadataSync(t *testing.T) {
 
 		// 2. Simulate remote metadata with different values (locked=true, scope="remote-scope")
 		// This simulates what would happen after `git fetch origin refs/stackit/metadata/*:refs/stackit/remote-metadata/*`
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      strPtr("remote-scope"),
 			LastModifiedBy: &git.ModifiedBy{
 				GitName:  "Remote User",
 				GitEmail: "remote@example.com",
 			},
-		}
+		})
 		createRemoteMetadataRef(t, sh, "feature-a", remoteMeta)
 
 		// 3. Load remote metadata cache
@@ -92,10 +92,10 @@ func TestRemoteMetadataSync(t *testing.T) {
 		require.NoError(t, eng.SetScope(context.Background(), branch, engine.NewScope("same-scope")))
 
 		// Create identical remote metadata
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      strPtr("same-scope"),
-		}
+		})
 		createRemoteMetadataRef(t, sh, "feature-b", remoteMeta)
 
 		// Load remote cache
@@ -172,10 +172,10 @@ func TestRemoteMetadataSync(t *testing.T) {
 		eng := sh.Engine
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      strPtr("remote-scope"),
-		}
+		})
 		createRemoteMetadataRef(t, sh, "non-existent-branch", remoteMeta)
 
 		// 2. Load remote metadata cache

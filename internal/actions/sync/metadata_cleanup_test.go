@@ -53,9 +53,9 @@ func TestMetadataCleanup(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// 1. Simulate remote metadata for a branch that doesn't exist locally
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: "locked",
-		}
+		})
 
 		// Serialize
 		data, err := json.Marshal(remoteMeta)

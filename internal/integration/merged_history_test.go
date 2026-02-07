@@ -26,10 +26,10 @@ func TestMergedDownstackHistory(t *testing.T) {
 		prNum := 101
 		meta1, err := sh.Engine.Git().ReadMetadata("branch1")
 		require.NoError(t, err)
-		meta1.PrInfo = &git.PrInfoPersistence{
+		meta1 = meta1.WithPrInfo(&git.PrInfoPersistence{
 			Number: &prNum,
 			State:  stringPtr(prStateMerged),
-		}
+		})
 		err = sh.Engine.Git().WriteMetadata("branch1", meta1)
 		require.NoError(t, err)
 
@@ -64,10 +64,10 @@ func TestMergedDownstackHistory(t *testing.T) {
 		prNum := 99
 		meta1, err := sh.Engine.Git().ReadMetadata("branch1")
 		require.NoError(t, err)
-		meta1.PrInfo = &git.PrInfoPersistence{
+		meta1 = meta1.WithPrInfo(&git.PrInfoPersistence{
 			Number: &prNum,
 			State:  stringPtr(prStateMerged),
-		}
+		})
 		err = sh.Engine.Git().WriteMetadata("branch1", meta1)
 		require.NoError(t, err)
 
@@ -107,10 +107,10 @@ func TestMergedDownstackHistory(t *testing.T) {
 		// Merge branch1 first
 		prNum1 := 100
 		meta1, _ := sh.Engine.Git().ReadMetadata("branch1")
-		meta1.PrInfo = &git.PrInfoPersistence{
+		meta1 = meta1.WithPrInfo(&git.PrInfoPersistence{
 			Number: &prNum1,
 			State:  stringPtr(prStateMerged),
-		}
+		})
 		_ = sh.Engine.Git().WriteMetadata("branch1", meta1)
 
 		// Rebuild
@@ -123,10 +123,10 @@ func TestMergedDownstackHistory(t *testing.T) {
 		// Now merge branch2
 		prNum2 := 101
 		meta2, _ := sh.Engine.Git().ReadMetadata("branch2")
-		meta2.PrInfo = &git.PrInfoPersistence{
+		meta2 = meta2.WithPrInfo(&git.PrInfoPersistence{
 			Number: &prNum2,
 			State:  stringPtr(prStateMerged),
-		}
+		})
 		_ = sh.Engine.Git().WriteMetadata("branch2", meta2)
 
 		// Rebuild
@@ -154,10 +154,10 @@ func TestMergedDownstackHistory(t *testing.T) {
 
 		prNum := 50
 		meta1, _ := sh.Engine.Git().ReadMetadata("branch1")
-		meta1.PrInfo = &git.PrInfoPersistence{
+		meta1 = meta1.WithPrInfo(&git.PrInfoPersistence{
 			Number: &prNum,
 			State:  stringPtr(prStateMerged),
-		}
+		})
 		_ = sh.Engine.Git().WriteMetadata("branch1", meta1)
 
 		// Rebuild
@@ -170,10 +170,11 @@ func TestMergedDownstackHistory(t *testing.T) {
 		// Read metadata directly to verify it was persisted
 		meta2, err := sh.Engine.Git().ReadMetadata("branch2")
 		require.NoError(t, err)
-		require.Len(t, meta2.MergedDownstack, 1)
-		require.Equal(t, "branch1", meta2.MergedDownstack[0].BranchName)
-		require.NotNil(t, meta2.MergedDownstack[0].PRNumber)
-		require.Equal(t, 50, *meta2.MergedDownstack[0].PRNumber)
+		mergedDownstack := meta2.GetMergedDownstack()
+		require.Len(t, mergedDownstack, 1)
+		require.Equal(t, "branch1", mergedDownstack[0].BranchName)
+		require.NotNil(t, mergedDownstack[0].PRNumber)
+		require.Equal(t, 50, *mergedDownstack[0].PRNumber)
 
 		// Rebuild engine and verify history still accessible
 		err = sh.Engine.Rebuild("main")

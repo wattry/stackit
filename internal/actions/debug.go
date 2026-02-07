@@ -224,14 +224,14 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 		// But for now, let's just use the cache
 		remoteCache.Range(func(branch string, meta *git.Meta) bool {
 			info := RemoteRefInfo{}
-			if meta.LastModifiedAt != nil {
-				info.LastModified = meta.LastModifiedAt.Format(time.RFC3339)
+			if meta.GetLastModifiedAt() != nil {
+				info.LastModified = meta.GetLastModifiedAt().Format(time.RFC3339)
 			}
-			if meta.LastModifiedBy != nil {
-				info.ModifiedBy = fmt.Sprintf("%s <%s>", meta.LastModifiedBy.GitName, meta.LastModifiedBy.GitEmail)
+			if modBy := meta.GetLastModifiedBy(); modBy != nil {
+				info.ModifiedBy = fmt.Sprintf("%s <%s>", modBy.GitName, modBy.GitEmail)
 			}
-			if meta.Scope != nil {
-				info.Scope = *meta.Scope
+			if meta.GetScope() != nil {
+				info.Scope = *meta.GetScope()
 			}
 			remoteRefs[branch] = info
 			return true

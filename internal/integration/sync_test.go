@@ -93,17 +93,19 @@ func TestSync(t *testing.T) {
 		for i, branch := range branchNames {
 			meta := metas[branch]
 			if meta == nil {
-				meta = &git.Meta{}
+				meta = git.NewMeta()
 			}
-			if meta.PrInfo == nil {
-				meta.PrInfo = &git.PrInfoPersistence{}
+			prInfo := meta.GetPrInfo()
+			if prInfo == nil {
+				prInfo = &git.PrInfoPersistence{}
 			}
 			prNum := i + 1
 			state := prStateMerged
 			base := mainBranchName
-			meta.PrInfo.Number = &prNum
-			meta.PrInfo.State = &state
-			meta.PrInfo.Base = &base
+			prInfo.Number = &prNum
+			prInfo.State = &state
+			prInfo.Base = &base
+			meta = meta.WithPrInfo(prInfo)
 			err := eng.Git().WriteMetadata(branch, meta)
 			require.NoError(t, err)
 		}
@@ -359,10 +361,10 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create remote metadata refs (simulating a successful fetch)
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
 			Scope:      scopePtr("remote-scope"),
-		}
+		})
 		createRemoteMetadataRefForSync(t, sh, "feature-a", remoteMeta)
 
 		// Load remote metadata cache (this is what sync does after fetching)
@@ -371,9 +373,10 @@ func TestSyncRemoteMetadata(t *testing.T) {
 
 		// Verify remote metadata cache was loaded
 		cache := eng.GetRemoteMetadataCache()
-		require.NotNil(t, cache.Get("feature-a"), "Remote metadata should be in cache")
-		require.Equal(t, git.LockReasonUser, cache.Get("feature-a").LockReason, "Remote metadata should show lock reason")
-		require.Equal(t, "remote-scope", *cache.Get("feature-a").Scope, "Remote metadata should have scope")
+		cachedMeta := cache.Get("feature-a")
+		require.NotNil(t, cachedMeta, "Remote metadata should be in cache")
+		require.Equal(t, git.LockReasonUser, cachedMeta.GetLockReason(), "Remote metadata should show lock reason")
+		require.Equal(t, "remote-scope", *cachedMeta.GetScope(), "Remote metadata should have scope")
 	})
 
 	t.Run("detects metadata conflicts", func(t *testing.T) {
@@ -391,9 +394,9 @@ func TestSyncRemoteMetadata(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create remote metadata refs: locked=true (conflict)
-		remoteMeta := &git.Meta{
+		remoteMeta := git.NewMetaFrom(git.MetaFields{
 			LockReason: git.LockReasonUser,
-		}
+		})
 		createRemoteMetadataRefForSync(t, sh, "feature-b", remoteMeta)
 
 		// Load remote metadata cache

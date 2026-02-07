@@ -55,9 +55,9 @@ func TestActionWithMockedGitHub(t *testing.T) {
 		// Verify that metadata was updated with LastModifiedBy after submit
 		meta, err := s.Engine.Git().ReadMetadata("feature")
 		require.NoError(t, err, "Should be able to read metadata ref after submit")
-		require.NotNil(t, meta.LastModifiedBy, "LastModifiedBy should be set after submit")
-		require.NotEmpty(t, meta.LastModifiedBy.GitName, "LastModifiedBy.GitName should not be empty")
-		require.NotEmpty(t, meta.LastModifiedBy.GitEmail, "LastModifiedBy.GitEmail should not be empty")
+		require.NotNil(t, meta.GetLastModifiedBy(), "LastModifiedBy should be set after submit")
+		require.NotEmpty(t, meta.GetLastModifiedBy().GitName, "LastModifiedBy.GitName should not be empty")
+		require.NotEmpty(t, meta.GetLastModifiedBy().GitEmail, "LastModifiedBy.GitEmail should not be empty")
 	})
 
 	t.Run("updates existing PR", func(t *testing.T) {

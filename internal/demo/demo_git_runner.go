@@ -565,7 +565,7 @@ func (d *demoGitRunner) ListRefs(_ string) (map[string]string, error) {
 }
 
 func (d *demoGitRunner) ReadMetadata(_ string) (*git.Meta, error) {
-	return &git.Meta{}, nil
+	return git.NewMeta(), nil
 }
 
 func (d *demoGitRunner) WriteMetadata(_ string, _ *git.Meta) error {

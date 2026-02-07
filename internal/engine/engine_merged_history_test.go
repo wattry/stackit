@@ -71,7 +71,9 @@ func TestRestackBranch_CapturesMergedHistory(t *testing.T) {
 		meta, err := s.Engine.Git().ReadMetadata("branch1")
 		require.NoError(t, err)
 		mergedState := prStateMerged
-		meta.PrInfo.State = &mergedState
+		metaPrInfo := meta.GetPrInfo()
+		metaPrInfo.State = &mergedState
+		meta = meta.WithPrInfo(metaPrInfo)
 		err = s.Engine.Git().WriteMetadata("branch1", meta)
 		require.NoError(t, err)
 
@@ -169,7 +171,7 @@ func TestRestackBranch_LimitsHistoryGrowth(t *testing.T) {
 
 			// Mark branch as merged
 			meta, _ := s.Engine.Git().ReadMetadata(branchToMerge)
-			meta.PrInfo = &git.PrInfoPersistence{State: &mergedState}
+			meta = meta.WithPrInfo(&git.PrInfoPersistence{State: &mergedState})
 			_ = s.Engine.Git().WriteMetadata(branchToMerge, meta)
 
 			// Rebuild and restack child

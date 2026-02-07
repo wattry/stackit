@@ -262,7 +262,7 @@ func TestFlattenAction(t *testing.T) {
 		// Clear B's ParentBranchRevision metadata to trigger the fallback path
 		meta, err := s.Engine.Git().ReadMetadata("B")
 		require.NoError(t, err)
-		meta.ParentBranchRevision = nil
+		meta = meta.WithParentBranchRevision(nil)
 		err = s.Engine.Git().WriteMetadata("B", meta)
 		require.NoError(t, err)
 

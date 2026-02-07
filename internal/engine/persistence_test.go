@@ -15,7 +15,7 @@ func TestMetaSerialization(t *testing.T) {
 	scope := "feat/xyz"
 	now := time.Now().UTC().Truncate(time.Second) // JSON unmarshaling might lose sub-second precision
 
-	meta := &git.Meta{
+	meta := git.NewMetaFrom(git.MetaFields{
 		ParentBranchName: &parent,
 		Scope:            &scope,
 		LockReason:       git.LockReasonUser,
@@ -25,7 +25,7 @@ func TestMetaSerialization(t *testing.T) {
 			GitEmail: "john@example.com",
 		},
 		LastModifiedAt: &now,
-	}
+	})
 
 	// Marshal
 	data, err := json.Marshal(meta)
@@ -36,13 +36,13 @@ func TestMetaSerialization(t *testing.T) {
 	err = json.Unmarshal(data, &meta2)
 	assert.NoError(t, err)
 
-	assert.Equal(t, meta.ParentBranchName, meta2.ParentBranchName)
-	assert.Equal(t, meta.Scope, meta2.Scope)
-	assert.Equal(t, meta.LockReason, meta2.LockReason)
-	assert.Equal(t, meta.BranchType, meta2.BranchType)
-	assert.Equal(t, meta.LastModifiedBy.GitName, meta2.LastModifiedBy.GitName)
-	assert.Equal(t, meta.LastModifiedBy.GitEmail, meta2.LastModifiedBy.GitEmail)
-	assert.True(t, meta.LastModifiedAt.Equal(*meta2.LastModifiedAt))
+	assert.Equal(t, meta.GetParentBranchName(), meta2.GetParentBranchName())
+	assert.Equal(t, meta.GetScope(), meta2.GetScope())
+	assert.Equal(t, meta.GetLockReason(), meta2.GetLockReason())
+	assert.Equal(t, meta.GetBranchType(), meta2.GetBranchType())
+	assert.Equal(t, meta.GetLastModifiedBy().GitName, meta2.GetLastModifiedBy().GitName)
+	assert.Equal(t, meta.GetLastModifiedBy().GitEmail, meta2.GetLastModifiedBy().GitEmail)
+	assert.True(t, meta.GetLastModifiedAt().Equal(*meta2.GetLastModifiedAt()))
 }
 
 func TestLocalMetaSerialization(t *testing.T) {
@@ -70,9 +70,9 @@ func TestMetaBackwardCompatibility(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &meta)
 	assert.NoError(t, err)
 
-	assert.Equal(t, "main", *meta.ParentBranchName)
-	assert.Equal(t, git.LockReason("locked"), meta.LockReason)
-	assert.Equal(t, git.BranchType(""), meta.BranchType) // Should be empty/default
-	assert.Nil(t, meta.LastModifiedBy)
-	assert.Nil(t, meta.LastModifiedAt)
+	assert.Equal(t, "main", *meta.GetParentBranchName())
+	assert.Equal(t, git.LockReason("locked"), meta.GetLockReason())
+	assert.Equal(t, git.BranchType(""), meta.GetBranchType()) // Should be empty/default
+	assert.Nil(t, meta.GetLastModifiedBy())
+	assert.Nil(t, meta.GetLastModifiedAt())
 }

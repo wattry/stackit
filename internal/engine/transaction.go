@@ -341,7 +341,7 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 			}
 		}
 
-		state.Parent = *meta.ParentBranchName
+		state.Parent = *meta.GetParentBranchName()
 
 		// Update children map for new parent
 		if state.Parent != "" {
@@ -351,14 +351,14 @@ func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
 		}
 	}
 
-	if meta.Scope != nil {
-		state.Scope = *meta.Scope
+	if meta.GetScope() != nil {
+		state.Scope = *meta.GetScope()
 	} else {
 		state.Scope = ""
 	}
 
-	state.LockReason = meta.LockReason
-	state.BranchType = meta.BranchType
+	state.LockReason = meta.GetLockReason()
+	state.BranchType = meta.GetBranchType()
 }
 
 // updateBranchStateFromLocalMeta updates the in-memory branch state from local metadata.
