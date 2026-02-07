@@ -524,7 +524,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 	t.Parallel()
 	t.Run("worktree with uncommitted changes during restack", func(t *testing.T) {
 		t.Parallel()
-		sh := NewTestShellInProcess(t, WithRemote())
+		sh := NewTestShellInProcess(t)
 
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -593,7 +593,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 
 	t.Run("worktree uses default stacks directory", func(t *testing.T) {
 		t.Parallel()
-		sh := NewTestShellInProcess(t, WithRemote())
+		sh := NewTestShellInProcess(t)
 
 		// Create worktree
 		sh.WriteFile("feature.txt", "feature").
@@ -612,7 +612,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 
 	t.Run("worktree survives git gc", func(t *testing.T) {
 		t.Parallel()
-		sh := NewTestShellInProcess(t, WithRemote())
+		sh := NewTestShellInProcess(t)
 
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
@@ -846,7 +846,7 @@ func TestWorktreeComplexScenarios(t *testing.T) {
 
 	t.Run("modify in main while worktree has different branch checked out", func(t *testing.T) {
 		t.Parallel()
-		sh := NewTestShellInProcess(t, WithRemote())
+		sh := NewTestShellInProcess(t)
 
 		sh.WriteFile("feature.txt", "feature").
 			Run("create feature -w -m 'feature branch'")
