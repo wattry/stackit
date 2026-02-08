@@ -251,8 +251,8 @@ func (m *shippableModel) unlockAllStacks() {
 }
 
 // toggleSelection toggles selection of the current stack.
-// Only shippable stacks (green check) can be selected.
-// Locked stacks cannot be selected.
+// Shippable and pending stacks can be selected.
+// Locked, blocked, and incomplete stacks cannot be selected.
 func (m *shippableModel) toggleSelection() {
 	stack := m.currentStack()
 	if stack == nil {
@@ -266,8 +266,8 @@ func (m *shippableModel) toggleSelection() {
 		return
 	}
 
-	// Only allow selecting shippable stacks
-	if !stack.IsShippable() {
+	// Only shippable and pending stacks can be selected
+	if !stack.IsShippable() && !stack.IsPending() {
 		return
 	}
 
@@ -285,11 +285,11 @@ func (m *shippableModel) toggleExpand() {
 	m.expanded[root] = !m.expanded[root]
 }
 
-// selectAllShippable selects all shippable stacks that are not locked.
+// selectAllShippable selects all shippable and pending stacks that are not locked.
 func (m *shippableModel) selectAllShippable() {
 	for _, s := range m.stacks {
 		root := s.RootBranch()
-		if s.IsShippable() && !m.isLocked(root) {
+		if (s.IsShippable() || s.IsPending()) && !m.isLocked(root) {
 			m.selected[root] = true
 		}
 	}

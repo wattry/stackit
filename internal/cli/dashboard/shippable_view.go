@@ -96,9 +96,31 @@ func (m *shippableModel) renderHeader() string {
 			m.analysis.TotalStacks(), m.analysis.ShippableCount))
 	}
 
+	left := lipgloss.JoinHorizontal(lipgloss.Left, title, "  ", status)
+
+	// Show refresh countdown on the right
+	var refreshStatus string
+	if !m.lastRefresh.IsZero() && m.state == stateMain {
+		timeSinceRefresh := time.Since(m.lastRefresh)
+		timeUntilRefresh := autoRefreshInterval - timeSinceRefresh
+		if timeUntilRefresh < 0 {
+			timeUntilRefresh = 0
+		}
+		secondsUntil := int(timeUntilRefresh.Seconds())
+		refreshStatus = style.ColorDim(fmt.Sprintf("refresh in %ds", secondsUntil))
+	}
+
+	if refreshStatus != "" {
+		gap := m.Width - lipgloss.Width(left) - lipgloss.Width(refreshStatus) - 2
+		if gap < 2 {
+			gap = 2
+		}
+		left = left + strings.Repeat(" ", gap) + refreshStatus
+	}
+
 	return headerBorderStyle.
 		Width(m.Width).
-		Render(lipgloss.JoinHorizontal(lipgloss.Left, title, "  ", status))
+		Render(left)
 }
 
 // renderStackList renders the list of stacks.
@@ -504,7 +526,7 @@ func (m *shippableModel) formatBlockingReason(reason shippable.BlockingReason) s
 	}
 }
 
-// renderFooter renders the footer with global shortcuts and refresh status.
+// renderFooter renders the footer with global shortcuts.
 func (m *shippableModel) renderFooter() string {
 	// During async operations, show progress bar
 	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
@@ -519,28 +541,6 @@ func (m *shippableModel) renderFooter() string {
 		"[q] Quit",
 	}
 	shortcutsStr := strings.Join(shortcuts, "  ")
-
-	// Build refresh status with countdown
-	var refreshStatus string
-	if !m.lastRefresh.IsZero() {
-		timeSinceRefresh := time.Since(m.lastRefresh)
-		timeUntilRefresh := autoRefreshInterval - timeSinceRefresh
-		if timeUntilRefresh < 0 {
-			timeUntilRefresh = 0
-		}
-		secondsUntil := int(timeUntilRefresh.Seconds())
-		refreshStatus = fmt.Sprintf("Next refresh in %ds", secondsUntil)
-	}
-
-	// Build footer: shortcuts on left, refresh status on right
-	if refreshStatus != "" {
-		gap := m.Width - lipgloss.Width(shortcutsStr) - lipgloss.Width(refreshStatus) - 4
-		if gap < 2 {
-			gap = 2
-		}
-		line := strings.Repeat(" ", gap)
-		return footerStyle.Width(m.Width).Render(shortcutsStr + line + style.ColorDim(refreshStatus))
-	}
 
 	return footerStyle.Width(m.Width).Render(shortcutsStr)
 }
