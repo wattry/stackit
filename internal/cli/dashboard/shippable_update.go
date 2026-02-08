@@ -79,6 +79,18 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.analysis = msg.result
 		m.stacks = msg.result.Stacks
 		m.rebuildCache() // Precompute titles, annotations, and tree renderer
+
+		// On initial load, auto-focus the stack containing the checked-out branch
+		if m.initialLoad && m.cache.currentStackRoot != "" {
+			for i, stack := range m.stacks {
+				if stack.RootBranch() == m.cache.currentStackRoot {
+					m.selectedIndex = i
+					break
+				}
+			}
+			m.initialLoad = false
+		}
+
 		m.updateFocusedStack()
 		return m, nil
 

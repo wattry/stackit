@@ -40,6 +40,11 @@ type renderCache struct {
 	// treeRenderer is the pre-built tree renderer, reused across renders
 	treeRenderer *tree.StackTreeRenderer
 
+	// currentBranch is the name of the currently checked-out branch
+	currentBranch string
+	// currentStackRoot is the root branch of the stack containing the checked-out branch
+	currentStackRoot string
+
 	// Cached selection state to avoid recomputing
 	selectedCount  int
 	selectedStacks []shippable.Stack
@@ -88,6 +93,7 @@ type shippableModel struct {
 	focusedStack  *shippable.Stack // Currently focused stack for detail view
 
 	// Status
+	initialLoad   bool // true until first refresh completes
 	lastRefresh   time.Time
 	statusMessage string
 	errorMessage  string
@@ -193,17 +199,18 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 	)
 
 	return &shippableModel{
-		ctx:      ctx,
-		engine:   ctx.Engine,
-		cfg:      cfg,
-		analyzer: analyzer,
-		combiner: combiner,
-		expanded: make(map[string]bool),
-		selected: make(map[string]bool),
-		locked:   make(map[string]bool),
-		state:    stateLoading,
-		options:  opts,
-		progress: p,
+		ctx:         ctx,
+		engine:      ctx.Engine,
+		cfg:         cfg,
+		analyzer:    analyzer,
+		combiner:    combiner,
+		expanded:    make(map[string]bool),
+		selected:    make(map[string]bool),
+		locked:      make(map[string]bool),
+		initialLoad: true,
+		state:       stateLoading,
+		options:     opts,
+		progress:    p,
 	}
 }
 
@@ -315,6 +322,24 @@ func (m *shippableModel) rebuildCache() {
 	m.cache.stackTitles = make(map[string]string)
 	m.cache.stackDescriptions = make(map[string]*git.StackDescription)
 	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
+
+	// Determine which stack contains the currently checked-out branch
+	m.cache.currentBranch = ""
+	m.cache.currentStackRoot = ""
+	if current := m.engine.CurrentBranch(); current != nil {
+		m.cache.currentBranch = current.GetName()
+		for _, stack := range m.stacks {
+			for _, branchName := range stack.Stack.AllBranches {
+				if branchName == m.cache.currentBranch {
+					m.cache.currentStackRoot = stack.RootBranch()
+					break
+				}
+			}
+			if m.cache.currentStackRoot != "" {
+				break
+			}
+		}
+	}
 
 	// Precompute titles, descriptions, and annotations for all stacks
 	for _, stack := range m.stacks {

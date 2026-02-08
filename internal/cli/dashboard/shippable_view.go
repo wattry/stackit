@@ -176,6 +176,9 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 		name = root // Fallback if cache not populated
 	}
 
+	// Mark the stack containing the checked-out branch
+	isCurrentStack := m.cache.currentStackRoot == root
+
 	// Only show branch count if more than 1 branch
 	branchCount := ""
 	if count := stack.BranchCount(); count > 1 {
@@ -205,10 +208,15 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 		name = name[:maxNameLen-3] + "..."
 	}
 
+	// Apply current stack styling to the name
+	if isCurrentStack {
+		name = style.ColorGreen(name)
+	}
+
 	// Build line
 	var line string
 	if branchCount != "" {
-		line = fmt.Sprintf("%s%s %s %s %s %s", cursor, checkbox, statusIcon, name, branchCount, expandIndicator)
+		line = fmt.Sprintf("%s%s %s %s %s %s", cursor, checkbox, statusIcon, name, style.ColorDim(branchCount), expandIndicator)
 	} else {
 		line = fmt.Sprintf("%s%s %s %s", cursor, checkbox, statusIcon, name)
 	}
@@ -223,9 +231,14 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 
 // renderBranchLine renders a single branch within an expanded stack.
 func (m *shippableModel) renderBranchLine(branchName string) string {
+	isCurrent := branchName == m.cache.currentBranch
+
 	// Use cached annotation for PR info
 	ann, hasCached := m.cache.branchAnnotations[branchName]
 	if !hasCached {
+		if isCurrent {
+			return style.ColorDim("├── ") + style.ColorGreen(branchName) + style.ColorDim(" (current)")
+		}
 		return style.ColorDim("├── " + branchName)
 	}
 
@@ -234,7 +247,14 @@ func (m *shippableModel) renderBranchLine(branchName string) string {
 		prInfo = fmt.Sprintf(" #%d", *ann.PRNumber)
 	}
 
-	return style.ColorDim("├── ") + branchName + style.ColorDim(prInfo)
+	displayName := branchName
+	suffix := style.ColorDim(prInfo)
+	if isCurrent {
+		displayName = style.ColorGreen(branchName)
+		suffix = style.ColorDim(prInfo) + style.ColorDim(" (current)")
+	}
+
+	return style.ColorDim("├── ") + displayName + suffix
 }
 
 // getStatusIcon returns the icon for a stack status.
