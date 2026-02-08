@@ -350,10 +350,13 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 		paneStyle = paneStyle.BorderForeground(lipgloss.Color(style.ColorDashboardFocusedBorder))
 	}
 
-	header := paneHeaderStyle.Render("DETAILS") + "\n\n"
+	innerWidth := width - borderW - rightPaneStyle.GetHorizontalPadding()
+
+	// Build fixed header: title + badge, stats right-aligned below
+	header := m.renderDetailsPanelHeader(m.focusedStack, innerWidth)
 	headerHeight := lipgloss.Height(header)
 
-	// Build details content
+	// Build scrollable content
 	var content string
 	selectedLine := -1
 	selectedLineEnd := -1
@@ -364,7 +367,6 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	}
 
 	// Size the viewport to fill the pane minus border, padding, and header
-	innerWidth := width - borderW - rightPaneStyle.GetHorizontalPadding()
 	innerHeight := height - borderH - paddingH - headerHeight
 	if innerHeight < 1 {
 		innerHeight = 1
@@ -388,6 +390,47 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	}
 
 	return paneStyle.Render(header + m.detailsViewport.View())
+}
+
+// renderDetailsPanelHeader renders the fixed header above the viewport.
+// Shows title + status badge on line 1, quick stats right-aligned on line 2.
+func (m *shippableModel) renderDetailsPanelHeader(stack *shippable.Stack, width int) string {
+	if stack == nil {
+		return paneHeaderStyle.Render("DETAILS") + "\n\n"
+	}
+
+	root := stack.RootBranch()
+
+	// Line 1: title + status badge
+	// Prefer stack description title over commit-derived title
+	statusBadge := m.renderStatusBadge(stack.Status)
+	title := ""
+	if desc := m.cache.stackDescriptions[root]; desc != nil && desc.Title != "" {
+		title = desc.Title
+	}
+	if title == "" {
+		title = m.cache.stackTitles[root]
+	}
+	if title == "" {
+		title = root
+	}
+
+	// Truncate title if needed to fit badge
+	badgeWidth := lipgloss.Width(statusBadge)
+	maxTitleWidth := width - badgeWidth - 2
+	if maxTitleWidth < 10 {
+		maxTitleWidth = 10
+	}
+	if lipgloss.Width(title) > maxTitleWidth {
+		title = title[:maxTitleWidth-3] + "..."
+	}
+
+	titleLine := commonStyles.Bold.Render(title) + " " + statusBadge
+
+	// Line 2: quick stats
+	statsRow := m.renderQuickStats(stack)
+
+	return titleLine + "\n" + statsRow + "\n\n"
 }
 
 // renderActionBar renders the compact action bar when stacks are selected.
@@ -432,15 +475,9 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int
 
 	root := stack.RootBranch()
 
-	// Show stack description if present
-	if desc := m.cache.stackDescriptions[root]; desc != nil {
-		var markdown string
-		if desc.Description != "" {
-			markdown = "# " + desc.Title + "\n\n" + desc.Description
-		} else {
-			markdown = "# " + desc.Title
-		}
-		rendered := style.RenderMarkdown(markdown)
+	// Show stack description body if present (title is already in the fixed header)
+	if desc := m.cache.stackDescriptions[root]; desc != nil && desc.Description != "" {
+		rendered := style.RenderMarkdown(desc.Description)
 		sb.WriteString(rendered + "\n")
 		lineCount += lipgloss.Height(rendered) + 1
 	} else if body := m.cache.commitBodies[root]; body != "" {
@@ -450,23 +487,11 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int
 		lineCount += lipgloss.Height(rendered) + 1
 	}
 
-	// Header: title with status badge
-	statusBadge := m.renderStatusBadge(stack.Status)
-	title := m.cache.stackTitles[root]
-	if title == "" {
-		title = root
+	// Add separator between description and tree
+	if lineCount > 0 {
+		sb.WriteString("\n")
+		lineCount++
 	}
-	sb.WriteString(commonStyles.Bold.Render(title) + " " + statusBadge + "\n")
-	lineCount++
-
-	// Quick stats row
-	statsRow := m.renderQuickStats(stack)
-	sb.WriteString(statsRow + "\n\n")
-	lineCount += 2
-
-	// Stack tree visualization (blocking status is shown inline per branch)
-	sb.WriteString(style.ColorDim("Stack:") + "\n")
-	lineCount++ // "Stack:" label
 
 	treeLines, selectedLine, selectedLineEnd, isTopmost := m.renderStackTree(stack)
 	for _, line := range treeLines {
