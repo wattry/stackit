@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -51,6 +52,10 @@ type renderCache struct {
 
 	// branchBlocking maps branch name to its blocking reason (only for blocked branches)
 	branchBlocking map[string]shippable.BlockingReason
+
+	// commitBodies maps stack root branch to the commit body (for single-branch stacks
+	// without a stack description, used as fallback description)
+	commitBodies map[string]string
 
 	// Cached selection state to avoid recomputing
 	selectedCount  int
@@ -361,6 +366,7 @@ func (m *shippableModel) rebuildCache() {
 	m.cache.stackDescriptions = make(map[string]*git.StackDescription)
 	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
 	m.cache.branchBlocking = make(map[string]shippable.BlockingReason)
+	m.cache.commitBodies = make(map[string]string)
 
 	// Determine which stack contains the currently checked-out branch
 	m.cache.currentBranch = ""
@@ -397,6 +403,11 @@ func (m *shippableModel) rebuildCache() {
 		if branch := m.engine.GetBranch(rootBranch); branch.GetName() != "" {
 			if desc := m.engine.GetStackDescription(branch); desc != nil && !desc.IsEmpty() {
 				m.cache.stackDescriptions[rootBranch] = desc
+			} else if stack.BranchCount() == 1 {
+				// For single-branch stacks without a description, use commit body
+				if body := branch.DefaultPRBody(); body != "" {
+					m.cache.commitBodies[rootBranch] = strings.TrimSpace(body)
+				}
 			}
 		}
 

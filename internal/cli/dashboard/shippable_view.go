@@ -430,9 +430,10 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int
 	var sb strings.Builder
 	lineCount := 0
 
-	// Show stack description if present (matches st info --stack)
-	if desc := m.cache.stackDescriptions[stack.RootBranch()]; desc != nil {
-		// Render title and description together through glamour for consistent formatting
+	root := stack.RootBranch()
+
+	// Show stack description if present
+	if desc := m.cache.stackDescriptions[root]; desc != nil {
 		var markdown string
 		if desc.Description != "" {
 			markdown = "# " + desc.Title + "\n\n" + desc.Description
@@ -442,18 +443,21 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int
 		rendered := style.RenderMarkdown(markdown)
 		sb.WriteString(rendered + "\n")
 		lineCount += lipgloss.Height(rendered) + 1
+	} else if body := m.cache.commitBodies[root]; body != "" {
+		// For single-branch stacks without a description, show the commit body
+		rendered := style.RenderMarkdown(body)
+		sb.WriteString(rendered + "\n")
+		lineCount += lipgloss.Height(rendered) + 1
 	}
 
-	// Header: show commit title with status badge, branch name dimmed below
+	// Header: title with status badge
 	statusBadge := m.renderStatusBadge(stack.Status)
-	// Use cached title (computed at refresh time)
-	title := m.cache.stackTitles[stack.RootBranch()]
+	title := m.cache.stackTitles[root]
 	if title == "" {
-		title = stack.RootBranch() // Fallback if cache not populated
+		title = root
 	}
 	sb.WriteString(commonStyles.Bold.Render(title) + " " + statusBadge + "\n")
-	sb.WriteString(style.ColorDim(stack.RootBranch()) + "\n")
-	lineCount += 2
+	lineCount++
 
 	// Quick stats row
 	statsRow := m.renderQuickStats(stack)
@@ -464,7 +468,7 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int
 	sb.WriteString(style.ColorDim("Stack:") + "\n")
 	lineCount++ // "Stack:" label
 
-	treeLines, selectedLine, selectedLineEnd := m.renderStackTree(stack)
+	treeLines, selectedLine, selectedLineEnd, isTopmost := m.renderStackTree(stack)
 	for _, line := range treeLines {
 		sb.WriteString(line + "\n")
 	}
@@ -475,6 +479,11 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int
 	if selectedLine >= 0 {
 		selectedContentLine = lineCount + selectedLine
 		selectedContentLineEnd = lineCount + selectedLineEnd
+		// When the topmost branch is selected, scroll up to show the header
+		// (description, title, stats) above the tree
+		if isTopmost {
+			selectedContentLine = 0
+		}
 	}
 
 	return sb.String(), selectedContentLine, selectedContentLineEnd
@@ -522,8 +531,9 @@ func (m *shippableModel) renderQuickStats(stack *shippable.Stack) string {
 
 // renderStackTree renders the stack as a tree visualization.
 // Returns the rendered lines, the line index of the selected branch (-1 if none),
-// and the last line that should remain visible (to keep trunk visible when selecting the bottommost branch).
-func (m *shippableModel) renderStackTree(stack *shippable.Stack) ([]string, int, int) {
+// the last line that should remain visible (to keep trunk visible when selecting
+// the bottommost branch), and whether the selected branch is the topmost in the tree.
+func (m *shippableModel) renderStackTree(stack *shippable.Stack) (lines []string, selectedLine int, selectedLineEnd int, isTopmost bool) {
 	// Use cached tree renderer if available, otherwise create one
 	var renderer *tree.StackTreeRenderer
 	if m.cache.treeRenderer != nil {
@@ -605,9 +615,8 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) ([]string, int,
 	// Use RenderStackDetailed to get per-branch line info for scroll tracking
 	rendered := renderer.RenderStackDetailed(stack.RootBranch(), opts)
 
-	var lines []string
-	selectedLine := -1
-	selectedLineEnd := -1
+	selectedLine = -1
+	selectedLineEnd = -1
 	selectedIdx := -1
 	lineOffset := 0
 	for i, rb := range rendered {
@@ -622,7 +631,6 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) ([]string, int,
 	// When the selected branch is the last one before trunk, extend the
 	// visible range to include trunk's lines (so "main" stays visible).
 	if selectedIdx >= 0 && selectedIdx+1 < len(rendered) {
-		// Include the next branch's lines (typically trunk/main)
 		nextEnd := 0
 		for i := 0; i <= selectedIdx+1; i++ {
 			nextEnd += len(rendered[i].Lines)
@@ -633,7 +641,10 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) ([]string, int,
 		selectedLineEnd = selectedLine
 	}
 
-	return lines, selectedLine, selectedLineEnd
+	// The topmost branch in the rendered tree is the first entry
+	isTopmost = selectedIdx == 0
+
+	return
 }
 
 // renderFooter renders the footer with global shortcuts.
