@@ -151,4 +151,8 @@ type Engine interface {
 	RemoteMetadataManager
 	WorktreeRegistry
 	Git() git.Runner
+
+	// SnapshotForWorktree creates a deep copy of engine state for initializing
+	// worktree engines without the cost of rebuildInternal.
+	SnapshotForWorktree() WorktreeSnapshot
 }

@@ -408,6 +408,18 @@ func NewRunnerWithPath(repoRoot string, logger DebugLogger) Runner {
 	return &runner{repoRoot: repoRoot, logger: logger}
 }
 
+// NewRunnerCommandOnly returns a Runner that only supports command-line git operations.
+// It skips go-git repository initialization (OpenRepository), saving ~2-5ms.
+// Use this for worktrees that only need CLI operations (rebase, rev-parse, status, etc.).
+// Any operation that requires go-git (ensureRepo) will return an error.
+func NewRunnerCommandOnly(repoRoot string) Runner {
+	abs, err := filepath.Abs(repoRoot)
+	if err == nil {
+		repoRoot = abs
+	}
+	return &runner{repoRoot: repoRoot, commandOnly: true}
+}
+
 // runner implements Runner by calling the actual git package functions
 type runner struct {
 	repo     *Repository
@@ -419,6 +431,12 @@ type runner struct {
 	goGitMu  sync.Mutex
 	loggerMu sync.RWMutex
 	logger   DebugLogger
+
+	// commandOnly disables go-git repository initialization. When true, ensureRepo()
+	// returns an error and InitDefaultRepo() is a no-op. Use this for worktrees that
+	// only need command-line git operations (rebase, rev-parse, status, etc.),
+	// saving ~2-5ms from OpenRepository().
+	commandOnly bool
 
 	// Cached metadata to avoid redundant ReadMetadata calls (each spawns 2 git processes).
 	// Thread-safe: sync.Map handles concurrent reads from worker pools.
@@ -455,6 +473,10 @@ func (r *runner) debugLog(format string, args ...any) {
 }
 
 func (r *runner) ensureRepo() (*Repository, error) {
+	if r.commandOnly {
+		return nil, fmt.Errorf("go-git repository access not available in command-only mode")
+	}
+
 	r.repoMu.Lock()
 	defer r.repoMu.Unlock()
 
@@ -493,6 +515,9 @@ func (r *runner) ReloadRepository() error {
 }
 
 func (r *runner) InitDefaultRepo() error {
+	if r.commandOnly {
+		return nil // No-op: worktree is already valid from `git worktree add`
+	}
 	_, err := r.ensureRepo()
 	return err
 }
@@ -650,6 +675,9 @@ func (r *runner) GetCurrentRevision(ctx context.Context) (string, error) {
 }
 
 func (r *runner) GetRevision(branchName string) (string, error) {
+	if r.commandOnly {
+		return r.RunGitCommandWithContext(context.Background(), "rev-parse", "--verify", branchName)
+	}
 	repo, err := r.ensureRepo()
 	if err != nil {
 		return "", err

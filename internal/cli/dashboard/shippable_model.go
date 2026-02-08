@@ -1,10 +1,12 @@
 package dashboard
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/app"
@@ -23,6 +25,9 @@ const (
 	// tickInterval is the interval for timer updates (for countdown display)
 	// Using 5s instead of 1s to reduce render frequency while still showing useful countdown
 	tickInterval = 5 * time.Second
+
+	// msgRefreshing is the status message shown during refresh operations.
+	msgRefreshing = "Refreshing..."
 )
 
 // renderCache stores precomputed data to avoid expensive git operations in the render loop.
@@ -40,10 +45,30 @@ type renderCache struct {
 	// treeRenderer is the pre-built tree renderer, reused across renders
 	treeRenderer *tree.StackTreeRenderer
 
+	// currentBranch is the name of the currently checked-out branch
+	currentBranch string
+	// currentStackRoot is the root branch of the stack containing the checked-out branch
+	currentStackRoot string
+
+	// branchBlocking maps branch name to its blocking reason (only for blocked branches)
+	branchBlocking map[string]shippable.BlockingReason
+
+	// commitBodies maps stack root branch to the commit body (for single-branch stacks
+	// without a stack description, used as fallback description)
+	commitBodies map[string]string
+
 	// Cached selection state to avoid recomputing
 	selectedCount  int
 	selectedStacks []shippable.Stack
 }
+
+// focusedPane indicates which pane has keyboard focus.
+type focusedPane int
+
+const (
+	paneLeft focusedPane = iota
+	paneRight
+)
 
 // dashboardState represents the current UI state of the dashboard.
 type dashboardState int
@@ -79,15 +104,19 @@ type shippableModel struct {
 	combination *shippable.CombinationResult
 
 	// UI state
-	state         dashboardState // Current UI state (replaces boolean flags)
-	stacks        []shippable.Stack
-	selectedIndex int
-	expanded      map[string]bool  // Tracks which stacks are expanded
-	selected      map[string]bool  // Tracks which stacks are selected for shipping
-	locked        map[string]bool  // Tracks which stacks are locked (during publish/ship)
-	focusedStack  *shippable.Stack // Currently focused stack for detail view
+	state             dashboardState // Current UI state (replaces boolean flags)
+	stacks            []shippable.Stack
+	selectedIndex     int
+	expanded          map[string]bool  // Tracks which stacks are expanded
+	selected          map[string]bool  // Tracks which stacks are selected for shipping
+	locked            map[string]bool  // Tracks which stacks are locked (during publish/ship)
+	focusedStack      *shippable.Stack // Currently focused stack for detail view
+	pane              focusedPane      // Which pane has keyboard focus
+	selectedBranchIdx int              // Index of highlighted branch in the details tree
+	detailsViewport   viewport.Model   // Viewport for scrollable details panel
 
 	// Status
+	initialLoad   bool // true until first refresh completes
 	lastRefresh   time.Time
 	statusMessage string
 	errorMessage  string
@@ -112,6 +141,8 @@ type shippableModel struct {
 type keyMap struct {
 	Up        key.Binding
 	Down      key.Binding
+	Left      key.Binding
+	Right     key.Binding
 	Select    key.Binding
 	Expand    key.Binding
 	Ship      key.Binding
@@ -133,6 +164,14 @@ var keys = keyMap{
 	Down: key.NewBinding(
 		key.WithKeys(core.KeyDown, "j"),
 		key.WithHelp("↓/j", "move down"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys(core.KeyLeft, "h"),
+		key.WithHelp("←/h", "focus stacks"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys(core.KeyRight, "l"),
+		key.WithHelp("→/l", "focus details"),
 	),
 	Select: key.NewBinding(
 		key.WithKeys(" "),
@@ -192,18 +231,29 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 		progress.WithoutPercentage(),
 	)
 
+	// Create viewport for the details panel with default keybindings,
+	// but disable up/down/left/right since we handle those for branch selection.
+	vp := viewport.New(0, 0)
+	vp.KeyMap.Up.SetEnabled(false)
+	vp.KeyMap.Down.SetEnabled(false)
+	vp.KeyMap.Left.SetEnabled(false)
+	vp.KeyMap.Right.SetEnabled(false)
+	vp.MouseWheelEnabled = true
+
 	return &shippableModel{
-		ctx:      ctx,
-		engine:   ctx.Engine,
-		cfg:      cfg,
-		analyzer: analyzer,
-		combiner: combiner,
-		expanded: make(map[string]bool),
-		selected: make(map[string]bool),
-		locked:   make(map[string]bool),
-		state:    stateLoading,
-		options:  opts,
-		progress: p,
+		ctx:             ctx,
+		engine:          ctx.Engine,
+		cfg:             cfg,
+		analyzer:        analyzer,
+		combiner:        combiner,
+		expanded:        make(map[string]bool),
+		selected:        make(map[string]bool),
+		locked:          make(map[string]bool),
+		initialLoad:     true,
+		state:           stateLoading,
+		options:         opts,
+		progress:        p,
+		detailsViewport: vp,
 	}
 }
 
@@ -244,8 +294,8 @@ func (m *shippableModel) unlockAllStacks() {
 }
 
 // toggleSelection toggles selection of the current stack.
-// Only shippable stacks (green check) can be selected.
-// Locked stacks cannot be selected.
+// Shippable and pending stacks can be selected.
+// Locked, blocked, and incomplete stacks cannot be selected.
 func (m *shippableModel) toggleSelection() {
 	stack := m.currentStack()
 	if stack == nil {
@@ -259,8 +309,8 @@ func (m *shippableModel) toggleSelection() {
 		return
 	}
 
-	// Only allow selecting shippable stacks
-	if !stack.IsShippable() {
+	// Only shippable and pending stacks can be selected
+	if !stack.IsShippable() && !stack.IsPending() {
 		return
 	}
 
@@ -278,11 +328,11 @@ func (m *shippableModel) toggleExpand() {
 	m.expanded[root] = !m.expanded[root]
 }
 
-// selectAllShippable selects all shippable stacks that are not locked.
+// selectAllShippable selects all shippable and pending stacks that are not locked.
 func (m *shippableModel) selectAllShippable() {
 	for _, s := range m.stacks {
 		root := s.RootBranch()
-		if s.IsShippable() && !m.isLocked(root) {
+		if (s.IsShippable() || s.IsPending()) && !m.isLocked(root) {
 			m.selected[root] = true
 		}
 	}
@@ -315,6 +365,26 @@ func (m *shippableModel) rebuildCache() {
 	m.cache.stackTitles = make(map[string]string)
 	m.cache.stackDescriptions = make(map[string]*git.StackDescription)
 	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
+	m.cache.branchBlocking = make(map[string]shippable.BlockingReason)
+	m.cache.commitBodies = make(map[string]string)
+
+	// Determine which stack contains the currently checked-out branch
+	m.cache.currentBranch = ""
+	m.cache.currentStackRoot = ""
+	if current := m.engine.CurrentBranch(); current != nil {
+		m.cache.currentBranch = current.GetName()
+		for _, stack := range m.stacks {
+			for _, branchName := range stack.Stack.AllBranches {
+				if branchName == m.cache.currentBranch {
+					m.cache.currentStackRoot = stack.RootBranch()
+					break
+				}
+			}
+			if m.cache.currentStackRoot != "" {
+				break
+			}
+		}
+	}
 
 	// Precompute titles, descriptions, and annotations for all stacks
 	for _, stack := range m.stacks {
@@ -333,6 +403,11 @@ func (m *shippableModel) rebuildCache() {
 		if branch := m.engine.GetBranch(rootBranch); branch.GetName() != "" {
 			if desc := m.engine.GetStackDescription(branch); desc != nil && !desc.IsEmpty() {
 				m.cache.stackDescriptions[rootBranch] = desc
+			} else if stack.BranchCount() == 1 {
+				// For single-branch stacks without a description, use commit body
+				if body := branch.DefaultPRBody(); body != "" {
+					m.cache.commitBodies[rootBranch] = strings.TrimSpace(body)
+				}
 			}
 		}
 
@@ -343,6 +418,11 @@ func (m *shippableModel) rebuildCache() {
 				ann := tui.GetBranchAnnotation(m.engine, branch)
 				m.cache.branchAnnotations[branchName] = ann
 			}
+		}
+
+		// Cache blocking reasons per branch
+		for _, bp := range stack.BlockingPRs {
+			m.cache.branchBlocking[bp.Branch] = bp.Reason
 		}
 	}
 

@@ -75,11 +75,10 @@ func (e *Executor) CreateSession(ctx context.Context, opts CreateSessionOptions)
 
 	e.output.Debug("Created worktree at %s", worktreePath)
 
-	// Create engine for worktree
-	worktreeEng, err := engine.NewEngine(engine.Options{
-		RepoRoot:          worktreePath,
-		Trunk:             e.eng.Trunk().GetName(),
-		MaxUndoStackDepth: 0, // No undo needed in worktrees
+	// Create engine for worktree using parent's snapshot to skip rebuildInternal
+	worktreeEng, err := engine.NewEngineForWorktree(engine.WorktreeEngineOptions{
+		WorktreePath: worktreePath,
+		Snapshot:     e.eng.SnapshotForWorktree(),
 	})
 	if err != nil {
 		cleanup()

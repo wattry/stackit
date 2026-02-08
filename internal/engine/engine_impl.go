@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sync"
 
 	"stackit.dev/stackit/internal/git"
@@ -97,7 +98,121 @@ type engineImpl struct {
 	git               git.Runner
 	writer            io.Writer
 	mu                sync.RWMutex
-	worktreeMu        sync.Mutex // serializes worktree creation to avoid git races on .git/worktrees/
+	worktreeMu        sync.Mutex // serializes worktree add/remove/prune to avoid git races on .git/worktrees/
+
+	// Temporary worktree cleanup tracking.
+	tempWorktreeNeedsPrune bool
+	tempWorktreePrunedOnce bool
+}
+
+// WorktreeSnapshot holds a deep copy of engine state for initializing worktree engines.
+// This avoids the cost of rebuildInternal (which reads all branches + metadata from git)
+// since worktrees share .git with the parent and the data is identical.
+type WorktreeSnapshot struct {
+	Trunk           string
+	Branches        []string
+	BranchState     BranchStateMap
+	ChildrenMap     map[string][]string
+	RemoteMetaCache map[string]*git.Meta
+	MaxConcurrency  int
+}
+
+// SnapshotForWorktree creates a deep copy of the engine's mutable state for use in
+// worktree sessions. The snapshot is safe to use from another goroutine since all
+// maps and slices are deep-copied.
+func (e *engineImpl) SnapshotForWorktree() WorktreeSnapshot {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	// Deep copy branches slice
+	branches := make([]string, len(e.branches))
+	copy(branches, e.branches)
+
+	// Deep copy branchState map
+	branchState := make(BranchStateMap, len(e.branchState))
+	for name, state := range e.branchState {
+		copied := *state
+		branchState[name] = &copied
+	}
+
+	// Deep copy childrenMap
+	childrenMap := make(map[string][]string, len(e.childrenMap))
+	for parent, children := range e.childrenMap {
+		childrenCopy := make([]string, len(children))
+		copy(childrenCopy, children)
+		childrenMap[parent] = childrenCopy
+	}
+
+	// Shallow copy remoteMetaCache — Meta values are treated as immutable
+	remoteMetaCache := make(map[string]*git.Meta, len(e.remoteMetaCache))
+	for name, meta := range e.remoteMetaCache {
+		remoteMetaCache[name] = meta
+	}
+
+	return WorktreeSnapshot{
+		Trunk:           e.trunk,
+		Branches:        branches,
+		BranchState:     branchState,
+		ChildrenMap:     childrenMap,
+		RemoteMetaCache: remoteMetaCache,
+		MaxConcurrency:  e.maxConcurrency,
+	}
+}
+
+// WorktreeEngineOptions configures NewEngineForWorktree.
+type WorktreeEngineOptions struct {
+	// WorktreePath is the root directory of the worktree.
+	WorktreePath string
+
+	// Snapshot is the parent engine's state snapshot.
+	Snapshot WorktreeSnapshot
+
+	// Writer is the output writer for warnings. If nil, os.Stderr is used.
+	Writer io.Writer
+}
+
+// NewEngineForWorktree creates an engine for a worktree session using a snapshot
+// from the parent engine. This skips rebuildInternal and maybeAutoFetchRemoteMetadata
+// since worktrees share .git with the parent and the metadata is identical.
+func NewEngineForWorktree(opts WorktreeEngineOptions) (Engine, error) {
+	g := git.NewRunnerWithPath(opts.WorktreePath, nil)
+
+	if err := g.InitDefaultRepo(); err != nil {
+		return nil, fmt.Errorf("failed to initialize worktree git repository: %w", err)
+	}
+
+	writer := opts.Writer
+	if writer == nil {
+		writer = os.Stderr
+	}
+
+	// Sort children for deterministic traversal (snapshot should already be sorted,
+	// but ensure consistency)
+	for _, children := range opts.Snapshot.ChildrenMap {
+		slices.Sort(children)
+	}
+
+	e := &engineImpl{
+		repoRoot:          opts.WorktreePath,
+		trunk:             opts.Snapshot.Trunk,
+		branches:          opts.Snapshot.Branches,
+		branchState:       opts.Snapshot.BranchState,
+		childrenMap:       opts.Snapshot.ChildrenMap,
+		remoteMetaCache:   opts.Snapshot.RemoteMetaCache,
+		maxUndoStackDepth: 0, // No undo in temporary worktrees
+		maxConcurrency:    opts.Snapshot.MaxConcurrency,
+		git:               g,
+		writer:            writer,
+	}
+
+	// Get current branch (1 cheap git call — needed for worktree's HEAD)
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		currentBranch = ""
+	}
+	e.currentBranch = currentBranch
+
+	return e, nil
 }
 
 // NewEngine creates a new engine instance

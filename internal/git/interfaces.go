@@ -252,6 +252,9 @@ type MetadataOperations interface {
 	WriteLocalMetadataBlob(meta *LocalMeta) (string, error)
 	GetMetadataRefSHA(branchName string) string
 	GetLocalMetadataRefSHA(branchName string) string
+
+	// Cache management
+	ClearMetadataCache()
 }
 
 // StackMetadataOperations handles stack-level metadata persistence.

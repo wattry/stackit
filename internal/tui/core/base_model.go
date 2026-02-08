@@ -16,6 +16,8 @@ const (
 	KeyEnter = "enter"
 	KeyUp    = "up"
 	KeyDown  = "down"
+	KeyLeft  = "left"
+	KeyRight = "right"
 	KeyTab   = "tab"
 )
 
