@@ -737,7 +737,16 @@ func (e *engineImpl) RemoveWorktree(ctx context.Context, path string) error {
 // This cleans up worktree information for worktrees whose working directory
 // has been deleted or is otherwise unavailable.
 func (e *engineImpl) PruneWorktrees(ctx context.Context) error {
-	return e.git.PruneWorktrees(ctx)
+	e.worktreeMu.Lock()
+	defer e.worktreeMu.Unlock()
+
+	if err := e.git.PruneWorktrees(ctx); err != nil {
+		return err
+	}
+
+	e.tempWorktreeNeedsPrune = false
+	e.tempWorktreePrunedOnce = true
+	return nil
 }
 
 // CreateTemporaryWorktree creates a temporary directory and adds a detached worktree
@@ -765,14 +774,6 @@ func (e *engineImpl) CreateTemporaryWorktreeSkipPrune(ctx context.Context, branc
 // Note: Callers that create multiple worktrees in parallel (like ValidateRebasesParallel) should call
 // PruneWorktrees() once before starting parallel worktree creation and pass WorktreePruneSkip to avoid race conditions.
 func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, branch string, prefix string, checkout WorktreeCheckoutMode, prune WorktreePruneMode) (string, func(), error) {
-	// Prune stale worktree entries before creating new ones.
-	// This cleans up entries in .git/worktrees/ that may be left behind from
-	// incomplete cleanup after failed or canceled operations.
-	// Skip if caller has already pruned (e.g., parallel worktree creation).
-	if prune == WorktreePruneAuto {
-		_ = e.git.PruneWorktrees(ctx)
-	}
-
 	tmpDir, err := os.MkdirTemp("", prefix)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
@@ -783,7 +784,7 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 	// intermittent failures when stale entries remained after incomplete cleanup.
 	worktreePath := filepath.Join(tmpDir, filepath.Base(tmpDir))
 
-	// Serialize worktree creation to prevent races on .git/worktrees/ directory.
+	// Serialize worktree operations to prevent races on .git/worktrees/ directory.
 	// Git's `worktree add` command is not concurrency-safe - when multiple goroutines
 	// run it simultaneously on the same repo, they can race on reading/writing the
 	// .git/worktrees/ directory, causing "failed to read commondir" errors.
@@ -792,9 +793,10 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 	// This is acceptable because:
 	// 1. Temp directory creation (above) is still parallel
 	// 2. The actual rebase validation (after worktree creation) is still parallel
-	// 3. Only the brief `git worktree add` command is serialized
+	// 3. Only the brief `git worktree` commands are serialized
 	e.worktreeMu.Lock()
-	err = e.git.AddWorktreeWithOptions(ctx, worktreePath, branch, true, checkout == WorktreeCheckoutShallow)
+	e.maybePruneTempWorktreesLocked(ctx, prune)
+	err = e.addWorktreeWithRetryLocked(ctx, worktreePath, branch, true, checkout == WorktreeCheckoutShallow)
 	e.worktreeMu.Unlock()
 
 	if err != nil {
@@ -803,19 +805,61 @@ func (e *engineImpl) CreateTemporaryWorktreeWithOptions(ctx context.Context, bra
 	}
 
 	cleanup := func() {
-		// Use context.Background for cleanup to ensure it runs even if ctx is canceled
-		cleanupCtx := context.Background()
-		removeErr := e.RemoveWorktree(cleanupCtx, worktreePath)
+		// Fast cleanup: remove directories and defer pruning until next creation.
+		e.worktreeMu.Lock()
+		e.tempWorktreeNeedsPrune = true
+		e.worktreeMu.Unlock()
+
+		_ = os.RemoveAll(worktreePath)
 		_ = os.RemoveAll(tmpDir)
-		// If worktree removal failed, prune to clean up any dangling entries.
-		// This prevents stale entries from accumulating and causing "commondir" errors
-		// in subsequent worktree operations, especially on busy build servers.
-		if removeErr != nil {
-			_ = e.git.PruneWorktrees(cleanupCtx)
-		}
 	}
 
 	return worktreePath, cleanup, nil
+}
+
+// maybePruneTempWorktreesLocked prunes stale temp worktrees if needed.
+// Caller must hold worktreeMu.
+func (e *engineImpl) maybePruneTempWorktreesLocked(ctx context.Context, prune WorktreePruneMode) {
+	if prune == WorktreePruneSkip && !e.tempWorktreeNeedsPrune {
+		return
+	}
+
+	if prune == WorktreePruneAuto && !e.tempWorktreeNeedsPrune && e.tempWorktreePrunedOnce {
+		return
+	}
+
+	if err := e.git.PruneWorktrees(ctx); err != nil {
+		return
+	}
+
+	e.tempWorktreeNeedsPrune = false
+	e.tempWorktreePrunedOnce = true
+}
+
+// addWorktreeWithRetryLocked attempts to add a worktree, pruning and retrying once on failure.
+// Caller must hold worktreeMu.
+func (e *engineImpl) addWorktreeWithRetryLocked(ctx context.Context, path string, branch string, detach bool, noCheckout bool) error {
+	if err := e.git.AddWorktreeWithOptions(ctx, path, branch, detach, noCheckout); err == nil {
+		return nil
+	}
+
+	pruneErr := e.git.PruneWorktrees(ctx)
+	if pruneErr == nil {
+		e.tempWorktreeNeedsPrune = false
+		e.tempWorktreePrunedOnce = true
+	} else {
+		e.tempWorktreeNeedsPrune = true
+	}
+
+	retryErr := e.git.AddWorktreeWithOptions(ctx, path, branch, detach, noCheckout)
+	if retryErr == nil {
+		return nil
+	}
+
+	if pruneErr != nil {
+		return fmt.Errorf("failed to add worktree at %s after prune attempt (%w): %w", path, pruneErr, retryErr)
+	}
+	return fmt.Errorf("failed to add worktree at %s after prune retry: %w", path, retryErr)
 }
 
 // RegisterWorktree registers a worktree for a stack root in local git refs

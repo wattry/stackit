@@ -234,6 +234,13 @@ func (r *runner) DeleteMetadata(branchName string) error {
 	return err
 }
 
+// ClearMetadataCache clears the in-memory metadata cache.
+// This should be called before a full rebuild to ensure stale entries
+// from external changes (e.g., branches created in another terminal) are not retained.
+func (r *runner) ClearMetadataCache() {
+	r.metadataCache.Clear()
+}
+
 func (r *runner) RenameMetadata(oldName, newName string) error {
 	oldRefName := fmt.Sprintf("%s%s", MetadataRefPrefix, oldName)
 	newRefName := fmt.Sprintf("%s%s", MetadataRefPrefix, newName)

@@ -36,17 +36,14 @@ func (m *shippableModel) renderMain() string {
 	headerHeight := lipgloss.Height(header)
 	footerHeight := lipgloss.Height(footer)
 
-	// Cart panel height (only if items selected)
-	// Height: 1 header + N stacks + 1 summary + 2 padding/border
-	cartHeight := 0
+	// Action bar height (only if items selected)
+	// Fixed height: border(1) + content(1) + padding(1)
+	actionBarHeight := 0
 	if m.cache.selectedCount > 0 {
-		cartHeight = 4 + m.cache.selectedCount // Dynamic based on selection count
-		if cartHeight > 10 {
-			cartHeight = 10 // Cap at reasonable max
-		}
+		actionBarHeight = 3
 	}
 
-	contentHeight := m.Height - headerHeight - footerHeight - cartHeight
+	contentHeight := m.Height - headerHeight - footerHeight - actionBarHeight
 	if contentHeight < 5 {
 		contentHeight = 5
 	}
@@ -65,10 +62,10 @@ func (m *shippableModel) renderMain() string {
 	var sections []string
 	sections = append(sections, header, stackViewer)
 
-	// Add cart panel if items selected (bottom row)
+	// Add action bar if items selected (bottom row)
 	if m.cache.selectedCount > 0 {
-		cartPane := m.renderCartPanel(m.Width, cartHeight)
-		sections = append(sections, cartPane)
+		bar := m.renderActionBar(m.Width)
+		sections = append(sections, bar)
 	}
 
 	sections = append(sections, footer)
@@ -99,20 +96,49 @@ func (m *shippableModel) renderHeader() string {
 			m.analysis.TotalStacks(), m.analysis.ShippableCount))
 	}
 
+	left := lipgloss.JoinHorizontal(lipgloss.Left, title, "  ", status)
+
+	// Show refresh countdown on the right
+	var refreshStatus string
+	if !m.lastRefresh.IsZero() && m.state == stateMain {
+		timeSinceRefresh := time.Since(m.lastRefresh)
+		timeUntilRefresh := autoRefreshInterval - timeSinceRefresh
+		if timeUntilRefresh < 0 {
+			timeUntilRefresh = 0
+		}
+		secondsUntil := int(timeUntilRefresh.Seconds())
+		refreshStatus = style.ColorDim(fmt.Sprintf("refresh in %ds", secondsUntil))
+	}
+
+	if refreshStatus != "" {
+		gap := m.Width - lipgloss.Width(left) - lipgloss.Width(refreshStatus) - 2
+		if gap < 2 {
+			gap = 2
+		}
+		left = left + strings.Repeat(" ", gap) + refreshStatus
+	}
+
 	return headerBorderStyle.
 		Width(m.Width).
-		Render(lipgloss.JoinHorizontal(lipgloss.Left, title, "  ", status))
+		Render(left)
 }
 
 // renderStackList renders the list of stacks.
 func (m *shippableModel) renderStackList(width, height int) string {
+	// Width/Height include padding but not borders, so subtract border size only
+	borderW := leftPaneStyle.GetHorizontalBorderSize()
+	borderH := leftPaneStyle.GetVerticalBorderSize()
 	paneStyle := leftPaneStyle.
-		Width(width).
-		Height(height)
+		Width(width - borderW).
+		Height(height - borderH)
+
+	// Highlight border when this pane has focus
+	if m.pane == paneLeft {
+		paneStyle = paneStyle.BorderForeground(lipgloss.Color(style.ColorDashboardFocusedBorder))
+	}
 
 	var sb strings.Builder
-	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n")
-	sb.WriteString(strings.Repeat("─", max(width-4, 0)) + "\n")
+	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n\n")
 
 	// Show appropriate content based on state
 	if len(m.stacks) == 0 {
@@ -156,6 +182,7 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	root := stack.RootBranch()
 
 	// Selection checkbox - show lock icon if locked
+	// Pad to fixed width so columns align regardless of emoji width
 	var checkbox string
 	switch {
 	case m.isLocked(root):
@@ -165,15 +192,19 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	default:
 		checkbox = "[ ]"
 	}
+	checkbox = style.PadToWidth(checkbox, style.CheckboxColumnWidth)
 
-	// Status icon
-	statusIcon := m.getStatusIcon(stack.Status)
+	// Status icon - pad to fixed width for alignment
+	statusIcon := style.PadToWidth(m.getStatusIcon(stack.Status), style.StatusIconColumnWidth)
 
 	// Stack title: use cached title (computed at refresh time)
 	name := m.cache.stackTitles[root]
 	if name == "" {
 		name = root // Fallback if cache not populated
 	}
+
+	// Mark the stack containing the checked-out branch
+	isCurrentStack := m.cache.currentStackRoot == root
 
 	// Only show branch count if more than 1 branch
 	branchCount := ""
@@ -191,9 +222,9 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	}
 
 	// Calculate max name length based on available pane width
-	// Account for: cursor(2) + checkbox(3) + space(1) + icon(2) + space(1) + branchCount + expandIndicator + padding(4)
+	// Use lipgloss.Width() for accurate unicode measurement
 	paneWidth := m.Width / 2
-	overhead := 2 + 3 + 1 + 2 + 1 + len(branchCount) + len(expandIndicator) + 4
+	overhead := 2 + style.CheckboxColumnWidth + 1 + style.StatusIconColumnWidth + 1 + lipgloss.Width(branchCount) + lipgloss.Width(expandIndicator) + 6
 	maxNameLen := paneWidth - overhead
 	if maxNameLen < 20 {
 		maxNameLen = 20 // Minimum readable length
@@ -204,10 +235,15 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 		name = name[:maxNameLen-3] + "..."
 	}
 
+	// Apply current stack styling to the name
+	if isCurrentStack {
+		name = style.ColorGreen(name)
+	}
+
 	// Build line
 	var line string
 	if branchCount != "" {
-		line = fmt.Sprintf("%s%s %s %s %s %s", cursor, checkbox, statusIcon, name, branchCount, expandIndicator)
+		line = fmt.Sprintf("%s%s %s %s %s %s", cursor, checkbox, statusIcon, name, style.ColorDim(branchCount), expandIndicator)
 	} else {
 		line = fmt.Sprintf("%s%s %s %s", cursor, checkbox, statusIcon, name)
 	}
@@ -222,18 +258,66 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 
 // renderBranchLine renders a single branch within an expanded stack.
 func (m *shippableModel) renderBranchLine(branchName string) string {
+	isCurrent := branchName == m.cache.currentBranch
+
 	// Use cached annotation for PR info
 	ann, hasCached := m.cache.branchAnnotations[branchName]
-	if !hasCached {
-		return style.ColorDim("├── " + branchName)
-	}
 
 	var prInfo string
-	if ann.PRNumber != nil && *ann.PRNumber > 0 {
+	if hasCached && ann.PRNumber != nil && *ann.PRNumber > 0 {
 		prInfo = fmt.Sprintf(" #%d", *ann.PRNumber)
 	}
 
-	return style.ColorDim("├── ") + branchName + style.ColorDim(prInfo)
+	displayName := branchName
+	if isCurrent {
+		displayName = style.ColorGreen(branchName)
+	}
+
+	// Build suffix parts
+	var suffixParts []string
+	if prInfo != "" {
+		suffixParts = append(suffixParts, style.ColorDim(prInfo))
+	}
+	if blockingStatus := m.formatBranchBlockingStatus(branchName); blockingStatus != "" {
+		suffixParts = append(suffixParts, blockingStatus)
+	}
+	if isCurrent {
+		suffixParts = append(suffixParts, style.ColorDim("(current)"))
+	}
+
+	suffix := ""
+	if len(suffixParts) > 0 {
+		suffix = " " + strings.Join(suffixParts, " ")
+	}
+
+	return style.ColorDim("├── ") + displayName + suffix
+}
+
+// formatBranchBlockingStatus returns a short colored status for a blocked branch.
+func (m *shippableModel) formatBranchBlockingStatus(branchName string) string {
+	reason, blocked := m.cache.branchBlocking[branchName]
+	if !blocked {
+		return ""
+	}
+
+	switch reason {
+	case shippable.ReasonCIFailing:
+		return style.ColorRed("✗ CI")
+	case shippable.ReasonCIPending:
+		return style.ColorYellow("⏳ CI")
+	case shippable.ReasonChangesRequested:
+		return style.ColorRed("✗ changes requested")
+	case shippable.ReasonReviewRequired:
+		return style.ColorYellow("○ review needed")
+	case shippable.ReasonDraft:
+		return style.ColorDim("draft")
+	case shippable.ReasonNoPR:
+		return style.ColorYellow("no PR")
+	case shippable.ReasonNotPushed:
+		return style.ColorYellow("not pushed")
+	default:
+		return ""
+	}
 }
 
 // getStatusIcon returns the icon for a stack status.
@@ -254,28 +338,61 @@ func (m *shippableModel) getStatusIcon(status shippable.Status) string {
 
 // renderDetailsPanel renders the right-side details panel (always shows stack details).
 func (m *shippableModel) renderDetailsPanel(width, height int) string {
+	borderW := rightPaneStyle.GetHorizontalBorderSize()
+	borderH := rightPaneStyle.GetVerticalBorderSize()
+	paddingH := rightPaneStyle.GetVerticalPadding()
 	paneStyle := rightPaneStyle.
-		Width(width).
-		Height(height)
+		Width(width - borderW).
+		Height(height - borderH)
 
-	var sb strings.Builder
-	sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n")
-	sb.WriteString(strings.Repeat("─", max(width-4, 0)) + "\n")
-
-	if m.focusedStack != nil {
-		sb.WriteString(m.renderStackDetails(m.focusedStack))
-	} else {
-		sb.WriteString(commonStyles.Dim.Render("Select a stack to see details"))
+	// Highlight border when this pane has focus
+	if m.pane == paneRight {
+		paneStyle = paneStyle.BorderForeground(lipgloss.Color(style.ColorDashboardFocusedBorder))
 	}
 
-	return paneStyle.Render(sb.String())
+	header := paneHeaderStyle.Render("DETAILS") + "\n\n"
+	headerHeight := lipgloss.Height(header)
+
+	// Build details content
+	var content string
+	selectedLine := -1
+	selectedLineEnd := -1
+	if m.focusedStack != nil {
+		content, selectedLine, selectedLineEnd = m.renderStackDetails(m.focusedStack)
+	} else {
+		content = commonStyles.Dim.Render("Select a stack to see details")
+	}
+
+	// Size the viewport to fill the pane minus border, padding, and header
+	innerWidth := width - borderW - rightPaneStyle.GetHorizontalPadding()
+	innerHeight := height - borderH - paddingH - headerHeight
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+	m.detailsViewport.Width = innerWidth
+	m.detailsViewport.Height = innerHeight
+	m.detailsViewport.SetContent(content)
+
+	// Scroll the viewport to keep the selected branch visible.
+	// Uses selectedLineEnd to ensure trunk (main) stays visible when
+	// the bottommost branch is selected.
+	if selectedLine >= 0 {
+		const scrollMargin = 2
+		top := m.detailsViewport.YOffset
+		bottom := top + innerHeight - 1
+		if selectedLine < top+scrollMargin {
+			m.detailsViewport.SetYOffset(max(0, selectedLine-scrollMargin))
+		} else if selectedLineEnd > bottom-scrollMargin {
+			m.detailsViewport.SetYOffset(selectedLineEnd - innerHeight + 1 + scrollMargin)
+		}
+	}
+
+	return paneStyle.Render(header + m.detailsViewport.View())
 }
 
-// renderCartPanel renders the bottom cart panel when stacks are selected.
-func (m *shippableModel) renderCartPanel(width, height int) string {
-	paneStyle := cartPaneStyle.
-		Width(width).
-		Height(height)
+// renderActionBar renders the compact action bar when stacks are selected.
+func (m *shippableModel) renderActionBar(width int) string {
+	barStyle := actionBarStyle.Width(width - actionBarStyle.GetHorizontalBorderSize())
 
 	// Use cached selected stacks
 	selected := m.cache.selectedStacks
@@ -284,68 +401,39 @@ func (m *shippableModel) renderCartPanel(width, height int) string {
 		totalBranches += s.BranchCount()
 	}
 
-	var sb strings.Builder
+	// Summary text
+	summary := fmt.Sprintf("%d stacks selected (%d branches)", len(selected), totalBranches)
 
-	// Header row: title, count badge, and actions
-	cartHeader := paneHeaderStyle.Render("SHIPPING")
-	countBadge := countBadgeStyle.Render(fmt.Sprintf("%d stacks", len(selected)))
-
-	// Ship button (all selected stacks are shippable by design now)
+	// Actions
 	shipAction := buttonPrimary.Render("[s] Ship")
 
-	// Combination status
-	var analysisStatus string
+	var analysisAction string
 	if m.combination != nil {
 		if m.combination.Combinable {
-			analysisStatus = style.ColorGreen("✓ Compatible")
+			analysisAction = style.ColorGreen("✓ Compatible")
 		} else {
-			analysisStatus = style.ColorRed("✗ Conflicts")
+			analysisAction = style.ColorRed("✗ Conflicts")
 		}
 	} else if len(selected) > 1 {
-		analysisStatus = style.ColorDim("[a] analyze compatibility")
+		analysisAction = style.ColorDim("[a] Analyze")
 	}
 
-	// Header line
-	headerLine := fmt.Sprintf("%s %s  %s  %s", cartHeader, countBadge, shipAction, analysisStatus)
-	sb.WriteString(headerLine + "\n")
-
-	// Vertical list of selected stacks
-	for _, s := range selected {
-		statusIcon := m.getStatusIcon(s.Status)
-		// Use cached title
-		title := m.cache.stackTitles[s.RootBranch()]
-		if title == "" {
-			title = s.RootBranch()
-		}
-		// Truncate if needed
-		maxLen := width - 10
-		if maxLen > 60 {
-			maxLen = 60
-		}
-		if len(title) > maxLen {
-			title = title[:maxLen-3] + "..."
-		}
-
-		branchInfo := ""
-		if s.BranchCount() > 1 {
-			branchInfo = style.ColorDim(fmt.Sprintf(" (%d branches)", s.BranchCount()))
-		}
-		sb.WriteString(fmt.Sprintf("  %s %s%s\n", statusIcon, title, branchInfo))
-	}
-
-	// Summary line
-	sb.WriteString(style.ColorDim(fmt.Sprintf("  Total: %d branches", totalBranches)))
-
-	return paneStyle.Render(sb.String())
+	line := fmt.Sprintf("%s  %s  %s", summary, shipAction, analysisAction)
+	return barStyle.Render(line)
 }
 
 // renderStackDetails renders detailed info about a stack with tree view.
-func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
+// Returns the rendered content, the line offset of the selected branch,
+// and the last line that should remain visible (for viewport scrolling).
+// Returns -1 for line values if no branch is selected.
+func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int, int) {
 	var sb strings.Builder
+	lineCount := 0
 
-	// Show stack description if present (matches st info --stack)
-	if desc := m.cache.stackDescriptions[stack.RootBranch()]; desc != nil {
-		// Render title and description together through glamour for consistent formatting
+	root := stack.RootBranch()
+
+	// Show stack description if present
+	if desc := m.cache.stackDescriptions[root]; desc != nil {
 		var markdown string
 		if desc.Description != "" {
 			markdown = "# " + desc.Title + "\n\n" + desc.Description
@@ -354,41 +442,51 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 		}
 		rendered := style.RenderMarkdown(markdown)
 		sb.WriteString(rendered + "\n")
-		sb.WriteString(strings.Repeat("─", 40) + "\n\n")
+		lineCount += lipgloss.Height(rendered) + 1
+	} else if body := m.cache.commitBodies[root]; body != "" {
+		// For single-branch stacks without a description, show the commit body
+		rendered := style.RenderMarkdown(body)
+		sb.WriteString(rendered + "\n")
+		lineCount += lipgloss.Height(rendered) + 1
 	}
 
-	// Header: show commit title with status badge, branch name dimmed below
+	// Header: title with status badge
 	statusBadge := m.renderStatusBadge(stack.Status)
-	// Use cached title (computed at refresh time)
-	title := m.cache.stackTitles[stack.RootBranch()]
+	title := m.cache.stackTitles[root]
 	if title == "" {
-		title = stack.RootBranch() // Fallback if cache not populated
+		title = root
 	}
 	sb.WriteString(commonStyles.Bold.Render(title) + " " + statusBadge + "\n")
-	sb.WriteString(style.ColorDim(stack.RootBranch()) + "\n")
+	lineCount++
 
 	// Quick stats row
 	statsRow := m.renderQuickStats(stack)
 	sb.WriteString(statsRow + "\n\n")
+	lineCount += 2
 
-	// Stack tree visualization
+	// Stack tree visualization (blocking status is shown inline per branch)
 	sb.WriteString(style.ColorDim("Stack:") + "\n")
-	treeLines := m.renderStackTree(stack)
+	lineCount++ // "Stack:" label
+
+	treeLines, selectedLine, selectedLineEnd, isTopmost := m.renderStackTree(stack)
 	for _, line := range treeLines {
 		sb.WriteString(line + "\n")
 	}
 
-	// Blocking PRs (if any)
-	if len(stack.BlockingPRs) > 0 {
-		sb.WriteString("\n" + style.ColorYellow("Blocking:") + "\n")
-		for _, bp := range stack.BlockingPRs {
-			reason := m.formatBlockingReason(bp.Reason)
-			sb.WriteString(fmt.Sprintf("  %s %s\n", style.ColorDim("•"), bp.Branch))
-			sb.WriteString(fmt.Sprintf("    %s\n", reason))
+	// Compute the absolute lines of the selected branch in the full content
+	selectedContentLine := -1
+	selectedContentLineEnd := -1
+	if selectedLine >= 0 {
+		selectedContentLine = lineCount + selectedLine
+		selectedContentLineEnd = lineCount + selectedLineEnd
+		// When the topmost branch is selected, scroll up to show the header
+		// (description, title, stats) above the tree
+		if isTopmost {
+			selectedContentLine = 0
 		}
 	}
 
-	return sb.String()
+	return sb.String(), selectedContentLine, selectedContentLineEnd
 }
 
 // renderStatusBadge returns a colored badge for the stack status.
@@ -432,7 +530,10 @@ func (m *shippableModel) renderQuickStats(stack *shippable.Stack) string {
 }
 
 // renderStackTree renders the stack as a tree visualization.
-func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
+// Returns the rendered lines, the line index of the selected branch (-1 if none),
+// the last line that should remain visible (to keep trunk visible when selecting
+// the bottommost branch), and whether the selected branch is the topmost in the tree.
+func (m *shippableModel) renderStackTree(stack *shippable.Stack) (lines []string, selectedLine int, selectedLineEnd int, isTopmost bool) {
 	// Use cached tree renderer if available, otherwise create one
 	var renderer *tree.StackTreeRenderer
 	if m.cache.treeRenderer != nil {
@@ -463,7 +564,7 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 			continue
 		}
 
-		// Overlay CI/review status from blocking PRs
+		// Overlay blocking status from shippability analysis
 		if bp, blocked := blockingByBranch[branchName]; blocked {
 			switch bp.Reason {
 			case shippable.ReasonCIFailing:
@@ -474,6 +575,12 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 				ann.ReviewStatus = "Changes Requested"
 			case shippable.ReasonReviewRequired:
 				ann.ReviewStatus = "In Review"
+			case shippable.ReasonDraft:
+				ann.IsDraft = true
+			case shippable.ReasonNoPR:
+				ann.CustomLabel = style.ColorYellow("no PR")
+			case shippable.ReasonNotPushed:
+				ann.CustomLabel = style.ColorYellow("not pushed")
 			}
 		} else {
 			// If not blocked, mark as passing/approved based on stack status
@@ -490,36 +597,57 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 
 	// Render tree in full mode with commit messages to match st info --stack
 	opts := tree.RenderOptions{
-		Mode:                tree.RenderModeFull,
-		HideSummary:         true,
-		SkipSelectionPrefix: true,
-		ShowCommitMessages:  true,
+		Mode:               tree.RenderModeFull,
+		HideSummary:        true,
+		ShowCommitMessages: true,
 	}
 
-	return renderer.RenderStack(stack.RootBranch(), opts)
-}
-
-// formatBlockingReason returns a human-readable blocking reason.
-func (m *shippableModel) formatBlockingReason(reason shippable.BlockingReason) string {
-	switch reason {
-	case shippable.ReasonCIFailing:
-		return style.ColorRed("CI checks failing")
-	case shippable.ReasonCIPending:
-		return style.ColorYellow("CI checks pending")
-	case shippable.ReasonChangesRequested:
-		return style.ColorRed("Changes requested")
-	case shippable.ReasonReviewRequired:
-		return style.ColorYellow("Review required")
-	case shippable.ReasonDraft:
-		return style.ColorDim("PR is a draft")
-	case shippable.ReasonNoPR:
-		return style.ColorDim("No PR created")
-	default:
-		return string(reason)
+	// Always show a selected branch to avoid layout jank when switching panes.
+	// When right pane is focused, highlight the user-navigated branch.
+	// When left pane is focused, highlight the checked-out branch.
+	opts.SkipSelectionPrefix = false
+	if m.pane == paneRight && m.selectedBranchIdx >= 0 && m.selectedBranchIdx < len(stack.Stack.AllBranches) {
+		opts.SelectedBranch = stack.Stack.AllBranches[m.selectedBranchIdx]
+	} else {
+		opts.SelectedBranch = m.cache.currentBranch
 	}
+
+	// Use RenderStackDetailed to get per-branch line info for scroll tracking
+	rendered := renderer.RenderStackDetailed(stack.RootBranch(), opts)
+
+	selectedLine = -1
+	selectedLineEnd = -1
+	selectedIdx := -1
+	lineOffset := 0
+	for i, rb := range rendered {
+		if rb.Name == opts.SelectedBranch {
+			selectedLine = lineOffset + rb.CursorLineIndex
+			selectedIdx = i
+		}
+		lines = append(lines, rb.Lines...)
+		lineOffset += len(rb.Lines)
+	}
+
+	// When the selected branch is the last one before trunk, extend the
+	// visible range to include trunk's lines (so "main" stays visible).
+	if selectedIdx >= 0 && selectedIdx+1 < len(rendered) {
+		nextEnd := 0
+		for i := 0; i <= selectedIdx+1; i++ {
+			nextEnd += len(rendered[i].Lines)
+		}
+		selectedLineEnd = nextEnd - 1
+	}
+	if selectedLineEnd < selectedLine {
+		selectedLineEnd = selectedLine
+	}
+
+	// The topmost branch in the rendered tree is the first entry
+	isTopmost = selectedIdx == 0
+
+	return
 }
 
-// renderFooter renders the footer with global shortcuts and refresh status.
+// renderFooter renders the footer with global shortcuts.
 func (m *shippableModel) renderFooter() string {
 	// During async operations, show progress bar
 	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
@@ -535,28 +663,6 @@ func (m *shippableModel) renderFooter() string {
 	}
 	shortcutsStr := strings.Join(shortcuts, "  ")
 
-	// Build refresh status with countdown
-	var refreshStatus string
-	if !m.lastRefresh.IsZero() {
-		timeSinceRefresh := time.Since(m.lastRefresh)
-		timeUntilRefresh := autoRefreshInterval - timeSinceRefresh
-		if timeUntilRefresh < 0 {
-			timeUntilRefresh = 0
-		}
-		secondsUntil := int(timeUntilRefresh.Seconds())
-		refreshStatus = fmt.Sprintf("Next refresh in %ds", secondsUntil)
-	}
-
-	// Build footer: shortcuts on left, refresh status on right
-	if refreshStatus != "" {
-		gap := m.Width - lipgloss.Width(shortcutsStr) - lipgloss.Width(refreshStatus) - 4
-		if gap < 2 {
-			gap = 2
-		}
-		line := strings.Repeat(" ", gap)
-		return footerStyle.Width(m.Width).Render(shortcutsStr + line + style.ColorDim(refreshStatus))
-	}
-
 	return footerStyle.Width(m.Width).Render(shortcutsStr)
 }
 
@@ -565,7 +671,7 @@ func (m *shippableModel) renderProgressFooter() string {
 	var message string
 	switch m.state {
 	case stateLoading:
-		message = "Refreshing..."
+		message = msgRefreshing
 	case stateAnalyzing:
 		message = "Analyzing..."
 	case stateShipping:
@@ -604,6 +710,7 @@ func (m *shippableModel) renderHelp() string {
 
 	sb.WriteString(helpSectionStyle.Render("Navigation") + "\n")
 	sb.WriteString(helpKeyStyle.Render("j/k, ↑/↓") + helpDescStyle.Render("Move selection up/down") + "\n")
+	sb.WriteString(helpKeyStyle.Render("h/l, ←/→") + helpDescStyle.Render("Switch pane focus") + "\n")
 	sb.WriteString(helpKeyStyle.Render("enter") + helpDescStyle.Render("Expand/collapse stack") + "\n")
 
 	sb.WriteString(helpSectionStyle.Render("Selection") + "\n")
@@ -649,7 +756,7 @@ func (m *shippableModel) renderConfirmation() string {
 	sb.WriteString("  - Create/update PR to main\n")
 	sb.WriteString("  - Merge when CI passes\n")
 
-	sb.WriteString("\n" + strings.Repeat("─", 40) + "\n")
+	sb.WriteString("\n" + style.ColorDim(strings.Repeat("─", 40)) + "\n")
 	sb.WriteString("[Enter/y] Confirm  [Esc/n] Cancel\n")
 
 	return dialogStyle.Render(sb.String())

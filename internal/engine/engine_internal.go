@@ -174,6 +174,9 @@ func (e *engineImpl) removeFromChildren(parent, child string) {
 
 // rebuild loads all branches and their metadata from Git
 func (e *engineImpl) rebuild() error {
+	// Clear metadata cache to pick up external changes (e.g., branches created in another terminal)
+	e.git.ClearMetadataCache()
+
 	// 1. Get all branch names (slow)
 	branches, err := e.git.GetAllBranchNames()
 	if err != nil {
