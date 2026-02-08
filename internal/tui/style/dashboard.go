@@ -42,6 +42,8 @@ const (
 	ColorDashboardDarkGray = "8"
 	// ColorDashboardBorder is dim gray for panel borders.
 	ColorDashboardBorder = "240"
+	// ColorDashboardFocusedBorder is brighter for the focused pane border.
+	ColorDashboardFocusedBorder = "252"
 )
 
 // DashboardStyles holds all styles for the shippable work dashboard.

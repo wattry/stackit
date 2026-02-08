@@ -178,11 +178,35 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle normal navigation and actions
+	// Handle pane switching (available in both panes)
 	switch {
 	case key.Matches(msg, keys.Quit):
 		return m, tea.Quit
 
+	case key.Matches(msg, keys.Left):
+		m.pane = paneLeft
+		return m, nil
+
+	case key.Matches(msg, keys.Right):
+		if m.focusedStack != nil {
+			m.pane = paneRight
+			m.selectedBranchIdx = len(m.focusedStack.Stack.AllBranches) - 1
+		}
+		return m, nil
+	}
+
+	// Pane-specific key handling
+	switch m.pane {
+	case paneRight:
+		return m.handleRightPaneKey(msg)
+	default:
+		return m.handleLeftPaneKey(msg)
+	}
+}
+
+// handleLeftPaneKey handles keyboard input when the left (stacks) pane is focused.
+func (m *shippableModel) handleLeftPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
 	case key.Matches(msg, keys.Up):
 		if m.selectedIndex > 0 {
 			m.selectedIndex--
@@ -224,7 +248,7 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Refresh):
 		m.state = stateLoading
-		m.statusMessage = "Refreshing..."
+		m.statusMessage = msgRefreshing
 		return m, m.refresh()
 
 	case key.Matches(msg, keys.Help):
@@ -233,6 +257,40 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleRightPaneKey handles keyboard input when the right (details) pane is focused.
+func (m *shippableModel) handleRightPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Up):
+		if m.focusedStack != nil && m.selectedBranchIdx < len(m.focusedStack.Stack.AllBranches)-1 {
+			m.selectedBranchIdx++
+		}
+		return m, nil
+
+	case key.Matches(msg, keys.Down):
+		if m.selectedBranchIdx > 0 {
+			m.selectedBranchIdx--
+		}
+		return m, nil
+
+	case key.Matches(msg, keys.Help):
+		m.state = stateHelp
+		return m, nil
+
+	case key.Matches(msg, keys.Refresh):
+		m.state = stateLoading
+		m.statusMessage = msgRefreshing
+		return m, m.refresh()
+
+	case key.Matches(msg, keys.Publish):
+		return m.startPublish()
+	}
+
+	// Forward unhandled keys to the viewport for pgup/pgdown scrolling
+	var cmd tea.Cmd
+	m.detailsViewport, cmd = m.detailsViewport.Update(msg)
+	return m, cmd
 }
 
 // handleConfirmationKey handles keyboard input during confirmation dialog.

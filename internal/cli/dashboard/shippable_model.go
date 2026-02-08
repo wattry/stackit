@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stackit.dev/stackit/internal/app"
@@ -23,6 +24,9 @@ const (
 	// tickInterval is the interval for timer updates (for countdown display)
 	// Using 5s instead of 1s to reduce render frequency while still showing useful countdown
 	tickInterval = 5 * time.Second
+
+	// msgRefreshing is the status message shown during refresh operations.
+	msgRefreshing = "Refreshing..."
 )
 
 // renderCache stores precomputed data to avoid expensive git operations in the render loop.
@@ -52,6 +56,14 @@ type renderCache struct {
 	selectedCount  int
 	selectedStacks []shippable.Stack
 }
+
+// focusedPane indicates which pane has keyboard focus.
+type focusedPane int
+
+const (
+	paneLeft focusedPane = iota
+	paneRight
+)
 
 // dashboardState represents the current UI state of the dashboard.
 type dashboardState int
@@ -87,13 +99,16 @@ type shippableModel struct {
 	combination *shippable.CombinationResult
 
 	// UI state
-	state         dashboardState // Current UI state (replaces boolean flags)
-	stacks        []shippable.Stack
-	selectedIndex int
-	expanded      map[string]bool  // Tracks which stacks are expanded
-	selected      map[string]bool  // Tracks which stacks are selected for shipping
-	locked        map[string]bool  // Tracks which stacks are locked (during publish/ship)
-	focusedStack  *shippable.Stack // Currently focused stack for detail view
+	state             dashboardState // Current UI state (replaces boolean flags)
+	stacks            []shippable.Stack
+	selectedIndex     int
+	expanded          map[string]bool  // Tracks which stacks are expanded
+	selected          map[string]bool  // Tracks which stacks are selected for shipping
+	locked            map[string]bool  // Tracks which stacks are locked (during publish/ship)
+	focusedStack      *shippable.Stack // Currently focused stack for detail view
+	pane              focusedPane      // Which pane has keyboard focus
+	selectedBranchIdx int              // Index of highlighted branch in the details tree
+	detailsViewport   viewport.Model   // Viewport for scrollable details panel
 
 	// Status
 	initialLoad   bool // true until first refresh completes
@@ -121,6 +136,8 @@ type shippableModel struct {
 type keyMap struct {
 	Up        key.Binding
 	Down      key.Binding
+	Left      key.Binding
+	Right     key.Binding
 	Select    key.Binding
 	Expand    key.Binding
 	Ship      key.Binding
@@ -142,6 +159,14 @@ var keys = keyMap{
 	Down: key.NewBinding(
 		key.WithKeys(core.KeyDown, "j"),
 		key.WithHelp("↓/j", "move down"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys(core.KeyLeft, "h"),
+		key.WithHelp("←/h", "focus stacks"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys(core.KeyRight, "l"),
+		key.WithHelp("→/l", "focus details"),
 	),
 	Select: key.NewBinding(
 		key.WithKeys(" "),
@@ -201,19 +226,29 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 		progress.WithoutPercentage(),
 	)
 
+	// Create viewport for the details panel with default keybindings,
+	// but disable up/down/left/right since we handle those for branch selection.
+	vp := viewport.New(0, 0)
+	vp.KeyMap.Up.SetEnabled(false)
+	vp.KeyMap.Down.SetEnabled(false)
+	vp.KeyMap.Left.SetEnabled(false)
+	vp.KeyMap.Right.SetEnabled(false)
+	vp.MouseWheelEnabled = true
+
 	return &shippableModel{
-		ctx:         ctx,
-		engine:      ctx.Engine,
-		cfg:         cfg,
-		analyzer:    analyzer,
-		combiner:    combiner,
-		expanded:    make(map[string]bool),
-		selected:    make(map[string]bool),
-		locked:      make(map[string]bool),
-		initialLoad: true,
-		state:       stateLoading,
-		options:     opts,
-		progress:    p,
+		ctx:             ctx,
+		engine:          ctx.Engine,
+		cfg:             cfg,
+		analyzer:        analyzer,
+		combiner:        combiner,
+		expanded:        make(map[string]bool),
+		selected:        make(map[string]bool),
+		locked:          make(map[string]bool),
+		initialLoad:     true,
+		state:           stateLoading,
+		options:         opts,
+		progress:        p,
+		detailsViewport: vp,
 	}
 }
 

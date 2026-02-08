@@ -132,6 +132,11 @@ func (m *shippableModel) renderStackList(width, height int) string {
 		Width(width - borderW).
 		Height(height - borderH)
 
+	// Highlight border when this pane has focus
+	if m.pane == paneLeft {
+		paneStyle = paneStyle.BorderForeground(lipgloss.Color(style.ColorDashboardFocusedBorder))
+	}
+
 	var sb strings.Builder
 	sb.WriteString(paneHeaderStyle.Render("STACKS") + "\n\n")
 
@@ -335,20 +340,54 @@ func (m *shippableModel) getStatusIcon(status shippable.Status) string {
 func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	borderW := rightPaneStyle.GetHorizontalBorderSize()
 	borderH := rightPaneStyle.GetVerticalBorderSize()
+	paddingH := rightPaneStyle.GetVerticalPadding()
 	paneStyle := rightPaneStyle.
 		Width(width - borderW).
 		Height(height - borderH)
 
-	var sb strings.Builder
-	sb.WriteString(paneHeaderStyle.Render("DETAILS") + "\n\n")
-
-	if m.focusedStack != nil {
-		sb.WriteString(m.renderStackDetails(m.focusedStack))
-	} else {
-		sb.WriteString(commonStyles.Dim.Render("Select a stack to see details"))
+	// Highlight border when this pane has focus
+	if m.pane == paneRight {
+		paneStyle = paneStyle.BorderForeground(lipgloss.Color(style.ColorDashboardFocusedBorder))
 	}
 
-	return paneStyle.Render(sb.String())
+	header := paneHeaderStyle.Render("DETAILS") + "\n\n"
+	headerHeight := lipgloss.Height(header)
+
+	// Build details content
+	var content string
+	selectedLine := -1
+	selectedLineEnd := -1
+	if m.focusedStack != nil {
+		content, selectedLine, selectedLineEnd = m.renderStackDetails(m.focusedStack)
+	} else {
+		content = commonStyles.Dim.Render("Select a stack to see details")
+	}
+
+	// Size the viewport to fill the pane minus border, padding, and header
+	innerWidth := width - borderW - rightPaneStyle.GetHorizontalPadding()
+	innerHeight := height - borderH - paddingH - headerHeight
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+	m.detailsViewport.Width = innerWidth
+	m.detailsViewport.Height = innerHeight
+	m.detailsViewport.SetContent(content)
+
+	// Scroll the viewport to keep the selected branch visible.
+	// Uses selectedLineEnd to ensure trunk (main) stays visible when
+	// the bottommost branch is selected.
+	if selectedLine >= 0 {
+		const scrollMargin = 2
+		top := m.detailsViewport.YOffset
+		bottom := top + innerHeight - 1
+		if selectedLine < top+scrollMargin {
+			m.detailsViewport.SetYOffset(max(0, selectedLine-scrollMargin))
+		} else if selectedLineEnd > bottom-scrollMargin {
+			m.detailsViewport.SetYOffset(selectedLineEnd - innerHeight + 1 + scrollMargin)
+		}
+	}
+
+	return paneStyle.Render(header + m.detailsViewport.View())
 }
 
 // renderActionBar renders the compact action bar when stacks are selected.
@@ -384,8 +423,12 @@ func (m *shippableModel) renderActionBar(width int) string {
 }
 
 // renderStackDetails renders detailed info about a stack with tree view.
-func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
+// Returns the rendered content, the line offset of the selected branch,
+// and the last line that should remain visible (for viewport scrolling).
+// Returns -1 for line values if no branch is selected.
+func (m *shippableModel) renderStackDetails(stack *shippable.Stack) (string, int, int) {
 	var sb strings.Builder
+	lineCount := 0
 
 	// Show stack description if present (matches st info --stack)
 	if desc := m.cache.stackDescriptions[stack.RootBranch()]; desc != nil {
@@ -398,6 +441,7 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 		}
 		rendered := style.RenderMarkdown(markdown)
 		sb.WriteString(rendered + "\n")
+		lineCount += lipgloss.Height(rendered) + 1
 	}
 
 	// Header: show commit title with status badge, branch name dimmed below
@@ -409,19 +453,31 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 	}
 	sb.WriteString(commonStyles.Bold.Render(title) + " " + statusBadge + "\n")
 	sb.WriteString(style.ColorDim(stack.RootBranch()) + "\n")
+	lineCount += 2
 
 	// Quick stats row
 	statsRow := m.renderQuickStats(stack)
 	sb.WriteString(statsRow + "\n\n")
+	lineCount += 2
 
 	// Stack tree visualization (blocking status is shown inline per branch)
 	sb.WriteString(style.ColorDim("Stack:") + "\n")
-	treeLines := m.renderStackTree(stack)
+	lineCount++ // "Stack:" label
+
+	treeLines, selectedLine, selectedLineEnd := m.renderStackTree(stack)
 	for _, line := range treeLines {
 		sb.WriteString(line + "\n")
 	}
 
-	return sb.String()
+	// Compute the absolute lines of the selected branch in the full content
+	selectedContentLine := -1
+	selectedContentLineEnd := -1
+	if selectedLine >= 0 {
+		selectedContentLine = lineCount + selectedLine
+		selectedContentLineEnd = lineCount + selectedLineEnd
+	}
+
+	return sb.String(), selectedContentLine, selectedContentLineEnd
 }
 
 // renderStatusBadge returns a colored badge for the stack status.
@@ -465,7 +521,9 @@ func (m *shippableModel) renderQuickStats(stack *shippable.Stack) string {
 }
 
 // renderStackTree renders the stack as a tree visualization.
-func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
+// Returns the rendered lines, the line index of the selected branch (-1 if none),
+// and the last line that should remain visible (to keep trunk visible when selecting the bottommost branch).
+func (m *shippableModel) renderStackTree(stack *shippable.Stack) ([]string, int, int) {
 	// Use cached tree renderer if available, otherwise create one
 	var renderer *tree.StackTreeRenderer
 	if m.cache.treeRenderer != nil {
@@ -529,13 +587,53 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 
 	// Render tree in full mode with commit messages to match st info --stack
 	opts := tree.RenderOptions{
-		Mode:                tree.RenderModeFull,
-		HideSummary:         true,
-		SkipSelectionPrefix: true,
-		ShowCommitMessages:  true,
+		Mode:               tree.RenderModeFull,
+		HideSummary:        true,
+		ShowCommitMessages: true,
 	}
 
-	return renderer.RenderStack(stack.RootBranch(), opts)
+	// Always show a selected branch to avoid layout jank when switching panes.
+	// When right pane is focused, highlight the user-navigated branch.
+	// When left pane is focused, highlight the checked-out branch.
+	opts.SkipSelectionPrefix = false
+	if m.pane == paneRight && m.selectedBranchIdx >= 0 && m.selectedBranchIdx < len(stack.Stack.AllBranches) {
+		opts.SelectedBranch = stack.Stack.AllBranches[m.selectedBranchIdx]
+	} else {
+		opts.SelectedBranch = m.cache.currentBranch
+	}
+
+	// Use RenderStackDetailed to get per-branch line info for scroll tracking
+	rendered := renderer.RenderStackDetailed(stack.RootBranch(), opts)
+
+	var lines []string
+	selectedLine := -1
+	selectedLineEnd := -1
+	selectedIdx := -1
+	lineOffset := 0
+	for i, rb := range rendered {
+		if rb.Name == opts.SelectedBranch {
+			selectedLine = lineOffset + rb.CursorLineIndex
+			selectedIdx = i
+		}
+		lines = append(lines, rb.Lines...)
+		lineOffset += len(rb.Lines)
+	}
+
+	// When the selected branch is the last one before trunk, extend the
+	// visible range to include trunk's lines (so "main" stays visible).
+	if selectedIdx >= 0 && selectedIdx+1 < len(rendered) {
+		// Include the next branch's lines (typically trunk/main)
+		nextEnd := 0
+		for i := 0; i <= selectedIdx+1; i++ {
+			nextEnd += len(rendered[i].Lines)
+		}
+		selectedLineEnd = nextEnd - 1
+	}
+	if selectedLineEnd < selectedLine {
+		selectedLineEnd = selectedLine
+	}
+
+	return lines, selectedLine, selectedLineEnd
 }
 
 // renderFooter renders the footer with global shortcuts.
@@ -562,7 +660,7 @@ func (m *shippableModel) renderProgressFooter() string {
 	var message string
 	switch m.state {
 	case stateLoading:
-		message = "Refreshing..."
+		message = msgRefreshing
 	case stateAnalyzing:
 		message = "Analyzing..."
 	case stateShipping:
@@ -601,6 +699,7 @@ func (m *shippableModel) renderHelp() string {
 
 	sb.WriteString(helpSectionStyle.Render("Navigation") + "\n")
 	sb.WriteString(helpKeyStyle.Render("j/k, ↑/↓") + helpDescStyle.Render("Move selection up/down") + "\n")
+	sb.WriteString(helpKeyStyle.Render("h/l, ←/→") + helpDescStyle.Render("Switch pane focus") + "\n")
 	sb.WriteString(helpKeyStyle.Render("enter") + helpDescStyle.Render("Expand/collapse stack") + "\n")
 
 	sb.WriteString(helpSectionStyle.Render("Selection") + "\n")
