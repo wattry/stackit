@@ -134,7 +134,7 @@ func TestGetSnapshots(t *testing.T) {
 		require.Contains(t, commands, "third")
 	})
 
-	t.Run("includes display names with relative time", func(t *testing.T) {
+	t.Run("includes display names with SHA and local timestamp", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 		s.WithInitialCommit()
 
@@ -144,8 +144,9 @@ func TestGetSnapshots(t *testing.T) {
 		snapshots, err := s.Engine.GetSnapshots()
 		require.NoError(t, err)
 		require.Len(t, snapshots, 1)
-		require.Contains(t, snapshots[0].DisplayName, "move")
-		require.Contains(t, snapshots[0].DisplayName, "ago")
+		require.Contains(t, snapshots[0].DisplayName, "[MOVE]")
+		require.Contains(t, snapshots[0].DisplayName, "move branch-a onto")
+		require.NotEmpty(t, snapshots[0].HeadSHA)
 	})
 }
 

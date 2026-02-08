@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/timeutil"
 )
 
 const (
@@ -39,6 +39,7 @@ type SnapshotInfo struct {
 	Command     string    // Command name
 	Args        []string  // Command arguments
 	Timestamp   time.Time // When the snapshot was taken
+	HeadSHA     string    // SHA of the current branch at snapshot time
 	DisplayName string    // Human-readable description
 }
 
@@ -89,11 +90,11 @@ func parseSnapshotFilename(filename string) (time.Time, string, error) {
 	timestampStr := base[:lastUnderscore]
 	command := base[lastUnderscore+1:]
 
-	timestamp, err := time.Parse("20060102150405.000", timestampStr)
+	timestamp, err := time.ParseInLocation("20060102150405.000", timestampStr, time.Local)
 	if err != nil {
 		// Try without milliseconds for backward compatibility
 		var err2 error
-		timestamp, err2 = time.Parse("20060102150405", timestampStr)
+		timestamp, err2 = time.ParseInLocation("20060102150405", timestampStr, time.Local)
 		if err2 != nil {
 			return time.Time{}, "", fmt.Errorf("failed to parse timestamp: %w", err)
 		}
@@ -255,14 +256,18 @@ func (e *engineImpl) GetSnapshots() ([]SnapshotInfo, error) {
 			continue
 		}
 
+		// Get HEAD SHA from snapshot (current branch's SHA at snapshot time)
+		headSHA := snapshot.BranchSHAs[snapshot.CurrentBranch]
+
 		// Generate display name
-		displayName := formatSnapshotDisplay(command, snapshot.Args, timestamp)
+		displayName := formatSnapshotDisplay(command, snapshot.Args, timestamp, headSHA)
 
 		snapshots = append(snapshots, SnapshotInfo{
 			ID:          entry.Name()[:len(entry.Name())-len(jsonExt)], // Remove .json
 			Command:     command,
 			Args:        snapshot.Args,
 			Timestamp:   timestamp,
+			HeadSHA:     headSHA,
 			DisplayName: displayName,
 		})
 	}
@@ -289,21 +294,30 @@ func (e *engineImpl) GetSnapshots() ([]SnapshotInfo, error) {
 }
 
 // formatSnapshotDisplay creates a human-readable description of a snapshot
-func formatSnapshotDisplay(command string, args []string, timestamp time.Time) string {
-	timeStr := timeutil.FormatTimeAgo(timestamp)
+func formatSnapshotDisplay(command string, args []string, timestamp time.Time, headSHA string) string {
+	// Truncate SHA to 12 chars
+	shortSHA := headSHA
+	if len(shortSHA) > 12 {
+		shortSHA = shortSHA[:12]
+	}
 
-	// Format command with args
-	cmdStr := command
+	// Format timestamp in local time
+	timeStr := timestamp.Local().Format("2006-01-02 15:04:05")
+
+	// Format command tag in uppercase brackets
+	tag := strings.ToUpper(command)
+
+	// Build description from args
+	description := command
 	if len(args) > 0 {
-		// Limit args display to first 2 for brevity
 		displayArgs := args
 		if len(displayArgs) > 2 {
 			displayArgs = displayArgs[:2]
 		}
-		cmdStr = fmt.Sprintf("%s %s", command, fmt.Sprint(displayArgs))
+		description = fmt.Sprintf("%s %s", command, strings.Join(displayArgs, " "))
 	}
 
-	return fmt.Sprintf("Before '%s' (%s)", cmdStr, timeStr)
+	return fmt.Sprintf("%s %s [%s] %s", shortSHA, timeStr, tag, description)
 }
 
 // LoadSnapshot loads a snapshot by ID (filename without .json)
