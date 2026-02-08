@@ -32,6 +32,12 @@ func (c *metadataCache) Delete(branchName string) {
 	c.entries.Delete(branchName)
 }
 
+// Clear removes all entries from the cache.
+// Used during Rebuild to ensure stale metadata from external changes is not retained.
+func (c *metadataCache) Clear() {
+	c.entries.Clear()
+}
+
 // InvalidateForRefs clears cached metadata for any refs in the given batch
 // that are metadata refs. This ensures batch operations (transactions)
 // don't leave stale cache entries.

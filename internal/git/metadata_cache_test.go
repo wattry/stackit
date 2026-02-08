@@ -84,6 +84,21 @@ func TestMetadataCache_InvalidateForRefNames(t *testing.T) {
 	require.NotNil(t, c.Get("feature-y"))
 }
 
+func TestMetadataCache_Clear(t *testing.T) {
+	t.Parallel()
+
+	var c metadataCache
+	c.Put("feature-a", NewMeta())
+	c.Put("feature-b", NewMeta())
+	c.Put("feature-c", NewMeta())
+
+	c.Clear()
+
+	require.Nil(t, c.Get("feature-a"))
+	require.Nil(t, c.Get("feature-b"))
+	require.Nil(t, c.Get("feature-c"))
+}
+
 func TestMetadataCache_Concurrent(t *testing.T) {
 	t.Parallel()
 

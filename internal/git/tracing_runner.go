@@ -1067,6 +1067,10 @@ func (t *tracingRunner) DeleteMetadata(branchName string) error {
 	return t.inner.DeleteMetadata(branchName)
 }
 
+func (t *tracingRunner) ClearMetadataCache() {
+	t.inner.ClearMetadataCache()
+}
+
 func (t *tracingRunner) RenameMetadata(oldName, newName string) error {
 	start := time.Now()
 	err := t.inner.RenameMetadata(oldName, newName)
