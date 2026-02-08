@@ -49,7 +49,7 @@ func showDryRun(ctx *app.Context, current, parent engine.Branch) {
 	// Show combined diff stat
 	out.Info("%s", style.ColorCyan("Combined Diff Stat:"))
 	// Base is parent's parent (or trunk)
-	grandparentName := parent.GetParentPrecondition()
+	grandparentName := parent.GetParentOrTrunk()
 	baseRev, err := eng.GetRevision(eng.GetBranch(grandparentName))
 	if err != nil {
 		out.Debug("Failed to get revision for grandparent %s: %v", grandparentName, err)
@@ -109,7 +109,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Get parent branch
-	parentName := currentBranchObj.GetParentPrecondition()
+	parentName := currentBranchObj.GetParentOrTrunk()
 
 	parentBranch := eng.GetBranch(parentName)
 	if !parentBranch.IsTrunk() {

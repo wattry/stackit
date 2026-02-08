@@ -234,7 +234,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 			switch result.Result {
 			case engine.RestackDone:
-				parentName := branch.GetParentPrecondition()
+				parentName := branch.GetParentOrTrunk()
 				isCurrent := branchName == currentBranchName
 				ctx.Output.Info("Restacked %s on %s.",
 					style.ColorBranchName(branchName, isCurrent),

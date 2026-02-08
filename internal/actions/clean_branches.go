@@ -428,7 +428,7 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 
 // getParentName returns the name of the parent branch or trunk if no parent exists
 func getParentName(branch engine.Branch, _ engine.Engine) string {
-	return branch.GetParentPrecondition()
+	return branch.GetParentOrTrunk()
 }
 
 // findNonDeletingAncestor finds the nearest ancestor that is not marked for deletion

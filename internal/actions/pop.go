@@ -32,7 +32,7 @@ func PopAction(ctx *app.Context, _ PopOptions) error {
 	currentBranchObj := eng.GetBranch(currentBranch)
 
 	// Get parent branch
-	parentName := currentBranchObj.GetParentPrecondition()
+	parentName := currentBranchObj.GetParentOrTrunk()
 
 	// Get parent branch revision
 	parentBranch := eng.GetBranch(parentName)

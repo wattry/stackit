@@ -212,13 +212,13 @@ func (g *StackGraph) Parent(branch Branch) string {
 
 // IsDescendant returns true if potentialDescendant is a descendant of branch.
 // This is useful for cycle detection when moving branches.
-func (g *StackGraph) IsDescendant(branch Branch, potentialDescendant string) bool {
+func (g *StackGraph) IsDescendant(branch Branch, potentialDescendant Branch) bool {
 	descendants := g.Range(branch, StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    false,
 	})
 	for _, d := range descendants {
-		if d.GetName() == potentialDescendant {
+		if d.GetName() == potentialDescendant.GetName() {
 			return true
 		}
 	}

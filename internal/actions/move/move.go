@@ -21,6 +21,19 @@ type Options struct {
 	SkipConfirm bool   // Skip confirmation prompt (--yes flag)
 	DryRun      bool   // If true, only shows what would happen without making changes
 	AutoRename  bool   // Auto-rename branch when scope changes (non-interactive mode)
+	// RebaseSpecs optionally provides precomputed specs (e.g. from interactive selection).
+	RebaseSpecs []engine.RebaseSpec
+}
+
+type movePlan struct {
+	source        string
+	onto          string
+	sourceBranch  engine.Branch
+	ontoBranch    engine.Branch
+	descendants   []engine.Branch
+	oldParentName string
+	oldParentRev  string
+	rebaseSpecs   []engine.RebaseSpec
 }
 
 // Action performs the move operation
@@ -35,19 +48,85 @@ func Action(ctx *app.Context, opts Options, h Handler) error {
 	}
 	defer h.Cleanup()
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	source, err := resolveSource(eng, opts.Source)
+	if err != nil {
+		return err
+	}
 
-	// Default source to current branch
-	source := opts.Source
+	if err := ensureOnto(ctx, &opts, h, source); err != nil {
+		return err
+	}
+
+	takeSnapshot(eng, out, opts)
+
+	if err := validateMoveTargets(eng, source, opts.Onto); err != nil {
+		return err
+	}
+
+	plan, err := buildMovePlan(eng, out, source, opts.Onto, opts.RebaseSpecs)
+	if err != nil {
+		return err
+	}
+
+	if opts.DryRun {
+		return dryRun(ctx, plan.source, plan.oldParentName, plan.onto, plan.sourceBranch, plan.descendants, plan.rebaseSpecs)
+	}
+
+	if err := validateForExecution(ctx, h, plan, opts.SkipConfirm); err != nil {
+		return err
+	}
+
+	renamed, source, sourceBranch := maybeRename(ctx, h, opts, plan)
+	plan.source = source
+	plan.sourceBranch = sourceBranch
+
+	h.Start(plan.source, plan.oldParentName, plan.onto)
+
+	if err := eng.SetParentPreservingDivergence(gctx, plan.sourceBranch, plan.ontoBranch, plan.oldParentRev); err != nil {
+		return fmt.Errorf("failed to set parent: %w", err)
+	}
+
+	updateStackIDsAfterMove(ctx, plan, plan.source, plan.sourceBranch)
+
+	if err := restackAndMark(ctx, plan, plan.sourceBranch); err != nil {
+		return err
+	}
+
+	completeMove(h, plan, renamed)
+	return nil
+}
+
+func resolveSource(eng engine.Engine, source string) (string, error) {
 	if source == "" {
 		currentBranch := eng.CurrentBranch()
 		if currentBranch == nil {
-			return fmt.Errorf("not on a branch and no source branch specified")
+			return "", fmt.Errorf("not on a branch and no source branch specified")
 		}
-		source = currentBranch.GetName()
+		return currentBranch.GetName(), nil
 	}
+	return source, nil
+}
 
-	// Take snapshot before modifying the repository
+func ensureOnto(ctx *app.Context, opts *Options, h Handler, source string) error {
+	if opts.Onto != "" {
+		return nil
+	}
+	if opts.DryRun {
+		return fmt.Errorf("--onto flag is required when using --dry-run")
+	}
+	if !h.IsInteractive() {
+		return validation.ValidateTargetBranch(ctx.Engine, source, "", "move")
+	}
+	selected, rebaseSpecs, err := h.PromptSelectOnto(ctx, source)
+	if err != nil {
+		return err
+	}
+	opts.Onto = selected
+	opts.RebaseSpecs = rebaseSpecs
+	return nil
+}
+
+func takeSnapshot(eng engine.Engine, out output.Output, opts Options) {
 	snapshotOpts := actions.NewSnapshot("move",
 		actions.WithFlagValue("--source", opts.Source),
 		actions.WithFlagValue("--onto", opts.Onto),
@@ -56,116 +135,140 @@ func Action(ctx *app.Context, opts Options, h Handler) error {
 		// Log but don't fail - snapshot is best effort
 		out.Debug("Failed to take snapshot: %v", err)
 	}
+}
 
-	// Validate source branch
+func validateMoveTargets(eng engine.Engine, source, onto string) error {
 	if err := validation.ValidateSourceBranch(eng, source, "move"); err != nil {
 		return err
 	}
-
-	// Validate target branch
-	onto := opts.Onto
 	if err := validation.ValidateTargetBranch(eng, source, onto, "move"); err != nil {
 		return err
 	}
+	return nil
+}
+
+func buildMovePlan(eng engine.Engine, out output.Output, source, onto string, rebaseSpecs []engine.RebaseSpec) (*movePlan, error) {
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	sourceBranch := eng.GetBranch(source)
 	ontoBranch := eng.GetBranch(onto)
 
-	// Cycle detection: ensure onto is not a descendant of source
-	if graph.IsDescendant(sourceBranch, onto) {
-		return fmt.Errorf("cannot move %s onto its own descendant %s", source, onto)
+	if graph.IsDescendant(sourceBranch, ontoBranch) {
+		return nil, fmt.Errorf("cannot move %s onto its own descendant %s", source, onto)
 	}
 
-	// Get descendants for rebase validation
 	descendants := graph.Range(sourceBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,
 	})
 
-	// Get current parent for preview
 	oldParent := sourceBranch.GetParent()
-	oldParentName := sourceBranch.GetParentPrecondition()
-
-	// Capture old divergence point to preserve it after reparenting
-	// This ensures we only move the commits that belong to this branch.
+	oldParentName := sourceBranch.GetParentOrTrunk()
 	oldParentRev, _ := eng.GetDivergencePoint(source)
 
-	// Build rebase specs for validation (needed for both preview conflict detection and actual move)
-	rebaseSpecs := BuildRebaseSpecs(eng, out, source, onto, oldParent, oldParentRev, descendants)
-
-	// Dry-run mode: validate and print what would happen without making changes
-	if opts.DryRun {
-		return dryRun(ctx, source, oldParentName, onto, sourceBranch, descendants, rebaseSpecs)
+	if len(rebaseSpecs) == 0 {
+		rebaseSpecs = BuildRebaseSpecs(eng, out, source, onto, oldParent, oldParentRev, descendants)
 	}
 
-	// Prompt for confirmation in interactive mode (unless --yes flag is set)
-	if h.IsInteractive() && !opts.SkipConfirm {
-		// Validate rebases BEFORE showing preview so user can see conflict info
-		validation, validationErr := eng.ValidateRebases(gctx, rebaseSpecs)
+	return &movePlan{
+		source:        source,
+		onto:          onto,
+		sourceBranch:  sourceBranch,
+		ontoBranch:    ontoBranch,
+		descendants:   descendants,
+		oldParentName: oldParentName,
+		oldParentRev:  oldParentRev,
+		rebaseSpecs:   rebaseSpecs,
+	}, nil
+}
 
-		// Get commits that will be moved
-		commits, _ := eng.GetAllCommits(sourceBranch, engine.CommitFormatSubject)
+func validateForExecution(ctx *app.Context, h Handler, plan *movePlan, skipConfirm bool) error {
+	if h.IsInteractive() && !skipConfirm {
+		return confirmInteractive(ctx, h, plan)
+	}
+	return validateNonInteractive(ctx, h, plan)
+}
 
-		// Get descendant names (excluding source itself)
-		var descendantNames []string
-		for _, d := range descendants {
-			if d.GetName() != source {
-				descendantNames = append(descendantNames, d.GetName())
-			}
-		}
+func confirmInteractive(ctx *app.Context, h Handler, plan *movePlan) error {
+	eng := ctx.Engine
+	out := ctx.Output
 
-		preview := Preview{
-			SourceBranch: source,
-			OldParent:    oldParentName,
-			NewParent:    onto,
-			Commits:      commits,
-			Descendants:  descendantNames,
-		}
+	validation, validationErr := eng.ValidateRebases(ctx.Context, plan.rebaseSpecs)
+	commits, _ := eng.GetAllCommits(plan.sourceBranch, engine.CommitFormatSubject)
 
-		// Add conflict info to preview if validation succeeded (even if there are conflicts)
-		if validationErr == nil && !validation.Success {
-			preview.HasConflicts = true
-			preview.ConflictBranch = validation.FailedBranch
-			preview.ConflictError = validation.ErrorMessage
-			preview.ConflictingFiles = validation.ConflictingFiles
-		}
+	preview := buildPreview(plan, commits, validation, validationErr)
 
-		confirmed, err := h.PromptConfirmMove(preview)
-		if err != nil {
-			return fmt.Errorf("failed to prompt for confirmation: %w", err)
-		}
-		if !confirmed {
-			out.Info("Move canceled.")
-			return nil
-		}
-
-		// If validation itself failed (not conflicts, but actual error), return error now
-		if validationErr != nil {
-			return fmt.Errorf("failed to validate rebases: %w", validationErr)
-		}
-
-		// If there are conflicts, return error after user has seen the preview
-		if preview.HasConflicts {
-			return fmt.Errorf("move would cause conflicts: %s on branch %s", preview.ConflictError, preview.ConflictBranch)
-		}
-	} else {
-		// Non-interactive mode: validate and fail immediately if there are conflicts
-		h.OnStep(StepValidating, handler.StatusStarted, "Validating rebases...")
-		validation, err := eng.ValidateRebases(gctx, rebaseSpecs)
-		if err != nil {
-			h.OnStep(StepValidating, handler.StatusFailed, err.Error())
-			return fmt.Errorf("failed to validate rebases: %w", err)
-		}
-		if !validation.Success {
-			h.OnStep(StepValidating, handler.StatusFailed, validation.ErrorMessage)
-			return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
-		}
-		h.OnStep(StepValidating, handler.StatusCompleted, "Validation passed")
+	confirmed, err := h.PromptConfirmMove(preview)
+	if err != nil {
+		return fmt.Errorf("failed to prompt for confirmation: %w", err)
+	}
+	if !confirmed {
+		out.Info("Move canceled.")
+		return nil
 	}
 
-	// Check for scope change and potential rename
-	var renamed bool
+	if validationErr != nil {
+		return fmt.Errorf("failed to validate rebases: %w", validationErr)
+	}
+	if preview.HasConflicts {
+		return fmt.Errorf("move would cause conflicts: %s on branch %s", preview.ConflictError, preview.ConflictBranch)
+	}
+	return nil
+}
+
+func validateNonInteractive(ctx *app.Context, h Handler, plan *movePlan) error {
+	h.OnStep(StepValidating, handler.StatusStarted, "Validating rebases...")
+	validation, err := ctx.Engine.ValidateRebases(ctx.Context, plan.rebaseSpecs)
+	if err != nil {
+		h.OnStep(StepValidating, handler.StatusFailed, err.Error())
+		return fmt.Errorf("failed to validate rebases: %w", err)
+	}
+	if !validation.Success {
+		h.OnStep(StepValidating, handler.StatusFailed, validation.ErrorMessage)
+		return fmt.Errorf("move would cause conflicts: %s on branch %s", validation.ErrorMessage, validation.FailedBranch)
+	}
+	h.OnStep(StepValidating, handler.StatusCompleted, "Validation passed")
+	return nil
+}
+
+func buildPreview(plan *movePlan, commits []string, validation *engine.RebaseValidation, validationErr error) Preview {
+	preview := Preview{
+		SourceBranch: plan.source,
+		OldParent:    plan.oldParentName,
+		NewParent:    plan.onto,
+		Commits:      commits,
+		Descendants:  descendantNames(plan.descendants, plan.source),
+	}
+
+	if validationErr == nil && validation != nil && !validation.Success {
+		preview.HasConflicts = true
+		preview.ConflictBranch = validation.FailedBranch
+		preview.ConflictError = validation.ErrorMessage
+		preview.ConflictingFiles = validation.ConflictingFiles
+	}
+
+	return preview
+}
+
+func descendantNames(descendants []engine.Branch, source string) []string {
+	var names []string
+	for _, d := range descendants {
+		if d.GetName() != source {
+			names = append(names, d.GetName())
+		}
+	}
+	return names
+}
+
+func maybeRename(ctx *app.Context, h Handler, opts Options, plan *movePlan) (bool, string, engine.Branch) {
+	eng := ctx.Engine
+	out := ctx.Output
+
+	source := plan.source
+	sourceBranch := plan.sourceBranch
+	ontoBranch := plan.ontoBranch
+
 	sourceScope := sourceBranch.GetScope()
 	ontoScope := ontoBranch.GetScope()
 	if sourceScope.IsDefined() && ontoScope.IsDefined() && !sourceScope.Equal(ontoScope) {
@@ -181,105 +284,103 @@ func Action(ctx *app.Context, opts Options, h Handler) error {
 
 		if shouldRename {
 			newName := strings.Replace(source, sourceScope.String(), ontoScope.String(), 1)
-			if err := eng.RenameBranch(gctx, eng.GetBranch(source), eng.GetBranch(newName)); err != nil {
+			if err := eng.RenameBranch(ctx.Context, eng.GetBranch(source), eng.GetBranch(newName)); err != nil {
 				out.Info("Warning: failed to rename branch: %v", err)
 			} else {
 				h.OnRename(source, newName)
 				out.Info("Renamed branch %s to %s.", style.ColorBranchName(source, false), style.ColorBranchName(newName, true))
 				source = newName
 				sourceBranch = eng.GetBranch(source)
-				renamed = true
+				return true, source, sourceBranch
 			}
 		}
 	}
 
-	// Start handler with branch info (oldParentName computed earlier for preview)
-	h.Start(source, oldParentName, onto)
+	return false, source, sourceBranch
+}
 
-	// Update parent in engine, preserving the divergence point
-	if err := eng.SetParentPreservingDivergence(gctx, sourceBranch, ontoBranch, oldParentRev); err != nil {
-		return fmt.Errorf("failed to set parent: %w", err)
+func updateStackIDsAfterMove(ctx *app.Context, plan *movePlan, source string, sourceBranch engine.Branch) {
+	eng := ctx.Engine
+	out := ctx.Output
+
+	if plan.oldParentName == plan.onto {
+		return
 	}
 
-	// Update stack IDs based on the move destination (only if parent actually changed):
-	// Stack IDs are only updated if the source branch already has a stack ID.
-	// If source has no stack ID, we don't auto-create one - stack IDs are created lazily
-	// when descriptions or scopes are set.
-	if oldParentName != onto {
-		oldStackID := eng.GetStackID(sourceBranch)
+	oldStackID := eng.GetStackID(sourceBranch)
+	if oldStackID == "" {
+		return
+	}
 
-		// Only sync stack IDs if the source branch already has one
-		if oldStackID != "" {
-			newStackID := eng.GetStackID(ontoBranch)
+	newStackID := eng.GetStackID(plan.ontoBranch)
 
-			// Determine what stack ID the source should have after the move
-			var targetStackID string
-			switch {
-			case eng.IsTrunk(ontoBranch):
-				// Moving to trunk creates a new stack
-				targetStackID = eng.GenerateStackID(source)
-				// Create a new stack ref (nil meta uses engine's timeNow() for proper testability)
-				if err := eng.CreateStackRef(targetStackID, nil); err != nil {
-					out.Warn("Failed to create stack ref: %v", err)
-				}
-			case newStackID != "" && newStackID != oldStackID:
-				// Moving to a different stack - inherit that stack's ID
-				targetStackID = newStackID
-			}
+	var targetStackID string
+	switch {
+	case eng.IsTrunk(plan.ontoBranch):
+		targetStackID = eng.GenerateStackID(source)
+		if err := eng.CreateStackRef(targetStackID, nil); err != nil {
+			out.Warn("Failed to create stack ref: %v", err)
+		}
+	case newStackID != "" && newStackID != oldStackID:
+		targetStackID = newStackID
+	}
 
-			// Update stack IDs if needed (descendants includes source via IncludeCurrent:true)
-			if targetStackID != "" {
-				for _, d := range descendants {
-					if err := eng.SetStackID(gctx, d, targetStackID); err != nil {
-						out.Warn("Failed to update stack ID for %s: %v", d.GetName(), err)
-					}
-				}
-				out.Info("Stack membership updated for %s", source)
-			}
+	if targetStackID == "" {
+		return
+	}
+
+	for _, d := range plan.descendants {
+		if err := eng.SetStackID(ctx.Context, d, targetStackID); err != nil {
+			out.Warn("Failed to update stack ID for %s: %v", d.GetName(), err)
 		}
 	}
+	out.Info("Stack membership updated for %s", source)
+}
 
-	// Rebuild graph after parent change for downstream traversals
-	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+func restackAndMark(ctx *app.Context, plan *movePlan, sourceBranch engine.Branch) error {
+	eng := ctx.Engine
+	out := ctx.Output
+
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
 
 	out.Info("Moved %s from %s to %s.",
-		style.ColorBranchName(source, true),
-		style.ColorBranchName(oldParentName, false),
-		style.ColorBranchName(onto, false))
+		style.ColorBranchName(plan.source, true),
+		style.ColorBranchName(plan.oldParentName, false),
+		style.ColorBranchName(plan.onto, false))
 
-	// Get all branches that need restacking: source and all its descendants
 	branchesToRestack := graph.Range(sourceBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,
 		RecursiveParents:  false,
 	})
 
-	// Restack source and all its descendants
 	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
 		return fmt.Errorf("failed to restack branches: %w", err)
 	}
 
-	// Mark affected branches as needing PR body update during next sync
-	affectedBranches := []string{source}
-	if oldParentName != eng.Trunk().GetName() {
-		affectedBranches = append(affectedBranches, oldParentName)
+	affectedBranches := []string{plan.source}
+	if plan.oldParentName != eng.Trunk().GetName() {
+		affectedBranches = append(affectedBranches, plan.oldParentName)
 	}
 	if err := eng.BatchMarkNeedsPRBodyUpdate(affectedBranches); err != nil {
 		out.Debug("Failed to mark branches for PR body update: %v", err)
 	}
 
+	return nil
+}
+
+func completeMove(h Handler, plan *movePlan, renamed bool) {
 	newName := ""
 	if renamed {
-		newName = source
+		newName = plan.source
 	}
 	h.Complete(Result{
-		SourceBranch: source,
-		OldParent:    oldParentName,
-		NewParent:    onto,
+		SourceBranch: plan.source,
+		OldParent:    plan.oldParentName,
+		NewParent:    plan.onto,
 		Renamed:      renamed,
 		NewName:      newName,
 	})
-	return nil
 }
 
 // dryRun validates and prints what the move would do without making changes.

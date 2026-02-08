@@ -5,7 +5,9 @@ import (
 
 	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/move"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
@@ -78,6 +80,11 @@ func (h *SimpleMoveHandler) PromptConfirmMove(_ move.Preview) (bool, error) {
 	return true, nil
 }
 
+// PromptSelectOnto returns error for simple handler (non-interactive).
+func (h *SimpleMoveHandler) PromptSelectOnto(_ *app.Context, _ string) (string, []engine.RebaseSpec, error) {
+	return "", nil, fmt.Errorf("target branch must be specified for move")
+}
+
 // InteractiveMoveHandler provides interactive prompts for move operations
 type InteractiveMoveHandler struct {
 	SimpleMoveHandler
@@ -126,4 +133,9 @@ func (h *InteractiveMoveHandler) PromptConfirmMove(preview move.Preview) (bool, 
 	}
 
 	return tui.PromptConfirm("Proceed with move?", true)
+}
+
+// PromptSelectOnto prompts user to select a new parent when --onto is not provided.
+func (h *InteractiveMoveHandler) PromptSelectOnto(ctx *app.Context, sourceBranch string) (string, []engine.RebaseSpec, error) {
+	return move.SelectOntoInteractive(ctx, sourceBranch)
 }

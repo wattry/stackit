@@ -94,7 +94,7 @@ func splitByFile(ctx context.Context, branchToSplit engine.Branch, pathspecs []s
 	// Capture original stack ID to preserve on new branches
 	originalStackID := eng.GetStackID(branchToSplit)
 	// Get parent branch
-	parentBranchName := branchToSplit.GetParentPrecondition()
+	parentBranchName := branchToSplit.GetParentOrTrunk()
 	parentBranch := eng.GetBranch(parentBranchName)
 
 	// Generate new branch name
@@ -636,7 +636,7 @@ func promptForFiles(ctx context.Context, branchToSplit engine.Branch, eng splitB
 		return nil, fmt.Errorf("file selection must be specified via pathspecs in non-interactive mode")
 	}
 	// Get the parent branch to compare against
-	parentBranchName := branchToSplit.GetParentPrecondition()
+	parentBranchName := branchToSplit.GetParentOrTrunk()
 
 	// Get merge base between branch and parent
 	mergeBase, err := eng.GetMergeBase(branchToSplit.GetName(), parentBranchName)

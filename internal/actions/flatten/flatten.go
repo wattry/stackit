@@ -442,7 +442,7 @@ func buildFlattenPlan(ctx *app.Context, eng engine.Engine, branches []engine.Bra
 		}
 
 		// Get current parent info
-		origParentName := b.GetParentPrecondition()
+		origParentName := b.GetParentOrTrunk()
 
 		// Get the branch's base (divergence point from parent)
 		oldUpstream, err := eng.GetDivergencePoint(bName)

@@ -28,7 +28,7 @@ func NewStackTree(branches []engine.Branch, currentBranch, trunkBranch string) *
 	for i, branch := range branches {
 		branchName := branch.GetName()
 		branchNames[i] = branchName
-		parentName := branch.GetParentPrecondition()
+		parentName := branch.GetParentOrTrunk()
 		parentMap[branchName] = parentName
 
 		// Build children map (inverse of parent map)

@@ -296,7 +296,7 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		actualParent := result.NewParent
 		if actualParent == "" {
 			branch := eng.GetBranch(step.BranchName)
-			actualParent = branch.GetParentPrecondition()
+			actualParent = branch.GetParentOrTrunk()
 		}
 
 		switch result.Result {

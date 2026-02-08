@@ -40,7 +40,7 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 		if currentBranch == nil {
 			return errors.ErrNotOnBranch
 		}
-		parentName := currentBranch.GetParentPrecondition()
+		parentName := currentBranch.GetParentOrTrunk()
 		parentBranch := eng.GetBranch(parentName)
 		parentRev, err := parentBranch.GetRevision()
 		if err != nil {

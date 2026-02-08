@@ -33,8 +33,9 @@ const (
 
 // MoveResult contains the result of the interactive move selection
 type MoveResult struct {
-	SelectedParent string // The branch selected as new parent
-	Canceled       bool   // Whether the user canceled
+	SelectedParent string              // The branch selected as new parent
+	RebaseSpecs    []engine.RebaseSpec // Precomputed rebase specs for the selection
+	Canceled       bool                // Whether the user canceled
 }
 
 // MoveModelConfig contains configuration for the move model
@@ -51,12 +52,13 @@ type MoveValidator func(ontoBranch string) (*MoveValidation, error)
 
 // MoveValidation contains the result of validating a move
 type MoveValidation struct {
-	Valid          bool     // Whether the move is valid (no conflicts)
-	Message        string   // Status message
-	Commits        []string // Commits that will be moved
-	HasConflicts   bool     // Whether conflicts were detected
-	ConflictBranch string   // Branch with conflicts
-	ConflictError  string   // Conflict error message
+	Valid          bool                // Whether the move is valid (no conflicts)
+	Message        string              // Status message
+	Commits        []string            // Commits that will be moved
+	HasConflicts   bool                // Whether conflicts were detected
+	ConflictBranch string              // Branch with conflicts
+	ConflictError  string              // Conflict error message
+	RebaseSpecs    []engine.RebaseSpec // Precomputed rebase specs for this selection
 }
 
 // branchItem represents a selectable branch in the list
@@ -86,6 +88,7 @@ type MoveModel struct {
 	validationPending bool
 	validationTag     int // For debouncing
 	validator         MoveValidator
+	rebaseSpecs       []engine.RebaseSpec
 
 	// Keybindings
 	keys moveKeyMap
@@ -304,8 +307,14 @@ func (m *MoveModel) updateSelecting(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Valid:   false,
 				Message: fmt.Sprintf("Error: %v", msg.err),
 			}
+			m.rebaseSpecs = nil
 		} else {
 			m.validation = msg.validation
+			if msg.validation != nil {
+				m.rebaseSpecs = msg.validation.RebaseSpecs
+			} else {
+				m.rebaseSpecs = nil
+			}
 		}
 	}
 
@@ -337,8 +346,14 @@ func (m *MoveModel) updateConfirming(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Valid:   false,
 				Message: fmt.Sprintf("Error: %v", msg.err),
 			}
+			m.rebaseSpecs = nil
 		} else {
 			m.validation = msg.validation
+			if msg.validation != nil {
+				m.rebaseSpecs = msg.validation.RebaseSpecs
+			} else {
+				m.rebaseSpecs = nil
+			}
 		}
 	}
 
@@ -547,14 +562,15 @@ func (m *MoveModel) viewConfirming() string {
 func (m *MoveModel) Result() MoveResult {
 	return MoveResult{
 		SelectedParent: m.selectedBranch(),
+		RebaseSpecs:    m.rebaseSpecs,
 		Canceled:       m.state == moveStateCanceled,
 	}
 }
 
-// PromptMoveSelect runs the interactive move selection and returns the selected parent
-func PromptMoveSelect(eng engine.Engine, config MoveModelConfig) (string, error) {
+// PromptMoveSelect runs the interactive move selection and returns the selection result.
+func PromptMoveSelect(eng engine.Engine, config MoveModelConfig) (MoveResult, error) {
 	if err := CheckInteractiveAllowed(); err != nil {
-		return "", err
+		return MoveResult{}, err
 	}
 
 	model := NewMoveModel(eng, config)
@@ -562,13 +578,13 @@ func PromptMoveSelect(eng engine.Engine, config MoveModelConfig) (string, error)
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()
 	if err != nil {
-		return "", err
+		return MoveResult{}, err
 	}
 
 	result := finalModel.(*MoveModel).Result()
 	if result.Canceled {
-		return "", errors.ErrCanceled
+		return MoveResult{}, errors.ErrCanceled
 	}
 
-	return result.SelectedParent, nil
+	return result, nil
 }
