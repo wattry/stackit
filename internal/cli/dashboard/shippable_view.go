@@ -257,26 +257,62 @@ func (m *shippableModel) renderBranchLine(branchName string) string {
 
 	// Use cached annotation for PR info
 	ann, hasCached := m.cache.branchAnnotations[branchName]
-	if !hasCached {
-		if isCurrent {
-			return style.ColorDim("├── ") + style.ColorGreen(branchName) + style.ColorDim(" (current)")
-		}
-		return style.ColorDim("├── " + branchName)
-	}
 
 	var prInfo string
-	if ann.PRNumber != nil && *ann.PRNumber > 0 {
+	if hasCached && ann.PRNumber != nil && *ann.PRNumber > 0 {
 		prInfo = fmt.Sprintf(" #%d", *ann.PRNumber)
 	}
 
 	displayName := branchName
-	suffix := style.ColorDim(prInfo)
 	if isCurrent {
 		displayName = style.ColorGreen(branchName)
-		suffix = style.ColorDim(prInfo) + style.ColorDim(" (current)")
+	}
+
+	// Build suffix parts
+	var suffixParts []string
+	if prInfo != "" {
+		suffixParts = append(suffixParts, style.ColorDim(prInfo))
+	}
+	if blockingStatus := m.formatBranchBlockingStatus(branchName); blockingStatus != "" {
+		suffixParts = append(suffixParts, blockingStatus)
+	}
+	if isCurrent {
+		suffixParts = append(suffixParts, style.ColorDim("(current)"))
+	}
+
+	suffix := ""
+	if len(suffixParts) > 0 {
+		suffix = " " + strings.Join(suffixParts, " ")
 	}
 
 	return style.ColorDim("├── ") + displayName + suffix
+}
+
+// formatBranchBlockingStatus returns a short colored status for a blocked branch.
+func (m *shippableModel) formatBranchBlockingStatus(branchName string) string {
+	reason, blocked := m.cache.branchBlocking[branchName]
+	if !blocked {
+		return ""
+	}
+
+	switch reason {
+	case shippable.ReasonCIFailing:
+		return style.ColorRed("✗ CI")
+	case shippable.ReasonCIPending:
+		return style.ColorYellow("⏳ CI")
+	case shippable.ReasonChangesRequested:
+		return style.ColorRed("✗ changes requested")
+	case shippable.ReasonReviewRequired:
+		return style.ColorYellow("○ review needed")
+	case shippable.ReasonDraft:
+		return style.ColorDim("draft")
+	case shippable.ReasonNoPR:
+		return style.ColorYellow("no PR")
+	case shippable.ReasonNotPushed:
+		return style.ColorYellow("not pushed")
+	default:
+		return ""
+	}
 }
 
 // getStatusIcon returns the icon for a stack status.
@@ -378,21 +414,11 @@ func (m *shippableModel) renderStackDetails(stack *shippable.Stack) string {
 	statsRow := m.renderQuickStats(stack)
 	sb.WriteString(statsRow + "\n\n")
 
-	// Stack tree visualization
+	// Stack tree visualization (blocking status is shown inline per branch)
 	sb.WriteString(style.ColorDim("Stack:") + "\n")
 	treeLines := m.renderStackTree(stack)
 	for _, line := range treeLines {
 		sb.WriteString(line + "\n")
-	}
-
-	// Blocking PRs (if any)
-	if len(stack.BlockingPRs) > 0 {
-		sb.WriteString("\n" + style.ColorYellow("Blocking:") + "\n")
-		for _, bp := range stack.BlockingPRs {
-			reason := m.formatBlockingReason(bp.Reason)
-			sb.WriteString(fmt.Sprintf("  %s %s\n", style.ColorDim("•"), bp.Branch))
-			sb.WriteString(fmt.Sprintf("    %s\n", reason))
-		}
 	}
 
 	return sb.String()
@@ -470,7 +496,7 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 			continue
 		}
 
-		// Overlay CI/review status from blocking PRs
+		// Overlay blocking status from shippability analysis
 		if bp, blocked := blockingByBranch[branchName]; blocked {
 			switch bp.Reason {
 			case shippable.ReasonCIFailing:
@@ -481,6 +507,12 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 				ann.ReviewStatus = "Changes Requested"
 			case shippable.ReasonReviewRequired:
 				ann.ReviewStatus = "In Review"
+			case shippable.ReasonDraft:
+				ann.IsDraft = true
+			case shippable.ReasonNoPR:
+				ann.CustomLabel = style.ColorYellow("no PR")
+			case shippable.ReasonNotPushed:
+				ann.CustomLabel = style.ColorYellow("not pushed")
 			}
 		} else {
 			// If not blocked, mark as passing/approved based on stack status
@@ -504,26 +536,6 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) []string {
 	}
 
 	return renderer.RenderStack(stack.RootBranch(), opts)
-}
-
-// formatBlockingReason returns a human-readable blocking reason.
-func (m *shippableModel) formatBlockingReason(reason shippable.BlockingReason) string {
-	switch reason {
-	case shippable.ReasonCIFailing:
-		return style.ColorRed("CI checks failing")
-	case shippable.ReasonCIPending:
-		return style.ColorYellow("CI checks pending")
-	case shippable.ReasonChangesRequested:
-		return style.ColorRed("Changes requested")
-	case shippable.ReasonReviewRequired:
-		return style.ColorYellow("Review required")
-	case shippable.ReasonDraft:
-		return style.ColorDim("PR is a draft")
-	case shippable.ReasonNoPR:
-		return style.ColorDim("No PR created")
-	default:
-		return string(reason)
-	}
 }
 
 // renderFooter renders the footer with global shortcuts.

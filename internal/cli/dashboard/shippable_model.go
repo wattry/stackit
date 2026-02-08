@@ -45,6 +45,9 @@ type renderCache struct {
 	// currentStackRoot is the root branch of the stack containing the checked-out branch
 	currentStackRoot string
 
+	// branchBlocking maps branch name to its blocking reason (only for blocked branches)
+	branchBlocking map[string]shippable.BlockingReason
+
 	// Cached selection state to avoid recomputing
 	selectedCount  int
 	selectedStacks []shippable.Stack
@@ -322,6 +325,7 @@ func (m *shippableModel) rebuildCache() {
 	m.cache.stackTitles = make(map[string]string)
 	m.cache.stackDescriptions = make(map[string]*git.StackDescription)
 	m.cache.branchAnnotations = make(map[string]tree.BranchAnnotation)
+	m.cache.branchBlocking = make(map[string]shippable.BlockingReason)
 
 	// Determine which stack contains the currently checked-out branch
 	m.cache.currentBranch = ""
@@ -368,6 +372,11 @@ func (m *shippableModel) rebuildCache() {
 				ann := tui.GetBranchAnnotation(m.engine, branch)
 				m.cache.branchAnnotations[branchName] = ann
 			}
+		}
+
+		// Cache blocking reasons per branch
+		for _, bp := range stack.BlockingPRs {
+			m.cache.branchBlocking[bp.Branch] = bp.Reason
 		}
 	}
 
