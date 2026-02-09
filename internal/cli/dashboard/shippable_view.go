@@ -90,8 +90,8 @@ func (m *shippableModel) renderHeader() string {
 		status = headerStatusStyle.Render(m.Spinner.View() + " Analyzing...")
 	case m.state == stateShipping:
 		status = headerStatusStyle.Render(m.Spinner.View() + " Shipping...")
-	case m.state == statePublishing:
-		status = headerStatusStyle.Render(m.Spinner.View() + " Publishing...")
+	case m.state == stateSubmitting:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Submitting...")
 	case m.errorMessage != "":
 		status = errorTextStyle.Render(m.errorMessage)
 	case m.statusMessage != "":
@@ -680,13 +680,13 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) (lines []string
 // renderFooter renders the footer with global shortcuts.
 func (m *shippableModel) renderFooter() string {
 	// During async operations, show progress bar
-	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == stateSubmitting {
 		return m.renderProgressFooter()
 	}
 
 	// Global shortcuts only (pane-specific shortcuts shown in their panes)
 	shortcuts := []string{
-		"[p] Publish all",
+		"[p] Submit stack",
 		"[r] Refresh",
 		"[?] Help",
 		"[q] Quit",
@@ -706,8 +706,8 @@ func (m *shippableModel) renderProgressFooter() string {
 		message = "Analyzing..."
 	case stateShipping:
 		message = "Shipping..."
-	case statePublishing:
-		message = "Publishing..."
+	case stateSubmitting:
+		message = "Submitting..."
 	}
 
 	if m.progressMessage != "" {
@@ -749,7 +749,7 @@ func (m *shippableModel) renderHelp() string {
 
 	sb.WriteString(helpSectionStyle.Render("Actions") + "\n")
 	sb.WriteString(helpKeyStyle.Render("s") + helpDescStyle.Render("Ship selected stacks") + "\n")
-	sb.WriteString(helpKeyStyle.Render("p") + helpDescStyle.Render("Restack & submit all branches") + "\n")
+	sb.WriteString(helpKeyStyle.Render("p") + helpDescStyle.Render("Submit focused stack") + "\n")
 	sb.WriteString(helpKeyStyle.Render("a") + helpDescStyle.Render("Analyze combination") + "\n")
 	sb.WriteString(helpKeyStyle.Render("r") + helpDescStyle.Render("Refresh analysis") + "\n")
 

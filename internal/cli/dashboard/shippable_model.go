@@ -13,6 +13,7 @@ import (
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/shippable"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/components/tree"
@@ -79,7 +80,7 @@ const (
 	stateAnalyzing
 	stateConfirming
 	stateShipping
-	statePublishing
+	stateSubmitting
 	stateHelp
 )
 
@@ -146,7 +147,7 @@ type keyMap struct {
 	Select    key.Binding
 	Expand    key.Binding
 	Ship      key.Binding
-	Publish   key.Binding
+	Submit    key.Binding
 	Analyze   key.Binding
 	Refresh   key.Binding
 	Help      key.Binding
@@ -185,9 +186,9 @@ var keys = keyMap{
 		key.WithKeys("s"),
 		key.WithHelp("s", "ship selected"),
 	),
-	Publish: key.NewBinding(
+	Submit: key.NewBinding(
 		key.WithKeys("p"),
-		key.WithHelp("p", "restack & submit all"),
+		key.WithHelp("p", "submit stack"),
 	),
 	Analyze: key.NewBinding(
 		key.WithKeys("a"),
@@ -222,7 +223,7 @@ var keys = keyMap{
 // newShippableModel creates a new shippable dashboard model.
 func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOptions) *shippableModel {
 	analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHubClient)
-	combiner := shippable.NewCombiner(ctx.Engine, cfg, ctx.Output)
+	combiner := shippable.NewCombiner(ctx.Engine, cfg, output.NewNullOutput())
 
 	// Create progress bar
 	p := progress.New(
@@ -268,6 +269,15 @@ func (m *shippableModel) selectedStacks() []shippable.Stack {
 	return result
 }
 
+// quietCtx returns a copy of the app context with output silenced.
+// Use this for actions running inside tea.Cmd to prevent stdout writes
+// from conflicting with the running bubbletea program.
+func (m *shippableModel) quietCtx() *app.Context {
+	ctx := *m.ctx
+	ctx.Output = output.NewNullOutput()
+	return &ctx
+}
+
 // currentStack returns the currently focused stack, or nil if none.
 func (m *shippableModel) currentStack() *shippable.Stack {
 	if m.selectedIndex >= 0 && m.selectedIndex < len(m.stacks) {
@@ -279,18 +289,6 @@ func (m *shippableModel) currentStack() *shippable.Stack {
 // isLocked returns true if the stack is currently locked (during publish/ship).
 func (m *shippableModel) isLocked(rootBranch string) bool {
 	return m.locked[rootBranch]
-}
-
-// lockAllStacks locks all stacks to prevent selection during operations.
-func (m *shippableModel) lockAllStacks() {
-	for _, s := range m.stacks {
-		m.locked[s.RootBranch()] = true
-	}
-}
-
-// unlockAllStacks unlocks all stacks after an operation completes.
-func (m *shippableModel) unlockAllStacks() {
-	m.locked = make(map[string]bool)
 }
 
 // toggleSelection toggles selection of the current stack.
@@ -471,8 +469,7 @@ type (
 		err    error
 	}
 
-	publishCompleteMsg struct {
-		restacked int
+	submitCompleteMsg struct {
 		submitted int
 		err       error
 	}

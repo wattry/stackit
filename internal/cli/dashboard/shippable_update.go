@@ -8,7 +8,6 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
-	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/submit"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
@@ -140,17 +139,16 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearSelection()
 		return m, m.refresh()
 
-	case publishCompleteMsg:
+	case submitCompleteMsg:
 		m.state = stateMain
 		m.progressStep = 0
 		m.progressTotal = 0
 		m.progressMessage = ""
-		m.unlockAllStacks()
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
 		}
-		m.statusMessage = fmt.Sprintf("Published! Restacked %d, submitted %d branches", msg.restacked, msg.submitted)
+		m.statusMessage = fmt.Sprintf("Submitted %d branches", msg.submitted)
 		return m, m.refresh()
 	}
 
@@ -171,7 +169,7 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	}
 
 	// If loading, analyzing, shipping, or publishing, only allow quit
-	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == stateSubmitting {
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -240,8 +238,8 @@ func (m *shippableModel) handleLeftPaneKey(msg tea.KeyPressMsg) (tea.Model, tea.
 	case key.Matches(msg, keys.Ship):
 		return m.startShip()
 
-	case key.Matches(msg, keys.Publish):
-		return m.startPublish()
+	case key.Matches(msg, keys.Submit):
+		return m.startSubmit()
 
 	case key.Matches(msg, keys.Analyze):
 		return m.startCombinationAnalysis()
@@ -283,8 +281,8 @@ func (m *shippableModel) handleRightPaneKey(msg tea.KeyPressMsg) (tea.Model, tea
 		m.statusMessage = msgRefreshing
 		return m, m.refresh()
 
-	case key.Matches(msg, keys.Publish):
-		return m.startPublish()
+	case key.Matches(msg, keys.Submit):
+		return m.startSubmit()
 	}
 
 	// Forward unhandled keys to the viewport for pgup/pgdown scrolling
@@ -368,7 +366,8 @@ func (m *shippableModel) executeShip() (tea.Model, tea.Cmd) {
 	m.statusMessage = "Shipping..."
 
 	return m, func() tea.Msg {
-		shipper := shippable.NewShipper(m.ctx)
+		quietCtx := m.quietCtx()
+		shipper := shippable.NewShipper(quietCtx)
 		result, err := shipper.Ship(selected, shippable.ShipOptions{
 			SkipLocalCI: !m.options.RunLocalCI,
 			Wait:        false, // Don't wait in UI, user can monitor PR
@@ -415,67 +414,51 @@ func (m *shippableModel) backgroundAnalyze() tea.Cmd {
 	}
 }
 
-// startPublish initiates the restack + submit workflow for all branches.
-func (m *shippableModel) startPublish() (tea.Model, tea.Cmd) {
-	m.state = statePublishing
-	m.statusMessage = "Restacking and submitting..."
-	m.lockAllStacks()
+// startSubmit initiates the restack + submit workflow for the focused stack.
+func (m *shippableModel) startSubmit() (tea.Model, tea.Cmd) {
+	stack := m.focusedStack
+	if stack == nil {
+		m.errorMessage = "No stack focused"
+		return m, nil
+	}
+
+	root := stack.RootBranch()
+	m.state = stateSubmitting
+	m.statusMessage = "Submitting " + root + "..."
 
 	return m, func() tea.Msg {
-		eng := m.engine
-		ctx := m.ctx
-
-		// Get all branches that need restacking
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		allBranches := graph.Range(eng.Trunk(), engine.StackRange{RecursiveChildren: true})
-
-		// Restack all branches
-		sortedBranches := eng.SortBranchesTopologically(allBranches)
-		restacked := 0
-
-		if len(sortedBranches) > 0 {
-			err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(_ string, result engine.RestackResult, _ string, _ bool, _ engine.LockReason, _ bool, _ bool, _ bool, _, _ string) {
-				if result == engine.RestackDone {
-					restacked++
-				}
-			}, false)
-			if err != nil {
-				return publishCompleteMsg{err: err}
-			}
-		}
-
-		// Submit all branches
 		opts := submit.Options{
-			Branch:     eng.CurrentBranch().GetName(),
+			Branch:     root,
 			StackRange: engine.StackRangeFull(),
 			Confirm:    true, // Skip confirmation
+			Restack:    true, // Restack before submitting
 		}
 
 		submitted := 0
-		handler := &publishSubmitHandler{onSubmit: func() { submitted++ }}
-		if err := submit.Action(ctx, opts, handler); err != nil {
-			return publishCompleteMsg{restacked: restacked, err: err}
+		handler := &dashboardSubmitHandler{onSubmit: func() { submitted++ }}
+		if err := submit.Action(m.quietCtx(), opts, handler); err != nil {
+			return submitCompleteMsg{err: err}
 		}
 
-		return publishCompleteMsg{restacked: restacked, submitted: submitted}
+		return submitCompleteMsg{submitted: submitted}
 	}
 }
 
-// publishSubmitHandler is a minimal handler for submit events during publish.
-type publishSubmitHandler struct {
+// dashboardSubmitHandler is a minimal handler for submit events in the dashboard.
+type dashboardSubmitHandler struct {
 	onSubmit func()
 }
 
-func (h *publishSubmitHandler) OnEvent(event submit.Event) {
+func (h *dashboardSubmitHandler) OnEvent(event submit.Event) {
 	if e, ok := event.(submit.BranchProgressEvent); ok && e.Status == submit.StatusDone {
 		h.onSubmit()
 	}
 }
 
-func (h *publishSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+func (h *dashboardSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
 
-func (h *publishSubmitHandler) IsInteractive() bool {
+func (h *dashboardSubmitHandler) IsInteractive() bool {
 	return false
 }
