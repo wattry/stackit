@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/submit"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/shippable"
@@ -150,6 +151,18 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMessage = fmt.Sprintf("Submitted %d branches", msg.submitted)
 		return m, m.refresh()
+
+	case squashCompleteMsg:
+		m.state = stateMain
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
+		if msg.err != nil {
+			m.errorMessage = msg.err.Error()
+			return m, nil
+		}
+		m.statusMessage = fmt.Sprintf("Squashed %s", msg.branch)
+		return m, m.refresh()
 	}
 
 	return m, nil
@@ -168,8 +181,8 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// If loading, analyzing, shipping, or publishing, only allow quit
-	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == stateSubmitting {
+	// If loading, analyzing, shipping, squashing, or publishing, only allow quit
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == stateSubmitting || m.state == stateSquashing {
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -283,6 +296,9 @@ func (m *shippableModel) handleRightPaneKey(msg tea.KeyPressMsg) (tea.Model, tea
 
 	case key.Matches(msg, keys.Submit):
 		return m.startSubmit()
+
+	case key.Matches(msg, keys.Squash):
+		return m.startSquash()
 	}
 
 	// Forward unhandled keys to the viewport for pgup/pgdown scrolling
@@ -296,14 +312,18 @@ func (m *shippableModel) handleConfirmationKey(msg tea.KeyPressMsg) (tea.Model, 
 	switch {
 	case key.Matches(msg, keys.Confirm):
 		m.state = stateMain
-		if m.confirmAction == "ship" {
+		switch m.confirmAction {
+		case confirmActionShip:
 			return m.executeShip()
+		case confirmActionSquash:
+			return m.executeSquash()
 		}
 		return m, nil
 
 	case key.Matches(msg, keys.Cancel):
 		m.state = stateMain
 		m.confirmAction = ""
+		m.confirmBranch = ""
 		return m, nil
 	}
 	return m, nil
@@ -344,7 +364,7 @@ func (m *shippableModel) startShip() (tea.Model, tea.Cmd) {
 
 	// Show confirmation dialog
 	m.state = stateConfirming
-	m.confirmAction = "ship"
+	m.confirmAction = confirmActionShip
 	return m, nil
 }
 
@@ -411,6 +431,77 @@ func (m *shippableModel) backgroundAnalyze() tea.Cmd {
 			RunLocalCI: m.options.RunLocalCI,
 		})
 		return combinationCompleteMsg{result: result, err: err}
+	}
+}
+
+// startSquash initiates the squash workflow for the selected branch in the right pane.
+func (m *shippableModel) startSquash() (tea.Model, tea.Cmd) {
+	stack := m.focusedStack
+	if stack == nil {
+		m.errorMessage = "No stack focused"
+		return m, nil
+	}
+
+	if m.selectedBranchIdx < 0 || m.selectedBranchIdx >= len(stack.Stack.AllBranches) {
+		m.errorMessage = "No branch selected"
+		return m, nil
+	}
+
+	branchName := stack.Stack.AllBranches[m.selectedBranchIdx]
+
+	// Don't allow squashing trunk
+	if m.engine.IsTrunk(m.engine.GetBranch(branchName)) {
+		m.errorMessage = "Cannot squash trunk"
+		return m, nil
+	}
+
+	m.state = stateConfirming
+	m.confirmAction = confirmActionSquash
+	m.confirmBranch = branchName
+	return m, nil
+}
+
+// executeSquash runs the squash action after confirmation.
+func (m *shippableModel) executeSquash() (tea.Model, tea.Cmd) {
+	branchName := m.confirmBranch
+	m.confirmBranch = ""
+	m.confirmAction = ""
+
+	if branchName == "" {
+		m.errorMessage = "No branch to squash"
+		return m, nil
+	}
+
+	m.state = stateSquashing
+	m.statusMessage = "Squashing " + branchName + "..."
+
+	return m, func() tea.Msg {
+		quietCtx := m.quietCtx()
+
+		// Save current branch to restore after squash
+		currentBranch := m.engine.CurrentBranch()
+
+		// Checkout the target branch
+		targetBranch := m.engine.GetBranch(branchName)
+		if err := m.engine.CheckoutBranch(quietCtx.Context, targetBranch); err != nil {
+			return squashCompleteMsg{branch: branchName, err: fmt.Errorf("checkout %s: %w", branchName, err)}
+		}
+
+		// Run squash
+		if err := actions.SquashAction(quietCtx, actions.SquashOptions{NoEdit: true}); err != nil {
+			// Restore original branch on error
+			if currentBranch != nil {
+				_ = m.engine.CheckoutBranch(quietCtx.Context, *currentBranch)
+			}
+			return squashCompleteMsg{branch: branchName, err: err}
+		}
+
+		// Restore original branch
+		if currentBranch != nil {
+			_ = m.engine.CheckoutBranch(quietCtx.Context, *currentBranch)
+		}
+
+		return squashCompleteMsg{branch: branchName}
 	}
 }
 

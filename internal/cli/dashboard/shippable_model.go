@@ -29,6 +29,11 @@ const (
 
 	// msgRefreshing is the status message shown during refresh operations.
 	msgRefreshing = "Refreshing..."
+
+	// confirmActionShip is the confirm action for shipping stacks.
+	confirmActionShip = "ship"
+	// confirmActionSquash is the confirm action for squashing a branch.
+	confirmActionSquash = "squash"
 )
 
 // renderCache stores precomputed data to avoid expensive git operations in the render loop.
@@ -81,6 +86,7 @@ const (
 	stateConfirming
 	stateShipping
 	stateSubmitting
+	stateSquashing
 	stateHelp
 )
 
@@ -130,6 +136,7 @@ type shippableModel struct {
 
 	// Confirmation action (used when state == stateConfirming)
 	confirmAction string
+	confirmBranch string // target branch for squash confirmation
 
 	// Options
 	options ShippableOptions
@@ -152,6 +159,7 @@ type keyMap struct {
 	Refresh   key.Binding
 	Help      key.Binding
 	Quit      key.Binding
+	Squash    key.Binding
 	Confirm   key.Binding
 	Cancel    key.Binding
 	SelectAll key.Binding
@@ -205,6 +213,10 @@ var keys = keyMap{
 	Quit: key.NewBinding(
 		key.WithKeys(core.KeyQuit, core.KeyCtrlC),
 		key.WithHelp("q", "quit"),
+	),
+	Squash: key.NewBinding(
+		key.WithKeys("x"),
+		key.WithHelp("x", "squash branch"),
 	),
 	Confirm: key.NewBinding(
 		key.WithKeys(core.KeyEnter, "y"),
@@ -472,6 +484,11 @@ type (
 	submitCompleteMsg struct {
 		submitted int
 		err       error
+	}
+
+	squashCompleteMsg struct {
+		branch string
+		err    error
 	}
 
 	// progressUpdateMsg updates the progress bar during async operations
