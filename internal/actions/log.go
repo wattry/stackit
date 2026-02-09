@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
@@ -42,7 +42,8 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 			ShowUntracked: opts.ShowUntracked,
 			Logger:        ctx.Logger,
 		})
-		p := tea.NewProgram(m, tea.WithAltScreen())
+		m.SetAltScreen(true)
+		p := tea.NewProgram(m)
 		_, err := p.Run()
 		return err
 	}

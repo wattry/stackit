@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/utils"
@@ -196,7 +197,7 @@ func (s *TestShell) Run(args string) *TestShell {
 	// Use in-process execution if available (faster)
 	if s.inProcessCLI != nil {
 		result := s.inProcessCLI.Run(s.scene.Dir, parts...)
-		s.lastOutput = result.Output
+		s.lastOutput = ansi.Strip(result.Output)
 		if result.Err != nil {
 			s.t.Logf("In-process CLI output: %s", s.lastOutput)
 		}
@@ -210,7 +211,7 @@ func (s *TestShell) Run(args string) *TestShell {
 	cmd := exec.Command(s.binaryPath, fullArgs...)
 	cmd.Dir = s.scene.Dir
 	output, err := cmd.CombinedOutput()
-	s.lastOutput = string(output)
+	s.lastOutput = ansi.Strip(string(output))
 	require.NoError(s.t, err, "$ stackit %s\n%s", args, s.lastOutput)
 	return s
 }
@@ -223,7 +224,7 @@ func (s *TestShell) RunExpectError(args string) *TestShell {
 	// Use in-process execution if available (faster)
 	if s.inProcessCLI != nil {
 		result := s.inProcessCLI.Run(s.scene.Dir, parts...)
-		s.lastOutput = result.Output
+		s.lastOutput = ansi.Strip(result.Output)
 		require.Error(s.t, result.Err, "$ stackit %s (expected error)\n%s", args, s.lastOutput)
 		return s
 	}
@@ -234,7 +235,7 @@ func (s *TestShell) RunExpectError(args string) *TestShell {
 	cmd := exec.Command(s.binaryPath, fullArgs...)
 	cmd.Dir = s.scene.Dir
 	output, err := cmd.CombinedOutput()
-	s.lastOutput = string(output)
+	s.lastOutput = ansi.Strip(string(output))
 	require.Error(s.t, err, "$ stackit %s (expected error)\n%s", args, s.lastOutput)
 	return s
 }

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -73,6 +73,7 @@ type LogModel struct {
 	cachedLines     []string             // All rendered lines (with selection applied)
 
 	// Options
+	altScreen         bool
 	style             string
 	showUntracked     bool
 	exclude           map[string]bool
@@ -192,6 +193,11 @@ func newLogSelectModel(ctx context.Context, eng engine.Engine, ghClient github.C
 	m := NewLogModel(ctx, eng, ghClient, opts)
 	m.mode = LogModeSelect
 	return m
+}
+
+// SetAltScreen sets whether the model should use alt screen mode
+func (m *LogModel) SetAltScreen(enabled bool) {
+	m.altScreen = enabled
 }
 
 // Init initializes the bubbletea model
@@ -398,8 +404,8 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renderTree()
 			default:
 				// Handle regular character input - invalidates cache because search affects display
-				if len(msg.Runes) > 0 {
-					m.searchQuery += string(msg.Runes)
+				if msg.Key().Text != "" {
+					m.searchQuery += msg.Key().Text
 					m.updateSearchMatches()
 					m.invalidateTreeCache()
 					m.renderTree()
@@ -494,13 +500,13 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		firstRender := !m.ready
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-2)
+			m.viewport = viewport.New(viewport.WithWidth(msg.Width), viewport.WithHeight(msg.Height-2))
 			m.ready = true
 			m.updateSearchMatches()
 			m.invalidateTreeCache() // First render needs full tree
 		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - 2
+			m.viewport.SetWidth(msg.Width)
+			m.viewport.SetHeight(msg.Height - 2)
 			// Note: width changes might affect rendering, but for simplicity
 			// we don't invalidate cache here - lines are pre-built and width
 			// mainly affects viewport scrolling
@@ -622,10 +628,10 @@ func (m *LogModel) ensureVisible() {
 	branchHeight := len(m.branches[m.selectedIndex].Lines)
 
 	// Simple viewport scrolling to keep selected branch visible
-	if lineOffset < m.viewport.YOffset {
-		m.viewport.YOffset = lineOffset
-	} else if lineOffset+branchHeight > m.viewport.YOffset+m.viewport.Height {
-		m.viewport.YOffset = lineOffset + branchHeight - m.viewport.Height
+	if lineOffset < m.viewport.YOffset() {
+		m.viewport.SetYOffset(lineOffset)
+	} else if lineOffset+branchHeight > m.viewport.YOffset()+m.viewport.Height() {
+		m.viewport.SetYOffset(lineOffset + branchHeight - m.viewport.Height())
 	}
 }
 
@@ -705,9 +711,9 @@ func (m *LogModel) runValidation(branchName string) tea.Cmd {
 }
 
 // View renders the bubbletea model
-func (m *LogModel) View() string {
+func (m *LogModel) View() tea.View {
 	if m.renderer == nil {
-		return ""
+		return tea.NewView("")
 	}
 
 	title := "Stackit Log"
@@ -769,7 +775,11 @@ func (m *LogModel) View() string {
 		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, parts...))
+	if m.altScreen {
+		v.AltScreen = true
+	}
+	return v
 }
 
 // renderValidationFooter renders the validation status footer
@@ -796,13 +806,9 @@ func PromptLogSelect(ctx context.Context, eng engine.Engine, ghClient github.Cli
 
 	m := newLogSelectModel(ctx, eng, ghClient, opts)
 
-	// Build program options
-	var programOpts []tea.ProgramOption
-	if !opts.Inline {
-		programOpts = append(programOpts, tea.WithAltScreen())
-	}
+	m.altScreen = !opts.Inline
 
-	p := tea.NewProgram(m, programOpts...)
+	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
 		return "", err

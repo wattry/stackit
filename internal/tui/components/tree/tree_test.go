@@ -4,16 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui/style"
 )
-
-func init() {
-	// Force color output for all tests in this file to ensure ANSI escape codes are generated
-	lipgloss.SetColorProfile(termenv.TrueColor)
-}
 
 func TestStackTreeRenderer_RenderStack_LinearStack(t *testing.T) {
 	mock := NewMockTreeData()

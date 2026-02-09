@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/progress"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/progress"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/submit"
@@ -21,7 +21,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = wsMsg.Width
 		m.Height = wsMsg.Height
 		// Also update progress bar width
-		m.progress.Width = min(wsMsg.Width-20, 60)
+		m.progress.SetWidth(min(wsMsg.Width-20, 60))
 		return m, nil
 	}
 
@@ -49,8 +49,8 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case progress.FrameMsg:
 		// Update progress bar animation
-		progressModel, cmd := m.progress.Update(msg)
-		m.progress = progressModel.(progress.Model)
+		var cmd tea.Cmd
+		m.progress, cmd = m.progress.Update(msg)
 		return m, cmd
 
 	case progressUpdateMsg:

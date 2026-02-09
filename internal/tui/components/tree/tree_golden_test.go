@@ -7,9 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -461,9 +458,6 @@ func intPtr(i int) *int {
 }
 
 func TestStackTreeRenderer_Golden(t *testing.T) {
-	// Force consistent color output for tests
-	lipgloss.SetColorProfile(termenv.TrueColor)
-
 	tests := buildGoldenTests()
 
 	for _, tt := range tests {
@@ -542,8 +536,6 @@ func diffStrings(expected, actual string) string {
 // TestStackTreeRenderer_GoldenWithColors tests that colors are applied correctly
 // This test verifies ANSI codes are present without checking exact sequences
 func TestStackTreeRenderer_GoldenWithColors(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-
 	mock := NewMockTreeData()
 	renderer := NewRenderer(mock)
 

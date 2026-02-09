@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/progress"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
@@ -77,7 +77,7 @@ type CompleteMsg struct {
 // NewModel creates a new sync model
 func NewModel(totalOps int) *Model {
 	p := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithDefaultBlend(),
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
@@ -121,12 +121,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// BaseModel already set Width/Height, but we also need to update Progress.Width
-		m.Progress.Width = min(msg.Width-10, 60)
+		m.Progress.SetWidth(min(msg.Width-10, 60))
 		return m, nil
 
 	case progress.FrameMsg:
-		progressModel, cmd := m.Progress.Update(msg)
-		m.Progress = progressModel.(progress.Model)
+		var cmd tea.Cmd
+		m.Progress, cmd = m.Progress.Update(msg)
 		return m, cmd
 
 	case PhaseStartMsg:
@@ -172,10 +172,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the model - shows only the active progress (package-manager pattern)
 // Completed items are printed above via tea.Printf
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	if m.Done {
 		// Summary already printed via tea.Printf in CompleteMsg
-		return ""
+		return tea.NewView("")
 	}
 
 	var b strings.Builder
@@ -201,7 +201,7 @@ func (m *Model) View() string {
 
 	b.WriteString(spin + info + gap + prog + pkgCount)
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // getStatusText returns the current status text to display

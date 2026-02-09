@@ -2,10 +2,11 @@
 package style
 
 import (
+	"image/color"
+	"os"
 	"sync"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
 
 // Theme represents the terminal background type
@@ -60,7 +61,7 @@ var (
 // The result is cached after the first call.
 func DetectTheme() Theme {
 	themeOnce.Do(func() {
-		if termenv.HasDarkBackground() {
+		if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
 			detectedTheme = ThemeDark
 		} else {
 			detectedTheme = ThemeLight
@@ -76,14 +77,14 @@ func IsDarkBackground() bool {
 
 // Adaptive colors that work on both dark and light backgrounds
 // Dark theme: use lighter grays, Light theme: use darker grays
-func colorDimValue() lipgloss.Color {
+func colorDimValue() color.Color {
 	if IsDarkBackground() {
 		return lipgloss.Color("245") // Light gray for dark backgrounds
 	}
 	return lipgloss.Color("240") // Darker gray for light backgrounds
 }
 
-func colorSubtleValue() lipgloss.Color {
+func colorSubtleValue() color.Color {
 	if IsDarkBackground() {
 		return lipgloss.Color("246") // Medium gray for dark backgrounds (was 240, too faint)
 	}
@@ -91,7 +92,7 @@ func colorSubtleValue() lipgloss.Color {
 }
 
 // DimColor returns the dim color value (adaptive to terminal background)
-func DimColor() lipgloss.Color {
+func DimColor() color.Color {
 	return colorDimValue()
 }
 

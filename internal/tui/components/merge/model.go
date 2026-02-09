@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/core"
@@ -253,9 +253,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the TUI
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	if m.Quitting {
-		return ""
+		return tea.NewView("")
 	}
 
 	var b strings.Builder
@@ -277,7 +277,7 @@ func (m *Model) View() string {
 			b.WriteString(m.Summary)
 			b.WriteString("\n")
 		}
-		return b.String()
+		return tea.NewView(b.String())
 	}
 
 	// Calculate overall progress
@@ -499,7 +499,7 @@ func (m *Model) View() string {
 		b.WriteString("\n")
 	}
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 func (m *Model) renderCheckIndicators(checks []github.CheckDetail) string {

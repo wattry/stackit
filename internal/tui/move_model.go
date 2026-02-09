@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -422,14 +422,14 @@ func (m *MoveModel) selectedBranch() string {
 }
 
 // View renders the current state
-func (m *MoveModel) View() string {
+func (m *MoveModel) View() tea.View {
 	switch m.state {
 	case moveStateSelecting:
-		return m.viewSelecting()
+		return tea.NewView(m.viewSelecting())
 	case moveStateConfirming:
-		return m.viewConfirming()
+		return tea.NewView(m.viewConfirming())
 	default:
-		return ""
+		return tea.NewView("")
 	}
 }
 

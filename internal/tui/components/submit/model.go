@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/tui/components/tree"
 	"stackit.dev/stackit/internal/tui/core"
@@ -168,7 +168,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the model as a string.
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	var b strings.Builder
 
 	if m.Renderer != nil {
@@ -288,5 +288,5 @@ func (m *Model) View() string {
 	}
 
 	b.WriteString("\n")
-	return b.String()
+	return tea.NewView(b.String())
 }

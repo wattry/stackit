@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,5 +20,5 @@ func runCliCommandSuccess(t *testing.T, binaryPath, dir string, args ...string) 
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command failed: %s %v\nOutput: %s", binaryPath, args, string(output))
-	return string(output)
+	return ansi.Strip(string(output))
 }

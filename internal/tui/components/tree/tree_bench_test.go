@@ -2,15 +2,7 @@ package tree
 
 import (
 	"testing"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
-
-func init() {
-	// Force color output for benchmarks to simulate realistic rendering
-	lipgloss.SetColorProfile(termenv.TrueColor)
-}
 
 const benchTrunk = "main"
 

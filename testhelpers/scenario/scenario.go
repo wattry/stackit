@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/app"
@@ -338,13 +339,16 @@ func (s *Scenario) RunCli(args ...string) *Scenario {
 }
 
 // RunCliAndGetOutput executes a stackit CLI command and returns its output.
+// ANSI escape codes are stripped from the output for stable test assertions,
+// since lipgloss v2 always generates ANSI codes regardless of terminal type.
 func (s *Scenario) RunCliAndGetOutput(args ...string) (string, error) {
 	if s.InProcess {
 		runner := GetGlobalInProcessRunner()
 		if runner == nil {
 			return "", fmt.Errorf("GlobalInProcessRunner not set")
 		}
-		return runner(s.Scene.Dir, args...)
+		out, err := runner(s.Scene.Dir, args...)
+		return ansi.Strip(out), err
 	}
 
 	if s.BinaryPath == "" {
@@ -359,7 +363,7 @@ func (s *Scenario) RunCliAndGetOutput(args ...string) (string, error) {
 	if s.Engine != nil {
 		s.Rebuild()
 	}
-	return string(output), err
+	return ansi.Strip(string(output)), err
 }
 
 // RunExpectError executes a stackit CLI command and expects it to fail.

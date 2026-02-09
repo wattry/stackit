@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
@@ -190,8 +190,7 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		headerHeight := 3 // Title + summary line + blank
 		footerHeight := 4 // Help + padding
-		m.viewport = viewport.New(msg.Width, msg.Height-headerHeight-footerHeight)
-		m.viewport.YPosition = headerHeight
+		m.viewport = viewport.New(viewport.WithWidth(msg.Width), viewport.WithHeight(msg.Height-headerHeight-footerHeight))
 		m.ready = true
 		m.updateViewportContent()
 		return m, nil
@@ -269,11 +268,11 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateViewportContent()
 
 		case key.Matches(msg, m.keys.PageUp):
-			m.viewport.SetYOffset(m.viewport.YOffset - m.viewport.Height/2)
+			m.viewport.SetYOffset(m.viewport.YOffset() - m.viewport.Height()/2)
 			return m, nil
 
 		case key.Matches(msg, m.keys.PageDown):
-			m.viewport.SetYOffset(m.viewport.YOffset + m.viewport.Height/2)
+			m.viewport.SetYOffset(m.viewport.YOffset() + m.viewport.Height()/2)
 			return m, nil
 		}
 	}
@@ -284,13 +283,13 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model
-func (m *HunkSelectorModel) View() string {
+func (m *HunkSelectorModel) View() tea.View {
 	if m.Done {
-		return ""
+		return tea.NewView("")
 	}
 
 	if !m.ready {
-		return "Initializing..."
+		return tea.NewView("Initializing...")
 	}
 
 	var sb strings.Builder
@@ -307,7 +306,9 @@ func (m *HunkSelectorModel) View() string {
 	// Help
 	sb.WriteString(m.help.View(m.keys))
 
-	return style.DefaultLayoutStyles().Container.Render(sb.String())
+	v := tea.NewView(style.DefaultLayoutStyles().Container.Render(sb.String()))
+	v.AltScreen = true
+	return v
 }
 
 // renderHeader creates the header line with selection info
@@ -459,10 +460,10 @@ func (m *HunkSelectorModel) ensureCursorVisible() {
 		for _, hunkIdx := range fg.Hunks {
 			if hunkIdx == m.cursor {
 				// Found cursor position
-				if linePos < m.viewport.YOffset {
+				if linePos < m.viewport.YOffset() {
 					m.viewport.SetYOffset(linePos)
-				} else if linePos > m.viewport.YOffset+m.viewport.Height-5 {
-					m.viewport.SetYOffset(linePos - m.viewport.Height + 5)
+				} else if linePos > m.viewport.YOffset()+m.viewport.Height()-5 {
+					m.viewport.SetYOffset(linePos - m.viewport.Height() + 5)
 				}
 				return
 			}
@@ -666,7 +667,7 @@ func PromptSelectHunks(hunks []git.Hunk) ([]git.Hunk, error) {
 
 	m := NewHunkSelectorModel(hunks)
 
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	model, err := p.Run()
 	if err != nil {
 		return nil, err

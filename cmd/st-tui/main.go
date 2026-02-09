@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui"
 )
@@ -35,7 +35,7 @@ func main() {
 		stories: tui.Stories,
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running storyboard: %v\n", err)
 		os.Exit(1)
@@ -55,7 +55,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.state == stateStory {
 		// Handle global back-to-list keys
-		if k, ok := msg.(tea.KeyMsg); ok {
+		if k, ok := msg.(tea.KeyPressMsg); ok {
 			if k.String() == "q" || k.String() == "esc" {
 				m.state = stateList
 				m.activeStory = nil
@@ -71,7 +71,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// List mode handling
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -99,7 +99,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
 	if m.state == stateStory {
 		return m.storyModel.View()
 	}
@@ -133,5 +133,7 @@ func (m model) View() string {
 
 	b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("↑/↓: navigate | enter: view | q: quit"))
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(b.String())
+	v := tea.NewView(lipgloss.NewStyle().Margin(1, 2).Render(b.String()))
+	v.AltScreen = true
+	return v
 }

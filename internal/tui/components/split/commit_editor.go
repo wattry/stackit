@@ -6,10 +6,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
@@ -202,17 +202,17 @@ func (m *CommitEditorModel) openEditor() tea.Cmd {
 }
 
 // View implements tea.Model
-func (m *CommitEditorModel) View() string {
+func (m *CommitEditorModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 
 	if !m.ready {
-		return "Loading..."
+		return tea.NewView("Loading...")
 	}
 
 	if m.editing {
-		return "Opening editor..."
+		return tea.NewView("Opening editor...")
 	}
 
 	var sb strings.Builder
@@ -233,7 +233,7 @@ func (m *CommitEditorModel) View() string {
 	// Help
 	sb.WriteString(m.help.View(m.keys))
 
-	return style.DefaultLayoutStyles().Container.Render(sb.String())
+	return tea.NewView(style.DefaultLayoutStyles().Container.Render(sb.String()))
 }
 
 // renderContext shows the split context (files, direction, etc.)

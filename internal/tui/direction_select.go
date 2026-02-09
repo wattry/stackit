@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -273,13 +273,13 @@ func (m *DirectionSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.
-func (m *DirectionSelectModel) View() string {
+func (m *DirectionSelectModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 
 	if !m.ready {
-		return "Loading..."
+		return tea.NewView("Loading...")
 	}
 
 	var sb strings.Builder
@@ -300,7 +300,7 @@ func (m *DirectionSelectModel) View() string {
 	// Help
 	sb.WriteString(m.help.View(m.keys))
 
-	return style.DefaultLayoutStyles().Container.Render(sb.String())
+	return tea.NewView(style.DefaultLayoutStyles().Container.Render(sb.String()))
 }
 
 // renderOptions renders the direction selection options

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui/components/submit"
 	"stackit.dev/stackit/internal/tui/components/tree"
@@ -539,9 +539,9 @@ func (m *submitSimulationModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *submitSimulationModel) View() string {
+func (m *submitSimulationModel) View() tea.View {
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).MarginTop(1)
-	return m.submitModel.View() + "\n" +
+	return tea.NewView(fmt.Sprint(m.submitModel.View().Content) + "\n" +
 		helpStyle.Render(fmt.Sprintf("Simulation step: %d/6", m.step)) + "\n" +
-		helpStyle.Render("q: back")
+		helpStyle.Render("q: back"))
 }

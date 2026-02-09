@@ -3,7 +3,7 @@ package style
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Column width constants for alignment in the stack list.

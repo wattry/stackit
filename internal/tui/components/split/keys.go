@@ -1,7 +1,7 @@
 package split
 
 import (
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/key"
 
 	"stackit.dev/stackit/internal/tui/core"
 )

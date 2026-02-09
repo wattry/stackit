@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
@@ -99,7 +99,7 @@ func NewModel(cfg Config) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "branch-name"
 	ti.CharLimit = 100
-	ti.Width = 40
+	ti.SetWidth(40)
 
 	m := &Model{
 		config:      cfg,
@@ -428,23 +428,23 @@ func (m *Model) validateBranchName(name string) error {
 }
 
 // View implements tea.Model
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	if m.Done || m.state == StateComplete || m.state == StateCanceled {
-		return ""
+		return tea.NewView("")
 	}
 
 	switch m.state {
 	case StateSelectingType:
-		return m.viewSelectingType()
+		return tea.NewView(m.viewSelectingType())
 	case StateSelectingDirection:
-		return m.viewSelectingDirection()
+		return tea.NewView(m.viewSelectingDirection())
 	case StateHunkLoop:
-		return m.viewHunkLoop()
+		return tea.NewView(m.viewHunkLoop())
 	case StateError:
-		return m.viewError()
+		return tea.NewView(m.viewError())
 	}
 
-	return "Loading..."
+	return tea.NewView("Loading...")
 }
 
 // viewSelectingType renders the type selection screen
