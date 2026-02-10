@@ -2,22 +2,8 @@
 package merge
 
 import (
-	"time"
-
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/github"
 )
-
-// Handler is an interface for reporting merge progress
-type Handler interface {
-	Start(plan *Plan)
-	StepStarted(stepIndex int, description string)
-	StepCompleted(stepIndex int)
-	StepFailed(stepIndex int, err error)
-	StepWaiting(stepIndex int, elapsed, timeout time.Duration, checks []github.CheckDetail)
-	SetEstimatedDuration(duration time.Duration)
-	Complete(result *ConsolidationResult)
-}
 
 // Options contains options for the merge command
 type Options struct {
@@ -30,7 +16,7 @@ type Options struct {
 	TargetBranch   string
 	Plan           *Plan // Optional pre-calculated plan
 	UndoStackDepth int   // Maximum undo stack depth (from config)
-	Handler        Handler
+	Handler        EventHandler
 }
 
 // Action performs the merge operation using the plan/execute pattern

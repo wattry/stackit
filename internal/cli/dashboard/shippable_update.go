@@ -140,17 +140,28 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearSelection()
 		return m, m.refresh()
 
-	case publishCompleteMsg:
+	case submitCompleteMsg:
 		m.state = stateMain
 		m.progressStep = 0
 		m.progressTotal = 0
 		m.progressMessage = ""
-		m.unlockAllStacks()
 		if msg.err != nil {
 			m.errorMessage = msg.err.Error()
 			return m, nil
 		}
-		m.statusMessage = fmt.Sprintf("Published! Restacked %d, submitted %d branches", msg.restacked, msg.submitted)
+		m.statusMessage = fmt.Sprintf("Submitted %d branches", msg.submitted)
+		return m, m.refresh()
+
+	case squashCompleteMsg:
+		m.state = stateMain
+		m.progressStep = 0
+		m.progressTotal = 0
+		m.progressMessage = ""
+		if msg.err != nil {
+			m.errorMessage = msg.err.Error()
+			return m, nil
+		}
+		m.statusMessage = fmt.Sprintf("Squashed %s", msg.branch)
 		return m, m.refresh()
 	}
 
@@ -170,8 +181,8 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// If loading, analyzing, shipping, or publishing, only allow quit
-	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
+	// If loading, analyzing, shipping, squashing, or publishing, only allow quit
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == stateSubmitting || m.state == stateSquashing {
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -240,8 +251,8 @@ func (m *shippableModel) handleLeftPaneKey(msg tea.KeyPressMsg) (tea.Model, tea.
 	case key.Matches(msg, keys.Ship):
 		return m.startShip()
 
-	case key.Matches(msg, keys.Publish):
-		return m.startPublish()
+	case key.Matches(msg, keys.Submit):
+		return m.startSubmit()
 
 	case key.Matches(msg, keys.Analyze):
 		return m.startCombinationAnalysis()
@@ -283,8 +294,11 @@ func (m *shippableModel) handleRightPaneKey(msg tea.KeyPressMsg) (tea.Model, tea
 		m.statusMessage = msgRefreshing
 		return m, m.refresh()
 
-	case key.Matches(msg, keys.Publish):
-		return m.startPublish()
+	case key.Matches(msg, keys.Submit):
+		return m.startSubmit()
+
+	case key.Matches(msg, keys.Squash):
+		return m.startSquash()
 	}
 
 	// Forward unhandled keys to the viewport for pgup/pgdown scrolling
@@ -298,14 +312,18 @@ func (m *shippableModel) handleConfirmationKey(msg tea.KeyPressMsg) (tea.Model, 
 	switch {
 	case key.Matches(msg, keys.Confirm):
 		m.state = stateMain
-		if m.confirmAction == "ship" {
+		switch m.confirmAction {
+		case confirmActionShip:
 			return m.executeShip()
+		case confirmActionSquash:
+			return m.executeSquash()
 		}
 		return m, nil
 
 	case key.Matches(msg, keys.Cancel):
 		m.state = stateMain
 		m.confirmAction = ""
+		m.confirmBranch = ""
 		return m, nil
 	}
 	return m, nil
@@ -346,7 +364,7 @@ func (m *shippableModel) startShip() (tea.Model, tea.Cmd) {
 
 	// Show confirmation dialog
 	m.state = stateConfirming
-	m.confirmAction = "ship"
+	m.confirmAction = confirmActionShip
 	return m, nil
 }
 
@@ -368,7 +386,8 @@ func (m *shippableModel) executeShip() (tea.Model, tea.Cmd) {
 	m.statusMessage = "Shipping..."
 
 	return m, func() tea.Msg {
-		shipper := shippable.NewShipper(m.ctx)
+		quietCtx := m.quietCtx()
+		shipper := shippable.NewShipper(quietCtx)
 		result, err := shipper.Ship(selected, shippable.ShipOptions{
 			SkipLocalCI: !m.options.RunLocalCI,
 			Wait:        false, // Don't wait in UI, user can monitor PR
@@ -415,67 +434,122 @@ func (m *shippableModel) backgroundAnalyze() tea.Cmd {
 	}
 }
 
-// startPublish initiates the restack + submit workflow for all branches.
-func (m *shippableModel) startPublish() (tea.Model, tea.Cmd) {
-	m.state = statePublishing
-	m.statusMessage = "Restacking and submitting..."
-	m.lockAllStacks()
+// startSquash initiates the squash workflow for the selected branch in the right pane.
+func (m *shippableModel) startSquash() (tea.Model, tea.Cmd) {
+	stack := m.focusedStack
+	if stack == nil {
+		m.errorMessage = "No stack focused"
+		return m, nil
+	}
+
+	if m.selectedBranchIdx < 0 || m.selectedBranchIdx >= len(stack.Stack.AllBranches) {
+		m.errorMessage = "No branch selected"
+		return m, nil
+	}
+
+	branchName := stack.Stack.AllBranches[m.selectedBranchIdx]
+
+	// Don't allow squashing trunk
+	if m.engine.IsTrunk(m.engine.GetBranch(branchName)) {
+		m.errorMessage = "Cannot squash trunk"
+		return m, nil
+	}
+
+	m.state = stateConfirming
+	m.confirmAction = confirmActionSquash
+	m.confirmBranch = branchName
+	return m, nil
+}
+
+// executeSquash runs the squash action after confirmation.
+func (m *shippableModel) executeSquash() (tea.Model, tea.Cmd) {
+	branchName := m.confirmBranch
+	m.confirmBranch = ""
+	m.confirmAction = ""
+
+	if branchName == "" {
+		m.errorMessage = "No branch to squash"
+		return m, nil
+	}
+
+	m.state = stateSquashing
+	m.statusMessage = "Squashing " + branchName + "..."
 
 	return m, func() tea.Msg {
-		eng := m.engine
-		ctx := m.ctx
+		quietCtx := m.quietCtx()
 
-		// Get all branches that need restacking
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-		allBranches := graph.Range(eng.Trunk(), engine.StackRange{RecursiveChildren: true})
+		// Save current branch to restore after squash
+		currentBranch := m.engine.CurrentBranch()
 
-		// Restack all branches
-		sortedBranches := eng.SortBranchesTopologically(allBranches)
-		restacked := 0
+		// Checkout the target branch
+		targetBranch := m.engine.GetBranch(branchName)
+		if err := m.engine.CheckoutBranch(quietCtx.Context, targetBranch); err != nil {
+			return squashCompleteMsg{branch: branchName, err: fmt.Errorf("checkout %s: %w", branchName, err)}
+		}
 
-		if len(sortedBranches) > 0 {
-			err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(_ string, result engine.RestackResult, _ string, _ bool, _ engine.LockReason, _ bool, _ bool, _ bool, _, _ string) {
-				if result == engine.RestackDone {
-					restacked++
-				}
-			}, false)
-			if err != nil {
-				return publishCompleteMsg{err: err}
+		// Run squash
+		if err := actions.SquashAction(quietCtx, actions.SquashOptions{NoEdit: true}); err != nil {
+			// Restore original branch on error
+			if currentBranch != nil {
+				_ = m.engine.CheckoutBranch(quietCtx.Context, *currentBranch)
 			}
+			return squashCompleteMsg{branch: branchName, err: err}
 		}
 
-		// Submit all branches
-		opts := submit.Options{
-			Branch:     eng.CurrentBranch().GetName(),
-			StackRange: engine.StackRangeFull(),
-			Confirm:    true, // Skip confirmation
+		// Restore original branch
+		if currentBranch != nil {
+			_ = m.engine.CheckoutBranch(quietCtx.Context, *currentBranch)
 		}
 
-		submitted := 0
-		handler := &publishSubmitHandler{onSubmit: func() { submitted++ }}
-		if err := submit.Action(ctx, opts, handler); err != nil {
-			return publishCompleteMsg{restacked: restacked, err: err}
-		}
-
-		return publishCompleteMsg{restacked: restacked, submitted: submitted}
+		return squashCompleteMsg{branch: branchName}
 	}
 }
 
-// publishSubmitHandler is a minimal handler for submit events during publish.
-type publishSubmitHandler struct {
+// startSubmit initiates the restack + submit workflow for the focused stack.
+func (m *shippableModel) startSubmit() (tea.Model, tea.Cmd) {
+	stack := m.focusedStack
+	if stack == nil {
+		m.errorMessage = "No stack focused"
+		return m, nil
+	}
+
+	root := stack.RootBranch()
+	m.state = stateSubmitting
+	m.statusMessage = "Submitting " + root + "..."
+
+	return m, func() tea.Msg {
+		opts := submit.Options{
+			Branch:     root,
+			StackRange: engine.StackRangeFull(),
+			Confirm:    true, // Skip confirmation
+			Restack:    true, // Restack before submitting
+		}
+
+		submitted := 0
+		handler := &dashboardSubmitHandler{onSubmit: func() { submitted++ }}
+		if err := submit.Action(m.quietCtx(), opts, handler); err != nil {
+			return submitCompleteMsg{err: err}
+		}
+
+		return submitCompleteMsg{submitted: submitted}
+	}
+}
+
+// dashboardSubmitHandler is a minimal handler for submit events in the dashboard.
+type dashboardSubmitHandler struct {
 	onSubmit func()
 }
 
-func (h *publishSubmitHandler) OnEvent(event submit.Event) {
+func (h *dashboardSubmitHandler) OnEvent(event submit.Event) {
 	if e, ok := event.(submit.BranchProgressEvent); ok && e.Status == submit.StatusDone {
 		h.onSubmit()
 	}
 }
 
-func (h *publishSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+func (h *dashboardSubmitHandler) Confirm(_ string, defaultYes bool) (bool, error) {
 	return defaultYes, nil
 }
 
-func (h *publishSubmitHandler) IsInteractive() bool {
+func (h *dashboardSubmitHandler) IsInteractive() bool {
 	return false
 }

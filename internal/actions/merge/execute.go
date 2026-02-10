@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
@@ -121,29 +120,20 @@ type mergeExecuteEngine interface {
 	Git() git.Runner
 }
 
-// NullHandler is a no-op handler for testing or when output is not needed
-type NullHandler struct{}
+// NullEventHandler is a no-op EventHandler for testing or when output is not needed
+type NullEventHandler struct{}
 
-// Start implements Handler.
-func (h *NullHandler) Start(_ *Plan) {}
+// Start implements EventHandler.
+func (h *NullEventHandler) Start(_ *Plan) {}
 
-// StepStarted implements Handler.
-func (h *NullHandler) StepStarted(_ int, _ string) {}
+// EmitEvent implements EventHandler.
+func (h *NullEventHandler) EmitEvent(_ Event) {}
 
-// StepCompleted implements Handler.
-func (h *NullHandler) StepCompleted(_ int) {}
+// Complete implements EventHandler.
+func (h *NullEventHandler) Complete(_ *Result) {}
 
-// StepFailed implements Handler.
-func (h *NullHandler) StepFailed(_ int, _ error) {}
-
-// StepWaiting implements Handler.
-func (h *NullHandler) StepWaiting(_ int, _, _ time.Duration, _ []github.CheckDetail) {}
-
-// SetEstimatedDuration implements Handler.
-func (h *NullHandler) SetEstimatedDuration(_ time.Duration) {}
-
-// Complete implements Handler.
-func (h *NullHandler) Complete(_ *ConsolidationResult) {}
+// Cleanup implements EventHandler.
+func (h *NullEventHandler) Cleanup() {}
 
 // ExecuteOptions contains options for executing a merge plan
 type ExecuteOptions struct {
@@ -151,7 +141,7 @@ type ExecuteOptions struct {
 	Strategy                Strategy
 	Force                   bool
 	Wait                    bool                       // Whether to wait for CI/merge (applies to consolidate)
-	Handler                 Handler                    // Optional progress handler
+	Handler                 EventHandler               // Optional progress handler
 	UndoStackDepth          int                        // Maximum undo stack depth (from config)
 	ConsolidationResultFunc func(*ConsolidationResult) // Callback for consolidation results
 }
@@ -164,7 +154,7 @@ func Execute(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) erro
 
 	// Use null handler if none provided
 	if opts.Handler == nil {
-		opts.Handler = &NullHandler{}
+		opts.Handler = &NullEventHandler{}
 	}
 
 	opts.Handler.Start(plan)
@@ -173,7 +163,10 @@ func Execute(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) erro
 	if githubClient != nil {
 		initialEstimate := calculateBaselineEstimate(ctx.Context, plan, githubClient, out)
 		if initialEstimate > 0 {
-			opts.Handler.SetEstimatedDuration(initialEstimate)
+			opts.Handler.EmitEvent(Event{
+				Type:              EventProgress,
+				EstimatedDuration: initialEstimate,
+			})
 		}
 	}
 
@@ -190,7 +183,11 @@ func Execute(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) erro
 
 	// Always call Complete to allow handlers to clean up (TUI, etc.)
 	// consolidationResult will be nil if it wasn't reached or failed
-	opts.Handler.Complete(consolidationResult)
+	opts.Handler.Complete(&Result{
+		Success:             consolidationResult != nil || err == nil,
+		ConsolidationResult: consolidationResult,
+		Error:               err,
+	})
 
 	return err
 }
@@ -200,24 +197,49 @@ func executeSteps(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions)
 	plan := opts.Plan
 
 	for i, step := range plan.Steps {
+		stepRef := &plan.Steps[i]
+
 		// Report step started
-		opts.Handler.StepStarted(i, step.Description)
+		opts.Handler.EmitEvent(Event{
+			Phase:     phaseFromStep(stepRef),
+			Type:      EventStarted,
+			StepIndex: i,
+			Step:      stepRef,
+			Message:   step.Description,
+		})
 
 		// 1. Re-validate preconditions for this step
 		if err := validateStepPreconditions(ctx.Context, step, eng, ctx.GitHubClient, opts); err != nil {
-			opts.Handler.StepFailed(i, err)
+			opts.Handler.EmitEvent(Event{
+				Phase:     phaseFromStep(stepRef),
+				Type:      EventFailed,
+				StepIndex: i,
+				Step:      stepRef,
+				Error:     err,
+			})
 			return fmt.Errorf("step %d (%s) failed precondition: %w", i+1, step.Description, err)
 		}
 
 		// 2. Execute the step (with progress reporting for wait steps)
 		if err := executeStepWithProgress(ctx, step, i, eng, opts); err != nil {
 			ctx.Output.Debug("Step %d (%s) failed: %v", i+1, step.Description, err)
-			opts.Handler.StepFailed(i, err)
+			opts.Handler.EmitEvent(Event{
+				Phase:     phaseFromStep(stepRef),
+				Type:      EventFailed,
+				StepIndex: i,
+				Step:      stepRef,
+				Error:     err,
+			})
 			return fmt.Errorf("step %d (%s) failed: %w", i+1, step.Description, err)
 		}
 
 		// 3. Report step completed
-		opts.Handler.StepCompleted(i)
+		opts.Handler.EmitEvent(Event{
+			Phase:     phaseFromStep(stepRef),
+			Type:      EventCompleted,
+			StepIndex: i,
+			Step:      stepRef,
+		})
 	}
 
 	return nil

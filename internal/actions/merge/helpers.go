@@ -16,7 +16,7 @@ type pauseResumer interface {
 	Resume()
 }
 
-func getMergeMethodWithPause(ctx *app.Context, githubClient github.Client, handler Handler) (github.MergeMethod, error) {
+func getMergeMethodWithPause(ctx *app.Context, githubClient github.Client, handler EventHandler) (github.MergeMethod, error) {
 	if handler != nil {
 		if pr, ok := handler.(pauseResumer); ok {
 			pr.Pause()

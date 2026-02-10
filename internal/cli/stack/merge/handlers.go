@@ -24,7 +24,7 @@ func NewMergeUI(out output.Output, logger output.Logger) (*tui.Runner, mergeActi
 		model := mergeComponent.NewModel()
 		runner := tui.NewRunner(model, out, logger)
 		runner.Start()
-		return runner, NewInteractiveMergeEventHandler(runner, model)
+		return runner, NewInteractiveMergeEventHandler(runner, model, out)
 	}
 	return nil, NewSimpleMergeEventHandler(out)
 }
@@ -90,77 +90,21 @@ func (h *SimpleMergeEventHandler) Pause() {}
 // Resume implements optional pauser interface. No-op for non-TTY handler.
 func (h *SimpleMergeEventHandler) Resume() {}
 
-// IsInteractive implements InteractiveHandler. Returns false for non-TTY handler.
-func (h *SimpleMergeEventHandler) IsInteractive() bool {
-	return false
-}
-
-// PromptMergeType implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptMergeType(_ bool, _ []string, _ []mergeAction.MultiStackInfo) (mergeAction.MergeType, error) {
-	return "", fmt.Errorf("interactive mode required for merge type selection")
-}
-
-// PromptScope implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptScope(_ []string) (string, error) {
-	return "", fmt.Errorf("interactive mode required for scope selection")
-}
-
-// PromptStacks implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptStacks(_ []mergeAction.MultiStackInfo) ([]string, error) {
-	return nil, fmt.Errorf("interactive mode required for stack selection")
-}
-
-// PromptStrategy implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptStrategy(_ *mergeAction.Plan, _ mergeAction.Strategy) (mergeAction.StrategyChoice, error) {
-	return mergeAction.StrategyChoice{}, fmt.Errorf("interactive mode required for strategy selection")
-}
-
-// PromptConfirm implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptConfirm(_ string, _ bool) (bool, error) {
-	return false, fmt.Errorf("interactive mode required for confirmation")
-}
-
-// ShowPlan implements InteractiveHandler. Displays plan as text output.
-func (h *SimpleMergeEventHandler) ShowPlan(plan *mergeAction.Plan, validation *mergeAction.PlanValidation) {
-	planText := mergeAction.FormatMergePlan(plan, validation)
-	h.out.Print(planText)
-}
-
-// ShowMidStackWarning implements InteractiveHandler.
-func (h *SimpleMergeEventHandler) ShowMidStackWarning(scope string, upstackBranchesInScope []string) {
-	h.out.Warn("⚠️  You're mid-stack in scope [%s]", scope)
-	h.out.Warn("   Branches above in the same scope won't be merged: %s", strings.Join(upstackBranchesInScope, ", "))
-	h.out.Info("   💡 To merge the entire scope, use: stackit merge --scope=%s", scope)
-}
-
-// PromptPostMerge implements InteractiveHandler. Returns Done in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptPostMerge(_ bool, _ string) (mergeAction.PostMergeAction, error) {
-	return mergeAction.PostMergeDone, nil
-}
-
-// PromptIndividualMerge implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptIndividualMerge(_ []mergeAction.BranchMergeInfo) (bool, error) {
-	return false, fmt.Errorf("interactive mode required for individual merge selection")
-}
-
-// PromptSimpleMergeConfirm implements InteractiveHandler. Returns error in non-interactive mode.
-func (h *SimpleMergeEventHandler) PromptSimpleMergeConfirm(_ mergeAction.BranchMergeInfo, _ string) (bool, error) {
-	return false, fmt.Errorf("interactive mode required for confirmation")
-}
-
 // InteractiveMergeEventHandler provides a TUI for merge operations using runner.Send()
 type InteractiveMergeEventHandler struct {
 	runner *tui.Runner
 	model  *mergeComponent.Model
+	out    output.Output
 	mu     sync.Mutex
 	plan   *mergeAction.Plan
 }
 
 // NewInteractiveMergeEventHandler creates a new InteractiveMergeEventHandler
-func NewInteractiveMergeEventHandler(runner *tui.Runner, model *mergeComponent.Model) *InteractiveMergeEventHandler {
+func NewInteractiveMergeEventHandler(runner *tui.Runner, model *mergeComponent.Model, out output.Output) *InteractiveMergeEventHandler {
 	return &InteractiveMergeEventHandler{
 		runner: runner,
 		model:  model,
+		out:    out,
 	}
 }
 
@@ -446,7 +390,7 @@ func (h *InteractiveMergeEventHandler) ShowPlan(plan *mergeAction.Plan, validati
 
 	// Use the plan formatting from the merge package
 	planText := mergeAction.FormatMergePlan(plan, validation)
-	fmt.Print(planText)
+	h.out.Print(planText)
 }
 
 // ShowMidStackWarning implements InteractiveHandler.
@@ -454,9 +398,9 @@ func (h *InteractiveMergeEventHandler) ShowMidStackWarning(scope string, upstack
 	h.runner.Pause()
 	defer h.runner.Resume()
 
-	fmt.Printf("⚠️  You're mid-stack in scope [%s]\n", scope)
-	fmt.Printf("   Branches above in the same scope won't be merged: %s\n", strings.Join(upstackBranchesInScope, ", "))
-	fmt.Printf("   💡 To merge the entire scope, use: stackit merge --scope=%s\n\n", scope)
+	h.out.Warn("⚠️  You're mid-stack in scope [%s]", scope)
+	h.out.Warn("   Branches above in the same scope won't be merged: %s", strings.Join(upstackBranchesInScope, ", "))
+	h.out.Info("   💡 To merge the entire scope, use: stackit merge --scope=%s", scope)
 }
 
 // PromptPostMerge implements InteractiveHandler.
@@ -464,9 +408,9 @@ func (h *InteractiveMergeEventHandler) PromptPostMerge(hasUncommittedChanges boo
 	h.runner.Pause()
 	defer h.runner.Resume()
 
-	fmt.Println()
-	fmt.Println("🎉 Merge completed successfully in the temporary worktree!")
-	fmt.Println("Your main workspace remains untouched.")
+	h.out.Newline()
+	h.out.Success("Merge completed successfully in the temporary worktree!")
+	h.out.Info("Your main workspace remains untouched.")
 
 	trunkLabel := fmt.Sprintf("🔄 Switch to trunk and sync (%s)", trunkName)
 	if hasUncommittedChanges {
@@ -513,9 +457,10 @@ func (h *InteractiveMergeEventHandler) PromptIndividualMerge(branches []mergeAct
 		}
 	}
 
-	fmt.Println()
-	fmt.Printf("All %d PRs are independent branches with no conflicts.\n", branchCount)
-	fmt.Printf("Branches: %s\n\n", branchList.String())
+	h.out.Newline()
+	h.out.Info("All %d PRs are independent branches with no conflicts.", branchCount)
+	h.out.Info("Branches: %s", branchList.String())
+	h.out.Newline()
 
 	options := []tui.SelectOption{
 		{
@@ -541,9 +486,10 @@ func (h *InteractiveMergeEventHandler) PromptSimpleMergeConfirm(branch mergeActi
 	h.runner.Pause()
 	defer h.runner.Resume()
 
-	fmt.Println()
-	fmt.Printf("Ready to merge PR #%d: %s\n", branch.PRNumber, branch.BranchName)
-	fmt.Printf("Target: %s\n\n", baseBranch)
+	h.out.Newline()
+	h.out.Info("Ready to merge PR #%d: %s", branch.PRNumber, branch.BranchName)
+	h.out.Info("Target: %s", baseBranch)
+	h.out.Newline()
 
 	return tui.PromptConfirm(fmt.Sprintf("Merge %s into %s?", branch.BranchName, baseBranch), false)
 }
