@@ -362,6 +362,20 @@ func NewLegacyHandlerAdapter(handler EventHandler) *LegacyHandlerAdapter {
 	return &LegacyHandlerAdapter{handler: handler}
 }
 
+// Pause implements optional pauser interface by delegating to the underlying handler.
+func (a *LegacyHandlerAdapter) Pause() {
+	if pr, ok := a.handler.(interface{ Pause() }); ok {
+		pr.Pause()
+	}
+}
+
+// Resume implements optional pauser interface by delegating to the underlying handler.
+func (a *LegacyHandlerAdapter) Resume() {
+	if pr, ok := a.handler.(interface{ Resume() }); ok {
+		pr.Resume()
+	}
+}
+
 // Start implements Handler.
 func (a *LegacyHandlerAdapter) Start(plan *Plan) {
 	a.plan = plan

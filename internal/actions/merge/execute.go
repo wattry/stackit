@@ -247,7 +247,7 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		out.Debug("Executing StepMergePR for branch %s", step.BranchName)
 
 		// Get merge method (prompts user if not configured)
-		mergeMethod, err := GetMergeMethod(ctx, githubClient)
+		mergeMethod, err := getMergeMethodWithPause(ctx, githubClient, opts.Handler)
 		if err != nil {
 			out.Debug("Failed to get merge method: %v", err)
 			return fmt.Errorf("failed to get merge method: %w", err)

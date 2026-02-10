@@ -84,6 +84,12 @@ func (h *SimpleMergeEventHandler) Complete(result *mergeAction.Result) {
 // Cleanup implements EventHandler. No-op for non-TTY handler.
 func (h *SimpleMergeEventHandler) Cleanup() {}
 
+// Pause implements optional pauser interface. No-op for non-TTY handler.
+func (h *SimpleMergeEventHandler) Pause() {}
+
+// Resume implements optional pauser interface. No-op for non-TTY handler.
+func (h *SimpleMergeEventHandler) Resume() {}
+
 // IsInteractive implements InteractiveHandler. Returns false for non-TTY handler.
 func (h *SimpleMergeEventHandler) IsInteractive() bool {
 	return false
@@ -239,6 +245,12 @@ func (h *InteractiveMergeEventHandler) Complete(result *mergeAction.Result) {
 
 // Cleanup implements EventHandler. No-op since runner cleanup is handled by defer.
 func (h *InteractiveMergeEventHandler) Cleanup() {}
+
+// Pause implements optional pauser interface. Releases the terminal for prompts.
+func (h *InteractiveMergeEventHandler) Pause() { h.runner.Pause() }
+
+// Resume implements optional pauser interface. Restores the TUI after prompts.
+func (h *InteractiveMergeEventHandler) Resume() { h.runner.Resume() }
 
 // IsInteractive implements InteractiveHandler. Returns true for TTY handler.
 func (h *InteractiveMergeEventHandler) IsInteractive() bool {

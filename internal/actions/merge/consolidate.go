@@ -103,7 +103,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 		splog.Info("🎉 Stack consolidation merge completed successfully!")
 	} else {
 		// Fire-and-forget: enable auto-merge and return
-		mergeMethod, err := GetMergeMethod(c.ctx, c.ctx.GitHubClient)
+		mergeMethod, err := getMergeMethodWithPause(c.ctx, c.ctx.GitHubClient, c.handler)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get merge method: %w", err)
 		}
@@ -237,7 +237,7 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 	expectChecks := AnyPRHasChecks(c.plan.BranchesToMerge)
 
 	// Get merge method (prompts user if not configured)
-	mergeMethod, err := GetMergeMethod(c.ctx, c.ctx.GitHubClient)
+	mergeMethod, err := getMergeMethodWithPause(c.ctx, c.ctx.GitHubClient, c.handler)
 	if err != nil {
 		return fmt.Errorf("failed to get merge method: %w", err)
 	}

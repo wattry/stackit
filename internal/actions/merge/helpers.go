@@ -6,9 +6,25 @@ import (
 	"strings"
 	"time"
 
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/output"
 )
+
+type pauseResumer interface {
+	Pause()
+	Resume()
+}
+
+func getMergeMethodWithPause(ctx *app.Context, githubClient github.Client, handler Handler) (github.MergeMethod, error) {
+	if handler != nil {
+		if pr, ok := handler.(pauseResumer); ok {
+			pr.Pause()
+			defer pr.Resume()
+		}
+	}
+	return GetMergeMethod(ctx, githubClient)
+}
 
 // calculateBaselineEstimate tries to find a branch with successful CI and use its timing as a baseline
 func calculateBaselineEstimate(ctx context.Context, plan *Plan, client github.Client, splog output.Output) time.Duration {
