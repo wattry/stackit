@@ -379,7 +379,7 @@ func (m *LogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Handle search mode input
 		if m.inSearchMode {
 			switch msg.String() {

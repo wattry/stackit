@@ -250,7 +250,7 @@ func (m *DirectionSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.ready = true
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keys.Up):
 			m.direction = DirectionAbove

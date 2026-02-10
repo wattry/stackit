@@ -372,7 +372,7 @@ func (m *shippableStoryModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case core.KeyQuit, core.KeyEsc:
 			return m, tea.Quit
@@ -873,7 +873,7 @@ type mergeSimTickMsg int
 
 func (m *mergeProgressSimulation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == core.KeyQuit || msg.String() == core.KeyEsc {
 			return m, tea.Quit
 		}

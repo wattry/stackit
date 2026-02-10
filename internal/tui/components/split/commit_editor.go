@@ -117,7 +117,7 @@ func (m *CommitEditorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.message = utils.CleanCommitMessage(msg.content)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.editing {
 			// Ignore key presses while editor is open
 			return m, nil

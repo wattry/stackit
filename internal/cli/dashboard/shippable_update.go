@@ -31,7 +31,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKeyMsg(msg)
 
 	case tickMsg:
@@ -158,7 +158,7 @@ func (m *shippableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyMsg handles keyboard input.
-func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *shippableModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If showing confirmation, handle confirm/cancel
 	if m.state == stateConfirming {
 		return m.handleConfirmationKey(msg)
@@ -205,7 +205,7 @@ func (m *shippableModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleLeftPaneKey handles keyboard input when the left (stacks) pane is focused.
-func (m *shippableModel) handleLeftPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *shippableModel) handleLeftPaneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Up):
 		if m.selectedIndex > 0 {
@@ -260,7 +260,7 @@ func (m *shippableModel) handleLeftPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 }
 
 // handleRightPaneKey handles keyboard input when the right (details) pane is focused.
-func (m *shippableModel) handleRightPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *shippableModel) handleRightPaneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Up):
 		if m.focusedStack != nil && m.selectedBranchIdx < len(m.focusedStack.Stack.AllBranches)-1 {
@@ -294,7 +294,7 @@ func (m *shippableModel) handleRightPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 }
 
 // handleConfirmationKey handles keyboard input during confirmation dialog.
-func (m *shippableModel) handleConfirmationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *shippableModel) handleConfirmationKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Confirm):
 		m.state = stateMain

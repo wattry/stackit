@@ -528,7 +528,7 @@ func (m *submitSimulationModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, tea.Batch(cmds...)
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "q" || msg.String() == "esc" || msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}

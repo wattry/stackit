@@ -78,12 +78,12 @@ func (b *BaseModel) SignalReady() {
 // should return the cmd and not process the message further.
 //
 // Handles:
-// - tea.KeyMsg: "ctrl+c" and "q" quit the program
+// - tea.KeyPressMsg: "ctrl+c" and "q" quit the program
 // - tea.WindowSizeMsg: updates Width and Height (returns handled=false so model can also handle)
 // - spinner.TickMsg: updates the spinner
 func (b *BaseModel) HandleCommonMsg(msg tea.Msg) (bool, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == KeyCtrlC || msg.String() == KeyQuit {
 			return true, tea.Quit
 		}

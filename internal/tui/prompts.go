@@ -144,7 +144,7 @@ func (m textInputModel) Init() tea.Cmd {
 func (m textInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Submit):
 			m.done = true
@@ -183,7 +183,7 @@ func (m confirmModel) Init() tea.Cmd {
 }
 
 func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Submit):
 			m.done = true
@@ -330,7 +330,7 @@ func (m promptListModel) Init() tea.Cmd {
 
 func (m promptListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			m.err = errors.ErrCanceled
 			return m, tea.Quit
@@ -375,7 +375,7 @@ func (m selectionModel) Init() tea.Cmd {
 }
 
 func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, defaultSelectionKeys.Up):
 			if m.cursor > 0 {
@@ -549,7 +549,7 @@ func (m multiSelectModel) Init() tea.Cmd {
 }
 
 func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Up):
 			if m.cursor > 0 {

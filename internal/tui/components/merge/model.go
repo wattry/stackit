@@ -158,7 +158,7 @@ func (m *Model) Init() tea.Cmd {
 // Update handles message updates for the bubbletea model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle quit keys first to set Quitting flag (unique to merge component)
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		if keyMsg.String() == core.KeyCtrlC || keyMsg.String() == core.KeyQuit {
 			m.Quitting = true
 			return m, tea.Quit

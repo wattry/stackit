@@ -270,7 +270,7 @@ func (m *MoveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateSelecting handles messages in the selection state
 func (m *MoveModel) updateSelecting(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keys.Up):
 			m.moveCursor(-1)
@@ -315,7 +315,7 @@ func (m *MoveModel) updateSelecting(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateConfirming handles messages in the confirmation state
 func (m *MoveModel) updateConfirming(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keys.Confirm):
 			if m.validation != nil && m.validation.Valid {

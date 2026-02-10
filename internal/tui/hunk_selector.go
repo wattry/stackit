@@ -195,7 +195,7 @@ func (m *HunkSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keys.Cancel):
 			m.err = errors.ErrCanceled

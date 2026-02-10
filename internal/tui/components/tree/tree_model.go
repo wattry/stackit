@@ -33,7 +33,7 @@ func (m Model) Init() tea.Cmd {
 // Update updates the model based on the message.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "s":
 			if m.Options.Mode == RenderModeFull {

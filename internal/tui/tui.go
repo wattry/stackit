@@ -105,7 +105,7 @@ func (m SubmitTUIModel) Init() tea.Cmd {
 
 // Update handles message updates for the bubbletea model
 func (m SubmitTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		if msg.String() == KeyCtrlC || msg.String() == KeyQuit {
 			m.quitting = true
 			return m, tea.Quit

@@ -51,7 +51,7 @@ func (m reorderModel) Init() tea.Cmd {
 }
 
 func (m reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Cancel):
 			m.canceled = true
