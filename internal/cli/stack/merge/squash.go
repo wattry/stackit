@@ -53,6 +53,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 				// Handle multi-stack mode
 				if len(stacks) > 0 || cmd.Flags().Changed("stacks") {
 					return runMultiStackSquash(ctx, squashMultiStackOptions{
+						dryRun:      dryRun,
 						stacks:      stacks,
 						skipLocalCI: skipLocalCI,
 						wait:        wait,
@@ -80,6 +81,10 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 	cmd.Flags().StringVar(&branch, "branch", "", "Target branch to merge from (default: current branch)")
 	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Combine multiple stacks (comma-separated stack roots)")
 	cmd.Flags().BoolVar(&skipLocalCI, "skip-local-ci", false, "Skip local CI validation for multi-stack merge")
+	cmd.MarkFlagsMutuallyExclusive("scope", "branch")
+	cmd.MarkFlagsMutuallyExclusive("stacks", "scope")
+	cmd.MarkFlagsMutuallyExclusive("stacks", "branch")
+	cmd.MarkFlagsMutuallyExclusive("stacks", "force")
 
 	return cmd
 }
@@ -94,6 +99,7 @@ type mergeSquashOptions struct {
 }
 
 type squashMultiStackOptions struct {
+	dryRun      bool
 	stacks      []string
 	skipLocalCI bool
 	wait        bool
@@ -128,6 +134,10 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 	if opts.dryRun {
 		out.Info("Dry-run mode: No changes were made.")
 		return nil
+	}
+
+	if ctx.GitHubClient == nil {
+		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
 	// Check if individual merge is possible and user wants it
@@ -284,6 +294,10 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 		return fmt.Errorf("no independent stacks found rooted at trunk")
 	}
 
+	if !opts.dryRun && ctx.GitHubClient == nil {
+		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
+	}
+
 	// Show available stacks
 	out.Info("Available stacks:")
 	for _, stack := range availableStacks {
@@ -319,6 +333,31 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 		}
 	}
 
+	// Dry-run mode: show the plan and exit without side effects
+	if opts.dryRun {
+		selected := availableStacks
+		if len(opts.stacks) > 0 {
+			selected = mergeAction.FilterStacks(availableStacks, opts.stacks)
+			if len(selected) == 0 {
+				return fmt.Errorf("none of the specified stacks were found")
+			}
+		}
+
+		out.Info("Dry-run mode: multi-stack merge plan")
+		out.Info("Combining %d stacks:", len(selected))
+		for _, stack := range selected {
+			out.Info("  - %s (%d branches)", stack.RootBranch, len(stack.AllBranches))
+		}
+		out.Info("Local CI validation: not run in dry-run")
+		if opts.wait {
+			out.Info("Automerge: would wait for CI and merge")
+		} else {
+			out.Info("Automerge: fire-and-forget (manual enablement after PR creation)")
+		}
+		out.Info("Dry-run mode: No changes were made.")
+		return nil
+	}
+
 	// Execute multi-stack merge
 	result, err := mergeAction.ExecuteMultiStack(ctx, mergeAction.MultiStackOptions{
 		SelectedStacks: opts.stacks,
@@ -345,11 +384,17 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 			out.Warn("Could not enable automerge: %v", err)
 			out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
 		} else {
-			if err := github.EnableAutoMerge(ctx.Context, ctx.Engine.Git(), prNodeID, github.MergeMethodSquash); err != nil {
-				out.Warn("Could not enable automerge: %v", err)
+			mergeMethod, methodErr := mergeAction.GetMergeMethod(ctx, ctx.GitHubClient)
+			if methodErr != nil {
+				out.Warn("Could not determine merge method: %v", methodErr)
 				out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
 			} else {
-				out.Success("Automerge enabled - PR will merge when CI passes")
+				if err := github.EnableAutoMerge(ctx.Context, ctx.Engine.Git(), prNodeID, mergeMethod); err != nil {
+					out.Warn("Could not enable automerge: %v", err)
+					out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
+				} else {
+					out.Success("Automerge enabled - PR will merge when CI passes")
+				}
 			}
 		}
 		out.Newline()
