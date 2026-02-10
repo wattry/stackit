@@ -112,6 +112,37 @@ func TestMergeNext(t *testing.T) {
 			OutputNotContains("#101")
 	})
 
+	t.Run("does not block on closed upstack PRs", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		// Mark bottom PR as open, upstack PR as closed
+		sh.SetPrMetadata("branch-a", PRMetadata{
+			Number: 101,
+			State:  "OPEN",
+			URL:    "https://github.com/owner/repo/pull/101",
+		})
+		sh.SetPrMetadata("branch-b", PRMetadata{
+			Number: 102,
+			State:  "CLOSED",
+			URL:    "https://github.com/owner/repo/pull/102",
+		})
+
+		// Run merge next --dry-run
+		sh.Run("merge next --dry-run")
+
+		// Should focus on bottom PR only
+		sh.OutputContains("Enable automerge for PR #101").
+			OutputNotContains("PR #102")
+	})
+
 	t.Run("shows draft PR in plan", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)
@@ -224,6 +255,27 @@ func TestMergeSquash(t *testing.T) {
 		// Try to squash with non-existent scope
 		sh.RunExpectError("merge squash --scope nonexistent --dry-run")
 		sh.OutputContains("no branches found")
+	})
+
+	t.Run("multi-stack dry-run shows plan without executing", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create two independent stacks rooted at trunk
+		sh.Write("a.txt", "content-a").
+			Run("create stack-a -m 'Add stack-a'")
+
+		sh.Checkout("main")
+
+		sh.Write("b.txt", "content-b").
+			Run("create stack-b -m 'Add stack-b'")
+
+		// Dry-run multi-stack merge
+		sh.Run("merge ship --stacks stack-a,stack-b --dry-run")
+
+		sh.OutputContains("Dry-run mode").
+			OutputContains("stack-a").
+			OutputContains("stack-b")
 	})
 }
 
