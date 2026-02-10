@@ -3,7 +3,6 @@ package merge
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -16,7 +15,7 @@ import (
 	"stackit.dev/stackit/internal/tui"
 )
 
-// NewSquashCmd creates the merge squash subcommand.
+// NewSquashCmd creates the merge ship subcommand (aliased as "squash" for backward compatibility).
 // This command consolidates all branches in the stack into a single PR and merges it atomically.
 // It uses GitHub automerge by default and waits for the merge to complete.
 func NewSquashCmd(postMergeHandler PostMergeHandler) *cobra.Command {
@@ -26,13 +25,15 @@ func NewSquashCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		force       bool
 		wait        bool
 		scope       string
+		branch      string
 		stacks      []string
 		skipLocalCI bool
 	)
 
 	cmd := &cobra.Command{
-		Use:   "squash",
-		Short: "Consolidate all stack branches into a single PR and merge atomically",
+		Use:     "ship",
+		Aliases: []string{"squash"},
+		Short:   "Consolidate all stack branches into a single PR and merge atomically",
 		Long: `Consolidate all branches in the stack into a single PR for atomic merging.
 
 This creates a new "consolidation" branch that contains all the commits from the stack,
@@ -65,6 +66,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 					force:  force,
 					wait:   wait,
 					scope:  scope,
+					branch: branch,
 				}, postMergeHandler)
 			})
 		},
@@ -75,6 +77,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for merge to complete (default: fire-and-forget)")
 	cmd.Flags().StringVar(&scope, "scope", "", "Consolidate all branches within the specified scope")
+	cmd.Flags().StringVar(&branch, "branch", "", "Target branch to merge from (default: current branch)")
 	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Combine multiple stacks (comma-separated stack roots)")
 	cmd.Flags().BoolVar(&skipLocalCI, "skip-local-ci", false, "Skip local CI validation for multi-stack merge")
 
@@ -87,6 +90,7 @@ type mergeSquashOptions struct {
 	force  bool
 	wait   bool
 	scope  string
+	branch string
 }
 
 type squashMultiStackOptions struct {
@@ -101,10 +105,11 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 
 	// Create consolidation plan
 	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
-		Strategy: mergeAction.StrategySquash,
-		Force:    opts.force,
-		Scope:    opts.scope,
-		Wait:     opts.wait,
+		Strategy:     mergeAction.StrategySquash,
+		Force:        opts.force,
+		Scope:        opts.scope,
+		TargetBranch: opts.branch,
+		Wait:         opts.wait,
 	})
 	if err != nil {
 		return err
@@ -116,7 +121,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 
 	// Validate
 	if !validation.Valid && !opts.force {
-		return formatSquashValidationError(validation.Errors, validation.Warnings)
+		return mergeAction.FormatValidationError(validation.Errors, validation.Warnings)
 	}
 
 	// Dry run - just show the plan
@@ -168,9 +173,10 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 		Force:          opts.force,
 		Wait:           opts.wait,
 		Scope:          opts.scope,
+		TargetBranch:   opts.branch,
 		Plan:           plan,
 		UndoStackDepth: undoStackDepth,
-		Handler:        mergeAction.NewLegacyHandlerAdapter(eventHandler),
+		Handler:        eventHandler,
 	}
 
 	if err := mergeAction.Action(ctx, actionOpts); err != nil {
@@ -229,10 +235,11 @@ func tryIndividualMerge(ctx *app.Context, opts mergeSquashOptions, plan *mergeAc
 	// Switch to bottom-up strategy
 	out.Info("Switching to individual merge mode...")
 	plan, _, err = mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
-		Strategy: mergeAction.StrategyBottomUp,
-		Force:    opts.force,
-		Scope:    opts.scope,
-		Wait:     true, // Individual merge always waits
+		Strategy:     mergeAction.StrategyBottomUp,
+		Force:        opts.force,
+		Scope:        opts.scope,
+		TargetBranch: opts.branch,
+		Wait:         true, // Individual merge always waits
 	})
 	if err != nil {
 		return false, err
@@ -247,9 +254,10 @@ func tryIndividualMerge(ctx *app.Context, opts mergeSquashOptions, plan *mergeAc
 		Force:          opts.force,
 		Wait:           true,
 		Scope:          opts.scope,
+		TargetBranch:   opts.branch,
 		Plan:           plan,
 		UndoStackDepth: cfg.UndoStackDepth(),
-		Handler:        mergeAction.NewLegacyHandlerAdapter(eventHandler),
+		Handler:        eventHandler,
 	}
 
 	if err := mergeAction.Action(ctx, actionOpts); err != nil {
@@ -363,29 +371,4 @@ func getPRNodeID(ctx *app.Context, prNumber int) (string, error) {
 		return "", fmt.Errorf("PR #%d does not have a Node ID", prNumber)
 	}
 	return prInfo.NodeID, nil
-}
-
-// formatSquashValidationError creates a detailed error message including validation errors and warnings.
-func formatSquashValidationError(errors, warnings []string) error {
-	var parts []string
-
-	if len(errors) > 0 {
-		parts = append(parts, "validation failed:")
-		for _, e := range errors {
-			parts = append(parts, fmt.Sprintf("  ✗ %s", e))
-		}
-	}
-
-	if len(warnings) > 0 {
-		if len(errors) == 0 {
-			parts = append(parts, "merge blocked due to warnings:")
-		}
-		for _, w := range warnings {
-			parts = append(parts, fmt.Sprintf("  ⚠ %s", w))
-		}
-	}
-
-	parts = append(parts, "(use --force to override)")
-
-	return fmt.Errorf("%s", strings.Join(parts, "\n"))
 }

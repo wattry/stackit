@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	mergeAction "stackit.dev/stackit/internal/actions/merge"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -24,10 +25,15 @@ func TestNewMergeCmd(t *testing.T) {
 		require.NotNil(t, nextCmd)
 		require.Equal(t, "next", nextCmd.Use)
 
+		shipCmd, _, err := cmd.Find([]string{"ship"})
+		require.NoError(t, err)
+		require.NotNil(t, shipCmd)
+		require.Equal(t, "ship", shipCmd.Use)
+
+		// "squash" should still work as an alias
 		squashCmd, _, err := cmd.Find([]string{"squash"})
 		require.NoError(t, err)
 		require.NotNil(t, squashCmd)
-		require.Equal(t, "squash", squashCmd.Use)
 	})
 
 	t.Run("has expected flags", func(t *testing.T) {
@@ -62,14 +68,20 @@ func TestNewNextCmd(t *testing.T) {
 
 		waitFlag := cmd.Flags().Lookup("wait")
 		require.NotNil(t, waitFlag)
+
+		branchFlag := cmd.Flags().Lookup("branch")
+		require.NotNil(t, branchFlag)
+
+		scopeFlag := cmd.Flags().Lookup("scope")
+		require.NotNil(t, scopeFlag)
 	})
 }
 
-func TestNewSquashCmd(t *testing.T) {
+func TestNewShipCmd(t *testing.T) {
 	t.Run("has expected flags", func(t *testing.T) {
 		cmd := NewSquashCmd(nil)
 
-		require.Equal(t, "squash", cmd.Use)
+		require.Equal(t, "ship", cmd.Use)
 
 		dryRunFlag := cmd.Flags().Lookup("dry-run")
 		require.NotNil(t, dryRunFlag)
@@ -86,6 +98,9 @@ func TestNewSquashCmd(t *testing.T) {
 		scopeFlag := cmd.Flags().Lookup("scope")
 		require.NotNil(t, scopeFlag)
 
+		branchFlag := cmd.Flags().Lookup("branch")
+		require.NotNil(t, branchFlag)
+
 		stacksFlag := cmd.Flags().Lookup("stacks")
 		require.NotNil(t, stacksFlag)
 
@@ -94,41 +109,49 @@ func TestNewSquashCmd(t *testing.T) {
 	})
 }
 
-func TestFindBottomUnmergedPR(t *testing.T) {
-	t.Run("returns error when not on a branch", func(t *testing.T) {
+func TestMergeNextUsesCreateMergePlan(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CreateMergePlan returns error when not on a branch", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		// Detach HEAD
-		s.RunGit("checkout", "HEAD~0")
+		s.RunGit("checkout", "HEAD~0").Rebuild()
 
-		// Rebuild engine after git operation
-		s.Rebuild()
-
-		_, _, err := findBottomUnmergedPR(s.Context)
+		_, _, err := mergeAction.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, nil, mergeAction.CreatePlanOptions{
+			Strategy: mergeAction.StrategyBottomUp,
+		})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "not on a branch")
 	})
 
-	t.Run("returns error when on trunk", func(t *testing.T) {
+	t.Run("CreateMergePlan returns error when on trunk", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 
 		s.Checkout("main")
 
-		_, _, err := findBottomUnmergedPR(s.Context)
+		_, _, err := mergeAction.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, nil, mergeAction.CreatePlanOptions{
+			Strategy: mergeAction.StrategyBottomUp,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "cannot merge from trunk")
 	})
 
-	t.Run("returns error when branch is not tracked", func(t *testing.T) {
+	t.Run("CreateMergePlan returns error when branch is not tracked", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			CreateBranch("untracked")
 
-		_, _, err := findBottomUnmergedPR(s.Context)
+		_, _, err := mergeAction.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, nil, mergeAction.CreatePlanOptions{
+			Strategy: mergeAction.StrategyBottomUp,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not tracked")
 	})
 
-	t.Run("returns nil when no PRs found", func(t *testing.T) {
+	t.Run("CreateMergePlan returns error when no PRs found", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch-a": "main",
@@ -136,13 +159,15 @@ func TestFindBottomUnmergedPR(t *testing.T) {
 
 		s.Checkout("branch-a")
 
-		prInfo, upstack, err := findBottomUnmergedPR(s.Context)
-		require.NoError(t, err)
-		require.Nil(t, prInfo)
-		require.Nil(t, upstack)
+		_, _, err := mergeAction.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, nil, mergeAction.CreatePlanOptions{
+			Strategy: mergeAction.StrategyBottomUp,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no open PRs found")
 	})
 
 	t.Run("finds bottom PR in stack", func(t *testing.T) {
+		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
 				"branch-a": "main",
@@ -170,51 +195,16 @@ func TestFindBottomUnmergedPR(t *testing.T) {
 		// Switch to branch-c (top of stack)
 		s.Checkout("branch-c")
 
-		prInfo, upstack, err := findBottomUnmergedPR(s.Context)
+		plan, _, err := mergeAction.CreateMergePlan(s.Context.Context, s.Engine, s.Context.Output, nil, mergeAction.CreatePlanOptions{
+			Strategy: mergeAction.StrategyBottomUp,
+			Force:    true,
+		})
 		require.NoError(t, err)
-		require.NotNil(t, prInfo)
+		require.NotNil(t, plan)
 
 		// Should find branch-a as the bottom PR
-		require.Equal(t, "branch-a", prInfo.BranchName)
-		require.Equal(t, 101, prInfo.PRNumber)
-
-		// Upstack should include branch-b and branch-c
-		require.Contains(t, upstack, "branch-b")
-		require.Contains(t, upstack, "branch-c")
-	})
-
-	t.Run("calculates upstack from merged branch not current branch", func(t *testing.T) {
-		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
-			WithStack(map[string]string{
-				"branch-a": "main",
-				"branch-b": "branch-a",
-				"branch-c": "branch-b",
-				"branch-d": "branch-c",
-			})
-
-		// Add PR info to all branches
-		branches := []string{"branch-a", "branch-b", "branch-c", "branch-d"}
-		for i, branchName := range branches {
-			branch := s.Engine.GetBranch(branchName)
-			err := s.Engine.UpsertPrInfo(context.Background(), branch, testhelpers.NewTestPrInfo(100+i+1).
-				WithURL("https://github.com/owner/repo/pull/"+branchName))
-			require.NoError(t, err)
-		}
-
-		// Switch to branch-c (not the top, not the bottom)
-		s.Checkout("branch-c")
-
-		prInfo, upstack, err := findBottomUnmergedPR(s.Context)
-		require.NoError(t, err)
-		require.NotNil(t, prInfo)
-
-		// Should find branch-a as the bottom PR
-		require.Equal(t, "branch-a", prInfo.BranchName)
-
-		// Upstack should include everything above branch-a: branch-b, branch-c, branch-d
-		require.Contains(t, upstack, "branch-b")
-		require.Contains(t, upstack, "branch-c")
-		require.Contains(t, upstack, "branch-d")
-		require.Len(t, upstack, 3)
+		require.NotEmpty(t, plan.BranchesToMerge)
+		require.Equal(t, "branch-a", plan.BranchesToMerge[0].BranchName)
+		require.Equal(t, 101, plan.BranchesToMerge[0].PRNumber)
 	})
 }

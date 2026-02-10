@@ -132,6 +132,15 @@ type CreatePlanOptions struct {
 	Wait         bool   // Whether to wait for CI/merge (applies to consolidate strategy)
 }
 
+// CollectedBranches holds the intermediate result of branch collection.
+// This allows the wizard to collect branches once, then build plans with different strategies.
+type CollectedBranches struct {
+	BranchesToMerge []BranchMergeInfo
+	UpstackBranches []string
+	CurrentBranch   string
+	Validation      *PlanValidation
+}
+
 // mergePlanEngine is a minimal interface needed for creating a merge plan
 type mergePlanEngine interface {
 	engine.BranchReader
@@ -140,19 +149,33 @@ type mergePlanEngine interface {
 	Git() git.Runner
 }
 
-// CreateMergePlan analyzes the current state and builds a merge plan
+// CreateMergePlan analyzes the current state and builds a merge plan.
+// This is a convenience wrapper that calls CollectMergeBranches + BuildMergePlan.
 func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Output, githubClient github.Client, opts CreatePlanOptions) (*Plan, *PlanValidation, error) {
+	collected, err := CollectMergeBranches(ctx, eng, splog, githubClient, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	plan := BuildMergePlan(collected, opts.Strategy, opts.Wait)
+	return plan, collected.Validation, nil
+}
+
+// CollectMergeBranches gathers branches, metadata, CI status, and validation
+// without building strategy-specific steps. This is the expensive part that
+// calls GitHub APIs and should only run once per wizard session.
+func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output.Output, githubClient github.Client, opts CreatePlanOptions) (*CollectedBranches, error) {
 	// 1. Get target branch, validate not on trunk
 	var targetBranch engine.Branch
 	if opts.TargetBranch != "" {
 		targetBranch = eng.GetBranch(opts.TargetBranch)
 		if !targetBranch.IsTracked() && !targetBranch.IsTrunk() {
-			return nil, nil, fmt.Errorf("branch %s is not tracked by stackit", opts.TargetBranch)
+			return nil, fmt.Errorf("branch %s is not tracked by stackit", opts.TargetBranch)
 		}
 	} else {
 		cb := eng.CurrentBranch()
 		if cb == nil {
-			return nil, nil, errors.ErrNotOnBranch
+			return nil, errors.ErrNotOnBranch
 		}
 		targetBranch = *cb
 	}
@@ -172,7 +195,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 			}
 		}
 		if len(scopeBranches) == 0 {
-			return nil, nil, fmt.Errorf("no branches found with scope %s", opts.Scope)
+			return nil, fmt.Errorf("no branches found with scope %s", opts.Scope)
 		}
 
 		// Sort branches topologically so we merge in correct order (bottom to top)
@@ -185,12 +208,12 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 		planCurrentBranch = allBranches[len(allBranches)-1]
 	} else {
 		if targetBranch.IsTrunk() {
-			return nil, nil, fmt.Errorf("cannot merge from trunk. You must be on a branch that has a PR")
+			return nil, fmt.Errorf("cannot merge from trunk. You must be on a branch that has a PR")
 		}
 
 		// Check if target branch is tracked
 		if !targetBranch.IsTracked() {
-			return nil, nil, fmt.Errorf("branch %s is not tracked by stackit", targetBranch.GetName())
+			return nil, fmt.Errorf("branch %s is not tracked by stackit", targetBranch.GetName())
 		}
 
 		// 2. Collect branches from trunk to target
@@ -381,7 +404,7 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 
 	// If no PRs to merge, return early
 	if len(finalBranchesToMerge) == 0 {
-		return nil, validation, fmt.Errorf("no open PRs found to merge")
+		return nil, fmt.Errorf("no open PRs found to merge")
 	}
 
 	// 6. Detect branching stacks (siblings)
@@ -402,27 +425,35 @@ func CreateMergePlan(ctx context.Context, eng mergePlanEngine, splog output.Outp
 		}
 	}
 
-	// 7. Build ordered steps based on strategy
-	var steps []PlanStep
-	switch opts.Strategy {
-	case StrategySquash:
-		steps = buildSquashSteps(finalBranchesToMerge, upstackBranches, opts.Wait)
-	default: // StrategyBottomUp or default
-		steps = buildBottomUpSteps(finalBranchesToMerge, upstackBranches)
-	}
-
-	plan := &Plan{
-		Strategy:        opts.Strategy,
-		CurrentBranch:   planCurrentBranch,
+	return &CollectedBranches{
 		BranchesToMerge: finalBranchesToMerge,
 		UpstackBranches: upstackBranches,
-		Steps:           steps,
-		Warnings:        validation.Warnings,
-		Infos:           validation.Infos,
-		CreatedAt:       time.Now(),
+		CurrentBranch:   planCurrentBranch,
+		Validation:      validation,
+	}, nil
+}
+
+// BuildMergePlan builds a Plan with strategy-specific steps from collected branch data.
+// This is the cheap part that only does in-memory computation.
+func BuildMergePlan(collected *CollectedBranches, strategy Strategy, wait bool) *Plan {
+	var steps []PlanStep
+	switch strategy {
+	case StrategySquash:
+		steps = buildSquashSteps(collected.BranchesToMerge, collected.UpstackBranches, wait)
+	default: // StrategyBottomUp or default
+		steps = buildBottomUpSteps(collected.BranchesToMerge, collected.UpstackBranches)
 	}
 
-	return plan, validation, nil
+	return &Plan{
+		Strategy:        strategy,
+		CurrentBranch:   collected.CurrentBranch,
+		BranchesToMerge: collected.BranchesToMerge,
+		UpstackBranches: collected.UpstackBranches,
+		Steps:           steps,
+		Warnings:        collected.Validation.Warnings,
+		Infos:           collected.Validation.Infos,
+		CreatedAt:       time.Now(),
+	}
 }
 
 func buildBottomUpSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string) []PlanStep {

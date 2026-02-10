@@ -29,8 +29,8 @@ type ConsolidateMergeExecutor struct {
 	consolidationUser string                  // GitHub username who performed the consolidation
 	prGenerator       *PRContentGenerator
 
-	handler   Handler // Optional progress handler for TUI updates
-	stepIndex int     // Current step index for the handler
+	handler   EventHandler // Optional progress handler for TUI updates
+	stepIndex int          // Current step index for the handler
 }
 
 // NewConsolidateMergeExecutor creates a new consolidation executor
@@ -44,7 +44,7 @@ func NewConsolidateMergeExecutor(plan *Plan, engine mergeExecuteEngine, ctx *app
 }
 
 // SetProgressHandler sets the progress handler and step index for reporting
-func (c *ConsolidateMergeExecutor) SetProgressHandler(handler Handler, stepIndex int) {
+func (c *ConsolidateMergeExecutor) SetProgressHandler(handler EventHandler, stepIndex int) {
 	c.handler = handler
 	c.stepIndex = stepIndex
 }

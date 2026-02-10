@@ -4,13 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
 	sterrors "stackit.dev/stackit/internal/errors"
-	"stackit.dev/stackit/internal/github"
 )
 
 // WizardOptions configures the interactive merge wizard
@@ -116,9 +114,9 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		out.Debug("merge wizard: using pre-selected scope=%q, targetBranch=%q", scope, targetBranch)
 	}
 
-	// Create initial plan with bottom-up strategy (will be refined)
-	out.Debug("merge wizard: creating initial plan with scope=%q, targetBranch=%q", scope, targetBranch)
-	plan, validation, err := CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, CreatePlanOptions{
+	// Collect branches once (expensive: GitHub API calls, CI status checks)
+	out.Debug("merge wizard: collecting branches with scope=%q, targetBranch=%q", scope, targetBranch)
+	collected, err := CollectMergeBranches(ctx.Context, eng, out, ctx.GitHubClient, CreatePlanOptions{
 		Strategy:     StrategyBottomUp,
 		Force:        opts.Force,
 		Scope:        scope,
@@ -126,9 +124,13 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		Wait:         false,
 	})
 	if err != nil {
-		out.Debug("merge wizard: failed to create initial plan: %v", err)
+		out.Debug("merge wizard: failed to collect branches: %v", err)
 		return err
 	}
+
+	// Build initial plan with bottom-up strategy for display/validation
+	plan := BuildMergePlan(collected, StrategyBottomUp, false)
+	validation := collected.Validation
 	out.Debug("merge wizard: initial plan created with %d branches to merge, %d steps", len(plan.BranchesToMerge), len(plan.Steps))
 
 	// Check for mid-stack scope warning
@@ -161,11 +163,11 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 
 	// Check validation
 	if !validation.Valid && !opts.Force {
-		return formatValidationError(validation.Errors, validation.Warnings)
+		return FormatValidationError(validation.Errors, validation.Warnings)
 	}
 
 	if len(validation.Warnings) > 0 && !opts.Force {
-		return formatValidationError(nil, validation.Warnings)
+		return FormatValidationError(nil, validation.Warnings)
 	}
 
 	// Determine strategy
@@ -195,19 +197,9 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		out.Debug("merge wizard: user selected strategy=%s, wait=%v", strategy, wait)
 	}
 
-	// Recreate plan with selected strategy
-	out.Debug("merge wizard: recreating plan with strategy=%s", strategy)
-	plan, validation, err = CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, CreatePlanOptions{
-		Strategy:     strategy,
-		Force:        opts.Force,
-		Scope:        scope,
-		TargetBranch: targetBranch,
-		Wait:         wait,
-	})
-	if err != nil {
-		out.Debug("merge wizard: failed to recreate plan: %v", err)
-		return err
-	}
+	// Rebuild plan with selected strategy (cheap: in-memory only, no API calls)
+	out.Debug("merge wizard: rebuilding plan with strategy=%s", strategy)
+	plan = BuildMergePlan(collected, strategy, wait)
 	out.Debug("merge wizard: final plan has %d branches, %d steps", len(plan.BranchesToMerge), len(plan.Steps))
 
 	// Streamlined UX for simple merges:
@@ -244,7 +236,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		// Re-validate with new strategy
 		if !validation.Valid && !opts.Force {
 			out.Debug("merge wizard: validation failed")
-			return formatValidationError(validation.Errors, validation.Warnings)
+			return FormatValidationError(validation.Errors, validation.Warnings)
 		}
 
 		// If dry-run, stop here
@@ -283,7 +275,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		TargetBranch:   targetBranch,
 		Plan:           plan,
 		UndoStackDepth: undoStackDepth,
-		Handler:        NewLegacyHandlerAdapter(handler),
+		Handler:        handler,
 	}
 
 	out.Debug("merge wizard: executing merge action")
@@ -350,115 +342,6 @@ func (e *PostMergeActionRequired) Error() string {
 	return fmt.Sprintf("post-merge action required: %s", e.Action)
 }
 
-// LegacyHandlerAdapter adapts EventHandler to the legacy Handler interface.
-// This allows using the new event-based handlers with the existing execute.go code.
-type LegacyHandlerAdapter struct {
-	handler EventHandler
-	plan    *Plan
-}
-
-// NewLegacyHandlerAdapter creates a new adapter wrapping an EventHandler.
-func NewLegacyHandlerAdapter(handler EventHandler) *LegacyHandlerAdapter {
-	return &LegacyHandlerAdapter{handler: handler}
-}
-
-// Pause implements optional pauser interface by delegating to the underlying handler.
-func (a *LegacyHandlerAdapter) Pause() {
-	if pr, ok := a.handler.(interface{ Pause() }); ok {
-		pr.Pause()
-	}
-}
-
-// Resume implements optional pauser interface by delegating to the underlying handler.
-func (a *LegacyHandlerAdapter) Resume() {
-	if pr, ok := a.handler.(interface{ Resume() }); ok {
-		pr.Resume()
-	}
-}
-
-// Start implements Handler.
-func (a *LegacyHandlerAdapter) Start(plan *Plan) {
-	a.plan = plan
-	a.handler.Start(plan)
-}
-
-// StepStarted implements Handler.
-func (a *LegacyHandlerAdapter) StepStarted(stepIndex int, description string) {
-	var step *PlanStep
-	if a.plan != nil && stepIndex < len(a.plan.Steps) {
-		step = &a.plan.Steps[stepIndex]
-	}
-	a.handler.EmitEvent(Event{
-		Phase:     phaseFromStep(step),
-		Type:      EventStarted,
-		StepIndex: stepIndex,
-		Step:      step,
-		Message:   description,
-	})
-}
-
-// StepCompleted implements Handler.
-func (a *LegacyHandlerAdapter) StepCompleted(stepIndex int) {
-	var step *PlanStep
-	if a.plan != nil && stepIndex < len(a.plan.Steps) {
-		step = &a.plan.Steps[stepIndex]
-	}
-	a.handler.EmitEvent(Event{
-		Phase:     phaseFromStep(step),
-		Type:      EventCompleted,
-		StepIndex: stepIndex,
-		Step:      step,
-	})
-}
-
-// StepFailed implements Handler.
-func (a *LegacyHandlerAdapter) StepFailed(stepIndex int, err error) {
-	var step *PlanStep
-	if a.plan != nil && stepIndex < len(a.plan.Steps) {
-		step = &a.plan.Steps[stepIndex]
-	}
-	a.handler.EmitEvent(Event{
-		Phase:     phaseFromStep(step),
-		Type:      EventFailed,
-		StepIndex: stepIndex,
-		Step:      step,
-		Error:     err,
-	})
-}
-
-// StepWaiting implements Handler.
-func (a *LegacyHandlerAdapter) StepWaiting(stepIndex int, elapsed, timeout time.Duration, checks []github.CheckDetail) {
-	var step *PlanStep
-	if a.plan != nil && stepIndex < len(a.plan.Steps) {
-		step = &a.plan.Steps[stepIndex]
-	}
-	a.handler.EmitEvent(Event{
-		Phase:     PhaseWaiting,
-		Type:      EventWaiting,
-		StepIndex: stepIndex,
-		Step:      step,
-		Elapsed:   elapsed,
-		Timeout:   timeout,
-		Checks:    checks,
-	})
-}
-
-// SetEstimatedDuration implements Handler.
-func (a *LegacyHandlerAdapter) SetEstimatedDuration(duration time.Duration) {
-	a.handler.EmitEvent(Event{
-		Type:              EventProgress,
-		EstimatedDuration: duration,
-	})
-}
-
-// Complete implements Handler.
-func (a *LegacyHandlerAdapter) Complete(result *ConsolidationResult) {
-	a.handler.Complete(&Result{
-		Success:             result != nil,
-		ConsolidationResult: result,
-	})
-}
-
 func phaseFromStep(step *PlanStep) Phase {
 	if step == nil {
 		return PhaseMerge
@@ -479,8 +362,8 @@ func phaseFromStep(step *PlanStep) Phase {
 	}
 }
 
-// formatValidationError creates a detailed error message including validation errors and warnings.
-func formatValidationError(errors, warnings []string) error {
+// FormatValidationError creates a detailed error message including validation errors and warnings.
+func FormatValidationError(errors, warnings []string) error {
 	var parts []string
 
 	if len(errors) > 0 {

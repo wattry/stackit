@@ -243,11 +243,11 @@ func TestAction(t *testing.T) {
 }
 
 type mockHandler struct {
-	merge.NullHandler
+	merge.NullEventHandler
 	completed bool
 }
 
-func (h *mockHandler) Complete(_ *merge.ConsolidationResult) {
+func (h *mockHandler) Complete(_ *merge.Result) {
 	h.completed = true
 }
 

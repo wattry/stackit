@@ -65,7 +65,7 @@ func TestMergeNext(t *testing.T) {
 		sh.OutputContains("not tracked")
 	})
 
-	t.Run("shows success message when no PRs to merge", func(t *testing.T) {
+	t.Run("errors when no PRs to merge", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
@@ -73,11 +73,11 @@ func TestMergeNext(t *testing.T) {
 		sh.Write("a.txt", "content-a").
 			Run("create branch-a -m 'Add branch-a'")
 
-		// Run merge next
-		sh.Run("merge next --dry-run")
+		// Run merge next - should error since no PRs exist
+		sh.RunExpectError("merge next --dry-run")
 
 		// Should indicate no PRs found
-		sh.OutputContains("No unmerged PRs")
+		sh.OutputContains("no open PRs")
 	})
 
 	t.Run("skips already merged PRs", func(t *testing.T) {
@@ -238,7 +238,7 @@ func TestMergeCommand(t *testing.T) {
 
 		// Should show subcommands
 		sh.OutputContains("next").
-			OutputContains("squash")
+			OutputContains("ship")
 	})
 
 	t.Run("next subcommand is accessible", func(t *testing.T) {
@@ -307,9 +307,9 @@ func TestMergeNextUpstackCalculation(t *testing.T) {
 		// Run from branch-d, should find branch-a and list upstack
 		sh.Run("merge next --dry-run")
 
-		// Should mention upstack branches will be restacked
+		// Should mention restacking of upstack branches
 		sh.OutputContains("branch-a").
-			OutputContains("Upstack")
+			OutputContains("Restack")
 	})
 
 	t.Run("handles mid-stack position correctly", func(t *testing.T) {

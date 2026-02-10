@@ -38,20 +38,20 @@ through the merge process with an interactive wizard.
 By default, shows only your own stacks. Use --all to see the entire team's work.
 
 Subcommands:
-  next    Merge the next (bottom-most) unmerged PR in the stack
-  squash  Consolidate all branches into a single PR and merge atomically
+  next  Merge the next (bottom-most) unmerged PR in the stack
+  ship  Consolidate all branches into a single PR and merge atomically
 
 Examples:
   stackit merge             # Show your mergeable work, then wizard
   stackit merge --all       # Show entire team's mergeable work
   stackit merge next        # Merge bottom PR, restack, stop
-  stackit merge squash      # Consolidate all branches into single PR`,
+  stackit merge ship        # Consolidate all branches into single PR`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				// Must be interactive for wizard mode
 				if !ctx.Interactive {
-					return fmt.Errorf("merge wizard requires a TTY. Use 'merge next' or 'merge squash' for non-interactive mode")
+					return fmt.Errorf("merge wizard requires a TTY. Use 'merge next' or 'merge ship' for non-interactive mode")
 				}
 
 				// Fetch and display shippability status before wizard
