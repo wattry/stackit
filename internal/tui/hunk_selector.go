@@ -74,7 +74,7 @@ var defaultHunkSelectorKeys = hunkSelectorKeyMap{
 		key.WithHelp("↓/j", "down"),
 	),
 	Toggle: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys("space", " "),
 		key.WithHelp("space", "toggle"),
 	),
 	Split: key.NewBinding(

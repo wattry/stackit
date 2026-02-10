@@ -67,7 +67,7 @@ var DefaultLog = LogKeyMap{
 		key.WithHelp("/", "search"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys(" ", "enter"),
+		key.WithKeys("space", " ", "enter"),
 		key.WithHelp("space", "expand/collapse"),
 	),
 	Quit: key.NewBinding(
@@ -91,7 +91,7 @@ var DefaultSelect = SelectKeyMap{
 		key.WithHelp("/", "search"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys("space", " "),
 		key.WithHelp("space", "expand/collapse"),
 	),
 }

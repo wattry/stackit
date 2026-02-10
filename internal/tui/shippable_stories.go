@@ -384,7 +384,7 @@ func (m *shippableStoryModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedIndex < len(m.scenario.stacks)-1 {
 				m.selectedIndex++
 			}
-		case " ":
+		case "space", " ":
 			m.toggleSelection()
 		case core.KeyEnter:
 			m.toggleExpand()

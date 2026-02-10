@@ -525,7 +525,7 @@ func (k multiSelectKeyMap) FullHelp() [][]key.Binding {
 var defaultMultiSelectKeys = multiSelectKeyMap{
 	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle: key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle")),
+	Toggle: key.NewBinding(key.WithKeys("space", " "), key.WithHelp("space", "toggle")),
 	All:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all")),
 	None:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "none")),
 	Submit: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),

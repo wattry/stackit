@@ -174,7 +174,7 @@ var keys = keyMap{
 		key.WithHelp("→/l", "focus details"),
 	),
 	Select: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys("space", " "),
 		key.WithHelp("space", "toggle selection"),
 	),
 	Expand: key.NewBinding(
