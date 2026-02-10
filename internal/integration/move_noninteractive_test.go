@@ -17,7 +17,7 @@ func TestMoveNonInteractive(t *testing.T) {
 
 		// Running move without --onto in non-interactive mode should fail
 		sh.RunExpectError("move --no-interactive").
-			OutputContains("--onto flag is required in non-interactive mode")
+			OutputContains("target branch must be specified")
 	})
 
 	t.Run("works with onto flag in non-interactive mode", func(t *testing.T) {

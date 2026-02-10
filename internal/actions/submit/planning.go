@@ -97,7 +97,7 @@ func prepareBranchesForSubmit(ctx *app.Context, branches []engine.Branch, opts O
 
 		// Get SHAs
 		headSHA, _ := branch.GetRevision()
-		parentBranchName := branch.GetParentPrecondition()
+		parentBranchName := branch.GetParentOrTrunk()
 		parentBranch := nav.GetBranch(parentBranchName)
 		baseSHA, _ := parentBranch.GetRevision()
 

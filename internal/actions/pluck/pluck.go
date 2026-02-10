@@ -73,7 +73,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	children := graph.ChildBranches(sourceBranch)
 
 	// Cycle detection: ensure onto is not a descendant of source
-	if graph.IsDescendant(sourceBranch, onto) {
+	if graph.IsDescendant(sourceBranch, ontoBranch) {
 		return fmt.Errorf("cannot pluck %s onto its own descendant %s", source, onto)
 	}
 

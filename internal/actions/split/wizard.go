@@ -54,7 +54,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	// Ensure branch is tracked
 	currentBranchObj := eng.GetBranch(currentBranch.GetName())
 	if !currentBranchObj.IsTracked() {
-		parentName := currentBranch.GetParentPrecondition()
+		parentName := currentBranch.GetParentOrTrunk()
 		if err := eng.TrackBranch(ctx.Context, currentBranch.GetName(), parentName); err != nil {
 			return fmt.Errorf("failed to track branch: %w", err)
 		}

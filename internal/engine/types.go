@@ -247,9 +247,9 @@ func (b Branch) GetScope() Scope {
 	return b.reader.GetScope(b)
 }
 
-// GetParentPrecondition returns the parent branch name, or trunk if no parent
+// GetParentOrTrunk returns the parent branch name, or trunk if no parent
 // This is used for validation where we expect a parent to exist
-func (b Branch) GetParentPrecondition() string {
+func (b Branch) GetParentOrTrunk() string {
 	parent := b.reader.GetParent(b)
 	if parent == nil {
 		return b.reader.Trunk().GetName()

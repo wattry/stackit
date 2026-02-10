@@ -585,7 +585,7 @@ func TestIsTrunk(t *testing.T) {
 	})
 }
 
-func TestGetParentPrecondition(t *testing.T) {
+func TestGetParentOrTrunk(t *testing.T) {
 	t.Parallel()
 	t.Run("returns parent when exists", func(t *testing.T) {
 		t.Parallel()
@@ -595,7 +595,7 @@ func TestGetParentPrecondition(t *testing.T) {
 			})
 
 		branch := s.Engine.GetBranch("branch1")
-		parent := branch.GetParentPrecondition()
+		parent := branch.GetParentOrTrunk()
 		require.Equal(t, "main", parent)
 	})
 
@@ -608,7 +608,7 @@ func TestGetParentPrecondition(t *testing.T) {
 
 		// Don't track branch1
 		branch := s.Engine.GetBranch("branch1")
-		parent := branch.GetParentPrecondition()
+		parent := branch.GetParentOrTrunk()
 		require.Equal(t, "main", parent) // Should return trunk
 	})
 }
@@ -975,9 +975,9 @@ func TestEdgeCases(t *testing.T) {
 		parent := branch.GetParent()
 		require.Empty(t, parent)
 
-		// GetParentPrecondition should return trunk
+		// GetParentOrTrunk should return trunk
 		// branch already declared above
-		parentName := branch.GetParentPrecondition()
+		parentName := branch.GetParentOrTrunk()
 		require.Equal(t, "main", parentName)
 	})
 

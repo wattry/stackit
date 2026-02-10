@@ -69,7 +69,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 
 		info := StackBranchInfo{
 			Name:           branch.GetName(),
-			Parent:         branch.GetParentPrecondition(),
+			Parent:         branch.GetParentOrTrunk(),
 			IsLocked:       branch.IsLocked(),
 			IsFrozen:       branch.IsFrozen(),
 			Scope:          branch.GetScope().String(),
@@ -90,7 +90,7 @@ func StackInfoAction(ctx *app.Context, opts StackInfoOptions) error {
 		}
 
 		// Files changed
-		parentName := branch.GetParentPrecondition()
+		parentName := branch.GetParentOrTrunk()
 		parentRev, err := eng.GetRevision(eng.GetBranch(parentName))
 		if err == nil {
 			branchRev, err := branch.GetRevision()

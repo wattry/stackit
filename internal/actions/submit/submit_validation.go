@@ -74,7 +74,7 @@ func validateBaseRevisions(branches []string, eng engine.BranchStatus, ctx *app.
 
 	for _, branchName := range branches {
 		branch := eng.GetBranch(branchName)
-		parentBranchName := branch.GetParentPrecondition()
+		parentBranchName := branch.GetParentOrTrunk()
 
 		parentBranch := eng.GetBranch(parentBranchName)
 		switch {

@@ -157,7 +157,7 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	}
 
 	if !branch.IsBranchUpToDate() {
-		parent := branch.GetParentPrecondition()
+		parent := branch.GetParentOrTrunk()
 		ctx.Output.Info("This branch has fallen behind %s - you may want to %s.",
 			style.ColorBranchName(parent, false),
 			style.ColorCyan("stackit upstack restack"))
@@ -185,7 +185,7 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 	for i := len(downstack) - 1; i >= startIdx; i-- {
 		ancestor := downstack[i]
 		if !ancestor.IsBranchUpToDate() {
-			parent := ancestor.GetParentPrecondition()
+			parent := ancestor.GetParentOrTrunk()
 			ctx.Output.Info("The downstack branch %s has fallen behind %s - you may want to %s.",
 				style.ColorBranchName(ancestor.GetName(), false),
 				style.ColorBranchName(parent, false),
