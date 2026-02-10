@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/core"

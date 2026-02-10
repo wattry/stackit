@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // MockRunner is a test double for Runner.

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,8 +130,10 @@ func ExpectCommitsString(t *testing.T, repo *GitRepo, expected string) {
 }
 
 // NormalizeOutput removes variable parts of output and extra whitespace for comparison.
-// It removes empty lines to make test output comparisons more stable.
+// It strips ANSI escape codes (lipgloss v2 always generates them) and removes
+// empty lines to make test output comparisons more stable.
 func NormalizeOutput(output string) string {
+	output = ansi.Strip(output)
 	lines := strings.Split(output, "\n")
 	var filtered []string
 	for _, line := range lines {

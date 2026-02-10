@@ -3,8 +3,8 @@ package tree
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Model wraps StackTreeRenderer to make it a tea.Model for the storyboard
@@ -33,7 +33,7 @@ func (m Model) Init() tea.Cmd {
 // Update updates the model based on the message.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "s":
 			if m.Options.Mode == RenderModeFull {
@@ -53,12 +53,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View returns the string representation of the model.
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	lines := m.Renderer.RenderStack(m.Renderer.trunk, m.Options)
 	content := strings.Join(lines, "\n")
 
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).MarginTop(1)
 	help := helpStyle.Render("s: toggle short | q: back")
 
-	return content + "\n" + help
+	return tea.NewView(content + "\n" + help)
 }

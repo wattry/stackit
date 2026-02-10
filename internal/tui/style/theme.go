@@ -1,6 +1,6 @@
 package style
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // StatusStyles contains styles for status indicators used across TUI components.
 // This provides a consistent look for pending, active, done, and error states.

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
@@ -372,7 +372,7 @@ func (m *shippableStoryModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case core.KeyQuit, core.KeyEsc:
 			return m, tea.Quit
@@ -384,7 +384,7 @@ func (m *shippableStoryModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedIndex < len(m.scenario.stacks)-1 {
 				m.selectedIndex++
 			}
-		case " ":
+		case "space", " ":
 			m.toggleSelection()
 		case core.KeyEnter:
 			m.toggleExpand()
@@ -431,9 +431,9 @@ func (m *shippableStoryModel) selectAllShippable() {
 	}
 }
 
-func (m *shippableStoryModel) View() string {
+func (m *shippableStoryModel) View() tea.View {
 	if m.width == 0 {
-		return "Loading..."
+		return tea.NewView("Loading...")
 	}
 
 	header := m.renderHeader()
@@ -470,7 +470,7 @@ func (m *shippableStoryModel) View() string {
 
 	sections = append(sections, footer)
 
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, sections...))
 }
 
 func (m *shippableStoryModel) renderHeader() string {
@@ -873,7 +873,7 @@ type mergeSimTickMsg int
 
 func (m *mergeProgressSimulation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == core.KeyQuit || msg.String() == core.KeyEsc {
 			return m, tea.Quit
 		}
@@ -999,7 +999,7 @@ func (m *mergeProgressSimulation) advanceFailure() (tea.Model, tea.Cmd) {
 	return m, m.nextTick()
 }
 
-func (m *mergeProgressSimulation) View() string {
+func (m *mergeProgressSimulation) View() tea.View {
 	var b strings.Builder
 	b.WriteString("\n")
 
@@ -1073,7 +1073,7 @@ func (m *mergeProgressSimulation) View() string {
 
 	b.WriteString("\n" + style.ColorDim("[r] restart simulation  [q] back"))
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 func allStepsDone(steps []mergeStep) bool {

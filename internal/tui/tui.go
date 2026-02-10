@@ -10,23 +10,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/components/submit"
 	"stackit.dev/stackit/internal/tui/core"
 	"stackit.dev/stackit/internal/tui/style"
 	"stackit.dev/stackit/internal/utils"
-)
-
-var (
-	// colorProfileMu protects calls to lipgloss.SetColorProfile which is not thread-safe
-	colorProfileMu sync.Mutex
 )
 
 // Key constants re-exported from core for backwards compatibility.
@@ -112,7 +105,7 @@ func (m SubmitTUIModel) Init() tea.Cmd {
 
 // Update handles message updates for the bubbletea model
 func (m SubmitTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		if msg.String() == KeyCtrlC || msg.String() == KeyQuit {
 			m.quitting = true
 			return m, tea.Quit
@@ -156,9 +149,9 @@ func (m SubmitTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the bubbletea model
-func (m SubmitTUIModel) View() string {
+func (m SubmitTUIModel) View() tea.View {
 	if m.quitting {
-		return ""
+		return tea.NewView("")
 	}
 
 	var b strings.Builder
@@ -228,7 +221,7 @@ func (m SubmitTUIModel) View() string {
 		b.WriteString("\n")
 	}
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // RunSubmitTUI runs the submit TUI and returns when complete
@@ -284,9 +277,4 @@ func IsTTY() bool {
 // This function is thread-safe and can be called from concurrent goroutines.
 func SetInteractive(interactive bool) {
 	utils.SetInteractive(interactive)
-	if !interactive {
-		colorProfileMu.Lock()
-		lipgloss.SetColorProfile(termenv.Ascii)
-		colorProfileMu.Unlock()
-	}
 }

@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestBaseModel_SignalReady(t *testing.T) {
@@ -51,25 +51,21 @@ func TestBaseModel_SignalReady(t *testing.T) {
 func TestBaseModel_HandleCommonMsg_KeyMsg(t *testing.T) {
 	tests := []struct {
 		name        string
-		key         string
+		msg         tea.Msg
 		wantHandled bool
 		wantQuit    bool
 	}{
-		{"ctrl+c quits", KeyCtrlC, true, true},
-		{"q quits", KeyQuit, true, true},
-		{"other keys not handled", "a", false, false},
-		{"enter not handled", KeyEnter, false, false},
+		{"ctrl+c quits", tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, true, true},
+		{"q quits", tea.KeyPressMsg{Code: 'q', Text: "q"}, true, true},
+		{"other keys not handled", tea.KeyPressMsg{Code: 'a', Text: "a"}, false, false},
+		{"enter not handled", tea.KeyPressMsg{Code: tea.KeyEnter}, false, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := &BaseModel{}
-			msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tt.key)}
-			if tt.key == KeyCtrlC {
-				msg = tea.KeyMsg{Type: tea.KeyCtrlC}
-			}
 
-			handled, cmd := b.HandleCommonMsg(msg)
+			handled, cmd := b.HandleCommonMsg(tt.msg)
 
 			if handled != tt.wantHandled {
 				t.Errorf("handled = %v, want %v", handled, tt.wantHandled)

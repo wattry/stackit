@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/tui/keys"
 	"stackit.dev/stackit/internal/tui/style"
@@ -51,7 +51,7 @@ func (m reorderModel) Init() tea.Cmd {
 }
 
 func (m reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Cancel):
 			m.canceled = true
@@ -133,7 +133,7 @@ func (m reorderModel) branchNeedsRestack(branchIndex int) bool {
 	return false
 }
 
-func (m reorderModel) View() string {
+func (m reorderModel) View() tea.View {
 	var b strings.Builder
 
 	// Header with title and help
@@ -202,7 +202,7 @@ func (m reorderModel) View() string {
 			trunkStyle.Render(m.trunk)))
 	}
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // NewReorderModel creates a tea.Model for a reorder prompt (used by stories/demo)

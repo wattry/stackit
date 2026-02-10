@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
@@ -99,7 +99,7 @@ func NewModel(cfg Config) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "branch-name"
 	ti.CharLimit = 100
-	ti.Width = 40
+	ti.SetWidth(40)
 
 	m := &Model{
 		config:      cfg,
@@ -158,7 +158,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// BaseModel already updated Width/Height
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKeyMsg(msg)
 
 	// Handle custom messages
@@ -252,7 +252,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyMsg handles keyboard input based on current state
-func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateSelectingType:
 		return m.updateSelectingType(msg)
@@ -265,7 +265,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateSelectingType handles input during type selection
-func (m *Model) updateSelectingType(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) updateSelectingType(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Guard against empty availableTypes
 	if len(m.availableTypes) == 0 {
 		return m, nil
@@ -313,7 +313,7 @@ func (m *Model) updateSelectingType(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateSelectingDirection handles input during direction selection
-func (m *Model) updateSelectingDirection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) updateSelectingDirection(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Up):
 		m.direction = DirectionAbove
@@ -332,7 +332,7 @@ func (m *Model) updateSelectingDirection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateHunkLoop handles input during the hunk loop phase
-func (m *Model) updateHunkLoop(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) updateHunkLoop(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.subState {
 	case SubStateEnteringBranchName:
 		return m.updateBranchNameInput(msg)
@@ -345,7 +345,7 @@ func (m *Model) updateHunkLoop(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateBranchNameInput handles branch name text input
-func (m *Model) updateBranchNameInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) updateBranchNameInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Submit):
 		name := m.branchInput.Value()
@@ -373,7 +373,7 @@ func (m *Model) updateBranchNameInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateEditMessagePrompt handles the edit message yes/no prompt
-func (m *Model) updateEditMessagePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) updateEditMessagePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Yes):
 		m.wantsEditMessage = true
@@ -392,7 +392,7 @@ func (m *Model) updateEditMessagePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateRetryPrompt handles the retry yes/no prompt when no changes were staged
-func (m *Model) updateRetryPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) updateRetryPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Yes):
 		m.subState = SubStateSelectingHunks
@@ -428,23 +428,23 @@ func (m *Model) validateBranchName(name string) error {
 }
 
 // View implements tea.Model
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	if m.Done || m.state == StateComplete || m.state == StateCanceled {
-		return ""
+		return tea.NewView("")
 	}
 
 	switch m.state {
 	case StateSelectingType:
-		return m.viewSelectingType()
+		return tea.NewView(m.viewSelectingType())
 	case StateSelectingDirection:
-		return m.viewSelectingDirection()
+		return tea.NewView(m.viewSelectingDirection())
 	case StateHunkLoop:
-		return m.viewHunkLoop()
+		return tea.NewView(m.viewHunkLoop())
 	case StateError:
-		return m.viewError()
+		return tea.NewView(m.viewError())
 	}
 
-	return "Loading..."
+	return tea.NewView("Loading...")
 }
 
 // viewSelectingType renders the type selection screen

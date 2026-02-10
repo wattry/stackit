@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,7 +37,7 @@ func TestMockRunner(t *testing.T) {
 	t.Run("reset clears state", func(t *testing.T) {
 		runner := NewMockRunner()
 		runner.Start()
-		runner.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		runner.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 		runner.Reset()
 		assert.False(t, runner.started)
@@ -54,7 +54,7 @@ func TestMockRunner(t *testing.T) {
 			wg.Add(1)
 			go func(n int) {
 				defer wg.Done()
-				runner.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{rune('a' + n%26)}})
+				runner.Send(tea.KeyPressMsg{Code: rune('a' + n%26), Text: string(rune('a' + n%26))})
 			}(i)
 		}
 		wg.Wait()
@@ -100,7 +100,7 @@ func TestMessageRecorder(t *testing.T) {
 
 	t.Run("reset clears messages", func(t *testing.T) {
 		recorder := NewMessageRecorder()
-		recorder.Record(tea.KeyMsg{Type: tea.KeyEnter})
+		recorder.Record(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 		recorder.Reset()
 		assert.Equal(t, 0, recorder.Count())
@@ -114,7 +114,7 @@ func TestMessageRecorder(t *testing.T) {
 			wg.Add(1)
 			go func(n int) {
 				defer wg.Done()
-				recorder.Record(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{rune('a' + n%26)}})
+				recorder.Record(tea.KeyPressMsg{Code: rune('a' + n%26), Text: string(rune('a' + n%26))})
 			}(i)
 		}
 		wg.Wait()

@@ -4,10 +4,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/progress"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
@@ -174,7 +174,7 @@ var keys = keyMap{
 		key.WithHelp("→/l", "focus details"),
 	),
 	Select: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys("space", " "),
 		key.WithHelp("space", "toggle selection"),
 	),
 	Expand: key.NewBinding(
@@ -226,14 +226,14 @@ func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOp
 
 	// Create progress bar
 	p := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithDefaultBlend(),
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
 
 	// Create viewport for the details panel with default keybindings,
 	// but disable up/down/left/right since we handle those for branch selection.
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	vp.KeyMap.Up.SetEnabled(false)
 	vp.KeyMap.Down.SetEnabled(false)
 	vp.KeyMap.Left.SetEnabled(false)

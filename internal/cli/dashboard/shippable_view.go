@@ -5,7 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/shippable"
 	"stackit.dev/stackit/internal/tui"
@@ -14,16 +15,20 @@ import (
 )
 
 // View renders the dashboard.
-func (m *shippableModel) View() string {
+func (m *shippableModel) View() tea.View {
+	var content string
 	switch m.state {
 	case stateHelp:
-		return m.renderHelp()
+		content = m.renderHelp()
 	case stateConfirming:
-		return m.renderConfirmation()
+		content = m.renderConfirmation()
 	default:
 		// All other states (including loading) show the main view
-		return m.renderMain()
+		content = m.renderMain()
 	}
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
 }
 
 // renderMain renders the main dashboard view.
@@ -371,8 +376,8 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	if innerHeight < 1 {
 		innerHeight = 1
 	}
-	m.detailsViewport.Width = innerWidth
-	m.detailsViewport.Height = innerHeight
+	m.detailsViewport.SetWidth(innerWidth)
+	m.detailsViewport.SetHeight(innerHeight)
 	m.detailsViewport.SetContent(content)
 
 	// Scroll the viewport to keep the selected branch visible.
@@ -380,7 +385,7 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	// the bottommost branch is selected.
 	if selectedLine >= 0 {
 		const scrollMargin = 2
-		top := m.detailsViewport.YOffset
+		top := m.detailsViewport.YOffset()
 		bottom := top + innerHeight - 1
 		if selectedLine < top+scrollMargin {
 			m.detailsViewport.SetYOffset(max(0, selectedLine-scrollMargin))

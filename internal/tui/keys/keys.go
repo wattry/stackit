@@ -1,7 +1,7 @@
 // Package keys provides shared keybindings for TUI views.
 package keys
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // NavigationKeyMap provides standard navigation keybindings shared across TUI views.
 type NavigationKeyMap struct {
@@ -67,7 +67,7 @@ var DefaultLog = LogKeyMap{
 		key.WithHelp("/", "search"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys(" ", "enter"),
+		key.WithKeys("space", " ", "enter"),
 		key.WithHelp("space", "expand/collapse"),
 	),
 	Quit: key.NewBinding(
@@ -91,7 +91,7 @@ var DefaultSelect = SelectKeyMap{
 		key.WithHelp("/", "search"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys("space", " "),
 		key.WithHelp("space", "expand/collapse"),
 	),
 }

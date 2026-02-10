@@ -1,12 +1,22 @@
 package merge
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// viewString extracts the string content from a tea.View for test assertions.
+func viewString(v tea.View) string {
+	if v.Content == nil {
+		return ""
+	}
+	return fmt.Sprint(v.Content)
+}
 
 func TestModel_EmptyPlan(t *testing.T) {
 	t.Run("empty plan shows initializing message", func(t *testing.T) {
@@ -16,7 +26,7 @@ func TestModel_EmptyPlan(t *testing.T) {
 		require.Empty(t, model.Groups)
 		require.Empty(t, model.Steps)
 
-		view := model.View()
+		view := viewString(model.View())
 
 		// Should show "Merge Progress" header
 		assert.Contains(t, view, "Merge Progress")
@@ -31,7 +41,7 @@ func TestModel_EmptyPlan(t *testing.T) {
 		model := NewModel()
 		model.Done = true
 
-		view := model.View()
+		view := viewString(model.View())
 
 		assert.Contains(t, view, "Merge Progress")
 		assert.Contains(t, view, "Complete")
@@ -44,7 +54,7 @@ func TestModel_EmptyPlan(t *testing.T) {
 		model.Done = true
 		model.Summary = "Created PR #123"
 
-		view := model.View()
+		view := viewString(model.View())
 
 		assert.Contains(t, view, "Created PR #123")
 	})
@@ -107,26 +117,26 @@ func TestModel_View_ProgressIndicator(t *testing.T) {
 		updated, _ := model.Update(loadMsg)
 		model = updated.(*Model)
 
-		view := model.View()
+		view := viewString(model.View())
 		assert.Contains(t, view, "Step 1 of 3")
 
 		// Complete first step
 		model.Steps[0].Status = StatusDone
 
-		view = model.View()
+		view = viewString(model.View())
 		assert.Contains(t, view, "Step 2 of 3")
 
 		// Complete second step
 		model.Steps[1].Status = StatusDone
 
-		view = model.View()
+		view = viewString(model.View())
 		assert.Contains(t, view, "Step 3 of 3")
 
 		// Complete all steps and mark done
 		model.Steps[2].Status = StatusDone
 		model.Done = true
 
-		view = model.View()
+		view = viewString(model.View())
 		assert.Contains(t, view, "3 of 3 complete")
 	})
 }
@@ -149,7 +159,7 @@ func TestModel_View_StepStatuses(t *testing.T) {
 		updated, _ = model.Update(startMsg)
 		model = updated.(*Model)
 
-		view := model.View()
+		view := viewString(model.View())
 		// Check that the group label is shown (bold styling stripped)
 		assert.True(t, strings.Contains(view, "Merge PR #1"))
 	})
@@ -171,7 +181,7 @@ func TestModel_View_StepStatuses(t *testing.T) {
 		updated, _ = model.Update(completeMsg)
 		model = updated.(*Model)
 
-		view := model.View()
+		view := viewString(model.View())
 		assert.Contains(t, view, "✓")
 	})
 
@@ -192,7 +202,7 @@ func TestModel_View_StepStatuses(t *testing.T) {
 		updated, _ = model.Update(failMsg)
 		model = updated.(*Model)
 
-		view := model.View()
+		view := viewString(model.View())
 		assert.Contains(t, view, "✗")
 	})
 }
@@ -202,7 +212,7 @@ func TestModel_Quitting(t *testing.T) {
 		model := NewModel()
 		model.Quitting = true
 
-		view := model.View()
+		view := viewString(model.View())
 		assert.Empty(t, view)
 	})
 }

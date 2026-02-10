@@ -1,15 +1,24 @@
 package sync
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/tui"
 )
+
+// viewString extracts the string content from a tea.View for test assertions.
+func viewString(v tea.View) string {
+	if v.Content == nil {
+		return ""
+	}
+	return fmt.Sprint(v.Content)
+}
 
 func TestNewModel(t *testing.T) {
 	model := NewModel(10)
@@ -140,10 +149,10 @@ func TestModel_Update_CompleteMsg(t *testing.T) {
 func TestModel_Update_KeyMsg_Quit(t *testing.T) {
 	tests := []struct {
 		name string
-		key  string
+		msg  tea.Msg
 	}{
-		{"ctrl+c quits", "ctrl+c"},
-		{"q quits", "q"},
+		{"ctrl+c quits", tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}},
+		{"q quits", tea.KeyPressMsg{Code: 'q', Text: "q"}},
 	}
 
 	for _, tt := range tests {
@@ -151,12 +160,7 @@ func TestModel_Update_KeyMsg_Quit(t *testing.T) {
 			model := NewModel(10)
 			model.Init()
 
-			_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tt.key)})
-
-			// For ctrl+c, use the proper key type
-			if tt.key == "ctrl+c" {
-				_, cmd = model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-			}
+			_, cmd := model.Update(tt.msg)
 
 			assert.NotNil(t, cmd, "should return quit command")
 		})
@@ -173,7 +177,7 @@ func TestModel_Update_WindowSizeMsg(t *testing.T) {
 	assert.Equal(t, 100, m.Width)
 	assert.Equal(t, 50, m.Height)
 	// Progress width should be capped at 60
-	assert.Equal(t, 60, m.Progress.Width)
+	assert.Equal(t, 60, m.Progress.Width())
 }
 
 func TestModel_Update_WindowSizeMsg_NarrowTerminal(t *testing.T) {
@@ -186,7 +190,7 @@ func TestModel_Update_WindowSizeMsg_NarrowTerminal(t *testing.T) {
 	assert.Equal(t, 50, m.Width)
 	assert.Equal(t, 30, m.Height)
 	// Progress width should be 40 (50 - 10)
-	assert.Equal(t, 40, m.Progress.Width)
+	assert.Equal(t, 40, m.Progress.Width())
 }
 
 func TestModel_View_InProgress(t *testing.T) {
@@ -201,7 +205,7 @@ func TestModel_View_InProgress(t *testing.T) {
 	newModel, _ = m.Update(ProgressTickMsg{Completed: 3, Total: 10})
 	m = newModel.(*Model)
 
-	view := m.View()
+	view := viewString(m.View())
 
 	// Should contain progress info (package-manager style single line)
 	assert.Contains(t, view, "3/10")
@@ -217,7 +221,7 @@ func TestModel_View_Completed(t *testing.T) {
 	newModel, _ := model.Update(CompleteMsg{Summary: "Everything synced!"})
 	m := newModel.(*Model)
 
-	view := m.View()
+	view := viewString(m.View())
 
 	// View should be empty when done (summary printed via tea.Printf)
 	assert.Empty(t, view)

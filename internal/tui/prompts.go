@@ -5,12 +5,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	lipgloss "github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -144,7 +144,7 @@ func (m textInputModel) Init() tea.Cmd {
 func (m textInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Submit):
 			m.done = true
@@ -160,12 +160,12 @@ func (m textInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m textInputModel) View() string {
+func (m textInputModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 	styleObj := lipgloss.NewStyle().Margin(1, 0)
-	return styleObj.Render(fmt.Sprintf("%s\n%s\n\n%s", m.prompt, m.textInput.View(), m.help.View(m.keys)))
+	return tea.NewView(styleObj.Render(fmt.Sprintf("%s\n%s\n\n%s", m.prompt, m.textInput.View(), m.help.View(m.keys))))
 }
 
 // confirmModel is a simple yes/no confirmation prompt model
@@ -183,7 +183,7 @@ func (m confirmModel) Init() tea.Cmd {
 }
 
 func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Submit):
 			m.done = true
@@ -205,16 +205,16 @@ func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m confirmModel) View() string {
+func (m confirmModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 	styleObj := lipgloss.NewStyle().Margin(1, 0)
 	yesNo := "[y/N]"
 	if m.choice {
 		yesNo = "[Y/n]"
 	}
-	return styleObj.Render(fmt.Sprintf("%s %s\n\n%s", m.prompt, yesNo, m.help.View(confirmKeyMap{m.keys})))
+	return tea.NewView(styleObj.Render(fmt.Sprintf("%s %s\n\n%s", m.prompt, yesNo, m.help.View(confirmKeyMap{m.keys}))))
 }
 
 func newTextInputModel(prompt, defaultValue string) textInputModel {
@@ -223,7 +223,7 @@ func newTextInputModel(prompt, defaultValue string) textInputModel {
 	ti.SetValue(defaultValue)
 	ti.Focus()
 	ti.CharLimit = 500
-	ti.Width = 80
+	ti.SetWidth(80)
 
 	return textInputModel{
 		textInput: ti,
@@ -330,7 +330,7 @@ func (m promptListModel) Init() tea.Cmd {
 
 func (m promptListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			m.err = errors.ErrCanceled
 			return m, tea.Quit
@@ -356,8 +356,8 @@ func (m promptListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m promptListModel) View() string {
-	return lipgloss.NewStyle().Margin(1, 2).Render(m.list.View())
+func (m promptListModel) View() tea.View {
+	return tea.NewView(lipgloss.NewStyle().Margin(1, 2).Render(m.list.View()))
 }
 
 // selectionModel is a simple selection prompt model
@@ -375,7 +375,7 @@ func (m selectionModel) Init() tea.Cmd {
 }
 
 func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, defaultSelectionKeys.Up):
 			if m.cursor > 0 {
@@ -397,9 +397,9 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m selectionModel) View() string {
+func (m selectionModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 
 	headerStyles := style.DefaultHeaderStyles()
@@ -419,7 +419,7 @@ func (m selectionModel) View() string {
 
 	s.WriteString("\n" + m.help.View(defaultSelectionKeys))
 
-	return layoutStyles.Container.Render(s.String())
+	return tea.NewView(layoutStyles.Container.Render(s.String()))
 }
 
 // NewSelectModel creates a tea.Model for a selection prompt (used by stories/demo)
@@ -525,7 +525,7 @@ func (k multiSelectKeyMap) FullHelp() [][]key.Binding {
 var defaultMultiSelectKeys = multiSelectKeyMap{
 	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle: key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle")),
+	Toggle: key.NewBinding(key.WithKeys("space", " "), key.WithHelp("space", "toggle")),
 	All:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all")),
 	None:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "none")),
 	Submit: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
@@ -549,7 +549,7 @@ func (m multiSelectModel) Init() tea.Cmd {
 }
 
 func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Up):
 			if m.cursor > 0 {
@@ -579,9 +579,9 @@ func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m multiSelectModel) View() string {
+func (m multiSelectModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 
 	headerStyles := style.DefaultHeaderStyles()
@@ -615,7 +615,7 @@ func (m multiSelectModel) View() string {
 	s.WriteString(fmt.Sprintf("\n%d of %d selected\n", count, len(m.options)))
 	s.WriteString("\n" + m.help.View(m.keys))
 
-	return layoutStyles.Container.Render(s.String())
+	return tea.NewView(layoutStyles.Container.Render(s.String()))
 }
 
 // PromptMultiSelect prompts the user to select multiple items from a list

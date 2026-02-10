@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -270,7 +270,7 @@ func (m *MoveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateSelecting handles messages in the selection state
 func (m *MoveModel) updateSelecting(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keys.Up):
 			m.moveCursor(-1)
@@ -315,7 +315,7 @@ func (m *MoveModel) updateSelecting(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateConfirming handles messages in the confirmation state
 func (m *MoveModel) updateConfirming(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keys.Confirm):
 			if m.validation != nil && m.validation.Valid {
@@ -422,14 +422,14 @@ func (m *MoveModel) selectedBranch() string {
 }
 
 // View renders the current state
-func (m *MoveModel) View() string {
+func (m *MoveModel) View() tea.View {
 	switch m.state {
 	case moveStateSelecting:
-		return m.viewSelecting()
+		return tea.NewView(m.viewSelecting())
 	case moveStateConfirming:
-		return m.viewConfirming()
+		return tea.NewView(m.viewConfirming())
 	default:
-		return ""
+		return tea.NewView("")
 	}
 }
 

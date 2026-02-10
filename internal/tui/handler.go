@@ -1,7 +1,7 @@
 // Package tui provides terminal UI utilities.
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // Sender is the interface for sending messages to a TUI.
 // Both *Runner and *MockRunner implement this interface.

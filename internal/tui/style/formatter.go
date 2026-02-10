@@ -2,10 +2,11 @@ package style
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"stackit.dev/stackit/internal/errors"
 )
@@ -168,9 +169,9 @@ func ColorPRState(state string, isDraft bool) string {
 }
 
 // GetScopeColor returns a deterministic color for a scope string
-func GetScopeColor(scope string) (lipgloss.Color, bool) {
+func GetScopeColor(scope string) (color.Color, bool) {
 	if scope == "" {
-		return lipgloss.Color(""), false
+		return lipgloss.NoColor{}, false
 	}
 	// Simple hash to select from StackitColors
 	var hash uint32

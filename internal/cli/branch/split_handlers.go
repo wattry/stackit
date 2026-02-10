@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/actions/handler"
 	"stackit.dev/stackit/internal/actions/split"

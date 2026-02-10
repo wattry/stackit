@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
@@ -29,7 +29,7 @@ func RunShippable(ctx *app.Context, opts ShippableOptions) error {
 	// Note: The dashboard uses alt-screen mode which is not directly supported
 	// by tui.Runner. We use tea.NewProgram directly with appropriate options.
 	// The model embeds core.BaseModel for ready signaling and common handling.
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
+	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout))
 	_, err = p.Run()
 	return err
 }
