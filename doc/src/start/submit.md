@@ -116,7 +116,7 @@ Merges the bottom-most unmerged PR using GitHub automerge, then restacks remaini
 ### Consolidate and merge
 
 ```bash
-stackit merge squash
+stackit merge ship
 ```
 
 Consolidates all branches into a single PR for atomic merging.

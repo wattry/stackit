@@ -164,11 +164,11 @@ Once your PRs are approved, merge the entire stack:
 ```bash
 stackit merge          # Interactive wizard
 stackit merge next     # Merge bottom PR, then restack
-stackit merge squash   # Consolidate into single PR and merge
+stackit merge ship     # Consolidate into single PR and merge
 ```
 - `stackit merge` launches an interactive wizard to guide you through merging
 - `stackit merge next` merges the bottom-most unmerged PR using GitHub automerge, then restacks remaining branches
-- `stackit merge squash` consolidates all branches into a single PR for atomic merging
+- `stackit merge ship` consolidates all branches into a single PR for atomic merging
 
 ---
 
@@ -267,7 +267,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | `stackit foreach` | Run a shell command on each branch in the stack (default: upstack) |
 | `stackit submit` | Push branches and create/update GitHub PRs (alias: `ss` for `--stack`) |
 | `stackit sync` | Pull trunk, delete merged branches, and restack |
-| `stackit merge` | Interactive merge wizard (use `merge next` or `merge squash` for non-interactive) |
+| `stackit merge` | Interactive merge wizard (use `merge next` or `merge ship` for non-interactive) |
 | `stackit reorder` | Interactively reorder branches in your stack |
 | `stackit move` | Rebase a branch (and its children) onto a new parent |
 | `stackit pluck` | Extract a single branch from a stack (reparents children to grandparent) |

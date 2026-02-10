@@ -7,7 +7,7 @@
 stackit merge              # Show your mergeable work, then wizard
 stackit merge --all        # Show entire team's mergeable work
 stackit merge next         # Merge bottom PR, enable automerge, return immediately
-stackit merge squash       # Consolidate stack into single atomic PR
+stackit merge ship         # Consolidate stack into single atomic PR
 ```
 
 **Key files:**
@@ -74,12 +74,12 @@ stackit merge next
 - Incremental shipping as PRs get approved
 - When you want granular merge commits
 
-### Squash (Consolidation)
+### Ship (Consolidation)
 
 Consolidates the entire stack into a single PR for atomic merging.
 
 ```bash
-stackit merge squash
+stackit merge ship
 ```
 
 **How it works:**
@@ -116,7 +116,7 @@ main ─── a ─── b ─── c     main ──────────
 Stackit's most powerful shipping feature: merge multiple independent stacks atomically.
 
 ```bash
-stackit merge squash --stacks stack1,stack2,stack3
+stackit merge ship --stacks stack1,stack2,stack3
 ```
 
 **How it works:**
@@ -236,9 +236,9 @@ Merge the bottom-most ready PR in the stack.
 | `--wait` | Block until merge completes |
 | `--timeout` | Timeout for --wait (default: 10m) |
 
-### `stackit merge squash`
+### `stackit merge ship`
 
-Consolidate stack(s) into a single PR.
+Consolidate stack(s) into a single PR. (Also available as `stackit merge squash` for backward compatibility.)
 
 | Flag | Description |
 |------|-------------|
@@ -314,7 +314,7 @@ merge next (again)
 ### Flow: Consolidation
 
 ```
-merge squash
+merge ship
   → PlanConsolidation()
   → CreateConsolidationBranch()
   → OctopusMerge(all branches)
@@ -326,7 +326,7 @@ merge squash
 ### Flow: Multi-Stack Consolidation
 
 ```
-merge squash --stacks a,b,c
+merge ship --stacks a,b,c
   → CreateWorktreeSession()
   → TestGlobalMerge(all stacks)
   → If fails: BinarySearchWorkingSubset()

@@ -90,8 +90,10 @@ func (m *shippableModel) renderHeader() string {
 		status = headerStatusStyle.Render(m.Spinner.View() + " Analyzing...")
 	case m.state == stateShipping:
 		status = headerStatusStyle.Render(m.Spinner.View() + " Shipping...")
-	case m.state == statePublishing:
-		status = headerStatusStyle.Render(m.Spinner.View() + " Publishing...")
+	case m.state == stateSubmitting:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Submitting...")
+	case m.state == stateSquashing:
+		status = headerStatusStyle.Render(m.Spinner.View() + " Squashing...")
 	case m.errorMessage != "":
 		status = errorTextStyle.Render(m.errorMessage)
 	case m.statusMessage != "":
@@ -112,7 +114,7 @@ func (m *shippableModel) renderHeader() string {
 			timeUntilRefresh = 0
 		}
 		secondsUntil := int(timeUntilRefresh.Seconds())
-		refreshStatus = style.ColorDim(fmt.Sprintf("refresh in %ds", secondsUntil))
+		refreshStatus = style.ColorDim(fmt.Sprintf("[r] refresh in %ds", secondsUntil))
 	}
 
 	if refreshStatus != "" {
@@ -680,17 +682,18 @@ func (m *shippableModel) renderStackTree(stack *shippable.Stack) (lines []string
 // renderFooter renders the footer with global shortcuts.
 func (m *shippableModel) renderFooter() string {
 	// During async operations, show progress bar
-	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == statePublishing {
+	if m.state == stateLoading || m.state == stateAnalyzing || m.state == stateShipping || m.state == stateSubmitting || m.state == stateSquashing {
 		return m.renderProgressFooter()
 	}
 
-	// Global shortcuts only (pane-specific shortcuts shown in their panes)
+	// Global shortcuts (pane-specific shortcuts shown in their panes)
 	shortcuts := []string{
-		"[p] Publish all",
-		"[r] Refresh",
-		"[?] Help",
-		"[q] Quit",
+		"[p] Submit stack",
 	}
+	if m.pane == paneRight {
+		shortcuts = append(shortcuts, "[x] Squash")
+	}
+	shortcuts = append(shortcuts, "[?] Help", "[q] Quit")
 	shortcutsStr := strings.Join(shortcuts, "  ")
 
 	return footerStyle.Width(m.Width).Render(shortcutsStr)
@@ -706,8 +709,10 @@ func (m *shippableModel) renderProgressFooter() string {
 		message = "Analyzing..."
 	case stateShipping:
 		message = "Shipping..."
-	case statePublishing:
-		message = "Publishing..."
+	case stateSubmitting:
+		message = "Submitting..."
+	case stateSquashing:
+		message = "Squashing..."
 	}
 
 	if m.progressMessage != "" {
@@ -749,7 +754,8 @@ func (m *shippableModel) renderHelp() string {
 
 	sb.WriteString(helpSectionStyle.Render("Actions") + "\n")
 	sb.WriteString(helpKeyStyle.Render("s") + helpDescStyle.Render("Ship selected stacks") + "\n")
-	sb.WriteString(helpKeyStyle.Render("p") + helpDescStyle.Render("Restack & submit all branches") + "\n")
+	sb.WriteString(helpKeyStyle.Render("p") + helpDescStyle.Render("Submit focused stack") + "\n")
+	sb.WriteString(helpKeyStyle.Render("x") + helpDescStyle.Render("Squash branch (right pane)") + "\n")
 	sb.WriteString(helpKeyStyle.Render("a") + helpDescStyle.Render("Analyze combination") + "\n")
 	sb.WriteString(helpKeyStyle.Render("r") + helpDescStyle.Render("Refresh analysis") + "\n")
 
@@ -762,8 +768,18 @@ func (m *shippableModel) renderHelp() string {
 	return dialogStyle.Render(sb.String())
 }
 
-// renderConfirmation renders the ship confirmation dialog.
+// renderConfirmation renders the confirmation dialog based on the current action.
 func (m *shippableModel) renderConfirmation() string {
+	switch m.confirmAction {
+	case confirmActionSquash:
+		return m.renderSquashConfirmation()
+	default:
+		return m.renderShipConfirmation()
+	}
+}
+
+// renderShipConfirmation renders the ship confirmation dialog.
+func (m *shippableModel) renderShipConfirmation() string {
 	// Use cached selected stacks
 	selected := m.cache.selectedStacks
 	totalBranches := 0
@@ -785,6 +801,24 @@ func (m *shippableModel) renderConfirmation() string {
 	sb.WriteString("  - Create consolidation branch\n")
 	sb.WriteString("  - Create/update PR to main\n")
 	sb.WriteString("  - Merge when CI passes\n")
+
+	sb.WriteString("\n" + style.ColorDim(strings.Repeat("─", 40)) + "\n")
+	sb.WriteString("[Enter/y] Confirm  [Esc/n] Cancel\n")
+
+	return dialogStyle.Render(sb.String())
+}
+
+// renderSquashConfirmation renders the squash confirmation dialog.
+func (m *shippableModel) renderSquashConfirmation() string {
+	var sb strings.Builder
+	sb.WriteString(helpTitleStyle.Render("SQUASH CONFIRMATION") + "\n\n")
+
+	sb.WriteString(fmt.Sprintf("Squash all commits in %s into a single commit?\n\n",
+		style.ColorCyan(m.confirmBranch)))
+
+	sb.WriteString("This will:\n")
+	sb.WriteString("  - Combine all commits into one\n")
+	sb.WriteString("  - Restack child branches\n")
 
 	sb.WriteString("\n" + style.ColorDim(strings.Repeat("─", 40)) + "\n")
 	sb.WriteString("[Enter/y] Confirm  [Esc/n] Cancel\n")

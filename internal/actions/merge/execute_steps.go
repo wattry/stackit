@@ -226,7 +226,10 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 
 	// Set estimated duration for future progress reporting
 	if result.MaxDuration > 0 {
-		opts.Handler.SetEstimatedDuration(result.MaxDuration)
+		opts.Handler.EmitEvent(Event{
+			Type:              EventProgress,
+			EstimatedDuration: result.MaxDuration,
+		})
 	}
 
 	return nil

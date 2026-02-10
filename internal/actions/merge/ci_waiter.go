@@ -18,7 +18,7 @@ type CIWaiter struct {
 	pollInterval time.Duration
 
 	// Optional progress reporting
-	handler   Handler
+	handler   EventHandler
 	stepIndex int
 }
 
@@ -51,7 +51,7 @@ func NewCIWaiter(opts CIWaiterOptions) *CIWaiter {
 }
 
 // SetProgressHandler sets the handler and step index for progress reporting
-func (w *CIWaiter) SetProgressHandler(handler Handler, stepIndex int) {
+func (w *CIWaiter) SetProgressHandler(handler EventHandler, stepIndex int) {
 	w.handler = handler
 	w.stepIndex = stepIndex
 }
@@ -97,7 +97,14 @@ func (w *CIWaiter) WaitForChecks(ctx context.Context, branchName string, prNumbe
 		// Report progress to handler if available
 		if w.handler != nil && status != nil && now.Sub(lastProgressReport) >= progressInterval {
 			elapsed := now.Sub(startTime)
-			w.handler.StepWaiting(w.stepIndex, elapsed, w.timeout, status.Checks)
+			w.handler.EmitEvent(Event{
+				Phase:     PhaseWaiting,
+				Type:      EventWaiting,
+				StepIndex: w.stepIndex,
+				Elapsed:   elapsed,
+				Timeout:   w.timeout,
+				Checks:    status.Checks,
+			})
 			lastProgressReport = now
 		}
 
