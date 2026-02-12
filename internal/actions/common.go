@@ -15,7 +15,6 @@
 package actions
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/gertd/go-pluralize"
@@ -23,7 +22,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
-	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/tui/style"
 )
 
@@ -480,110 +478,6 @@ func Pluralize(word string, count int) string {
 		return word
 	}
 	return pluralizeClient.Plural(word)
-}
-
-// ShouldDeleteBranch checks if a branch should be deleted
-func ShouldDeleteBranch(ctx context.Context, branchName string, eng engine.BranchStatus, force bool) (bool, string) {
-	status, err := eng.GetDeletionStatus(ctx, branchName)
-	if err != nil {
-		return false, ""
-	}
-
-	if status.SafeToDelete {
-		return true, status.Reason
-	}
-
-	if force {
-		return false, ""
-	}
-
-	// Interactive prompting not yet implemented
-	return false, ""
-}
-
-type deleteBranchCachedEngine interface {
-	engine.StackNavigator
-	engine.BranchInfo
-	engine.GitDiffer
-}
-
-// ShouldDeleteBranchCached checks if a branch should be deleted using pre-fetched metadata and revisions
-func ShouldDeleteBranchCached(ctx context.Context, branchName string, eng deleteBranchCachedEngine, force bool, meta *git.Meta, revisions map[string]string, mergedBranches map[string]bool) (bool, string) {
-	// 0. Never delete worktree anchor branches - they appear "merged" because they
-	// point to the same commit as trunk, but they're needed for worktree management
-	branch := eng.GetBranch(branchName)
-	if branch.IsWorktreeAnchor() {
-		return false, ""
-	}
-
-	// 1. Check PR info from cached metadata
-	if meta != nil {
-		prInfo := meta.GetPrInfo()
-		if prInfo != nil {
-			const (
-				prStateClosed = "CLOSED"
-				prStateMerged = "MERGED"
-			)
-			if prInfo.State != nil {
-				if *prInfo.State == prStateClosed {
-					return true, "closed on GitHub"
-				}
-				if *prInfo.State == prStateMerged {
-					base := ""
-					if prInfo.Base != nil {
-						base = *prInfo.Base
-					}
-					if base == "" {
-						base = eng.Trunk().GetName()
-					}
-					return true, fmt.Sprintf("merged into %s", base)
-				}
-			}
-		}
-	}
-
-	// 2. Check if merged into trunk
-	trunkName := eng.Trunk().GetName()
-	if mergedBranches != nil && mergedBranches[branchName] {
-		return true, fmt.Sprintf("merged into %s", trunkName)
-	}
-
-	// 3. Check if empty
-	// Need parent revision
-	var parentRev string
-	parent := branch.GetParent()
-	parentName := trunkName
-	if parent != nil {
-		parentName = parent.GetName()
-	}
-
-	// Use cached revisions to avoid eng.Git().GetRevision calls
-	if rev, ok := revisions[parentName]; ok {
-		parentRev = rev
-	} else {
-		// Fallback
-		rev, err := eng.GetRevisionForName(parentName)
-		if err == nil {
-			parentRev = rev
-		}
-	}
-
-	if parentRev != "" {
-		empty, err := eng.IsDiffEmpty(ctx, branchName, parentRev)
-		if err == nil && empty { // IsDiffEmpty returns true if no diff
-			// Only delete empty branches if they have a PR
-			metaPrInfo := meta.GetPrInfo()
-			if meta != nil && metaPrInfo != nil && metaPrInfo.Number != nil && *metaPrInfo.Number != 0 {
-				return true, "empty"
-			}
-		}
-	}
-
-	if force {
-		return false, ""
-	}
-
-	return false, ""
 }
 
 // PluralIt returns "them" if plural is true, otherwise "it"

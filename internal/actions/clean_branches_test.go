@@ -141,6 +141,38 @@ func TestCleanBranches(t *testing.T) {
 		require.False(t, s.Engine.GetBranch("branch1").IsTracked())
 	})
 
+	t.Run("never considers trunk for deletion", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Merge branch1 into main so trunk appears "merged into itself"
+		s.Checkout("main").
+			RunGit("merge", "branch1")
+
+		err := s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		// Mark branch1 as merged
+		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
+		branch := s.Engine.GetBranch("branch1")
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
+		require.NoError(t, err)
+
+		result, err := actions.CleanBranches(s.Context, actions.CleanBranchesOptions{
+			Force: true,
+		})
+		require.NoError(t, err)
+
+		// branch1 should be deleted (it's merged)
+		require.Contains(t, result.DeletedBranches, "branch1")
+
+		// trunk (main) must NOT be deleted
+		require.NotContains(t, result.DeletedBranches, "main")
+		require.True(t, s.Engine.GetBranch("main").IsTrunk())
+	})
+
 	t.Run("deletes merged child even if parent is NOT merged", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{
