@@ -265,44 +265,131 @@ func (e *engineImpl) IsBranchEmpty(ctx context.Context, branchName string) (bool
 	return e.git.IsDiffEmpty(ctx, branchName, parentRev)
 }
 
-// GetDeletionStatus checks if a branch should be deleted
+// GetDeletionStatus checks if a branch should be deleted.
+// Thin wrapper around BatchGetDeletionStatuses for a single branch.
 func (e *engineImpl) GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error) {
-	// Check PR info
-	branch := e.GetBranch(branchName)
-	prInfo, err := e.GetPrInfo(branch)
-	if err == nil && prInfo != nil {
-		const (
-			prStateClosed = "CLOSED"
-			prStateMerged = "MERGED"
-		)
-		if prInfo.State() == prStateClosed {
-			return DeletionStatus{SafeToDelete: true, Reason: "closed on GitHub"}, nil
-		}
-		if prInfo.State() == prStateMerged {
-			base := prInfo.Base()
-			if base == "" {
-				base = e.Trunk().GetName()
-			}
-			return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", base)}, nil
-		}
+	statuses, err := e.BatchGetDeletionStatuses(ctx, []string{branchName})
+	if err != nil {
+		return DeletionStatus{}, err
 	}
-
-	// Check if merged into trunk
-	merged, err := e.IsMergedIntoTrunk(ctx, branchName)
-	if err == nil && merged {
-		return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", e.Trunk().GetName())}, nil
+	if status, ok := statuses[branchName]; ok {
+		return status, nil
 	}
-
-	// Check if empty
-	empty, err := e.IsBranchEmpty(ctx, branchName)
-	if err == nil && empty {
-		// Only delete empty branches if they have a PR
-		if prInfo != nil && prInfo.Number() != nil {
-			return DeletionStatus{SafeToDelete: true, Reason: "empty"}, nil
-		}
-	}
-
 	return DeletionStatus{SafeToDelete: false, Reason: ""}, nil
+}
+
+// BatchGetDeletionStatuses checks deletion status for multiple branches in a single batch.
+// It batch-fetches metadata, revisions, and merged status, then evaluates the canonical
+// deletion policy for each branch.
+func (e *engineImpl) BatchGetDeletionStatuses(ctx context.Context, branchNames []string) (map[string]DeletionStatus, error) {
+	results := make(map[string]DeletionStatus, len(branchNames))
+	if len(branchNames) == 0 {
+		return results, nil
+	}
+
+	trunkName := e.Trunk().GetName()
+
+	// Collect all refs we need revisions for (branches + their parents)
+	refsToFetch := make([]string, 0, len(branchNames)*2+1)
+	refsToFetch = append(refsToFetch, trunkName)
+	for _, name := range branchNames {
+		refsToFetch = append(refsToFetch, name)
+		branch := e.GetBranch(name)
+		parent := branch.GetParent()
+		if parent != nil {
+			refsToFetch = append(refsToFetch, parent.GetName())
+		}
+	}
+
+	// Batch fetch all data
+	metadataMap, _ := e.git.BatchReadMetadata(branchNames)
+	revisions, _ := e.git.BatchGetRevisions(refsToFetch)
+	mergedBranches, err := e.GetMergedBranches(ctx, trunkName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check merged branches: %w", err)
+	}
+
+	// Evaluate each branch
+	for _, name := range branchNames {
+		branch := e.GetBranch(name)
+		meta := metadataMap[name]
+		results[name] = e.evaluateDeletionStatus(ctx, name, branch, meta, revisions, mergedBranches, trunkName)
+	}
+
+	return results, nil
+}
+
+// evaluateDeletionStatus applies the canonical deletion policy for a single branch.
+// Policy order:
+//  1. Trunk guard → not deletable
+//  2. Worktree anchor guard → not deletable
+//  3. PR state CLOSED/MERGED → deletable
+//  4. Merged into trunk → deletable
+//  5. Empty with PR → deletable
+func (e *engineImpl) evaluateDeletionStatus(ctx context.Context, branchName string, branch Branch, meta *git.Meta, revisions map[string]string, mergedBranches map[string]bool, trunkName string) DeletionStatus {
+	// 1. Never delete trunk
+	if e.IsTrunk(branch) {
+		return DeletionStatus{SafeToDelete: false, Reason: ""}
+	}
+
+	// 2. Never delete worktree anchor branches
+	if e.IsWorktreeAnchor(branch) {
+		return DeletionStatus{SafeToDelete: false, Reason: ""}
+	}
+
+	// 3. Check PR state from metadata
+	if meta != nil {
+		prInfo := NewPrInfoFromMeta(meta)
+		if prInfo != nil {
+			const (
+				prStateClosed = "CLOSED"
+				prStateMerged = "MERGED"
+			)
+			if prInfo.State() == prStateClosed {
+				return DeletionStatus{SafeToDelete: true, Reason: "closed on GitHub"}
+			}
+			if prInfo.State() == prStateMerged {
+				base := prInfo.Base()
+				if base == "" {
+					base = trunkName
+				}
+				return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", base)}
+			}
+		}
+	}
+
+	// 4. Check if merged into trunk
+	if mergedBranches != nil && mergedBranches[branchName] {
+		return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", trunkName)}
+	}
+
+	// 5. Check if empty (no diff from parent) with an associated PR
+	parent := branch.GetParent()
+	parentName := trunkName
+	if parent != nil {
+		parentName = parent.GetName()
+	}
+
+	parentRev := revisions[parentName]
+	if parentRev == "" {
+		if rev, revErr := e.git.GetRevision(parentName); revErr == nil {
+			parentRev = rev
+		}
+	}
+	if parentRev != "" {
+		empty, err := e.git.IsDiffEmpty(ctx, branchName, parentRev)
+		if err == nil && empty {
+			// Only delete empty branches if they have a PR
+			if meta != nil {
+				metaPrInfo := meta.GetPrInfo()
+				if metaPrInfo != nil && metaPrInfo.Number != nil && *metaPrInfo.Number != 0 {
+					return DeletionStatus{SafeToDelete: true, Reason: "empty"}
+				}
+			}
+		}
+	}
+
+	return DeletionStatus{SafeToDelete: false, Reason: ""}
 }
 
 // GetRemote returns the default remote name

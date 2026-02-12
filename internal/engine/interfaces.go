@@ -35,12 +35,14 @@ type BranchStatus interface {
 	IsMergedIntoTrunk(ctx context.Context, branchName string) (bool, error)
 	IsBranchEmpty(ctx context.Context, branchName string) (bool, error)
 	GetDeletionStatus(ctx context.Context, branchName string) (DeletionStatus, error)
+	BatchGetDeletionStatuses(ctx context.Context, branchNames []string) (map[string]DeletionStatus, error)
 	GetScope(branch Branch) Scope
 	GetStackDescription(branch Branch) *git.StackDescription
 	IsLocked(branch Branch) bool
 	GetLockReason(branch Branch) LockReason
 	IsFrozen(branch Branch) bool
 	IsWorktreeAnchor(branch Branch) bool
+	GetBranchType(branch Branch) git.BranchType
 	GetPrInfo(branch Branch) (*PrInfo, error)
 	FindMostRecentTrackedAncestors(ctx context.Context, branchName string) ([]string, error)
 	GetRemote() string

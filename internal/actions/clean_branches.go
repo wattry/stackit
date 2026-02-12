@@ -6,14 +6,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui/style"
-	"stackit.dev/stackit/internal/utils"
 )
 
 // CleanBranchesOptions contains options for cleaning branches
@@ -89,7 +87,10 @@ func (p *deletionPlan) removeBlocker(branchName, blockerName string) {
 // 4. Execute the deletions in batches (greedy iterative approach).
 func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesResult, error) {
 	// Phase 1: Identify candidates for deletion
-	deleteStatuses, skippedInWorktree, _ := identifyBranchesToDelete(ctx, opts)
+	deleteStatuses, skippedInWorktree, _, err := identifyBranchesToDelete(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
 
 	// Phase 2: Build deletion plan
 	plan, branchesWithNewParents, err := buildDeletionPlanAndReparent(ctx, deleteStatuses)
@@ -119,7 +120,10 @@ func CleanBranches(ctx *app.Context, opts CleanBranchesOptions) (*CleanBranchesR
 // This does NOT execute any deletions - use ExecuteBranchDeletions to apply the plan.
 func PlanBranchDeletions(ctx *app.Context, opts CleanBranchesOptions) (*BranchDeletionPlan, error) {
 	// Phase 1: Identify candidates for deletion
-	deleteStatuses, skippedInWorktree, utilityBranches := identifyBranchesToDelete(ctx, opts)
+	deleteStatuses, skippedInWorktree, utilityBranches, err := identifyBranchesToDelete(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
 
 	// Phase 2: Build deletion plan
 	plan, branchesWithNewParents, err := buildDeletionPlanAndReparent(ctx, deleteStatuses)
@@ -173,88 +177,63 @@ func ExecuteBranchDeletions(ctx *app.Context, plannedDeletion *BranchDeletionPla
 	}, nil
 }
 
-// identifyBranchesToDelete pre-calculates deletion status for all tracked branches in parallel.
+// identifyBranchesToDelete pre-calculates deletion status for all tracked branches.
 // Returns the branches to delete, any branches that were skipped due to being in a worktree,
 // and which branches are utility branches (e.g., consolidated merge branches).
-func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[string]string, []string, map[string]bool) {
+func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[string]string, []string, map[string]bool, error) {
 	eng := ctx.Engine
 	c := ctx.Context
-	out := ctx.Output
 
 	ctx.Logger.Info("identifyBranchesToDelete started", "force", opts.Force, "inManagedWorktree", opts.InManagedWorktree)
 
+	// Collect non-trunk candidate branch names
 	allTrackedBranches := eng.AllBranches()
-	candidateBranches := []engine.Branch{}
-	branchNames := []string{}
-	allRevisionsToFetch := []string{eng.Trunk().GetName()}
-
+	candidateNames := make([]string, 0, len(allTrackedBranches))
 	for _, branch := range allTrackedBranches {
-		name := branch.GetName()
-		allRevisionsToFetch = append(allRevisionsToFetch, name)
 		if !branch.IsTrunk() {
-			candidateBranches = append(candidateBranches, branch)
-			branchNames = append(branchNames, name)
-
-			parent := branch.GetParent()
-			if parent != nil {
-				allRevisionsToFetch = append(allRevisionsToFetch, parent.GetName())
-			}
+			candidateNames = append(candidateNames, branch.GetName())
 		}
 	}
 
-	metadataMap, metaErrs := eng.Git().BatchReadMetadata(branchNames)
-	if len(metaErrs) > 0 {
-		out.Warn("Failed to read metadata for some branches (they may not be cleaned): %v", metaErrs)
-	}
-
-	revisionsMap, revErrs := eng.Git().BatchGetRevisions(allRevisionsToFetch)
-	if len(revErrs) > 0 {
-		out.Warn("Failed to get revisions for some branches (they may not be cleaned): %v", revErrs)
-	}
-
-	mergedBranches, err := eng.Git().GetMergedBranches(c, eng.Trunk().GetName())
+	// Single batch call to engine for deletion statuses
+	statuses, err := eng.BatchGetDeletionStatuses(c, candidateNames)
 	if err != nil {
-		out.Warn("Failed to get merged branches: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to get deletion statuses: %w", err)
 	}
 
 	deleteStatuses := make(map[string]string) // name -> reason
 	utilityBranches := make(map[string]bool)  // branches that are utility type
 	var skippedInWorktree []string
-	var mu sync.Mutex
 
-	if len(candidateBranches) > 0 {
-		utils.Run(candidateBranches, func(branch engine.Branch) {
-			name := branch.GetName()
-			meta := metadataMap[name]
-			// ShouldDeleteBranchCached is defined in common.go and uses pre-fetched data
-			// to determine if a branch should be deleted (merged, closed PR, etc.)
-			shouldDelete, reason := ShouldDeleteBranchCached(c, name, eng, opts.Force, meta, revisionsMap, mergedBranches)
-			if shouldDelete {
-				// Skip current branch if in a managed worktree (can't checkout trunk to delete it)
-				if opts.InManagedWorktree && name == opts.CurrentBranch {
-					mu.Lock()
-					skippedInWorktree = append(skippedInWorktree, name)
-					mu.Unlock()
-					ctx.Logger.Info("identifyBranchesToDelete skipped (worktree)", "branch", name)
-					return
-				}
-				mu.Lock()
-				deleteStatuses[name] = reason
-				// Track if this is a utility branch (e.g., consolidated merge branch)
-				if meta != nil && meta.GetBranchType() == git.BranchTypeUtility {
-					utilityBranches[name] = true
-				}
-				mu.Unlock()
-				ctx.Logger.Info("identifyBranchesToDelete marked for deletion", "branch", name, "reason", reason)
-			}
-		})
+	for _, name := range candidateNames {
+		status := statuses[name]
+		if !status.SafeToDelete {
+			continue
+		}
+
+		// Skip current branch if in a managed worktree (can't checkout trunk to delete it)
+		if opts.InManagedWorktree && name == opts.CurrentBranch {
+			skippedInWorktree = append(skippedInWorktree, name)
+			ctx.Logger.Info("identifyBranchesToDelete skipped (worktree)", "branch", name)
+			continue
+		}
+
+		deleteStatuses[name] = status.Reason
+
+		// Track utility branches using in-memory branch state (no extra fetch)
+		branch := eng.GetBranch(name)
+		if eng.GetBranchType(branch) == git.BranchTypeUtility {
+			utilityBranches[name] = true
+		}
+
+		ctx.Logger.Info("identifyBranchesToDelete marked for deletion", "branch", name, "reason", status.Reason)
 	}
 
 	ctx.Logger.Info("identifyBranchesToDelete completed",
 		"toDeleteCount", len(deleteStatuses),
 		"skippedCount", len(skippedInWorktree))
 
-	return deleteStatuses, skippedInWorktree, utilityBranches
+	return deleteStatuses, skippedInWorktree, utilityBranches, nil
 }
 
 // buildDeletionPlanAndReparent constructs the deletion hierarchy and updates parents of surviving branches.

@@ -79,12 +79,20 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 
 	// Confirm if not forced and not merged/closed
 	if !opts.Force {
+		toDeleteNames := make([]string, len(toDelete))
+		for i, b := range toDelete {
+			toDeleteNames[i] = b.GetName()
+		}
+		statuses, err := eng.BatchGetDeletionStatuses(ctx.Context, toDeleteNames)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to check deletion statuses: %w", err)
+		}
 		for _, b := range toDelete {
-			shouldDelete, reason := actions.ShouldDeleteBranch(ctx.Context, b.GetName(), eng, false)
-			if !shouldDelete {
+			status := statuses[b.GetName()]
+			if !status.SafeToDelete {
 				// If handler is interactive, prompt for confirmation
 				if handler.IsInteractive() {
-					confirmed, err := handler.PromptConfirm(b.GetName(), reason)
+					confirmed, err := handler.PromptConfirm(b.GetName(), status.Reason)
 					if err != nil {
 						return Result{}, err
 					}
@@ -93,7 +101,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 						handler.Complete(0, 1)
 						return Result{}, nil
 					}
-				} else if reason == "" {
+				} else if status.Reason == "" {
 					return Result{}, fmt.Errorf("branch %s is not merged/closed; use --force to delete anyway", b.GetName())
 				}
 			}

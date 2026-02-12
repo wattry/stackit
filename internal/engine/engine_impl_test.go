@@ -8,6 +8,7 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -625,6 +626,129 @@ func TestIsMergedIntoTrunk(t *testing.T) {
 		merged, err := s.Engine.IsMergedIntoTrunk(context.Background(), "branch1")
 		require.NoError(t, err)
 		require.False(t, merged)
+	})
+}
+
+func TestGetDeletionStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("never considers trunk for deletion", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		status, err := s.Engine.GetDeletionStatus(context.Background(), "main")
+		require.NoError(t, err)
+		require.False(t, status.SafeToDelete)
+	})
+
+	t.Run("considers merged branch for deletion", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Merge branch1 into main
+		s.Checkout("main").
+			RunGit("merge", "branch1")
+
+		err := s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		status, err := s.Engine.GetDeletionStatus(context.Background(), "branch1")
+		require.NoError(t, err)
+		require.True(t, status.SafeToDelete)
+	})
+
+	t.Run("worktree anchor is never deletable", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Merge branch1 into main so it would normally be deletable
+		s.Checkout("main").
+			RunGit("merge", "branch1")
+
+		err := s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		// Mark as worktree anchor
+		branch := s.Engine.GetBranch("branch1")
+		err = s.Engine.SetBranchType(branch, git.BranchTypeWorktreeAnchor)
+		require.NoError(t, err)
+
+		status, err := s.Engine.GetDeletionStatus(context.Background(), "branch1")
+		require.NoError(t, err)
+		require.False(t, status.SafeToDelete, "worktree anchor should not be deletable even if merged")
+	})
+}
+
+func TestBatchGetDeletionStatuses(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty list returns empty map", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		statuses, err := s.Engine.BatchGetDeletionStatuses(context.Background(), []string{})
+		require.NoError(t, err)
+		require.Empty(t, statuses)
+	})
+
+	t.Run("trunk not deletable and merged branch deletable", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "main",
+			})
+
+		// Merge branch1 into main (branch2 stays unmerged)
+		s.Checkout("main").
+			RunGit("merge", "branch1")
+
+		err := s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		statuses, err := s.Engine.BatchGetDeletionStatuses(context.Background(), []string{"main", "branch1", "branch2"})
+		require.NoError(t, err)
+		require.Len(t, statuses, 3)
+
+		// Trunk is never deletable
+		require.False(t, statuses["main"].SafeToDelete)
+
+		// Merged branch is deletable
+		require.True(t, statuses["branch1"].SafeToDelete)
+		require.Contains(t, statuses["branch1"].Reason, "merged into")
+
+		// Unmerged branch is not deletable
+		require.False(t, statuses["branch2"].SafeToDelete)
+	})
+
+	t.Run("worktree anchor never deletable even if merged", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Merge branch1 into main
+		s.Checkout("main").
+			RunGit("merge", "branch1")
+
+		err := s.Engine.Rebuild("main")
+		require.NoError(t, err)
+
+		// Mark as worktree anchor
+		branch := s.Engine.GetBranch("branch1")
+		err = s.Engine.SetBranchType(branch, git.BranchTypeWorktreeAnchor)
+		require.NoError(t, err)
+
+		statuses, err := s.Engine.BatchGetDeletionStatuses(context.Background(), []string{"branch1"})
+		require.NoError(t, err)
+		require.False(t, statuses["branch1"].SafeToDelete)
 	})
 }
 
