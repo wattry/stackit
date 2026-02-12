@@ -2,12 +2,20 @@ package actions
 
 import (
 	"stackit.dev/stackit/internal/app"
-	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 )
+
+// MetadataPushEngine defines the engine capabilities needed for pushing metadata.
+type MetadataPushEngine interface {
+	BatchSetLastModifiedBy(branchNames []string) error
+	IsRemoteSyncEnabled() bool
+	SetRemoteSyncEnabled(enabled bool)
+	Git() git.Runner
+}
 
 // PushMetadataOnly pushes metadata refs without updating GitHub PRs.
 // Use this when you want to push metadata changes but defer PR updates to sync.
-func PushMetadataOnly(ctx *app.Context, eng engine.Engine, branchNames []string) error {
+func PushMetadataOnly(ctx *app.Context, eng MetadataPushEngine, branchNames []string) error {
 	out := ctx.Output
 
 	// Update LastModifiedBy for all branches (parallel with config caching)

@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"stackit.dev/stackit/internal/git"
 )
@@ -27,8 +26,8 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 	}
 
 	// Load metadata for each branch in parallel
-	allMeta, _ := e.git.BatchReadMetadata(branches)
-	allLocalMeta := e.git.BatchReadLocalMetadata(branches)
+	allMeta, _ := e.batchReadMetadata(branches)
+	allLocalMeta := e.batchReadLocalMetadata(branches)
 
 	e.applyRebuild(branches, currentBranch, allMeta, allLocalMeta)
 	return nil
@@ -37,58 +36,9 @@ func (e *engineImpl) rebuildInternal(refreshCurrentBranch bool) error {
 // applyRebuild updates the internal state from the provided metadata results.
 // The caller MUST hold the engine's write lock (e.mu).
 func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMeta map[string]*git.Meta, allLocalMeta map[string]*git.LocalMeta) {
-	e.branches = branches
-	e.branchNamesSet = nil // invalidate cache
+	e.state.rebuildFromMetadata(e.trunk, branches, allMeta, allLocalMeta)
 	if currentBranch != "" {
 		e.currentBranch = currentBranch
-	}
-
-	// Reset state
-	e.branchState = make(BranchStateMap)
-	e.childrenMap = make(map[string][]string)
-
-	// Collect results and populate state sequentially to avoid lock contention/races
-	for name, meta := range allMeta {
-		if name == e.trunk {
-			continue // Trunk branches should never be tracked
-		}
-
-		if meta.GetParentBranchName() == nil {
-			continue // No parent means not tracked
-		}
-
-		parent := *meta.GetParentBranchName()
-		if parent == name {
-			continue // Skip self-parenting to avoid cycles
-		}
-
-		// Create or get branch state
-		state := &BranchState{
-			Parent:     parent,
-			LockReason: meta.GetLockReason(),
-			BranchType: meta.GetBranchType(),
-		}
-		if meta.GetScope() != nil {
-			state.Scope = *meta.GetScope()
-		}
-
-		e.branchState.Set(name, state)
-		e.childrenMap[parent] = append(e.childrenMap[parent], name)
-	}
-
-	// Apply local metadata (frozen state)
-	// Note: We create a BranchState entry for frozen branches even if they're not
-	// tracked, since frozen status is independent of tracked status.
-	for name, meta := range allLocalMeta {
-		if meta.Frozen {
-			state := e.branchState.GetOrCreate(name)
-			state.Frozen = true
-		}
-	}
-
-	// Sort children by name for deterministic traversal
-	for _, children := range e.childrenMap {
-		slices.Sort(children)
 	}
 }
 
@@ -98,78 +48,16 @@ func (e *engineImpl) updateBranchInCache(branchName string) {
 		return
 	}
 
-	// Get the old parent before updating (for children map maintenance)
-	var oldParent string
-	if oldState := e.branchState.GetByName(branchName); oldState != nil {
-		oldParent = oldState.Parent
-	}
-
 	// Read metadata for this branch
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
-		// If metadata doesn't exist, remove branch from state and children map
-		if oldParent != "" {
-			e.removeFromChildren(oldParent, branchName)
-		}
-		e.branchState.Delete(branchName)
+		e.state.removeBranch(branchName)
 		return
 	}
 
 	// Read local metadata too
-	localMeta, _ := e.git.ReadLocalMetadata(branchName)
-
-	// Determine new parent
-	newParent := ""
-	if meta.GetParentBranchName() != nil {
-		newParent = *meta.GetParentBranchName()
-	}
-
-	// If no parent, branch is not tracked - remove it
-	if newParent == "" {
-		if oldParent != "" {
-			e.removeFromChildren(oldParent, branchName)
-		}
-		e.branchState.Delete(branchName)
-		return
-	}
-
-	// Create or update branch state
-	state := &BranchState{
-		Parent:     newParent,
-		LockReason: meta.GetLockReason(),
-		BranchType: meta.GetBranchType(),
-	}
-	if meta.GetScope() != nil {
-		state.Scope = *meta.GetScope()
-	}
-	if localMeta != nil {
-		state.Frozen = localMeta.Frozen
-	}
-
-	e.branchState.Set(branchName, state)
-
-	// Update children map - remove from old parent, add to new parent
-	if oldParent != "" && oldParent != newParent {
-		e.removeFromChildren(oldParent, branchName)
-	}
-
-	// Add to new parent's children if not already there
-	if newParent != "" && (oldParent == "" || oldParent != newParent) {
-		e.childrenMap[newParent] = append(e.childrenMap[newParent], branchName)
-		slices.Sort(e.childrenMap[newParent])
-	}
-}
-
-// removeFromChildren removes a branch from its parent's children list
-func (e *engineImpl) removeFromChildren(parent, child string) {
-	if children, ok := e.childrenMap[parent]; ok {
-		if i := slices.Index(children, child); i >= 0 {
-			e.childrenMap[parent] = slices.Delete(children, i, i+1)
-		}
-		if len(e.childrenMap[parent]) == 0 {
-			delete(e.childrenMap, parent)
-		}
-	}
+	localMeta, _ := e.readLocalMetadata(branchName)
+	e.state.updateBranchFromMetadata(branchName, meta, localMeta)
 }
 
 // rebuild loads all branches and their metadata from Git
@@ -187,8 +75,8 @@ func (e *engineImpl) rebuild() error {
 	currentBranch, _ := e.git.GetCurrentBranch()
 
 	// 3. Load metadata for each branch in parallel (slow)
-	allMeta, _ := e.git.BatchReadMetadata(branches)
-	allLocalMeta := e.git.BatchReadLocalMetadata(branches)
+	allMeta, _ := e.batchReadMetadata(branches)
+	allLocalMeta := e.batchReadLocalMetadata(branches)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -217,7 +105,7 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 
 	// Check if parent branch still exists locally
 	parentExists := false
-	for _, name := range e.branches {
+	for _, name := range e.state.branches {
 		if name == parentBranchName {
 			parentExists = true
 			break
@@ -259,7 +147,7 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 // Returns trunk if all ancestors have been merged
 func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName string, metaMap map[string]*git.Meta) string {
 	// Get the starting parent from branchState
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	if state == nil {
 		return e.trunk
 	}
@@ -270,7 +158,7 @@ func (e *engineImpl) findNearestValidAncestor(ctx context.Context, branchName st
 			return current
 		}
 		// Move to the next parent
-		parentState := e.branchState.GetByName(current)
+		parentState := e.state.branchState.GetByName(current)
 		if parentState == nil {
 			break
 		}
@@ -290,7 +178,7 @@ func (e *engineImpl) appendMergedDownstack(
 	// Always read fresh metadata from disk for the branch being modified.
 	// This is critical because SetParent has just written the new parent,
 	// and metaMap may contain stale metadata with the old parent.
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return err
 	}
@@ -322,7 +210,7 @@ func (e *engineImpl) appendMergedDownstack(
 		if existing.BranchName == oldParent {
 			// Already captured, skip adding duplicate
 			meta = meta.WithMergedDownstack(history)
-			if err := e.git.WriteMetadata(branchName, meta); err != nil {
+			if err := e.writeMetadata(branchName, meta); err != nil {
 				return err
 			}
 			if metaMap != nil {
@@ -343,7 +231,7 @@ func (e *engineImpl) appendMergedDownstack(
 	meta = meta.WithMergedDownstack(history)
 
 	// Write and update cache
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
+	if err := e.writeMetadata(branchName, meta); err != nil {
 		return err
 	}
 	if metaMap != nil {
@@ -359,7 +247,7 @@ func (e *engineImpl) getMetaFromMapOrDisk(branchName string, metaMap map[string]
 			return meta
 		}
 	}
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return nil
 	}

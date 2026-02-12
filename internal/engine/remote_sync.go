@@ -118,7 +118,7 @@ func (e *engineImpl) setLastModifiedByInternal(branchName string, modifiedBy *gi
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		meta = git.NewMeta()
 	}
@@ -129,7 +129,7 @@ func (e *engineImpl) setLastModifiedByInternal(branchName string, modifiedBy *gi
 	hash := e.computeMetadataHash(meta)
 	meta = meta.WithLocalOnlyHash(&hash)
 
-	return e.git.WriteMetadata(branchName, meta)
+	return e.writeMetadata(branchName, meta)
 }
 
 // LoadRemoteMetadataCache loads remote metadata refs into the engine's cache
@@ -187,7 +187,7 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	}
 
 	// Update local branch state
-	if state := e.branchState.GetByName(branchName); state != nil {
+	if state := e.state.branchState.GetByName(branchName); state != nil {
 		state.LockReason = remote.GetLockReason()
 		if remote.GetScope() != nil {
 			state.Scope = *remote.GetScope()
@@ -195,7 +195,7 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	}
 
 	// Read existing local metadata to preserve fields not in remote (like PrInfo)
-	local, err := e.git.ReadMetadata(branchName)
+	local, err := e.readMetadata(branchName)
 	if err != nil {
 		local = git.NewMeta()
 	}
@@ -212,7 +212,7 @@ func (e *engineImpl) ApplyRemoteMetadataIfExists(branchName string) error {
 	hash := e.computeMetadataHash(local)
 	local = local.WithLocalOnlyHash(&hash)
 
-	return e.git.WriteMetadata(branchName, local)
+	return e.writeMetadata(branchName, local)
 }
 
 // GetRemoteMetadataCache returns a read-only view of the remote metadata cache.
@@ -231,7 +231,7 @@ func (e *engineImpl) GetRemoteMetadataCache() RemoteMetadataView {
 // ComputeMetadataDiff compares local and remote metadata for a branch
 func (e *engineImpl) ComputeMetadataDiff(branch string) (*MetadataDiff, error) {
 	e.mu.RLock()
-	local, err := e.git.ReadMetadata(branch)
+	local, err := e.readMetadata(branch)
 	remote := e.remoteMetaCache[branch]
 	e.mu.RUnlock()
 
@@ -284,7 +284,7 @@ func (e *engineImpl) ComputeAllMetadataDiffs() ([]*MetadataDiff, error) {
 	e.mu.RLock()
 	// Filter to only include branches that exist locally (as git branches)
 	localBranches := make(map[string]bool)
-	for _, b := range e.branches {
+	for _, b := range e.state.branches {
 		localBranches[b] = true
 	}
 
@@ -318,7 +318,7 @@ func (e *engineImpl) AcceptRemoteMetadata(branch string) error {
 func (e *engineImpl) RejectRemoteMetadata(branch string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if state := e.branchState.GetByName(branch); state != nil {
+	if state := e.state.branchState.GetByName(branch); state != nil {
 		state.LocalModified = true
 	}
 }
@@ -328,11 +328,11 @@ func (e *engineImpl) HasLocalModifications(branch string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if state := e.branchState.GetByName(branch); state != nil && state.LocalModified {
+	if state := e.state.branchState.GetByName(branch); state != nil && state.LocalModified {
 		return true
 	}
 
-	local, err := e.git.ReadMetadata(branch)
+	local, err := e.readMetadata(branch)
 	if err != nil || local.GetLocalOnlyHash() == nil {
 		return false // Never synced or error, treat as not modified
 	}
@@ -402,7 +402,7 @@ func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error)
 
 	// Create a map of local branches for faster lookup
 	localBranches := make(map[string]bool)
-	for _, b := range e.branches {
+	for _, b := range e.state.branches {
 		localBranches[b] = true
 	}
 
@@ -422,7 +422,7 @@ func (e *engineImpl) FindOrphanedLocalMetadata() ([]OrphanedMetadataInfo, error)
 
 		// If it exists locally but has no remote metadata, it's not orphaned (it's a local-only branch)
 		// UNLESS it was previously synced (has LocalOnlyHash).
-		local, err := e.git.ReadMetadata(branchName)
+		local, err := e.readMetadata(branchName)
 		if err != nil {
 			continue
 		}
@@ -466,13 +466,13 @@ func (e *engineImpl) DeleteLocalMetadataHash(branchName string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	local, err := e.git.ReadMetadata(branchName)
+	local, err := e.readMetadata(branchName)
 	if err != nil {
 		return err
 	}
 
 	local = local.WithLocalOnlyHash(nil)
-	return e.git.WriteMetadata(branchName, local)
+	return e.writeMetadata(branchName, local)
 }
 
 // DeleteMetadata deletes the metadata ref for a branch with retry logic.

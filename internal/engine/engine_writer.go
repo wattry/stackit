@@ -105,7 +105,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 
 	// Validate branch exists
 	branchExists := false
-	for _, name := range e.branches {
+	for _, name := range e.state.branches {
 		if name == branchName {
 			branchExists = true
 			break
@@ -118,10 +118,9 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 			e.mu.Unlock()
 			return fmt.Errorf("failed to get branches: %w", err)
 		}
-		e.branches = branches
-		e.branchNamesSet = nil // invalidate cache
+		e.state.setBranches(branches)
 		branchExists = false
-		for _, name := range e.branches {
+		for _, name := range e.state.branches {
 			if name == branchName {
 				branchExists = true
 				break
@@ -136,7 +135,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 	// Validate parent exists (or is trunk)
 	if parentBranchName != e.trunk {
 		parentExists := false
-		for _, name := range e.branches {
+		for _, name := range e.state.branches {
 			if name == parentBranchName {
 				parentExists = true
 				break
@@ -149,10 +148,9 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 				e.mu.Unlock()
 				return fmt.Errorf("failed to get branches: %w", err)
 			}
-			e.branches = branches
-			e.branchNamesSet = nil // invalidate cache
+			e.state.setBranches(branches)
 			parentExists = false
-			for _, name := range e.branches {
+			for _, name := range e.state.branches {
 				if name == parentBranchName {
 					parentExists = true
 					break
@@ -192,12 +190,12 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	e.mu.Lock()
 
 	// Get children before deletion
-	children := make([]string, len(e.childrenMap[branchName]))
-	copy(children, e.childrenMap[branchName])
+	children := make([]string, len(e.state.childrenMap[branchName]))
+	copy(children, e.state.childrenMap[branchName])
 
 	// Get parent
 	parent := e.trunk
-	if state := e.branchState.GetByName(branchName); state != nil {
+	if state := e.state.branchState.GetByName(branchName); state != nil {
 		parent = state.Parent
 	}
 
@@ -242,22 +240,11 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Remove from parent's children list
-	if parent != "" {
-		parentChildren := e.childrenMap[parent]
-		if i := slices.Index(parentChildren, branchName); i >= 0 {
-			e.childrenMap[parent] = slices.Delete(parentChildren, i, i+1)
-		}
-	}
-
-	// Remove from maps
-	e.branchState.Delete(branchName)
-	delete(e.childrenMap, branchName)
+	e.state.removeBranch(branchName)
 
 	// Remove from branches list
-	if i := slices.Index(e.branches, branchName); i >= 0 {
-		e.branches = slices.Delete(e.branches, i, i+1)
-		e.branchNamesSet = nil // invalidate cache
+	if i := slices.Index(e.state.branches, branchName); i >= 0 {
+		e.state.setBranches(slices.Delete(e.state.branches, i, i+1))
 	}
 
 	return nil
@@ -272,7 +259,7 @@ func (e *engineImpl) DeleteBranches(ctx context.Context, branches []Branch) ([]s
 		branchName := b.GetName()
 		toDeleteSet[branchName] = true
 		e.mu.RLock()
-		children := e.childrenMap[branchName]
+		children := e.state.childrenMap[branchName]
 		e.mu.RUnlock()
 		for _, child := range children {
 			allChildren[child] = true
@@ -340,9 +327,8 @@ func (e *engineImpl) CreateAndCheckoutBranch(ctx context.Context, branch Branch)
 
 	e.currentBranch = branchName
 	// Add to branches list if not already there
-	if !slices.Contains(e.branches, branchName) {
-		e.branches = append(e.branches, branchName)
-		e.branchNamesSet = nil // invalidate cache
+	if !slices.Contains(e.state.branches, branchName) {
+		e.state.setBranches(append(e.state.branches, branchName))
 	}
 
 	return nil
@@ -366,7 +352,7 @@ func (e *engineImpl) SetParent(ctx context.Context, branch Branch, parentBranch 
 		}
 
 		// Read existing metadata
-		meta, err := e.git.ReadMetadata(branchName)
+		meta, err := e.readMetadata(branchName)
 		if err != nil {
 			return fmt.Errorf("failed to read metadata: %w", err)
 		}
@@ -429,7 +415,7 @@ func (e *engineImpl) SetParentPreservingDivergence(ctx context.Context, branch B
 func (e *engineImpl) UpdateParentRevision(ctx context.Context, branchName string, parentRev string) error {
 	return e.WithRetry(ctx, func() error {
 		// Read existing metadata (outside lock for performance)
-		meta, err := e.git.ReadMetadata(branchName)
+		meta, err := e.readMetadata(branchName)
 		if err != nil {
 			return fmt.Errorf("failed to read metadata: %w", err)
 		}
@@ -451,7 +437,7 @@ func (e *engineImpl) SetScope(ctx context.Context, branch Branch, scope Scope) e
 
 	return e.WithRetry(ctx, func() error {
 		// Read existing metadata (outside lock for performance)
-		meta, err := e.git.ReadMetadata(branchName)
+		meta, err := e.readMetadata(branchName)
 		if err != nil {
 			return fmt.Errorf("failed to read metadata: %w", err)
 		}
@@ -497,7 +483,7 @@ func (e *engineImpl) SetLocked(ctx context.Context, branches []Branch, reason Lo
 		result.Errors = make(map[string]error)
 
 		// Batch read all metadata first (parallel, outside any lock)
-		metas, readErrs := e.git.BatchReadMetadata(branchNames)
+		metas, readErrs := e.batchReadMetadata(branchNames)
 
 		// Collect read errors
 		for name, readErr := range readErrs {
@@ -583,7 +569,7 @@ func (e *engineImpl) SetFrozen(ctx context.Context, branches []Branch, frozen bo
 		result.Errors = make(map[string]error)
 
 		// Batch read all local metadata first (parallel, outside any lock)
-		metas := e.git.BatchReadLocalMetadata(branchNames)
+		metas := e.batchReadLocalMetadata(branchNames)
 
 		// Create transaction for atomic update
 		tx := e.BeginTx(fmt.Sprintf("freeze: set frozen=%t on %d branches", frozen, len(branches)))
@@ -635,8 +621,8 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 
 	e.mu.RLock()
 	// Get children before renaming anything
-	children := make([]string, len(e.childrenMap[oldName]))
-	copy(children, e.childrenMap[oldName])
+	children := make([]string, len(e.state.childrenMap[oldName]))
+	copy(children, e.state.childrenMap[oldName])
 	e.mu.RUnlock()
 
 	// Rename git branch
@@ -665,12 +651,12 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 
 	// Update children to point to the new branch name
 	for _, child := range children {
-		childMeta, err := e.git.ReadMetadata(child)
+		childMeta, err := e.readMetadata(child)
 		if err != nil {
 			continue
 		}
 		childMeta = childMeta.WithParentBranchName(&newName)
-		if err := e.git.WriteMetadata(child, childMeta); err != nil {
+		if err := e.writeMetadata(child, childMeta); err != nil {
 			continue
 		}
 	}
@@ -953,13 +939,13 @@ func (e *engineImpl) GetStackRootForBranch(branch Branch) string {
 	}
 
 	// Check if branch is tracked at all
-	if !e.branchState.HasByName(branchName) {
+	if !e.state.branchState.HasByName(branchName) {
 		return "" // Untracked branch has no stack root
 	}
 
 	current := branchName
 	for {
-		state := e.branchState.GetByName(current)
+		state := e.state.branchState.GetByName(current)
 		if state == nil {
 			// Should not happen since we checked above, but handle gracefully
 			return ""
@@ -1034,7 +1020,7 @@ func (e *engineImpl) BatchMarkNeedsPRBodyUpdate(branchNames []string) error {
 	}
 
 	// Batch read all local metadata in parallel
-	allMeta := e.git.BatchReadLocalMetadata(branchNames)
+	allMeta := e.batchReadLocalMetadata(branchNames)
 
 	// Create blobs and collect ref updates
 	updates := make([]git.RefUpdate, 0, len(branchNames))
@@ -1061,7 +1047,7 @@ func (e *engineImpl) BatchMarkNeedsPRBodyUpdate(branchNames []string) error {
 
 // ClearNeedsPRBodyUpdate clears the PR body update flag for a branch
 func (e *engineImpl) ClearNeedsPRBodyUpdate(branchName string) error {
-	localMeta, err := e.git.ReadLocalMetadata(branchName)
+	localMeta, err := e.readLocalMetadata(branchName)
 	if err != nil {
 		// Best effort - if we can't read metadata, nothing to clear
 		return nil //nolint:nilerr
@@ -1070,7 +1056,7 @@ func (e *engineImpl) ClearNeedsPRBodyUpdate(branchName string) error {
 		return nil // Nothing to clear
 	}
 	localMeta.NeedsPRBodyUpdate = false
-	return e.git.WriteLocalMetadata(branchName, localMeta)
+	return e.writeLocalMetadata(branchName, localMeta)
 }
 
 // GetBranchesNeedingPRBodyUpdate returns all branches that need PR body updates
@@ -1081,7 +1067,7 @@ func (e *engineImpl) GetBranchesNeedingPRBodyUpdate() []string {
 		branchNames[i] = b.GetName()
 	}
 
-	localMetas := e.git.BatchReadLocalMetadata(branchNames)
+	localMetas := e.batchReadLocalMetadata(branchNames)
 	var result []string
 	for name, meta := range localMetas {
 		if meta != nil && meta.NeedsPRBodyUpdate {
@@ -1218,7 +1204,7 @@ func (e *engineImpl) GetStackID(branch Branch) string {
 	}
 
 	// Read branch metadata
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return ""
 	}
@@ -1234,7 +1220,7 @@ func (e *engineImpl) GetStackID(branch Branch) string {
 		return ""
 	}
 
-	rootMeta, err := e.git.ReadMetadata(rootName)
+	rootMeta, err := e.readMetadata(rootName)
 	if err != nil || rootMeta == nil || rootMeta.GetStackID() == nil {
 		return ""
 	}
@@ -1293,8 +1279,8 @@ func (e *engineImpl) propagateStackID(ctx context.Context, branchName string, st
 
 	// Get children from the map
 	e.mu.RLock()
-	children := make([]string, len(e.childrenMap[branchName]))
-	copy(children, e.childrenMap[branchName])
+	children := make([]string, len(e.state.childrenMap[branchName]))
+	copy(children, e.state.childrenMap[branchName])
 	e.mu.RUnlock()
 
 	// Recursively set on children
@@ -1312,7 +1298,7 @@ func (e *engineImpl) SetStackID(ctx context.Context, branch Branch, stackID stri
 	branchName := branch.GetName()
 
 	return e.WithRetry(ctx, func() error {
-		meta, err := e.git.ReadMetadata(branchName)
+		meta, err := e.readMetadata(branchName)
 		if err != nil {
 			return fmt.Errorf("failed to read metadata: %w", err)
 		}

@@ -118,7 +118,7 @@ func (e *engineImpl) TakeSnapshot(opts SnapshotOptions) error {
 
 	// Get all branch SHAs
 	branchSHAs := make(map[string]string)
-	for _, branchName := range e.branches {
+	for _, branchName := range e.state.branches {
 		branch := e.GetBranch(branchName)
 		sha, err := branch.GetRevision()
 		if err != nil {
@@ -433,7 +433,7 @@ func (e *engineImpl) RestoreSnapshot(ctx context.Context, snapshotID string) err
 	if snapshot.CurrentBranch != "" {
 		// Check if the branch still exists
 		branchExists := false
-		for _, branchName := range e.branches {
+		for _, branchName := range e.state.branches {
 			if branchName == snapshot.CurrentBranch {
 				branchExists = true
 				break

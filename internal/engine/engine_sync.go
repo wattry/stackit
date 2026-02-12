@@ -113,7 +113,7 @@ func (e *engineImpl) restackBranch(
 	}
 
 	e.mu.RLock()
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
 	var parent string
@@ -167,7 +167,7 @@ func (e *engineImpl) restackBranch(
 			oldMetadataSHA, _ := e.git.GetRef(fmt.Sprintf("%s%s", git.MetadataRefPrefix, branchName))
 
 			// Prepare metadata update
-			meta, err := e.git.ReadMetadata(branchName)
+			meta, err := e.readMetadata(branchName)
 			if err != nil {
 				meta = git.NewMeta()
 			}
@@ -240,7 +240,7 @@ func (e *engineImpl) restackBranch(
 		oldMetadataSHA, _ := e.git.GetRef(fmt.Sprintf("%s%s", git.MetadataRefPrefix, branchName))
 
 		// Prepare metadata update with new parent revision
-		meta, err := e.git.ReadMetadata(branchName)
+		meta, err := e.readMetadata(branchName)
 		if err != nil {
 			meta = git.NewMeta()
 		}
@@ -333,7 +333,7 @@ func (e *engineImpl) restackBranch(
 		meta = metaMap[branchName]
 	}
 	if meta == nil {
-		meta, err = e.git.ReadMetadata(branchName)
+		meta, err = e.readMetadata(branchName)
 		if err != nil {
 			return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to read metadata: %w", err)
 		}
@@ -413,7 +413,7 @@ func (e *engineImpl) restackBranch(
 	oldMetadataSHA, _ := e.git.GetRef(fmt.Sprintf("%s%s", git.MetadataRefPrefix, branchName))
 
 	// Prepare metadata update
-	meta, metaReadErr := e.git.ReadMetadata(branchName)
+	meta, metaReadErr := e.readMetadata(branchName)
 	if metaReadErr != nil {
 		meta = git.NewMeta()
 	}
@@ -466,7 +466,7 @@ func (e *engineImpl) restackBranch(
 	// Update the cached metadata if we're using a metaMap, so subsequent branches in the batch
 	// see the updated ParentBranchRevision.
 	if metaMap != nil {
-		if updatedMeta, err := e.git.ReadMetadata(branchName); err == nil {
+		if updatedMeta, err := e.readMetadata(branchName); err == nil {
 			metaMap[branchName] = updatedMeta
 		}
 	}
@@ -519,7 +519,7 @@ func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (Re
 		// Crawl up the branch state to find all ancestors
 		current := name
 		for {
-			state := e.branchState.GetByName(current)
+			state := e.state.branchState.GetByName(current)
 			if state == nil || state.Parent == e.trunk || allInvolvedBranches[state.Parent] {
 				break
 			}
@@ -536,7 +536,7 @@ func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (Re
 	e.mu.RUnlock()
 
 	// Fetch ALL metadata in parallel
-	allMeta, _ := e.git.BatchReadMetadata(involvedBranchNames)
+	allMeta, _ := e.batchReadMetadata(involvedBranchNames)
 
 	// Fetch ALL revisions in parallel
 	allRevisions, _ := e.git.BatchGetRevisions(involvedBranchNames)

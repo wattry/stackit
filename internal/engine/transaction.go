@@ -293,7 +293,7 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	}
 	// Clear frozen state for deleted local metadata
 	for _, branch := range localMetaDeleteBranches {
-		if state := tx.eng.branchState.GetByName(branch); state != nil {
+		if state := tx.eng.state.branchState.GetByName(branch); state != nil {
 			state.Frozen = false
 		}
 	}
@@ -323,78 +323,28 @@ func (tx *MetadataTx) IsCommitted() bool {
 // updateBranchStateFromMeta updates the in-memory branch state from metadata.
 //
 // IMPORTANT: Caller MUST hold e.mu lock before calling this function.
-// This function modifies e.childrenMap and e.branchState which are not
+// This function modifies e.state.childrenMap and e.state.branchState which are not
 // individually thread-safe. Failing to hold the lock can cause data races
 // and corrupt the in-memory cache.
 func (e *engineImpl) updateBranchStateFromMeta(branch string, meta *git.Meta) {
-	state := e.branchState.GetOrCreate(branch)
-
-	if parentName := meta.GetParentBranchName(); parentName != nil {
-		// Update children map for old parent
-		if state.Parent != "" && state.Parent != *parentName {
-			oldChildren := e.childrenMap[state.Parent]
-			for i, c := range oldChildren {
-				if c == branch {
-					e.childrenMap[state.Parent] = append(oldChildren[:i], oldChildren[i+1:]...)
-					break
-				}
-			}
-		}
-
-		state.Parent = *parentName
-
-		// Update children map for new parent
-		if state.Parent != "" {
-			if !slices.Contains(e.childrenMap[state.Parent], branch) {
-				e.childrenMap[state.Parent] = append(e.childrenMap[state.Parent], branch)
-			}
-		}
-	}
-
-	if meta.GetScope() != nil {
-		state.Scope = *meta.GetScope()
-	} else {
-		state.Scope = ""
-	}
-
-	state.LockReason = meta.GetLockReason()
-	state.BranchType = meta.GetBranchType()
+	e.state.updateBranchStateFromMeta(branch, meta)
 }
 
 // updateBranchStateFromLocalMeta updates the in-memory branch state from local metadata.
 //
 // IMPORTANT: Caller MUST hold e.mu lock before calling this function.
-// This function modifies e.branchState which is not individually thread-safe.
+// This function modifies e.state.branchState which is not individually thread-safe.
 func (e *engineImpl) updateBranchStateFromLocalMeta(branch string, meta *git.LocalMeta) {
-	state := e.branchState.GetOrCreate(branch)
-	state.Frozen = meta.Frozen
+	e.state.updateBranchStateFromLocalMeta(branch, meta)
 }
 
 // removeBranchFromState removes a branch from in-memory caches.
 //
 // IMPORTANT: Caller MUST hold e.mu lock before calling this function.
-// This function modifies e.childrenMap and e.branchState which are not
+// This function modifies e.state.childrenMap and e.state.branchState which are not
 // individually thread-safe.
 func (e *engineImpl) removeBranchFromState(branch string) {
-	state := e.branchState.GetByName(branch)
-	if state == nil {
-		return
-	}
-
-	// Remove from parent's children list
-	if state.Parent != "" {
-		parentChildren := e.childrenMap[state.Parent]
-		for i, c := range parentChildren {
-			if c == branch {
-				e.childrenMap[state.Parent] = append(parentChildren[:i], parentChildren[i+1:]...)
-				break
-			}
-		}
-	}
-
-	// Delete branch state and children map entry
-	e.branchState.Delete(branch)
-	delete(e.childrenMap, branch)
+	e.state.removeBranch(branch)
 }
 
 // IsConcurrentModificationError returns true if the error indicates a concurrent
