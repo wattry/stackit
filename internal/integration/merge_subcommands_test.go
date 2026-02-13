@@ -289,7 +289,8 @@ func TestMergeCommand(t *testing.T) {
 		sh.Run("merge --help")
 
 		// Should show subcommands
-		sh.OutputContains("next").
+		sh.OutputContains("status").
+			OutputContains("next").
 			OutputContains("ship")
 	})
 
@@ -328,6 +329,49 @@ func TestMergeCommand(t *testing.T) {
 		// merge (without subcommand) should error in non-interactive mode
 		sh.RunExpectError("merge")
 		sh.OutputContains("requires a TTY")
+	})
+}
+
+func TestMergeStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("status subcommand is accessible", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Run("merge status --help")
+
+		sh.OutputContains("ready to merge").
+			OutputContains("--all")
+	})
+
+	t.Run("shows empty state when no stacks", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Run("merge status")
+
+		sh.OutputContains("No active stacks found")
+	})
+
+	t.Run("shows stacks when they exist", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{
+			Number: 101,
+			State:  "OPEN",
+			URL:    "https://github.com/owner/repo/pull/101",
+		})
+
+		sh.Run("merge status --all")
+
+		// Should show the stack info (incomplete since no approvals/CI)
+		sh.OutputContains("branch-a")
 	})
 }
 
