@@ -36,6 +36,7 @@ through the merge process.
 Subcommands:
   status  Show shippability status of your stacks
   next    Merge the next (bottom-most) unmerged PR in the stack
+  drain   Merge all PRs bottom-up, waiting for each to complete
   ship    Consolidate all branches into a single PR and merge atomically
 
 Examples:
@@ -43,6 +44,7 @@ Examples:
   stackit merge status      # Show your mergeable work
   stackit merge status --all # Show entire team's mergeable work
   stackit merge next        # Merge bottom PR, restack, stop
+  stackit merge drain       # Merge all PRs bottom-up, wait for each
   stackit merge ship        # Consolidate all branches into single PR`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -91,6 +93,7 @@ Examples:
 	cmd.AddCommand(NewStatusCmd())
 	cmd.AddCommand(NewNextCmd(postMergeHandler))
 	cmd.AddCommand(NewSquashCmd(postMergeHandler))
+	cmd.AddCommand(NewDrainCmd(postMergeHandler))
 
 	return cmd
 }
