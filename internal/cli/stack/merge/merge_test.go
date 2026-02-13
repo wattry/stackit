@@ -29,11 +29,6 @@ func TestNewMergeCmd(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, shipCmd)
 		require.Equal(t, "ship", shipCmd.Use)
-
-		// "squash" should still work as an alias
-		squashCmd, _, err := cmd.Find([]string{"squash"})
-		require.NoError(t, err)
-		require.NotNil(t, squashCmd)
 	})
 
 	t.Run("has expected flags", func(t *testing.T) {
@@ -79,7 +74,7 @@ func TestNewNextCmd(t *testing.T) {
 
 func TestNewShipCmd(t *testing.T) {
 	t.Run("has expected flags", func(t *testing.T) {
-		cmd := NewSquashCmd(nil)
+		cmd := NewShipCmd(nil)
 
 		require.Equal(t, "ship", cmd.Use)
 

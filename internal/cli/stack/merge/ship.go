@@ -15,10 +15,10 @@ import (
 	"stackit.dev/stackit/internal/tui"
 )
 
-// NewSquashCmd creates the merge ship subcommand (aliased as "squash" for backward compatibility).
+// NewShipCmd creates the merge ship subcommand.
 // This command consolidates all branches in the stack into a single PR and merges it atomically.
 // It uses GitHub automerge by default and waits for the merge to complete.
-func NewSquashCmd(postMergeHandler PostMergeHandler) *cobra.Command {
+func NewShipCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 	var (
 		dryRun      bool
 		yes         bool
@@ -31,9 +31,8 @@ func NewSquashCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "ship",
-		Aliases: []string{"squash"},
-		Short:   "Consolidate all stack branches into a single PR and merge atomically",
+		Use:   "ship",
+		Short: "Consolidate all stack branches into a single PR and merge atomically",
 		Long: `Consolidate all branches in the stack into a single PR for atomic merging.
 
 This creates a new "consolidation" branch that contains all the commits from the stack,
@@ -52,7 +51,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 			return common.Run(cmd, func(ctx *app.Context) error {
 				// Handle multi-stack mode
 				if len(stacks) > 0 || cmd.Flags().Changed("stacks") {
-					return runMultiStackSquash(ctx, squashMultiStackOptions{
+					return runMultiStackShip(ctx, shipMultiStackOptions{
 						dryRun:      dryRun,
 						stacks:      stacks,
 						skipLocalCI: skipLocalCI,
@@ -61,7 +60,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 					})
 				}
 
-				return runMergeSquash(ctx, mergeSquashOptions{
+				return runMergeShip(ctx, mergeShipOptions{
 					dryRun: dryRun,
 					yes:    yes,
 					force:  force,
@@ -89,7 +88,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 	return cmd
 }
 
-type mergeSquashOptions struct {
+type mergeShipOptions struct {
 	dryRun bool
 	yes    bool
 	force  bool
@@ -98,7 +97,7 @@ type mergeSquashOptions struct {
 	branch string
 }
 
-type squashMultiStackOptions struct {
+type shipMultiStackOptions struct {
 	dryRun      bool
 	stacks      []string
 	skipLocalCI bool
@@ -106,12 +105,12 @@ type squashMultiStackOptions struct {
 	yes         bool
 }
 
-func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler PostMergeHandler) error {
+func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler PostMergeHandler) error {
 	out := ctx.Output
 
 	// Create consolidation plan
 	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
-		Strategy:     mergeAction.StrategySquash,
+		Strategy:     mergeAction.StrategyShip,
 		Force:        opts.force,
 		Scope:        opts.scope,
 		TargetBranch: opts.branch,
@@ -155,7 +154,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 
 	// Confirm unless --yes
 	if !opts.yes && ctx.Interactive {
-		confirmed, err := tui.PromptConfirm("Proceed with squash merge?", false)
+		confirmed, err := tui.PromptConfirm("Proceed with ship merge?", false)
 		if err != nil {
 			return fmt.Errorf("confirmation canceled: %w", err)
 		}
@@ -179,7 +178,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 	actionOpts := mergeAction.Options{
 		DryRun:         false,
 		Confirm:        false, // Already confirmed
-		Strategy:       mergeAction.StrategySquash,
+		Strategy:       mergeAction.StrategyShip,
 		Force:          opts.force,
 		Wait:           opts.wait,
 		Scope:          opts.scope,
@@ -207,7 +206,7 @@ func runMergeSquash(ctx *app.Context, opts mergeSquashOptions, postMergeHandler 
 // consolidation, or (false, err) if an error occurred.
 //
 // The graph parameter is passed to avoid rebuilding it (the caller already has one).
-func tryIndividualMerge(ctx *app.Context, opts mergeSquashOptions, plan *mergeAction.Plan, graph *engine.StackGraph, postMergeHandler PostMergeHandler) (bool, error) {
+func tryIndividualMerge(ctx *app.Context, opts mergeShipOptions, plan *mergeAction.Plan, graph *engine.StackGraph, postMergeHandler PostMergeHandler) (bool, error) {
 	out := ctx.Output
 
 	if !mergeAction.AllBranchesAreLeaves(graph, plan.BranchesToMerge) {
@@ -281,7 +280,7 @@ func tryIndividualMerge(ctx *app.Context, opts mergeSquashOptions, plan *mergeAc
 	return true, nil
 }
 
-func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
+func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {
 	out := ctx.Output
 
 	// Discover available stacks
@@ -370,7 +369,7 @@ func runMultiStackSquash(ctx *app.Context, opts squashMultiStackOptions) error {
 
 	// Show summary
 	out.Newline()
-	out.Success("Multi-stack squash merge complete!")
+	out.Success("Multi-stack ship merge complete!")
 	out.Info("  PR: #%d %s", result.PRNumber, result.PRURL)
 	out.Info("  Included: %d stacks", len(result.IncludedStacks))
 	if len(result.ExcludedStacks) > 0 {

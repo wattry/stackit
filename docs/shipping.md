@@ -238,7 +238,7 @@ Merge the bottom-most ready PR in the stack.
 
 ### `stackit merge ship`
 
-Consolidate stack(s) into a single PR. (Also available as `stackit merge squash` for backward compatibility.)
+Consolidate stack(s) into a single PR.
 
 | Flag | Description |
 |------|-------------|
@@ -272,7 +272,7 @@ internal/actions/merge/
 type Strategy int
 const (
     StrategyBottomUp Strategy = iota
-    StrategySquash
+    StrategyShip
 )
 
 // Merge plan - created before execution

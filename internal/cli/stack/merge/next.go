@@ -116,6 +116,10 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 		return nil
 	}
 
+	if ctx.GitHubClient == nil {
+		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
+	}
+
 	// Confirm unless --yes
 	if !opts.yes && ctx.Interactive {
 		confirmed, err := tui.PromptConfirm(fmt.Sprintf("Merge PR #%d (%s)?", bottomPR.PRNumber, bottomPR.BranchName), false)
@@ -126,10 +130,6 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 			out.Info("Merge canceled")
 			return nil
 		}
-	}
-
-	if ctx.GitHubClient == nil {
-		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
 	// Get the PR's NodeID for merge operations

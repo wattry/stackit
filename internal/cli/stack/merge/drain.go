@@ -118,6 +118,10 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 		return nil
 	}
 
+	if ctx.GitHubClient == nil {
+		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
+	}
+
 	// Confirm unless --yes
 	if !opts.yes && ctx.Interactive {
 		confirmed, err := tui.PromptConfirm(fmt.Sprintf("Drain all %d PRs in the stack?", totalPRs), false)
@@ -128,10 +132,6 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 			out.Info("Merge canceled")
 			return nil
 		}
-	}
-
-	if ctx.GitHubClient == nil {
-		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
 	// Resolve merge method once upfront (flag > config > prompt)
