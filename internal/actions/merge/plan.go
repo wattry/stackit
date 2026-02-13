@@ -308,8 +308,13 @@ func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output
 			return
 		}
 
-		// Check PR state
+		// Determine PR state: prefer live GitHub state over local metadata
 		state := prInfo.State()
+		if allCheckStatuses != nil {
+			if checkStatus, ok := allCheckStatuses[name]; ok && checkStatus.State != "" {
+				state = checkStatus.State
+			}
+		}
 		if state != "OPEN" {
 			if state == "MERGED" {
 				splog.Debug("Skipping %s: PR #%d is already merged", name, *prInfo.Number())

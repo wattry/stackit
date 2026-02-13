@@ -54,6 +54,10 @@ func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, 
 	if err != nil {
 		return 0, fmt.Errorf("failed to check PR mergeable state: %w", err)
 	}
+	if mergeableState.State == "MERGED" {
+		out.Success("PR #%d is already merged", opts.prNumber)
+		return OutcomeMerged, nil
+	}
 	if mergeableState.State != "OPEN" {
 		return 0, fmt.Errorf("PR #%d is %s (not open)", opts.prNumber, mergeableState.State)
 	}

@@ -128,6 +128,51 @@ func TestParseCheckRollup_FiltersStackitChecks(t *testing.T) {
 	assert.Equal(t, "CI", status.Checks[0].Name)
 }
 
+func TestParseBranchStatus_ExtractsPRState(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		prState       string
+		expectedState string
+	}{
+		{"open PR", "OPEN", "OPEN"},
+		{"merged PR", "MERGED", "MERGED"},
+		{"closed PR", "CLOSED", "CLOSED"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := map[string]interface{}{
+				"nodes": []interface{}{
+					map[string]interface{}{
+						"state":          tt.prState,
+						"author":         map[string]interface{}{"login": "testuser"},
+						"reviewDecision": "APPROVED",
+					},
+				},
+			}
+
+			status := parseBranchStatus(data)
+			require.NotNil(t, status)
+			assert.Equal(t, tt.expectedState, status.State)
+		})
+	}
+}
+
+func TestParseBranchStatus_NoPRReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]interface{}{
+		"nodes": []interface{}{},
+	}
+
+	status := parseBranchStatus(data)
+	assert.Nil(t, status)
+}
+
 func TestParseCheckRollup_MultipleDistinctChecks(t *testing.T) {
 	t.Parallel()
 
