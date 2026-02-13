@@ -137,6 +137,93 @@ func TestPreparePRMetadata_DraftStatus(t *testing.T) {
 	})
 }
 
+func TestPreparePRMetadata_InheritParentDraft(t *testing.T) {
+	t.Parallel()
+
+	t.Run("new PR inherits draft from parent", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, nil).WithLinearStack("parent", "child")
+
+		// Set parent PR as draft
+		parentBranch := s.Engine.GetBranch("parent")
+		err := s.Engine.UpsertPrInfo(context.Background(), parentBranch, testhelpers.NewTestPrInfoDraft(100))
+		require.NoError(t, err)
+
+		// Child has no PR yet
+		childBranch := s.Engine.GetBranch("child")
+		metadata, err := submit.PreparePRMetadata(childBranch, submit.MetadataOptions{}, s.Context)
+		require.NoError(t, err)
+		require.True(t, metadata.IsDraft, "new PR should inherit draft status from parent PR")
+	})
+
+	t.Run("new PR stays non-draft when parent is non-draft", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, nil).WithLinearStack("parent", "child")
+
+		// Set parent PR as non-draft
+		parentBranch := s.Engine.GetBranch("parent")
+		err := s.Engine.UpsertPrInfo(context.Background(), parentBranch, testhelpers.NewTestPrInfo(100))
+		require.NoError(t, err)
+
+		childBranch := s.Engine.GetBranch("child")
+		metadata, err := submit.PreparePRMetadata(childBranch, submit.MetadataOptions{}, s.Context)
+		require.NoError(t, err)
+		require.False(t, metadata.IsDraft, "new PR should not be draft when parent PR is not draft")
+	})
+
+	t.Run("--publish overrides parent draft", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, nil).WithLinearStack("parent", "child")
+
+		// Set parent PR as draft
+		parentBranch := s.Engine.GetBranch("parent")
+		err := s.Engine.UpsertPrInfo(context.Background(), parentBranch, testhelpers.NewTestPrInfoDraft(100))
+		require.NoError(t, err)
+
+		childBranch := s.Engine.GetBranch("child")
+		metadata, err := submit.PreparePRMetadata(childBranch, submit.MetadataOptions{Publish: true}, s.Context)
+		require.NoError(t, err)
+		require.False(t, metadata.IsDraft, "--publish should override parent draft status")
+	})
+
+	t.Run("parent with no PR does not affect child", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, nil).WithLinearStack("parent", "child")
+
+		// Parent has no PR info at all
+		childBranch := s.Engine.GetBranch("child")
+		metadata, err := submit.PreparePRMetadata(childBranch, submit.MetadataOptions{}, s.Context)
+		require.NoError(t, err)
+		require.False(t, metadata.IsDraft, "child should not be draft when parent has no PR")
+	})
+
+	t.Run("ConfigDraft and parent draft are OR-ed", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, nil).WithLinearStack("parent", "child")
+
+		// Parent PR is not draft, but ConfigDraft is true
+		parentBranch := s.Engine.GetBranch("parent")
+		err := s.Engine.UpsertPrInfo(context.Background(), parentBranch, testhelpers.NewTestPrInfo(100))
+		require.NoError(t, err)
+
+		childBranch := s.Engine.GetBranch("child")
+		metadata, err := submit.PreparePRMetadata(childBranch, submit.MetadataOptions{ConfigDraft: true}, s.Context)
+		require.NoError(t, err)
+		require.True(t, metadata.IsDraft, "ConfigDraft should make PR draft even when parent is not draft")
+	})
+
+	t.Run("trunk-parented branch uses config only", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, nil).WithLinearStack("solo")
+
+		// Branch parented to trunk — no parent PR possible
+		branch := s.Engine.GetBranch("solo")
+		metadata, err := submit.PreparePRMetadata(branch, submit.MetadataOptions{}, s.Context)
+		require.NoError(t, err)
+		require.False(t, metadata.IsDraft, "trunk-parented branch should not be draft without config")
+	})
+}
+
 func TestPreparePRMetadata_NoEdit(t *testing.T) {
 	t.Run("no-edit skips title and body editing", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)

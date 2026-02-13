@@ -121,8 +121,8 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 	case opts.Publish:
 		metadata.IsDraft = false
 	case prInfo == nil:
-		// For new PRs, use config draft setting as default
-		metadata.IsDraft = opts.ConfigDraft
+		// For new PRs, use config draft setting or inherit from parent PR
+		metadata.IsDraft = opts.ConfigDraft || isParentPRDraft(branch)
 	default:
 		metadata.IsDraft = prInfo.IsDraft()
 	}
@@ -200,6 +200,20 @@ type PRMetadata struct {
 	TeamReviewers []string
 	Labels        []string // Labels to apply to the PR
 	Assignees     []string // Assignees to apply to the PR
+}
+
+// isParentPRDraft returns true if the branch's parent has a draft PR.
+// Returns false for trunk-parented branches, branches with no parent PR, or on errors.
+func isParentPRDraft(branch engine.Branch) bool {
+	parent := branch.GetParent()
+	if parent == nil {
+		return false
+	}
+	prInfo, err := parent.GetPrInfo()
+	if err != nil || prInfo == nil {
+		return false
+	}
+	return prInfo.IsDraft()
 }
 
 // Helper to get string value from prInfo
