@@ -109,6 +109,36 @@ func TestNewShipCmd(t *testing.T) {
 	})
 }
 
+func TestNewDrainCmd(t *testing.T) {
+	t.Run("has expected flags", func(t *testing.T) {
+		cmd := NewDrainCmd(nil)
+
+		require.Equal(t, "drain", cmd.Use)
+
+		dryRunFlag := cmd.Flags().Lookup("dry-run")
+		require.NotNil(t, dryRunFlag)
+
+		yesFlag := cmd.Flags().Lookup("yes")
+		require.NotNil(t, yesFlag)
+
+		forceFlag := cmd.Flags().Lookup("force")
+		require.NotNil(t, forceFlag)
+
+		methodFlag := cmd.Flags().Lookup("method")
+		require.NotNil(t, methodFlag)
+
+		branchFlag := cmd.Flags().Lookup("branch")
+		require.NotNil(t, branchFlag)
+
+		scopeFlag := cmd.Flags().Lookup("scope")
+		require.NotNil(t, scopeFlag)
+
+		// drain should NOT have a --wait flag (it always waits)
+		waitFlag := cmd.Flags().Lookup("wait")
+		require.Nil(t, waitFlag)
+	})
+}
+
 func TestMergeNextUsesCreateMergePlan(t *testing.T) {
 	t.Parallel()
 

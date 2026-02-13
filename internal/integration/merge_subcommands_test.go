@@ -166,6 +166,98 @@ func TestMergeNext(t *testing.T) {
 	})
 }
 
+func TestMergeDrain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("drain subcommand is accessible", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Run("merge drain --help")
+
+		sh.OutputContains("bottom-up").
+			OutputContains("--dry-run").
+			OutputContains("--method")
+	})
+
+	t.Run("dry-run shows full plan", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.Write("c.txt", "content-c").
+			Run("create branch-c -m 'Add branch-c'")
+
+		// Add PR info to all branches
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN", URL: "https://github.com/owner/repo/pull/101"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN", URL: "https://github.com/owner/repo/pull/102"})
+		sh.SetPrMetadata("branch-c", PRMetadata{Number: 103, State: "OPEN", URL: "https://github.com/owner/repo/pull/103"})
+
+		// Run merge drain --dry-run
+		sh.Run("merge drain --dry-run")
+
+		// Should show all branches in the plan
+		sh.OutputContains("drain").
+			OutputContains("branch-a").
+			OutputContains("branch-b").
+			OutputContains("branch-c").
+			OutputContains("#101").
+			OutputContains("#102").
+			OutputContains("#103").
+			OutputContains("Dry-run mode")
+	})
+
+	t.Run("errors when on trunk", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Stay on main
+		sh.OnBranch("main")
+
+		// Should error when trying to drain from trunk
+		sh.RunExpectError("merge drain --dry-run")
+		sh.OutputContains("cannot merge from trunk")
+	})
+
+	t.Run("errors when no PRs to merge", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack without PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		// Run merge drain - should error since no PRs exist
+		sh.RunExpectError("merge drain --dry-run")
+		sh.OutputContains("no open PRs")
+	})
+
+	t.Run("shows total PR count in plan", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		sh.Run("merge drain --dry-run")
+
+		sh.OutputContains("Total: 2 PRs to drain")
+	})
+}
+
 func TestMergeSquash(t *testing.T) {
 	t.Parallel()
 	t.Run("dry-run shows consolidation plan", func(t *testing.T) {
@@ -289,7 +381,9 @@ func TestMergeCommand(t *testing.T) {
 		sh.Run("merge --help")
 
 		// Should show subcommands
-		sh.OutputContains("next").
+		sh.OutputContains("status").
+			OutputContains("next").
+			OutputContains("drain").
 			OutputContains("ship")
 	})
 
@@ -328,6 +422,49 @@ func TestMergeCommand(t *testing.T) {
 		// merge (without subcommand) should error in non-interactive mode
 		sh.RunExpectError("merge")
 		sh.OutputContains("requires a TTY")
+	})
+}
+
+func TestMergeStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("status subcommand is accessible", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Run("merge status --help")
+
+		sh.OutputContains("ready to merge").
+			OutputContains("--all")
+	})
+
+	t.Run("shows empty state when no stacks", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		sh.Run("merge status")
+
+		sh.OutputContains("No active stacks found")
+	})
+
+	t.Run("shows stacks when they exist", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{
+			Number: 101,
+			State:  "OPEN",
+			URL:    "https://github.com/owner/repo/pull/101",
+		})
+
+		sh.Run("merge status --all")
+
+		// Should show the stack info (incomplete since no approvals/CI)
+		sh.OutputContains("branch-a")
 	})
 }
 

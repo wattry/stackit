@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,15 @@ import (
 	"golang.org/x/oauth2"
 
 	"stackit.dev/stackit/internal/git"
+)
+
+var (
+	// ErrAutoMergeNotEnabled is returned when auto-merge is not enabled for the repository.
+	ErrAutoMergeNotEnabled = errors.New("auto-merge is not enabled for this repository")
+	// ErrPRCleanStatus is returned when a PR is already in a clean/mergeable status.
+	ErrPRCleanStatus = errors.New("PR is already in clean status")
+	// ErrPRAlreadyMerged is returned when a PR was merged while waiting.
+	ErrPRAlreadyMerged = errors.New("PR was merged while waiting")
 )
 
 // CreatePROptions contains options for creating a pull request
@@ -414,11 +424,15 @@ func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, me
 
 	_, err := executeGraphQLQuery(ctx, runner, mutation, variables)
 	if err != nil {
-		// Check for common error cases
-		if strings.Contains(err.Error(), "auto-merge is not allowed") || strings.Contains(err.Error(), "Pull request auto-merge is not enabled") {
-			return fmt.Errorf("auto-merge is not enabled for this repository. Enable it in repository settings under 'Pull Requests' → 'Allow auto-merge'")
+		errMsg := err.Error()
+		// Check for common error cases and wrap with sentinel errors
+		if strings.Contains(errMsg, "auto-merge is not allowed") || strings.Contains(errMsg, "Pull request auto-merge is not enabled") {
+			return fmt.Errorf("enable it in repository settings under 'Pull Requests' → 'Allow auto-merge': %w", ErrAutoMergeNotEnabled)
 		}
-		if strings.Contains(err.Error(), "Pull request is not in a mergeable state") {
+		if strings.Contains(errMsg, "clean status") {
+			return fmt.Errorf("PR is ready for direct merge: %w", ErrPRCleanStatus)
+		}
+		if strings.Contains(errMsg, "Pull request is not in a mergeable state") {
 			return fmt.Errorf("PR has merge conflicts. Please resolve conflicts before enabling auto-merge")
 		}
 		return fmt.Errorf("failed to enable auto-merge: %w", err)
@@ -508,6 +522,12 @@ func GetAutoMergeStatus(ctx context.Context, runner git.Runner, prNodeID string)
 
 	return status, nil
 }
+
+// PR state constants as returned by GitHub's GraphQL API.
+const (
+	PRStateMerged = "MERGED"
+	PRStateClosed = "CLOSED"
+)
 
 // PRMergeableState represents the mergeable state of a PR
 type PRMergeableState struct {
@@ -644,11 +664,11 @@ func WaitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, tim
 			return fmt.Errorf("failed to check PR state: %w", err)
 		}
 
-		if state.State == "MERGED" {
+		if state.State == PRStateMerged {
 			return nil
 		}
 
-		if state.State == "CLOSED" {
+		if state.State == PRStateClosed {
 			return fmt.Errorf("PR was closed without merging")
 		}
 
@@ -657,7 +677,7 @@ func WaitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, tim
 		if err == nil && !autoMerge.Enabled {
 			// Re-check PR state to avoid race condition where PR merged between checks
 			freshState, freshErr := GetPRMergeableState(ctx, runner, prNodeID)
-			if freshErr == nil && freshState.State == "MERGED" {
+			if freshErr == nil && freshState.State == PRStateMerged {
 				return nil // PR merged successfully
 			}
 
@@ -672,6 +692,46 @@ func WaitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, tim
 	}
 
 	return fmt.Errorf("timed out waiting for PR to be merged after %v", timeout)
+}
+
+// WaitForMergeable polls until a PR's mergeStateStatus becomes CLEAN or HAS_HOOKS (ready to merge).
+// Returns the final PRMergeableState when ready.
+// Returns ErrPRAlreadyMerged if the PR is merged during polling.
+// Returns an error if the PR is CLOSED, DIRTY (conflicts), times out, or the context is canceled.
+func WaitForMergeable(ctx context.Context, runner git.Runner, prNodeID string, timeout time.Duration, pollInterval time.Duration) (*PRMergeableState, error) {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		state, err := GetPRMergeableState(ctx, runner, prNodeID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check PR state: %w", err)
+		}
+
+		switch state.State {
+		case PRStateMerged:
+			return state, fmt.Errorf("PR was merged while waiting: %w", ErrPRAlreadyMerged)
+		case PRStateClosed:
+			return state, fmt.Errorf("PR was closed without merging")
+		}
+
+		switch state.MergeStateText {
+		case "CLEAN", "HAS_HOOKS":
+			return state, nil
+		case "DIRTY":
+			return state, fmt.Errorf("PR has merge conflicts (DIRTY). Please resolve conflicts and try again")
+		}
+
+		// BLOCKED, BEHIND, UNKNOWN, or empty — keep polling
+		time.Sleep(pollInterval)
+	}
+
+	return nil, fmt.Errorf("timed out waiting for PR to become mergeable after %v", timeout)
 }
 
 // updatePRDraftStatus updates the draft status of a PR using GitHub's GraphQL API

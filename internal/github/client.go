@@ -48,6 +48,7 @@ type CheckStatus struct {
 	Checks         []CheckDetail
 	ReviewDecision string // "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", ""
 	Author         string // GitHub username of PR author
+	State          string // "OPEN", "CLOSED", "MERGED", or "" if unknown
 }
 
 // MergeMethod represents a GitHub PR merge method

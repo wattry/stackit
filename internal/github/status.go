@@ -107,8 +107,9 @@ func buildPRStatusQuery(aliasMap map[string]string) string {
 	queryBuilder.WriteString("query($owner: String!, $repo: String!) {\n")
 	queryBuilder.WriteString("  repository(owner: $owner, name: $repo) {\n")
 	for branch, alias := range aliasMap {
-		fmt.Fprintf(&queryBuilder, "    %s: pullRequests(headRefName: \"%s\", first: 1, states: [OPEN]) {\n", alias, branch)
+		fmt.Fprintf(&queryBuilder, "    %s: pullRequests(headRefName: \"%s\", first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {\n", alias, branch)
 		queryBuilder.WriteString("      nodes {\n")
+		queryBuilder.WriteString("        state\n")
 		queryBuilder.WriteString("        author { login }\n")
 		queryBuilder.WriteString("        reviewDecision\n")
 		queryBuilder.WriteString("        commits(last: 1) {\n")
@@ -196,6 +197,12 @@ func parseBranchStatus(data interface{}) *CheckStatus {
 		return nil
 	}
 
+	// Extract PR state
+	var prState string
+	if s, ok := prNode["state"].(string); ok {
+		prState = s
+	}
+
 	// Extract author
 	var author string
 	if authorData, ok := prNode["author"].(map[string]interface{}); ok {
@@ -213,30 +220,32 @@ func parseBranchStatus(data interface{}) *CheckStatus {
 	// Navigate to commit's statusCheckRollup
 	commits, ok := prNode["commits"].(map[string]interface{})
 	if !ok {
-		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author}
+		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
 	commitNodes, ok := commits["nodes"].([]interface{})
 	if !ok || len(commitNodes) == 0 {
-		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author}
+		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
 	commitNode, ok := commitNodes[0].(map[string]interface{})
 	if !ok {
-		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author}
+		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 	commit, ok := commitNode["commit"].(map[string]interface{})
 	if !ok {
-		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author}
+		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
 	rollup, ok := commit["statusCheckRollup"].(map[string]interface{})
 	if !ok || rollup == nil {
 		// No status checks
-		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author}
+		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
-	return parseCheckRollup(rollup, reviewDecision, author)
+	result := parseCheckRollup(rollup, reviewDecision, author)
+	result.State = prState
+	return result
 }
 
 // parseCheckRollup parses the statusCheckRollup data from the GraphQL response

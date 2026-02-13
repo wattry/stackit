@@ -2,26 +2,15 @@
 package merge
 
 import (
-	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	mergeAction "stackit.dev/stackit/internal/actions/merge"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
-	"stackit.dev/stackit/internal/git"
-	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
-)
-
-const (
-	// DefaultMergeTimeout is the default timeout for waiting on a merge to complete
-	DefaultMergeTimeout = 30 * time.Minute
-	// DefaultMergePollInterval is the default interval between merge status checks
-	DefaultMergePollInterval = 10 * time.Second
 )
 
 // NewNextCmd creates the merge next subcommand.
@@ -143,7 +132,7 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
-	// Get the PR's NodeID for automerge
+	// Get the PR's NodeID for merge operations
 	owner, repo := ctx.GitHubClient.GetOwnerRepo()
 	prInfo, err := ctx.GitHubClient.GetPullRequest(ctx.Context, owner, repo, bottomPR.PRNumber)
 	if err != nil {
@@ -153,77 +142,40 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 		return fmt.Errorf("PR #%d does not have a Node ID", bottomPR.PRNumber)
 	}
 
-	// Check if PR is mergeable
-	mergeableState, err := getMergeableStateWithRetry(ctx.Context, eng.Git(), prInfo.NodeID)
-	if err != nil {
-		return fmt.Errorf("failed to check PR mergeable state: %w", err)
-	}
-	if mergeableState.State != "OPEN" {
-		return fmt.Errorf("PR #%d is %s (not open)", bottomPR.PRNumber, mergeableState.State)
-	}
-	if !mergeableState.Mergeable {
-		if strings.EqualFold(mergeableState.MergeStateText, "UNKNOWN") {
-			return fmt.Errorf("PR #%d mergeability is still being calculated by GitHub. Try again shortly", bottomPR.PRNumber)
-		}
-		if mergeableState.MergeStateText != "" {
-			return fmt.Errorf("PR #%d is not mergeable (%s). Please resolve conflicts and try again", bottomPR.PRNumber, mergeableState.MergeStateText)
-		}
-		return fmt.Errorf("PR #%d is not mergeable. Please resolve conflicts and try again", bottomPR.PRNumber)
-	}
-
 	// Determine merge method: flag > config > prompt
-	var mergeMethod github.MergeMethod
-	if opts.method != "" {
-		// Flag override
-		switch opts.method {
-		case "squash":
-			mergeMethod = github.MergeMethodSquash
-		case "merge":
-			mergeMethod = github.MergeMethodMerge
-		case "rebase":
-			mergeMethod = github.MergeMethodRebase
-		default:
-			return fmt.Errorf("invalid merge method: %s (must be squash, merge, or rebase)", opts.method)
-		}
-	} else {
-		// Use config or prompt user
-		mergeMethod, err = mergeAction.GetMergeMethod(ctx, ctx.GitHubClient)
-		if err != nil {
-			return fmt.Errorf("failed to determine merge method: %w", err)
-		}
+	mergeMethod, err := resolveMergeMethod(ctx, opts.method)
+	if err != nil {
+		return err
 	}
 
-	// Enable automerge
-	out.Info("Enabling automerge on PR #%d (method: %s)...", bottomPR.PRNumber, mergeMethod)
-	if err := github.EnableAutoMerge(ctx.Context, eng.Git(), prInfo.NodeID, mergeMethod); err != nil {
-		return fmt.Errorf("failed to enable automerge: %w", err)
+	// Orchestrate the merge (direct merge → automerge → poll fallback)
+	outcome, err := orchestrateMerge(ctx, orchestrateMergeOptions{
+		branchName:  bottomPR.BranchName,
+		prNumber:    bottomPR.PRNumber,
+		prNodeID:    prInfo.NodeID,
+		mergeMethod: mergeMethod,
+		wait:        opts.wait,
+	})
+	if err != nil {
+		return err
 	}
-	out.Success("Automerge enabled on PR #%d", bottomPR.PRNumber)
 
-	// If --wait, wait for merge and perform cleanup
-	if opts.wait {
-		out.Info("Waiting for PR #%d to be merged...", bottomPR.PRNumber)
-		if err := github.WaitForPRMerge(ctx.Context, eng.Git(), prInfo.NodeID, DefaultMergeTimeout, DefaultMergePollInterval); err != nil {
-			return fmt.Errorf("failed waiting for merge: %w", err)
-		}
-		out.Success("PR #%d merged successfully!", bottomPR.PRNumber)
-
+	switch outcome {
+	case OutcomeMerged:
 		// Perform post-merge cleanup
 		out.Newline()
 		out.Info("Performing post-merge cleanup...")
-
-		// Use post-merge handler for cleanup (checkout trunk, sync, restack)
 		if postMergeHandler != nil {
 			return postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk)
 		}
-
+		return nil
+	case OutcomeAutomergeEnabled:
+		out.Info("PR will be merged automatically when CI passes and requirements are met.")
+		out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
+		return nil
+	default:
 		return nil
 	}
-
-	// Fire-and-forget: return immediately after enabling automerge
-	out.Info("PR will be merged automatically when CI passes and requirements are met.")
-	out.Tip("Run 'stackit sync --restack' after the PR is merged to update your stack.")
-	return nil
 }
 
 func buildMergeNextValidation(plan *mergeAction.Plan, base *mergeAction.PlanValidation, force bool) *mergeAction.PlanValidation {
@@ -350,26 +302,4 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 	}
 
 	return result.String()
-}
-
-func getMergeableStateWithRetry(ctx context.Context, runner git.Runner, prNodeID string) (*github.PRMergeableState, error) {
-	const (
-		maxAttempts = 5
-		retryDelay  = 2 * time.Second
-	)
-
-	var lastState *github.PRMergeableState
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		state, err := github.GetPRMergeableState(ctx, runner, prNodeID)
-		if err != nil {
-			return nil, err
-		}
-		lastState = state
-		if !strings.EqualFold(state.MergeStateText, "UNKNOWN") {
-			return state, nil
-		}
-		time.Sleep(retryDelay)
-	}
-
-	return lastState, nil
 }
