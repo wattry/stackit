@@ -9,7 +9,7 @@ import (
 
 // GetPrInfo returns PR information for a branch
 func (e *engineImpl) GetPrInfo(branch Branch) (*PrInfo, error) {
-	meta, err := e.git.ReadMetadata(branch.GetName())
+	meta, err := e.readMetadata(branch.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (e *engineImpl) getPrInfo(branch Branch) (*PrInfo, error) {
 
 // GetMergedDownstack returns the merged downstack history for a branch
 func (e *engineImpl) GetMergedDownstack(branch Branch) []git.MergedParent {
-	meta, err := e.git.ReadMetadata(branch.GetName())
+	meta, err := e.readMetadata(branch.GetName())
 	if err != nil {
 		return nil
 	}
@@ -68,7 +68,7 @@ func (e *engineImpl) UpsertPrInfo(ctx context.Context, branch Branch, prInfo *Pr
 
 	return e.WithRetry(ctx, func() error {
 		// Read existing metadata (outside lock for performance)
-		meta, err := e.git.ReadMetadata(branchName)
+		meta, err := e.readMetadata(branchName)
 		if err != nil {
 			meta = git.NewMeta()
 		}
@@ -114,12 +114,9 @@ func (e *engineImpl) UpsertPrInfo(ctx context.Context, branch Branch, prInfo *Pr
 			meta = meta.WithPrInfo(existing)
 		}
 
-		// Use transaction for atomic update
-		tx := e.BeginTx(fmt.Sprintf("upsert PR info: %s", branchName))
-		if err := tx.UpdateMeta(branchName, meta); err != nil {
-			return err
-		}
-		return tx.Commit(ctx)
+		return e.withMetadataTx(ctx, fmt.Sprintf("upsert PR info: %s", branchName), func(tx *MetadataTx) error {
+			return tx.UpdateMeta(branchName, meta)
+		})
 	})
 }
 
@@ -156,7 +153,7 @@ func (e *engineImpl) GetPRSubmissionStatus(branch Branch) (PRSubmissionStatus, e
 
 	// Check if lock status changed
 	lockStatusChanged := false
-	meta, err := e.git.ReadMetadata(branch.GetName())
+	meta, err := e.readMetadata(branch.GetName())
 	if err == nil {
 		if meta.GetLockReason() != prInfo.LockReason() {
 			lockStatusChanged = true
@@ -215,7 +212,7 @@ func (e *engineImpl) prTitleNeedsUpdate(branch Branch, prInfo *PrInfo) bool {
 // GetNavigationCommentID returns the cached navigation comment ID for a branch.
 // Returns 0 if no comment ID is cached.
 func (e *engineImpl) GetNavigationCommentID(branch Branch) (int64, error) {
-	localMeta, err := e.git.ReadLocalMetadata(branch.GetName())
+	localMeta, err := e.readLocalMetadata(branch.GetName())
 	if err != nil {
 		return 0, err
 	}
@@ -230,13 +227,13 @@ func (e *engineImpl) SetNavigationCommentID(branch Branch, commentID int64) erro
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	localMeta, err := e.git.ReadLocalMetadata(branch.GetName())
+	localMeta, err := e.readLocalMetadata(branch.GetName())
 	if err != nil {
 		localMeta = &git.LocalMeta{}
 	}
 
 	localMeta.NavigationCommentID = &commentID
-	return e.git.WriteLocalMetadata(branch.GetName(), localMeta)
+	return e.writeLocalMetadata(branch.GetName(), localMeta)
 }
 
 // ClearNavigationCommentID removes the cached navigation comment ID for a branch.
@@ -244,7 +241,7 @@ func (e *engineImpl) ClearNavigationCommentID(branch Branch) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	localMeta, err := e.git.ReadLocalMetadata(branch.GetName())
+	localMeta, err := e.readLocalMetadata(branch.GetName())
 	if err != nil {
 		return nil // Nothing to clear if we can't read
 	}
@@ -254,5 +251,5 @@ func (e *engineImpl) ClearNavigationCommentID(branch Branch) error {
 	}
 
 	localMeta.NavigationCommentID = nil
-	return e.git.WriteLocalMetadata(branch.GetName(), localMeta)
+	return e.writeLocalMetadata(branch.GetName(), localMeta)
 }

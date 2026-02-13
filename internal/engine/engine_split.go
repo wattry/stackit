@@ -18,7 +18,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 	}
 
 	// Get metadata for the branch being split
-	meta, err := e.git.ReadMetadata(opts.BranchToSplit)
+	meta, err := e.readMetadata(opts.BranchToSplit)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -35,7 +35,7 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 
 	parentBranchName := *meta.GetParentBranchName()
 	parentRevision := *meta.GetParentBranchRevision()
-	children := e.childrenMap[opts.BranchToSplit]
+	children := e.state.childrenMap[opts.BranchToSplit]
 
 	// Reverse branch points (newest to oldest -> oldest to newest)
 	reversedBranchPoints := make([]int, len(opts.BranchPoints))
@@ -103,16 +103,16 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 			})
 		}
 
-		if err := e.git.WriteMetadata(branchName, newMeta); err != nil {
+		if err := e.writeMetadata(branchName, newMeta); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", branchName, err)
 		}
 
 		// Update in-memory cache
-		e.branchState.Set(branchName, &BranchState{
+		e.state.branchState.Set(branchName, &BranchState{
 			Parent: branchParentName,
 		})
-		e.childrenMap[branchParentName] = append(e.childrenMap[branchParentName], branchName)
-		slices.Sort(e.childrenMap[branchParentName])
+		e.state.childrenMap[branchParentName] = append(e.state.childrenMap[branchParentName], branchName)
+		slices.Sort(e.state.childrenMap[branchParentName])
 
 		// Update last branch info (only matters for chain mode)
 		lastBranchName = branchName
@@ -181,7 +181,7 @@ func (e *engineImpl) DetachAndResetBranchChanges(ctx context.Context, branchName
 
 	// Get the parent branch
 	parentBranchName := e.trunk
-	if state := e.branchState.GetByName(branchName); state != nil {
+	if state := e.state.branchState.GetByName(branchName); state != nil {
 		parentBranchName = state.Parent
 	}
 

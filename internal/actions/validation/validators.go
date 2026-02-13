@@ -46,9 +46,18 @@ func (c Chain) Validate() error {
 	return nil
 }
 
+// BranchValidationEngine is the minimal engine contract needed by validators.
+// Keeping this narrow avoids coupling callers to the full engine.Engine surface.
+type BranchValidationEngine interface {
+	ValidateOnBranch() (string, error)
+	GetBranch(branchName string) engine.Branch
+	CurrentBranch() *engine.Branch
+	AllBranches() []engine.Branch
+}
+
 // MustBeOnBranch validates that HEAD is on a branch (not detached).
 // Returns a Validator that checks the engine's current branch state.
-func MustBeOnBranch(eng engine.Engine) Validator {
+func MustBeOnBranch(eng BranchValidationEngine) Validator {
 	return ValidatorFunc(func() error {
 		_, err := eng.ValidateOnBranch()
 		return err
@@ -99,7 +108,7 @@ func BranchMustExist(g git.Runner, branchName string) Validator {
 }
 
 // BranchMustBeTracked validates that a branch is tracked by stackit.
-func BranchMustBeTracked(eng engine.Engine, branchName string) Validator {
+func BranchMustBeTracked(eng BranchValidationEngine, branchName string) Validator {
 	return ValidatorFunc(func() error {
 		branch := eng.GetBranch(branchName)
 		if !branch.IsTracked() {
@@ -110,7 +119,7 @@ func BranchMustBeTracked(eng engine.Engine, branchName string) Validator {
 }
 
 // BranchMustBeModifiable validates that a branch can be modified (not locked, frozen, or worktree anchor).
-func BranchMustBeModifiable(eng engine.Engine, branchName string) Validator {
+func BranchMustBeModifiable(eng BranchValidationEngine, branchName string) Validator {
 	return ValidatorFunc(func() error {
 		branch := eng.GetBranch(branchName)
 		return branch.EnsureCanModify()
@@ -118,7 +127,7 @@ func BranchMustBeModifiable(eng engine.Engine, branchName string) Validator {
 }
 
 // BranchMustNotBeTrunk validates that a branch is not the trunk branch.
-func BranchMustNotBeTrunk(eng engine.Engine, branchName string) Validator {
+func BranchMustNotBeTrunk(eng BranchValidationEngine, branchName string) Validator {
 	return ValidatorFunc(func() error {
 		branch := eng.GetBranch(branchName)
 		if branch.IsTrunk() {
@@ -129,7 +138,7 @@ func BranchMustNotBeTrunk(eng engine.Engine, branchName string) Validator {
 }
 
 // CurrentBranchMustBeModifiable validates that the current branch can be modified.
-func CurrentBranchMustBeModifiable(eng engine.Engine) Validator {
+func CurrentBranchMustBeModifiable(eng BranchValidationEngine) Validator {
 	return ValidatorFunc(func() error {
 		currentBranch := eng.CurrentBranch()
 		if currentBranch == nil {
@@ -141,7 +150,7 @@ func CurrentBranchMustBeModifiable(eng engine.Engine) Validator {
 
 // CurrentBranchMustNotBeTrunk validates that the current branch is not trunk.
 // The operation parameter is used in the error message (e.g., "reorder", "fold").
-func CurrentBranchMustNotBeTrunk(eng engine.Engine, operation string) Validator {
+func CurrentBranchMustNotBeTrunk(eng BranchValidationEngine, operation string) Validator {
 	return ValidatorFunc(func() error {
 		currentBranch := eng.CurrentBranch()
 		if currentBranch == nil {
@@ -155,7 +164,7 @@ func CurrentBranchMustNotBeTrunk(eng engine.Engine, operation string) Validator 
 }
 
 // CurrentBranchMustBeTracked validates that the current branch is tracked by stackit.
-func CurrentBranchMustBeTracked(eng engine.Engine) Validator {
+func CurrentBranchMustBeTracked(eng BranchValidationEngine) Validator {
 	return ValidatorFunc(func() error {
 		currentBranch := eng.CurrentBranch()
 		if currentBranch == nil {
@@ -175,7 +184,7 @@ func CurrentBranchMustBeTracked(eng engine.Engine) Validator {
 //   - Branch is not a worktree anchor
 //
 // The operation parameter is used in error messages (e.g., "move", "pluck", "delete").
-func SourceBranchMustBeValid(eng engine.Engine, branchName, operation string) Validator {
+func SourceBranchMustBeValid(eng BranchValidationEngine, branchName, operation string) Validator {
 	return ValidatorFunc(func() error {
 		return ValidateSourceBranch(eng, branchName, operation)
 	})
@@ -190,7 +199,7 @@ func SourceBranchMustBeValid(eng engine.Engine, branchName, operation string) Va
 //   - Branch is not a worktree anchor
 //
 // The operation parameter is used in error messages (e.g., "move", "pluck", "delete").
-func ValidateSourceBranch(eng engine.Engine, branchName, operation string) error {
+func ValidateSourceBranch(eng BranchValidationEngine, branchName, operation string) error {
 	branch := eng.GetBranch(branchName)
 
 	if branch.IsTrunk() {
@@ -216,7 +225,7 @@ func ValidateSourceBranch(eng engine.Engine, branchName, operation string) error
 //   - Target is not the same as source
 //
 // The operation parameter is used in error messages (e.g., "move", "pluck").
-func TargetBranchMustBeValid(eng engine.Engine, sourceName, targetName, operation string) Validator {
+func TargetBranchMustBeValid(eng BranchValidationEngine, sourceName, targetName, operation string) Validator {
 	return ValidatorFunc(func() error {
 		return ValidateTargetBranch(eng, sourceName, targetName, operation)
 	})
@@ -232,7 +241,7 @@ func TargetBranchMustBeValid(eng engine.Engine, sourceName, targetName, operatio
 //   - Target is not the same as source
 //
 // The operation parameter is used in error messages (e.g., "move", "pluck").
-func ValidateTargetBranch(eng engine.Engine, sourceName, targetName, operation string) error {
+func ValidateTargetBranch(eng BranchValidationEngine, sourceName, targetName, operation string) error {
 	if targetName == "" {
 		return fmt.Errorf("target branch must be specified for %s", operation)
 	}

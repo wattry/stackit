@@ -210,14 +210,24 @@ func (s BranchRemoteStatus) MissingRemote() bool {
 // Branch represents a branch in the stack
 type Branch struct {
 	name   string
-	reader *engineImpl
+	reader branchReader
+}
+
+type branchReader interface {
+	BranchReader
+	GetParent(branch Branch) *Branch
+	getParent(branch Branch) *Branch
+	getPrInfo(branch Branch) (*PrInfo, error)
+	getMergedDownstack(branch Branch) []git.MergedParent
+	getExplicitScope(branch Branch) Scope
+	getPRSubmissionStatus(branch Branch) (PRSubmissionStatus, error)
 }
 
 // NewBranch creates a new immutable Branch
-func NewBranch(name string, reader BranchReader) Branch {
+func NewBranch(name string, reader branchReader) Branch {
 	return Branch{
 		name:   name,
-		reader: reader.(*engineImpl),
+		reader: reader,
 	}
 }
 

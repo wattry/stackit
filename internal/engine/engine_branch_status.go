@@ -19,7 +19,7 @@ func (e *engineImpl) IsTrunk(branch Branch) bool {
 func (e *engineImpl) IsTracked(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	state := e.branchState.Get(branch)
+	state := e.state.branchState.Get(branch)
 	return state != nil && state.Parent != ""
 }
 
@@ -37,7 +37,7 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 		}
 		visited[current] = true
 
-		state := e.branchState.GetByName(current)
+		state := e.state.branchState.GetByName(current)
 		if state == nil {
 			break
 		}
@@ -60,7 +60,7 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 func (e *engineImpl) IsLocked(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if state := e.branchState.Get(branch); state != nil {
+	if state := e.state.branchState.Get(branch); state != nil {
 		return state.IsLocked()
 	}
 	return false
@@ -70,7 +70,7 @@ func (e *engineImpl) IsLocked(branch Branch) bool {
 func (e *engineImpl) GetLockReason(branch Branch) LockReason {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if state := e.branchState.Get(branch); state != nil {
+	if state := e.state.branchState.Get(branch); state != nil {
 		return state.LockReason
 	}
 	return LockReasonNone
@@ -80,7 +80,7 @@ func (e *engineImpl) GetLockReason(branch Branch) LockReason {
 func (e *engineImpl) IsFrozen(branch Branch) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if state := e.branchState.Get(branch); state != nil {
+	if state := e.state.branchState.Get(branch); state != nil {
 		return state.Frozen
 	}
 	return false
@@ -90,7 +90,7 @@ func (e *engineImpl) IsFrozen(branch Branch) bool {
 func (e *engineImpl) GetBranchType(branch Branch) git.BranchType {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if state := e.branchState.Get(branch); state != nil {
+	if state := e.state.branchState.Get(branch); state != nil {
 		return state.BranchType
 	}
 	return ""
@@ -109,7 +109,7 @@ func (e *engineImpl) SetBranchType(branch Branch, branchType git.BranchType) err
 	branchName := branch.GetName()
 
 	// Read existing metadata
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -118,12 +118,12 @@ func (e *engineImpl) SetBranchType(branch Branch, branchType git.BranchType) err
 	meta = meta.WithBranchType(branchType)
 
 	// Write metadata
-	if err := e.git.WriteMetadata(branchName, meta); err != nil {
+	if err := e.writeMetadata(branchName, meta); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
 	// Update in-memory state
-	if state := e.branchState.GetByName(branchName); state != nil {
+	if state := e.state.branchState.GetByName(branchName); state != nil {
 		state.BranchType = branchType
 	}
 
@@ -135,7 +135,7 @@ func (e *engineImpl) GetExplicitScope(branch Branch) Scope {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if state := e.branchState.Get(branch); state != nil && state.HasScope() {
+	if state := e.state.branchState.Get(branch); state != nil && state.HasScope() {
 		return state.GetScope()
 	}
 	return Empty()
@@ -155,7 +155,7 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 	}
 
 	e.mu.RLock()
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
 	if state == nil {
@@ -169,7 +169,7 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 	}
 
 	// Get stored parent revision from metadata
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return false // No metadata, assume needs restack
 	}
@@ -186,7 +186,7 @@ func (e *engineImpl) IsUpToDate(branch Branch) bool {
 func (e *engineImpl) GetBranchRemoteStatus(branch Branch) (BranchRemoteStatus, error) {
 	branchName := branch.GetName()
 	e.mu.RLock()
-	state := e.branchState.Get(branch)
+	state := e.state.branchState.Get(branch)
 	var remoteSha string
 	if state != nil {
 		remoteSha = state.RemoteSHA
@@ -247,7 +247,7 @@ func (e *engineImpl) IsMergedIntoTrunk(ctx context.Context, branchName string) (
 // IsBranchEmpty checks if a branch has no changes compared to its parent
 func (e *engineImpl) IsBranchEmpty(ctx context.Context, branchName string) (bool, error) {
 	e.mu.RLock()
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	trunk := e.trunk
 	e.mu.RUnlock()
 
@@ -302,7 +302,7 @@ func (e *engineImpl) BatchGetDeletionStatuses(ctx context.Context, branchNames [
 	}
 
 	// Batch fetch all data
-	metadataMap, _ := e.git.BatchReadMetadata(branchNames)
+	metadataMap, _ := e.batchReadMetadata(branchNames)
 	revisions, _ := e.git.BatchGetRevisions(refsToFetch)
 	mergedBranches, err := e.GetMergedBranches(ctx, trunkName)
 	if err != nil {

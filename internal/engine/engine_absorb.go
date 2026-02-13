@@ -53,7 +53,7 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 	}
 
 	// Get base revision (parent of the first commit in the branch)
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to read metadata for %s: %w", branchName, err)
 	}

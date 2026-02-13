@@ -12,8 +12,8 @@ import (
 func (e *engineImpl) AllBranches() []Branch {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	branches := make([]Branch, len(e.branches))
-	for i, name := range e.branches {
+	branches := make([]Branch, len(e.state.branches))
+	for i, name := range e.state.branches {
 		branches[i] = NewBranch(name, e)
 	}
 	return branches
@@ -22,9 +22,9 @@ func (e *engineImpl) AllBranches() []Branch {
 // BranchNames returns a cached BranchSet for O(1) branch name lookups.
 func (e *engineImpl) BranchNames() *BranchSet {
 	e.mu.RLock()
-	if e.branchNamesSet != nil {
+	if e.state.branchNamesSet != nil {
 		defer e.mu.RUnlock()
-		return e.branchNamesSet
+		return e.state.branchNamesSet
 	}
 	e.mu.RUnlock()
 
@@ -33,12 +33,12 @@ func (e *engineImpl) BranchNames() *BranchSet {
 	defer e.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if e.branchNamesSet != nil {
-		return e.branchNamesSet
+	if e.state.branchNamesSet != nil {
+		return e.state.branchNamesSet
 	}
 
-	e.branchNamesSet = newBranchSet(e.branches)
-	return e.branchNamesSet
+	e.state.branchNamesSet = newBranchSet(e.state.branches)
+	return e.state.branchNamesSet
 }
 
 // CurrentBranch returns the current branch (nil if not on a branch)
@@ -88,7 +88,7 @@ func (e *engineImpl) GetParent(branch Branch) *Branch {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if state := e.branchState.Get(branch); state != nil {
+	if state := e.state.branchState.Get(branch); state != nil {
 		b := NewBranch(state.Parent, e)
 		return &b
 	}
@@ -123,14 +123,14 @@ func (e *engineImpl) FindMostRecentTrackedAncestors(ctx context.Context, branchN
 	}
 
 	// Get all tracked branches and their tips
-	for _, candidate := range e.branches {
+	for _, candidate := range e.state.branches {
 		// Skip the branch itself and trunk (already handled)
 		if candidate == branchName || candidate == trunk {
 			continue
 		}
 
 		// Only consider tracked branches
-		if !e.branchState.HasByName(candidate) {
+		if !e.state.branchState.HasByName(candidate) {
 			continue
 		}
 
@@ -169,8 +169,8 @@ func (e *engineImpl) FindMostRecentTrackedAncestors(ctx context.Context, branchN
 // FindBranchForCommit finds which branch a commit belongs to
 func (e *engineImpl) FindBranchForCommit(commitSHA string) (string, error) {
 	e.mu.RLock()
-	branches := make([]string, len(e.branches))
-	copy(branches, e.branches)
+	branches := make([]string, len(e.state.branches))
+	copy(branches, e.state.branches)
 	e.mu.RUnlock()
 
 	for _, branchName := range branches {
@@ -196,49 +196,26 @@ func (e *engineImpl) SortBranchesTopologically(branches []Branch) []Branch {
 		return branches
 	}
 
-	// Calculate depth for each branch (distance from trunk)
-	depths := make(map[string]int)
-	visited := make(map[string]bool)
-	var getDepth func(branchName string) int
-	getDepth = func(branchName string) int {
-		if depth, ok := depths[branchName]; ok {
-			return depth
-		}
-
-		if visited[branchName] {
-			return 1000 // Arbitrary high depth for cycles
-		}
-		visited[branchName] = true
-		defer func() { visited[branchName] = false }()
-
-		e.mu.RLock()
-		isTrunk := branchName == e.trunk
-		state := e.branchState.GetByName(branchName)
-		e.mu.RUnlock()
-
-		if isTrunk {
-			depths[branchName] = 0
-			return 0
-		}
-		if state == nil || state.Parent == "" || e.IsTrunk(NewBranch(state.Parent, e)) {
-			depths[branchName] = 1
-			return 1
-		}
-		depths[branchName] = getDepth(state.Parent) + 1
-		return depths[branchName]
-	}
-
-	// Calculate depth for all branches
-	for _, branch := range branches {
-		getDepth(branch.GetName())
-	}
-
-	// Sort by depth (parents first, then children)
+	// Build a full graph once and sort by computed depth, then name for stability.
+	graph := BuildStackGraph(e, SortStrategyAlphabetical, nil)
 	result := make([]Branch, len(branches))
 	copy(result, branches)
 	for i := 0; i < len(result)-1; i++ {
 		for j := i + 1; j < len(result); j++ {
-			if depths[result[i].GetName()] > depths[result[j].GetName()] {
+			left := graph.GetNode(result[i].GetName())
+			right := graph.GetNode(result[j].GetName())
+			leftDepth := 0
+			rightDepth := 0
+			if left != nil {
+				leftDepth = left.Depth
+			}
+			if right != nil {
+				rightDepth = right.Depth
+			}
+
+			swap := leftDepth > rightDepth ||
+				(leftDepth == rightDepth && result[i].GetName() > result[j].GetName())
+			if swap {
 				result[i], result[j] = result[j], result[i]
 			}
 		}
@@ -266,7 +243,7 @@ func (e *engineImpl) BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, in
 
 			// Get children directly from internal map
 			e.mu.RLock()
-			children := e.childrenMap[branch]
+			children := e.state.childrenMap[branch]
 			e.mu.RUnlock()
 
 			for _, childName := range children {
@@ -289,14 +266,14 @@ func (e *engineImpl) BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, in
 // otherwise falls back to the parent's current revision.
 func (e *engineImpl) GetDivergencePoint(branchName string) (string, error) {
 	// First, try to get from metadata
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil && *rev != "" {
 		return *rev, nil
 	}
 
 	// Get the parent branch
 	e.mu.RLock()
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
 	if state == nil {

@@ -11,87 +11,12 @@ import (
 	"stackit.dev/stackit/internal/git"
 )
 
-// BranchState holds the cached metadata state for a single branch.
-// This consolidates what was previously stored in separate maps.
-type BranchState struct {
-	Parent        string         // Parent branch name
-	Scope         string         // Scope string (may be empty)
-	LockReason    git.LockReason // Lock reason (empty if not locked)
-	Frozen        bool           // Whether branch is frozen (local-only state)
-	BranchType    git.BranchType // Branch type (worktree-anchor, utility, etc.)
-	RemoteSHA     string         // Remote SHA (populated by PopulateRemoteShas)
-	LocalModified bool           // Has local metadata changes not yet pushed
-}
-
-// HasScope returns true if this branch has an explicit scope set.
-func (s *BranchState) HasScope() bool {
-	return s.Scope != ""
-}
-
-// GetScope returns the scope as a Scope type.
-func (s *BranchState) GetScope() Scope {
-	return NewScope(s.Scope)
-}
-
-// IsLocked returns true if this branch is locked.
-func (s *BranchState) IsLocked() bool {
-	return s.LockReason.IsLocked()
-}
-
-// BranchStateMap is a map of branch names to their state.
-type BranchStateMap map[string]*BranchState
-
-// Get returns the state for a branch, or nil if not found.
-func (m BranchStateMap) Get(branch Branch) *BranchState {
-	return m[branch.GetName()]
-}
-
-// GetByName returns the state for a branch name, or nil if not found.
-func (m BranchStateMap) GetByName(name string) *BranchState {
-	return m[name]
-}
-
-// Has returns true if the branch exists in the map.
-func (m BranchStateMap) Has(branch Branch) bool {
-	_, ok := m[branch.GetName()]
-	return ok
-}
-
-// HasByName returns true if the branch name exists in the map.
-func (m BranchStateMap) HasByName(name string) bool {
-	_, ok := m[name]
-	return ok
-}
-
-// Set sets the state for a branch.
-func (m BranchStateMap) Set(name string, state *BranchState) {
-	m[name] = state
-}
-
-// Delete removes a branch from the map.
-func (m BranchStateMap) Delete(name string) {
-	delete(m, name)
-}
-
-// GetOrCreate returns the state for a branch, creating it if it doesn't exist.
-func (m BranchStateMap) GetOrCreate(name string) *BranchState {
-	if state, ok := m[name]; ok {
-		return state
-	}
-	state := &BranchState{}
-	m[name] = state
-	return state
-}
-
 // engineImpl is a minimal implementation of the Engine interface
 type engineImpl struct {
 	repoRoot          string
 	trunk             string
 	currentBranch     string
-	branches          []string
-	branchNamesSet    *BranchSet           // cached set for O(1) lookups, lazily built
-	branchState       BranchStateMap       // branch -> consolidated state
-	childrenMap       map[string][]string  // branch -> children (computed from parents)
+	state             *stateCore
 	remoteMetaCache   map[string]*git.Meta // branch -> remote metadata (can include non-local branches)
 	maxUndoStackDepth int
 	maxConcurrency    int
@@ -125,19 +50,19 @@ func (e *engineImpl) SnapshotForWorktree() WorktreeSnapshot {
 	defer e.mu.RUnlock()
 
 	// Deep copy branches slice
-	branches := make([]string, len(e.branches))
-	copy(branches, e.branches)
+	branches := make([]string, len(e.state.branches))
+	copy(branches, e.state.branches)
 
 	// Deep copy branchState map
-	branchState := make(BranchStateMap, len(e.branchState))
-	for name, state := range e.branchState {
+	branchState := make(BranchStateMap, len(e.state.branchState))
+	for name, state := range e.state.branchState {
 		copied := *state
 		branchState[name] = &copied
 	}
 
 	// Deep copy childrenMap
-	childrenMap := make(map[string][]string, len(e.childrenMap))
-	for parent, children := range e.childrenMap {
+	childrenMap := make(map[string][]string, len(e.state.childrenMap))
+	for parent, children := range e.state.childrenMap {
 		childrenCopy := make([]string, len(children))
 		copy(childrenCopy, children)
 		childrenMap[parent] = childrenCopy
@@ -195,9 +120,7 @@ func NewEngineForWorktree(opts WorktreeEngineOptions) (Engine, error) {
 	e := &engineImpl{
 		repoRoot:          opts.WorktreePath,
 		trunk:             opts.Snapshot.Trunk,
-		branches:          opts.Snapshot.Branches,
-		branchState:       opts.Snapshot.BranchState,
-		childrenMap:       opts.Snapshot.ChildrenMap,
+		state:             newStateCoreFromSnapshot(opts.Snapshot.Branches, opts.Snapshot.BranchState, opts.Snapshot.ChildrenMap),
 		remoteMetaCache:   opts.Snapshot.RemoteMetaCache,
 		maxUndoStackDepth: 0, // No undo in temporary worktrees
 		maxConcurrency:    opts.Snapshot.MaxConcurrency,
@@ -247,8 +170,7 @@ func NewEngine(opts Options) (Engine, error) {
 	e := &engineImpl{
 		repoRoot:          opts.RepoRoot,
 		trunk:             opts.Trunk,
-		branchState:       make(BranchStateMap),
-		childrenMap:       make(map[string][]string),
+		state:             newStateCore(),
 		remoteMetaCache:   make(map[string]*git.Meta),
 		maxUndoStackDepth: maxDepth,
 		maxConcurrency:    opts.MaxConcurrency,
@@ -348,7 +270,7 @@ func (e *engineImpl) PopulateRemoteShas() error {
 	defer e.mu.Unlock()
 
 	// Clear existing remote SHAs
-	for _, state := range e.branchState {
+	for _, state := range e.state.branchState {
 		state.RemoteSHA = ""
 	}
 
@@ -359,7 +281,7 @@ func (e *engineImpl) PopulateRemoteShas() error {
 
 	// Set RemoteSHA for tracked branches that have a remote
 	for branchName, sha := range remoteShas {
-		if state := e.branchState.GetByName(branchName); state != nil {
+		if state := e.state.branchState.GetByName(branchName); state != nil {
 			state.RemoteSHA = sha
 		}
 	}

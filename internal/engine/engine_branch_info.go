@@ -39,7 +39,7 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	branchName := branch.GetName()
 	e.mu.RLock()
 	trunk := e.trunk
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
 	parent := trunk
@@ -48,7 +48,7 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 	}
 
 	// Get base revision (stored parent revision)
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	var base string
 	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
 		base = *rev
@@ -84,7 +84,7 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	branchName := branch.GetName()
 	e.mu.RLock()
 	trunk := e.trunk
-	state := e.branchState.GetByName(branchName)
+	state := e.state.branchState.GetByName(branchName)
 	e.mu.RUnlock()
 
 	parent := trunk
@@ -93,7 +93,7 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	}
 
 	// Get base revision (stored parent revision)
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	var base string
 	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
 		base = *rev
@@ -150,8 +150,8 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 // data cached, eliminating go-git mutex contention for revision lookups.
 func (e *engineImpl) PreloadBranchData() {
 	e.mu.RLock()
-	branches := make([]string, 0, len(e.branchState))
-	for name := range e.branchState {
+	branches := make([]string, 0, len(e.state.branchState))
+	for name := range e.state.branchState {
 		branches = append(branches, name)
 	}
 	e.mu.RUnlock()
@@ -161,7 +161,7 @@ func (e *engineImpl) PreloadBranchData() {
 
 	// Batch load all metadata (populates metadataCache via sync.Map)
 	if len(branches) > 0 {
-		e.git.BatchReadMetadata(branches)
+		e.batchReadMetadata(branches)
 	}
 }
 
@@ -178,7 +178,7 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 	}
 
 	// Get metadata to find parent revision
-	meta, err := e.git.ReadMetadata(branchName)
+	meta, err := e.readMetadata(branchName)
 	if err != nil {
 		return nil, err
 	}
