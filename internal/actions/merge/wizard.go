@@ -161,13 +161,9 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 		out.Newline()
 	}
 
-	// Check validation
+	// Check validation — only errors block, warnings are shown but don't block
 	if !validation.Valid && !opts.Force {
-		return FormatValidationError(validation.Errors, validation.Warnings)
-	}
-
-	if len(validation.Warnings) > 0 && !opts.Force {
-		return FormatValidationError(nil, validation.Warnings)
+		return FormatValidationError(validation.Errors, nil)
 	}
 
 	// Determine strategy
@@ -285,7 +281,15 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	}
 	out.Debug("merge wizard: merge action completed successfully")
 
-	// Handle post-merge follow-up
+	// For fire-and-forget (no wait), skip the post-merge prompt since nothing has merged yet.
+	// Show a tip instead so the user knows what to do next.
+	if !wait {
+		out.Debug("merge wizard: fire-and-forget mode, skipping post-merge prompt")
+		out.Tip("Run 'stackit sync' after the PR merges to clean up branches.")
+		return nil
+	}
+
+	// Handle post-merge follow-up (only when we waited for the merge)
 	out.Debug("merge wizard: handling post-merge")
 	return HandlePostMerge(ctx, handler)
 }

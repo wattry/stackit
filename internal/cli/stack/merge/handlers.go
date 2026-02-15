@@ -365,11 +365,8 @@ func (h *InteractiveMergeEventHandler) PromptStrategy(plan *mergeAction.Plan, re
 		strategy = mergeAction.StrategyBottomUp
 	case "ship":
 		strategy = mergeAction.StrategyShip
-		// Prompt for wait if shipping (default is fire-and-forget)
-		wait, err = tui.PromptConfirm("Wait for merge to complete? (default: fire-and-forget)", false)
-		if err != nil {
-			return mergeAction.StrategyChoice{}, fmt.Errorf("wait selection canceled: %w", err)
-		}
+		// Default to waiting (matches `merge ship --wait=true` CLI default)
+		wait = true
 	}
 
 	return mergeAction.StrategyChoice{Strategy: strategy, Wait: wait}, nil
@@ -409,8 +406,7 @@ func (h *InteractiveMergeEventHandler) PromptPostMerge(hasUncommittedChanges boo
 	defer h.runner.Resume()
 
 	h.out.Newline()
-	h.out.Success("Merge completed successfully in the temporary worktree!")
-	h.out.Info("Your main workspace remains untouched.")
+	h.out.Success("Merge completed successfully!")
 
 	trunkLabel := fmt.Sprintf("🔄 Switch to trunk and sync (%s)", trunkName)
 	if hasUncommittedChanges {
@@ -436,49 +432,6 @@ func (h *InteractiveMergeEventHandler) PromptPostMerge(hasUncommittedChanges boo
 	default:
 		return mergeAction.PostMergeDone, nil
 	}
-}
-
-// PromptIndividualMerge implements InteractiveHandler.
-func (h *InteractiveMergeEventHandler) PromptIndividualMerge(branches []mergeAction.BranchMergeInfo) (bool, error) {
-	h.runner.Pause()
-	defer h.runner.Resume()
-
-	// Build descriptive prompt
-	branchCount := len(branches)
-	var branchList strings.Builder
-	for i, b := range branches {
-		if i > 0 {
-			branchList.WriteString(", ")
-		}
-		fmt.Fprintf(&branchList, "PR #%d (%s)", b.PRNumber, b.BranchName)
-		if i >= 2 && branchCount > 3 {
-			fmt.Fprintf(&branchList, ", and %d more", branchCount-i-1)
-			break
-		}
-	}
-
-	h.out.Newline()
-	h.out.Info("All %d PRs are independent branches with no conflicts.", branchCount)
-	h.out.Info("Branches: %s", branchList.String())
-	h.out.Newline()
-
-	options := []tui.SelectOption{
-		{
-			Label: "🔄 Merge individually — Each PR merged separately, stops on first failure (recommended)",
-			Value: "individual",
-		},
-		{
-			Label: "🔀 Create consolidated PR — All-or-nothing atomic merge into single commit",
-			Value: "consolidate",
-		},
-	}
-
-	selected, err := tui.PromptSelect("How would you like to merge these PRs?", options, 0)
-	if err != nil {
-		return false, err
-	}
-
-	return selected == "individual", nil
 }
 
 // PromptSimpleMergeConfirm implements InteractiveHandler.
@@ -656,7 +609,12 @@ func DisplayMergeStatus(out output.Output, result *shippable.AnalysisResult) {
 		out.Print("\n")
 		out.Print(styles.Done.Render(fmt.Sprintf("Ready (%d):", len(ready))) + "\n")
 		for _, s := range ready {
-			printStackEntry(out, "  ✅ ", s, "All approved, CI passing")
+			detail := "All approved, CI passing"
+			recommended := mergeAction.DetermineRecommendedStrategy(s.BranchCount())
+			if recommended == mergeAction.StrategyShip {
+				detail += " — ship recommended"
+			}
+			printStackEntry(out, "  ✅ ", s, detail)
 		}
 	}
 

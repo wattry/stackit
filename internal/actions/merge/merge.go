@@ -3,6 +3,7 @@ package merge
 
 import (
 	"stackit.dev/stackit/internal/app"
+	"stackit.dev/stackit/internal/github"
 )
 
 // Options contains options for the merge command
@@ -17,6 +18,7 @@ type Options struct {
 	Plan           *Plan // Optional pre-calculated plan
 	UndoStackDepth int   // Maximum undo stack depth (from config)
 	Handler        EventHandler
+	MergeMethod    github.MergeMethod // Optional: override merge method (empty = auto-detect/prompt)
 }
 
 // Action performs the merge operation using the plan/execute pattern
@@ -61,6 +63,7 @@ func Action(ctx *app.Context, opts Options) error {
 		Wait:           opts.Wait,
 		UndoStackDepth: opts.UndoStackDepth,
 		Handler:        opts.Handler,
+		MergeMethod:    opts.MergeMethod,
 	}
 
 	// If no target branch or scope specified, use current branch

@@ -90,13 +90,6 @@ type InteractiveHandler interface {
 	// Returns ErrCanceled if user cancels (treated as "done").
 	PromptPostMerge(hasUncommittedChanges bool, trunkName string) (PostMergeAction, error)
 
-	// PromptIndividualMerge asks user if they want to merge PRs individually
-	// when consolidation was requested but individual merge is possible.
-	// This is offered when all branches are leaves (no children) and all PRs
-	// are mergeable without conflicts.
-	// Returns true for individual merge, false for consolidation.
-	PromptIndividualMerge(branches []BranchMergeInfo) (bool, error)
-
 	// PromptSimpleMergeConfirm shows a simplified confirmation for single-branch merges.
 	// This provides a cleaner UX than ShowPlan + PromptConfirm for simple cases.
 	// Returns true to proceed, false to cancel.

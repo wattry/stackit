@@ -28,6 +28,7 @@ type ConsolidateMergeExecutor struct {
 	consolidationPR   *github.PullRequestInfo // Set after consolidation PR is merged
 	consolidationUser string                  // GitHub username who performed the consolidation
 	prGenerator       *PRContentGenerator
+	mergeMethod       github.MergeMethod // Optional override (empty = auto-detect/prompt)
 
 	handler   EventHandler // Optional progress handler for TUI updates
 	stepIndex int          // Current step index for the handler
@@ -103,7 +104,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 		splog.Info("🎉 Stack consolidation merge completed successfully!")
 	} else {
 		// Fire-and-forget: enable auto-merge and return
-		mergeMethod, err := getMergeMethodWithPause(c.ctx, c.ctx.GitHubClient, c.handler)
+		mergeMethod, err := c.resolveMergeMethod()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get merge method: %w", err)
 		}
@@ -164,18 +165,20 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 
 	splog.Info("📋 Creating merge branch: %s", branchName)
 
-	if err := c.engine.CreateAndCheckoutBranch(ctx, c.engine.GetBranch(branchName)); err != nil {
-		return "", fmt.Errorf("failed to create and checkout branch: %w", err)
+	trunkName := c.engine.Trunk().GetName()
+
+	// Create branch directly at trunk (avoids creating at HEAD then resetting)
+	if err := c.engine.CreateBranch(ctx, branchName, trunkName); err != nil {
+		return "", fmt.Errorf("failed to create branch: %w", err)
+	}
+
+	if err := c.engine.CheckoutBranch(ctx, c.engine.GetBranch(branchName)); err != nil {
+		return "", fmt.Errorf("failed to checkout branch: %w", err)
 	}
 
 	// Mark as utility branch so it can be auto-deleted without confirmation during sync
 	if err := c.engine.SetBranchType(c.engine.GetBranch(branchName), git.BranchTypeUtility); err != nil {
 		splog.Debug("Failed to set branch type: %v", err)
-	}
-
-	// Reset to trunk since CreateAndCheckoutBranch creates from current HEAD
-	if err := c.engine.ResetHard(ctx, c.engine.Trunk().GetName()); err != nil {
-		return "", fmt.Errorf("failed to reset to trunk: %w", err)
 	}
 
 	// Collect branch names for octopus merge
@@ -236,8 +239,8 @@ func (c *ConsolidateMergeExecutor) createConsolidationPR(ctx context.Context, br
 func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo) error {
 	expectChecks := AnyPRHasChecks(c.plan.BranchesToMerge)
 
-	// Get merge method (prompts user if not configured)
-	mergeMethod, err := getMergeMethodWithPause(c.ctx, c.ctx.GitHubClient, c.handler)
+	// Get merge method: use override if provided, otherwise detect/prompt
+	mergeMethod, err := c.resolveMergeMethod()
 	if err != nil {
 		return fmt.Errorf("failed to get merge method: %w", err)
 	}
@@ -333,4 +336,12 @@ func (c *ConsolidateMergeExecutor) getStackScope() string {
 
 func (c *ConsolidateMergeExecutor) getOwnerRepo() (owner, repo string) {
 	return c.ctx.GitHubClient.GetOwnerRepo()
+}
+
+// resolveMergeMethod returns the merge method to use, preferring the override if set.
+func (c *ConsolidateMergeExecutor) resolveMergeMethod() (github.MergeMethod, error) {
+	if c.mergeMethod != "" {
+		return c.mergeMethod, nil
+	}
+	return getMergeMethodWithPause(c.ctx, c.ctx.GitHubClient, c.handler)
 }

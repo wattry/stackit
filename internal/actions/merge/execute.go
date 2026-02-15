@@ -78,7 +78,7 @@ func GetMergeMethod(ctx *app.Context, githubClient github.Client) (github.MergeM
 
 	// Check if interactive mode is available
 	if err := tui.CheckInteractiveAllowed(); err != nil {
-		// Non-interactive mode: use the first option (squash if available)
+		// Non-interactive mode: use the first allowed option
 		method := options[0].Value
 		if err := cfg.SetMergeMethod(method); err != nil {
 			return "", fmt.Errorf("failed to save merge method: %w", err)
@@ -144,6 +144,7 @@ type ExecuteOptions struct {
 	Handler                 EventHandler               // Optional progress handler
 	UndoStackDepth          int                        // Maximum undo stack depth (from config)
 	ConsolidationResultFunc func(*ConsolidationResult) // Callback for consolidation results
+	MergeMethod             github.MergeMethod         // Optional: override merge method (empty = auto-detect/prompt)
 }
 
 // Execute executes a validated merge plan step by step
@@ -268,11 +269,15 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 		}
 		out.Debug("Executing StepMergePR for branch %s", step.BranchName)
 
-		// Get merge method (prompts user if not configured)
-		mergeMethod, err := getMergeMethodWithPause(ctx, githubClient, opts.Handler)
-		if err != nil {
-			out.Debug("Failed to get merge method: %v", err)
-			return fmt.Errorf("failed to get merge method: %w", err)
+		// Get merge method: use override if provided, otherwise detect/prompt
+		mergeMethod := opts.MergeMethod
+		if mergeMethod == "" {
+			var err error
+			mergeMethod, err = getMergeMethodWithPause(ctx, githubClient, opts.Handler)
+			if err != nil {
+				out.Debug("Failed to get merge method: %v", err)
+				return fmt.Errorf("failed to get merge method: %w", err)
+			}
 		}
 
 		if err := githubClient.MergePullRequest(ctx.Context, step.BranchName, mergeMethod); err != nil {

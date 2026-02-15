@@ -116,6 +116,7 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 		return nil
 	}
 
+	// Fail fast if no GitHub client
 	if ctx.GitHubClient == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
@@ -132,6 +133,12 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 		}
 	}
 
+	// Determine merge method: flag > config > prompt
+	mergeMethod, err := resolveMergeMethod(ctx, opts.method)
+	if err != nil {
+		return err
+	}
+
 	// Get the PR's NodeID for merge operations
 	owner, repo := ctx.GitHubClient.GetOwnerRepo()
 	prInfo, err := ctx.GitHubClient.GetPullRequest(ctx.Context, owner, repo, bottomPR.PRNumber)
@@ -140,12 +147,6 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 	}
 	if prInfo.NodeID == "" {
 		return fmt.Errorf("PR #%d does not have a Node ID", bottomPR.PRNumber)
-	}
-
-	// Determine merge method: flag > config > prompt
-	mergeMethod, err := resolveMergeMethod(ctx, opts.method)
-	if err != nil {
-		return err
 	}
 
 	// Orchestrate the merge (direct merge → automerge → poll fallback)
@@ -247,31 +248,7 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 	fmt.Fprintf(&result, "Current Branch: %s\n", plan.CurrentBranch)
 	result.WriteString("\n")
 
-	if validation != nil {
-		if len(validation.Errors) > 0 {
-			result.WriteString("Errors:\n")
-			for _, err := range validation.Errors {
-				fmt.Fprintf(&result, "  ✗ %s\n", err)
-			}
-			result.WriteString("\n")
-		}
-
-		if len(validation.Warnings) > 0 {
-			result.WriteString("Warnings:\n")
-			for _, warn := range validation.Warnings {
-				fmt.Fprintf(&result, "  ⚠ %s\n", warn)
-			}
-			result.WriteString("\n")
-		}
-
-		if len(validation.Infos) > 0 {
-			result.WriteString("Information:\n")
-			for _, info := range validation.Infos {
-				fmt.Fprintf(&result, "  • %s\n", info)
-			}
-			result.WriteString("\n")
-		}
-	}
+	mergeAction.FormatValidationSection(&result, validation)
 
 	result.WriteString("Merge Plan:\n")
 	if len(plan.BranchesToMerge) == 0 {
@@ -281,12 +258,16 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 
 	bottom := plan.BranchesToMerge[0]
 	step := 1
-	fmt.Fprintf(&result, "  %d. Enable automerge for PR #%d (%s)\n", step, bottom.PRNumber, bottom.BranchName)
+	if wait {
+		fmt.Fprintf(&result, "  %d. Merge PR #%d (%s)\n", step, bottom.PRNumber, bottom.BranchName)
+	} else {
+		fmt.Fprintf(&result, "  %d. Enable automerge for PR #%d (%s)\n", step, bottom.PRNumber, bottom.BranchName)
+	}
 	step++
 
 	remaining := len(plan.BranchesToMerge) - 1 + len(plan.UpstackBranches)
 	if wait {
-		fmt.Fprintf(&result, "  %d. Wait for PR #%d to merge\n", step, bottom.PRNumber)
+		fmt.Fprintf(&result, "  %d. Wait for merge to complete\n", step)
 		step++
 		if remaining > 0 {
 			fmt.Fprintf(&result, "  %d. Sync trunk and restack %d remaining branches\n", step, remaining)

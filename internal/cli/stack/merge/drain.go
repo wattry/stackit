@@ -25,6 +25,7 @@ func NewDrainCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		method string
 		branch string
 		scope  string
+		count  int
 	)
 
 	cmd := &cobra.Command{
@@ -43,6 +44,7 @@ This is equivalent to running "merge next --wait" in a loop.
 
 Examples:
   stackit merge drain              # Drain the entire stack
+  stackit merge drain --count 2    # Drain only the first 2 PRs
   stackit merge drain --dry-run    # Show what would be merged
   stackit merge drain --yes        # Skip confirmation prompt
   stackit merge drain --method squash  # Use squash merge for all PRs`,
@@ -56,6 +58,7 @@ Examples:
 					method: method,
 					branch: branch,
 					scope:  scope,
+					count:  count,
 				}, postMergeHandler)
 			})
 		},
@@ -67,7 +70,9 @@ Examples:
 	cmd.Flags().StringVar(&method, "method", "", "Merge method (squash, merge, rebase). Uses config merge.method if not specified")
 	cmd.Flags().StringVar(&branch, "branch", "", "Target branch to merge from (default: current branch)")
 	cmd.Flags().StringVar(&scope, "scope", "", "Merge PRs within the specified scope")
+	cmd.Flags().IntVar(&count, "count", 0, "Maximum number of PRs to drain (0 = all)")
 	cmd.MarkFlagsMutuallyExclusive("scope", "branch")
+	_ = cmd.RegisterFlagCompletionFunc("count", cobra.NoFileCompletions)
 
 	return cmd
 }
@@ -79,11 +84,16 @@ type mergeDrainOptions struct {
 	method string
 	branch string
 	scope  string
+	count  int // Maximum number of PRs to drain (0 = all)
 }
 
 func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler PostMergeHandler) error {
 	out := ctx.Output
 	eng := ctx.Engine
+
+	if opts.count < 0 {
+		return fmt.Errorf("--count must be non-negative (got %d)", opts.count)
+	}
 
 	// Create initial plan to discover what needs to be merged
 	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, mergeAction.CreatePlanOptions{
@@ -103,9 +113,19 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 
 	totalPRs := len(plan.BranchesToMerge)
 
+	// Apply count limit: 0 means unlimited, positive caps at totalPRs
+	drainTarget := 0 // 0 = unlimited
+	if opts.count > 0 {
+		drainTarget = min(opts.count, totalPRs)
+	}
+
 	// Show the full drain plan
-	planText := formatMergeDrainPlan(plan, validation, opts.force)
+	planText := formatMergeDrainPlan(plan, validation)
 	out.Print(planText)
+
+	if drainTarget > 0 && drainTarget < totalPRs {
+		out.Info("Draining first %d of %d PRs (--count=%d)", drainTarget, totalPRs, opts.count)
+	}
 
 	// Validate the initial plan
 	if !validation.Valid && !opts.force {
@@ -118,13 +138,18 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 		return nil
 	}
 
+	// Fail fast if no GitHub client
 	if ctx.GitHubClient == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
 	// Confirm unless --yes
 	if !opts.yes && ctx.Interactive {
-		confirmed, err := tui.PromptConfirm(fmt.Sprintf("Drain all %d PRs in the stack?", totalPRs), false)
+		prompt := fmt.Sprintf("Drain all %d PRs in the stack?", totalPRs)
+		if drainTarget > 0 && drainTarget < totalPRs {
+			prompt = fmt.Sprintf("Drain %d of %d PRs in the stack?", drainTarget, totalPRs)
+		}
+		confirmed, err := tui.PromptConfirm(prompt, false)
 		if err != nil {
 			return fmt.Errorf("confirmation canceled: %w", err)
 		}
@@ -142,7 +167,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 
 	// Drain loop: merge one PR at a time, bottom-up
 	merged := 0
-	for {
+	for drainTarget == 0 || merged < drainTarget {
 		// Re-read state each iteration (branches change after merges + sync)
 		plan, _, err = mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, mergeAction.CreatePlanOptions{
 			Strategy:     mergeAction.StrategyBottomUp,
@@ -154,6 +179,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 			// After merging some PRs, "not on a branch" or "on trunk" can happen
 			// if post-merge sync moved us. This is expected when stack is fully drained.
 			if merged > 0 {
+				out.Debug("Stopping drain after %d merges: %v", merged, err)
 				break
 			}
 			return err
@@ -166,7 +192,11 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 		bottomPR := plan.BranchesToMerge[0]
 
 		out.Newline()
-		out.Info("Merging PR #%d (%s) [%d/%d]...", bottomPR.PRNumber, bottomPR.BranchName, merged+1, totalPRs)
+		displayTotal := totalPRs
+		if drainTarget > 0 {
+			displayTotal = drainTarget
+		}
+		out.Info("Merging PR #%d (%s) [%d/%d]...", bottomPR.PRNumber, bottomPR.BranchName, merged+1, displayTotal)
 
 		// Get the PR's NodeID for merge operations
 		owner, repo := ctx.GitHubClient.GetOwnerRepo()
@@ -223,7 +253,7 @@ func resolveMergeMethod(ctx *app.Context, methodFlag string) (github.MergeMethod
 	return mergeAction.GetMergeMethod(ctx, ctx.GitHubClient)
 }
 
-func formatMergeDrainPlan(plan *mergeAction.Plan, validation *mergeAction.PlanValidation, force bool) string {
+func formatMergeDrainPlan(plan *mergeAction.Plan, validation *mergeAction.PlanValidation) string {
 	var result strings.Builder
 
 	result.WriteString("Merge Strategy: drain (bottom-up, all PRs)\n")
@@ -236,31 +266,7 @@ func formatMergeDrainPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVa
 	fmt.Fprintf(&result, "Current Branch: %s\n", plan.CurrentBranch)
 	result.WriteString("\n")
 
-	if validation != nil {
-		if len(validation.Errors) > 0 && !force {
-			result.WriteString("Errors:\n")
-			for _, err := range validation.Errors {
-				fmt.Fprintf(&result, "  ✗ %s\n", err)
-			}
-			result.WriteString("\n")
-		}
-
-		if len(validation.Warnings) > 0 {
-			result.WriteString("Warnings:\n")
-			for _, warn := range validation.Warnings {
-				fmt.Fprintf(&result, "  ⚠ %s\n", warn)
-			}
-			result.WriteString("\n")
-		}
-
-		if len(validation.Infos) > 0 {
-			result.WriteString("Information:\n")
-			for _, info := range validation.Infos {
-				fmt.Fprintf(&result, "  • %s\n", info)
-			}
-			result.WriteString("\n")
-		}
-	}
+	mergeAction.FormatValidationSection(&result, validation)
 
 	result.WriteString("Drain Plan:\n")
 	if len(plan.BranchesToMerge) == 0 {
