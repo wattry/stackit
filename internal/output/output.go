@@ -149,19 +149,19 @@ func (c *ConsoleOutput) DirectiveRerun(args ...string) {
 
 // joinArgs joins arguments, quoting any that contain spaces.
 func joinArgs(args []string) string {
-	var result string
+	var result strings.Builder
 	for i, arg := range args {
 		if i > 0 {
-			result += " "
+			result.WriteString(" ")
 		}
 		// Quote args containing spaces
 		if strings.Contains(arg, " ") {
-			result += fmt.Sprintf("%q", arg)
+			result.WriteString(fmt.Sprintf("%q", arg))
 		} else {
-			result += arg
+			result.WriteString(arg)
 		}
 	}
-	return result
+	return result.String()
 }
 
 // writeDirective writes a directive to the directive file if set, otherwise to the writer.

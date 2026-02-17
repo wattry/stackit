@@ -344,10 +344,7 @@ func (m promptListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		h, _ := lipgloss.NewStyle().Margin(1, 2).GetFrameSize()
 		// Limit height to number of items + title + help (roughly 4 extra lines)
-		maxHeight := m.itemCount + 4
-		if maxHeight > msg.Height {
-			maxHeight = msg.Height
-		}
+		maxHeight := min(m.itemCount+4, msg.Height)
 		m.list.SetSize(msg.Width-h, maxHeight)
 	}
 

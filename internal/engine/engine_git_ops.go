@@ -18,8 +18,8 @@ func (e *engineImpl) GetPendingChanges(ctx context.Context) ([]PendingChange, er
 	}
 
 	var changes []PendingChange
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
+	for line := range lines {
 		if len(line) < 4 {
 			continue
 		}

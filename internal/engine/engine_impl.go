@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"sync"
@@ -70,9 +71,7 @@ func (e *engineImpl) SnapshotForWorktree() WorktreeSnapshot {
 
 	// Shallow copy remoteMetaCache — Meta values are treated as immutable
 	remoteMetaCache := make(map[string]*git.Meta, len(e.remoteMetaCache))
-	for name, meta := range e.remoteMetaCache {
-		remoteMetaCache[name] = meta
-	}
+	maps.Copy(remoteMetaCache, e.remoteMetaCache)
 
 	return WorktreeSnapshot{
 		Trunk:           e.trunk,
@@ -203,13 +202,11 @@ func (e *engineImpl) maybeAutoFetchRemoteMetadata() {
 	refspecs, err := e.git.GetConfigAll("remote.origin.fetch")
 	if err == nil {
 		metadataRefspec := "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*"
-		for _, rs := range refspecs {
-			if rs == metadataRefspec {
-				// Already configured, nothing to do - this is the fast path
-				// Skip loading remote metadata cache here - it's not needed for most commands
-				// and will be loaded lazily when actually needed (e.g., during sync operations)
-				return
-			}
+		if slices.Contains(refspecs, metadataRefspec) {
+			// Already configured, nothing to do - this is the fast path
+			// Skip loading remote metadata cache here - it's not needed for most commands
+			// and will be loaded lazily when actually needed (e.g., during sync operations)
+			return
 		}
 	}
 

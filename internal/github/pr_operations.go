@@ -256,8 +256,8 @@ func ParseReviewers(reviewersStr string) ([]string, []string) {
 	var reviewers []string
 	var teamReviewers []string
 
-	parts := strings.Split(reviewersStr, ",")
-	for _, part := range parts {
+	parts := strings.SplitSeq(reviewersStr, ",")
+	for part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
@@ -298,7 +298,7 @@ func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, b
 }
 
 // executeGraphQLQuery executes a GraphQL query and returns the response body
-func executeGraphQLQuery(ctx context.Context, runner git.Runner, query string, variables map[string]interface{}) ([]byte, error) {
+func executeGraphQLQuery(ctx context.Context, runner git.Runner, query string, variables map[string]any) ([]byte, error) {
 	// Get GitHub token
 	token, err := getGitHubToken(runner)
 	if err != nil {
@@ -327,7 +327,7 @@ func executeGraphQLQuery(ctx context.Context, runner git.Runner, query string, v
 	httpClient := oauth2.NewClient(ctx, ts)
 
 	// Prepare GraphQL request
-	requestBody := map[string]interface{}{
+	requestBody := map[string]any{
 		"query":     query,
 		"variables": variables,
 	}
@@ -417,7 +417,7 @@ func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, me
 		graphqlMethod = "SQUASH"
 	}
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"pullRequestId": prNodeID,
 		"mergeMethod":   graphqlMethod,
 	}
@@ -453,7 +453,7 @@ func DisableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string) e
 		}
 	}`
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"pullRequestId": prNodeID,
 	}
 
@@ -481,7 +481,7 @@ func GetAutoMergeStatus(ctx context.Context, runner git.Runner, prNodeID string)
 		}
 	}`
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"nodeId": prNodeID,
 	}
 
@@ -548,7 +548,7 @@ func GetPRMergeableState(ctx context.Context, runner git.Runner, prNodeID string
 		}
 	}`
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"nodeId": prNodeID,
 	}
 
@@ -587,7 +587,7 @@ func BatchGetPRMergeableStates(ctx context.Context, runner git.Runner, prNodeIDs
 
 	// Build query with aliases for each PR
 	queryParts := make([]string, 0, len(prNodeIDs))
-	variables := make(map[string]interface{}, len(prNodeIDs))
+	variables := make(map[string]any, len(prNodeIDs))
 	for i, nodeID := range prNodeIDs {
 		alias := fmt.Sprintf("pr%d", i)
 		varName := fmt.Sprintf("nodeId%d", i)
@@ -761,7 +761,7 @@ func updatePRDraftStatus(ctx context.Context, runner git.Runner, pullRequestID s
 		}`
 	}
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"pullRequestId": pullRequestID,
 	}
 

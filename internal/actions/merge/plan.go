@@ -3,6 +3,7 @@ package merge
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -239,13 +240,7 @@ func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output
 		for _, branch := range eng.AllBranches() {
 			if branch.IsTracked() && eng.GetScope(branch).String() == opts.Scope {
 				// Check if this branch is not already being merged
-				isBeingMerged := false
-				for _, merged := range allBranches {
-					if branch.GetName() == merged {
-						isBeingMerged = true
-						break
-					}
-				}
+				isBeingMerged := slices.Contains(allBranches, branch.GetName())
 				if !isBeingMerged {
 					upstackBranches = append(upstackBranches, branch.GetName())
 				}

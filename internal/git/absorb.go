@@ -60,8 +60,8 @@ func parseDiffHunks(diffOutput, targetFile string) []Hunk {
 			parts := strings.Split(line, " ")
 			if len(parts) >= 4 {
 				bPath := parts[len(parts)-1]
-				if strings.HasPrefix(bPath, "b/") {
-					currentFile = strings.TrimPrefix(bPath, "b/")
+				if after, ok := strings.CutPrefix(bPath, "b/"); ok {
+					currentFile = after
 				}
 			}
 			continue

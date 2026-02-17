@@ -253,7 +253,7 @@ func (r *runner) fileExistsInIndex(ctx context.Context, file string) (bool, erro
 func extractContentFromHunk(h Hunk) string {
 	var lines []string
 	hasNoNewlineMarker := false
-	for _, line := range strings.Split(h.Content, "\n") {
+	for line := range strings.SplitSeq(h.Content, "\n") {
 		// Skip the hunk header line (@@ ... @@)
 		if strings.HasPrefix(line, "@@") {
 			continue

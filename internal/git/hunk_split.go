@@ -218,8 +218,8 @@ func GetHunkPreview(hunk Hunk, maxLines int) (preview string, totalLines int, ha
 
 // GetHunkHeader extracts just the @@ header line from the hunk
 func GetHunkHeader(hunk Hunk) string {
-	lines := strings.Split(hunk.Content, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(hunk.Content, "\n")
+	for line := range lines {
 		if strings.HasPrefix(line, "@@") {
 			return line
 		}

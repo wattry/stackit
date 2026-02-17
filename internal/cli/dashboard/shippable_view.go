@@ -48,10 +48,7 @@ func (m *shippableModel) renderMain() string {
 		actionBarHeight = 3
 	}
 
-	contentHeight := m.Height - headerHeight - footerHeight - actionBarHeight
-	if contentHeight < 5 {
-		contentHeight = 5
-	}
+	contentHeight := max(m.Height-headerHeight-footerHeight-actionBarHeight, 5)
 
 	leftWidth := m.Width / 2
 	rightWidth := m.Width - leftWidth
@@ -109,19 +106,13 @@ func (m *shippableModel) renderHeader() string {
 	var refreshStatus string
 	if !m.lastRefresh.IsZero() && m.state == stateMain {
 		timeSinceRefresh := time.Since(m.lastRefresh)
-		timeUntilRefresh := autoRefreshInterval - timeSinceRefresh
-		if timeUntilRefresh < 0 {
-			timeUntilRefresh = 0
-		}
+		timeUntilRefresh := max(autoRefreshInterval-timeSinceRefresh, 0)
 		secondsUntil := int(timeUntilRefresh.Seconds())
 		refreshStatus = style.ColorDim(fmt.Sprintf("[r] refresh in %ds", secondsUntil))
 	}
 
 	if refreshStatus != "" {
-		gap := m.Width - lipgloss.Width(left) - lipgloss.Width(refreshStatus) - 2
-		if gap < 2 {
-			gap = 2
-		}
+		gap := max(m.Width-lipgloss.Width(left)-lipgloss.Width(refreshStatus)-2, 2)
 		left = left + strings.Repeat(" ", gap) + refreshStatus
 	}
 
@@ -232,10 +223,9 @@ func (m *shippableModel) renderStackLine(stack shippable.Stack, focused bool) st
 	// Use lipgloss.Width() for accurate unicode measurement
 	paneWidth := m.Width / 2
 	overhead := 2 + style.CheckboxColumnWidth + 1 + style.StatusIconColumnWidth + 1 + lipgloss.Width(branchCount) + lipgloss.Width(expandIndicator) + 6
-	maxNameLen := paneWidth - overhead
-	if maxNameLen < 20 {
-		maxNameLen = 20 // Minimum readable length
-	}
+	maxNameLen := max(paneWidth-overhead,
+		// Minimum readable length
+		20)
 
 	// Truncate if needed
 	if len(name) > maxNameLen {
@@ -374,10 +364,7 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	}
 
 	// Size the viewport to fill the pane minus border, padding, and header
-	innerHeight := height - borderH - paddingH - headerHeight
-	if innerHeight < 1 {
-		innerHeight = 1
-	}
+	innerHeight := max(height-borderH-paddingH-headerHeight, 1)
 	m.detailsViewport.SetWidth(innerWidth)
 	m.detailsViewport.SetHeight(innerHeight)
 	m.detailsViewport.SetContent(content)
@@ -424,10 +411,7 @@ func (m *shippableModel) renderDetailsPanelHeader(stack *shippable.Stack, width 
 
 	// Truncate title if needed to fit badge
 	badgeWidth := lipgloss.Width(statusBadge)
-	maxTitleWidth := width - badgeWidth - 2
-	if maxTitleWidth < 10 {
-		maxTitleWidth = 10
-	}
+	maxTitleWidth := max(width-badgeWidth-2, 10)
 	if lipgloss.Width(title) > maxTitleWidth {
 		title = title[:maxTitleWidth-3] + "..."
 	}
@@ -729,10 +713,7 @@ func (m *shippableModel) renderProgressFooter() string {
 	}
 
 	quitHint := style.ColorDim("[q] Quit")
-	gap := m.Width - lipgloss.Width(progressLine) - lipgloss.Width(quitHint) - 4
-	if gap < 2 {
-		gap = 2
-	}
+	gap := max(m.Width-lipgloss.Width(progressLine)-lipgloss.Width(quitHint)-4, 2)
 	line := strings.Repeat(" ", gap)
 
 	return footerStyle.Width(m.Width).Render(progressLine + line + quitHint)

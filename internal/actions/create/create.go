@@ -4,6 +4,7 @@ package create
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/handler"
@@ -158,10 +159,8 @@ func Action(ctx *app.Context, opts Options, h Handler) (Result, error) {
 
 	// Check if branch already exists
 	allBranches := eng.AllBranches()
-	for _, existingBranch := range allBranches {
-		if branch.Equal(existingBranch) {
-			return Result{}, fmt.Errorf("branch %s already exists", branchName)
-		}
+	if slices.ContainsFunc(allBranches, branch.Equal) {
+		return Result{}, fmt.Errorf("branch %s already exists", branchName)
 	}
 
 	// Create and checkout new branch

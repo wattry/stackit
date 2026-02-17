@@ -646,10 +646,7 @@ func (r *StackTreeRenderer) getDownstackExclusiveRendered(args treeRenderArgs) [
 	fullStack = append([]string{r.trunk}, fullStack...)
 
 	if args.steps != nil && *args.steps > 0 {
-		start := len(fullStack) - *args.steps
-		if start < 0 {
-			start = 0
-		}
+		start := max(len(fullStack)-*args.steps, 0)
 		fullStack = fullStack[start:]
 	}
 

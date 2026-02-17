@@ -2,6 +2,7 @@ package split
 
 import (
 	"fmt"
+	"slices"
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
@@ -106,7 +107,7 @@ func splitByCommit(ctx *app.Context, branchToSplit string, eng splitByCommitEngi
 
 	// Build branchPoints in sorted order (0 first, then group points in ascending order)
 	branchPoints = append(branchPoints, 0) // Current branch at commit 0
-	for i := 0; i < len(groups); i++ {
+	for i := range groups {
 		branchPoints = append(branchPoints, splitPoint+groups[i].startIdx)
 	}
 
@@ -342,13 +343,7 @@ func deriveBranchName(ctx *app.Context, commitSubject string, pattern config.Bra
 	originalName := name
 	suffix := 1
 	for {
-		conflict := false
-		for _, existing := range existingNames {
-			if name == existing {
-				conflict = true
-				break
-			}
-		}
+		conflict := slices.Contains(existingNames, name)
 		// Also check existing branches in the repo
 		if !conflict && eng.BranchNames().Contains(name) {
 			conflict = true

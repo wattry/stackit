@@ -105,7 +105,7 @@ func PrecommitUninstallAction(ctx *app.Context) error {
 	var newLines []string
 	removed := false
 
-	for i := 0; i < len(lines); i++ {
+	for i := range lines {
 		line := lines[i]
 		if strings.Contains(line, "stackit precommit verify") {
 			removed = true

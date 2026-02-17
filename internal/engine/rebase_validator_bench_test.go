@@ -116,7 +116,7 @@ func benchmarkWideStack(b *testing.B, numBranches int) {
 
 		// Create N sibling branches
 		branches := make(map[string]string)
-		for i := 0; i < numBranches; i++ {
+		for i := range numBranches {
 			branches[branchName(i)] = mainBranch
 		}
 		s = setupScenario.WithStack(branches)
@@ -133,7 +133,7 @@ func benchmarkWideStack(b *testing.B, numBranches int) {
 
 	// Build specs
 	specs := make([]engine.RebaseSpec, numBranches)
-	for i := 0; i < numBranches; i++ {
+	for i := range numBranches {
 		specs[i] = engine.RebaseSpec{
 			Branch:      branchName(i),
 			NewParent:   mainRev,
@@ -158,7 +158,7 @@ func benchmarkLinearStack(b *testing.B, depth int) {
 
 		// Create linear stack
 		branches := make(map[string]string)
-		for i := 0; i < depth; i++ {
+		for i := range depth {
 			if i == 0 {
 				branches[branchName(i)] = mainBranch
 			} else {

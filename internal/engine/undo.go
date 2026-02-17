@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -137,9 +138,7 @@ func (e *engineImpl) TakeSnapshot(opts SnapshotOptions) error {
 
 	// Convert metadata refs to branch name -> SHA mapping
 	metadataSHAs := make(map[string]string)
-	for branchName, sha := range metadataRefs {
-		metadataSHAs[branchName] = sha
-	}
+	maps.Copy(metadataSHAs, metadataRefs)
 
 	// Create snapshot
 	timestamp := time.Now()
@@ -209,7 +208,7 @@ func (e *engineImpl) enforceMaxStackDepth() error {
 
 	// Delete oldest snapshots
 	toDelete := len(snapshots) - e.maxUndoStackDepth
-	for i := 0; i < toDelete; i++ {
+	for i := range toDelete {
 		filePath := filepath.Join(dir, snapshots[i].Name())
 		if err := os.Remove(filePath); err != nil {
 			// Continue deleting others even if one fails
@@ -432,13 +431,7 @@ func (e *engineImpl) RestoreSnapshot(ctx context.Context, snapshotID string) err
 	// Restore HEAD to the original branch
 	if snapshot.CurrentBranch != "" {
 		// Check if the branch still exists
-		branchExists := false
-		for _, branchName := range e.state.branches {
-			if branchName == snapshot.CurrentBranch {
-				branchExists = true
-				break
-			}
-		}
+		branchExists := slices.Contains(e.state.branches, snapshot.CurrentBranch)
 
 		if branchExists {
 			branch := e.GetBranch(snapshot.CurrentBranch)

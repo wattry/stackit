@@ -508,7 +508,7 @@ func (m MergeTUIModel) renderProgressBar(elapsed, estimate time.Duration) string
 
 	var b strings.Builder
 	b.WriteString("[")
-	for i := 0; i < width; i++ {
+	for i := range width {
 		if i < filled {
 			b.WriteString(m.styles.doneStyle.Render("█"))
 		} else {

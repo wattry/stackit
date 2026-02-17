@@ -183,7 +183,7 @@ func showDescription(ctx *app.Context, branch engine.Branch, stackRoot string) e
 	if desc.Description != "" {
 		out.Info("")
 		// Print description with indentation
-		for _, line := range strings.Split(desc.Description, "\n") {
+		for line := range strings.SplitSeq(desc.Description, "\n") {
 			out.Info("  %s", line)
 		}
 	}

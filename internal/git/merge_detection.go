@@ -122,8 +122,8 @@ func (r *runner) IsMerged(ctx context.Context, branchName, target string) (bool,
 	}
 
 	// Check if all commits are marked as merged (lines starting with '-')
-	lines := strings.Split(strings.TrimSpace(cherryOutput), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(cherryOutput), "\n")
+	for line := range lines {
 		if line != "" && line[0] != '-' {
 			return false, nil
 		}

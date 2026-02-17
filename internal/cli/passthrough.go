@@ -182,14 +182,14 @@ func HandlePassthroughWithResult(args []string, exit bool, out, errWriter io.Wri
 }
 
 func joinArgs(args []string) string {
-	result := ""
+	var result strings.Builder
 	for i, arg := range args {
 		if i > 0 {
-			result += " "
+			result.WriteString(" ")
 		}
-		result += arg
+		result.WriteString(arg)
 	}
-	return result
+	return result.String()
 }
 
 func isCurrentBranchLockedOrFrozen(runner git.Runner) (bool, bool, string) {

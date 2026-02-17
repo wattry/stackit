@@ -42,7 +42,7 @@ func TestBuildSplitResult(t *testing.T) {
 
 		// Build branchPoints in sorted order (forward iteration since startIdx is ascending)
 		branchPoints = append(branchPoints, 0) // Current branch at commit 0
-		for i := 0; i < len(groups); i++ {
+		for i := range groups {
 			branchPoints = append(branchPoints, splitPoint+groups[i].startIdx)
 		}
 
@@ -89,7 +89,7 @@ func TestBuildSplitResult(t *testing.T) {
 
 		// Build branchPoints in sorted order (forward iteration since startIdx is ascending)
 		branchPoints = append(branchPoints, 0)
-		for i := 0; i < len(groups); i++ {
+		for i := range groups {
 			branchPoints = append(branchPoints, splitPoint+groups[i].startIdx)
 		}
 

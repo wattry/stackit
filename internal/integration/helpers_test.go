@@ -524,7 +524,7 @@ func splitArgs(s string) []string {
 // countNonEmptyLines counts lines that have non-whitespace content
 func countNonEmptyLines(s string) int {
 	count := 0
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.TrimSpace(line) != "" {
 			count++
 		}
@@ -570,10 +570,10 @@ func isMainWorktree(path string) bool {
 
 func parseWorktreePaths(output string) []string {
 	var paths []string
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "worktree ") {
-			paths = append(paths, strings.TrimSpace(strings.TrimPrefix(line, "worktree ")))
+		if after, ok := strings.CutPrefix(line, "worktree "); ok {
+			paths = append(paths, strings.TrimSpace(after))
 		}
 	}
 	return paths
@@ -721,7 +721,7 @@ func (s *TestShell) SetPrState(branch, state string) *TestShell {
 	cmd.Dir = s.scene.Dir
 	shaOutput, err := cmd.Output()
 
-	var meta map[string]interface{}
+	var meta map[string]any
 	if err == nil {
 		// Ref exists, read it
 		sha := strings.TrimSpace(string(shaOutput))
@@ -733,13 +733,13 @@ func (s *TestShell) SetPrState(branch, state string) *TestShell {
 		require.NoError(s.t, err, "failed to parse metadata for %s", branch)
 	} else {
 		// No existing metadata
-		meta = make(map[string]interface{})
+		meta = make(map[string]any)
 	}
 
 	// Update PR state
-	prInfo, ok := meta["prInfo"].(map[string]interface{})
+	prInfo, ok := meta["prInfo"].(map[string]any)
 	if !ok {
-		prInfo = make(map[string]interface{})
+		prInfo = make(map[string]any)
 	}
 	prInfo["state"] = state
 	meta["prInfo"] = prInfo
@@ -858,7 +858,7 @@ func (s *TestShell) SetPrMetadata(branch string, pr PRMetadata) *TestShell {
 	cmd.Dir = s.scene.Dir
 	shaOutput, err := cmd.Output()
 
-	var meta map[string]interface{}
+	var meta map[string]any
 	if err == nil {
 		// Ref exists, read it
 		sha := strings.TrimSpace(string(shaOutput))
@@ -870,11 +870,11 @@ func (s *TestShell) SetPrMetadata(branch string, pr PRMetadata) *TestShell {
 		require.NoError(s.t, err, "failed to parse metadata for %s", branch)
 	} else {
 		// No existing metadata
-		meta = make(map[string]interface{})
+		meta = make(map[string]any)
 	}
 
 	// Update PR info
-	prInfo := make(map[string]interface{})
+	prInfo := make(map[string]any)
 	if pr.Number > 0 {
 		prInfo["number"] = pr.Number
 	}

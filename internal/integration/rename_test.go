@@ -46,9 +46,9 @@ func TestRenameWithPR(t *testing.T) {
 
 	// Manually set PR metadata
 	prNumber := 123
-	meta := map[string]interface{}{
+	meta := map[string]any{
 		"parentBranchName": "main",
-		"prInfo": map[string]interface{}{
+		"prInfo": map[string]any{
 			"number": prNumber,
 			"url":    "https://github.com/owner/repo/pull/123",
 		},

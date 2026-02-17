@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -384,11 +385,8 @@ func (m *shippableModel) rebuildCache() {
 	if current := m.engine.CurrentBranch(); current != nil {
 		m.cache.currentBranch = current.GetName()
 		for _, stack := range m.stacks {
-			for _, branchName := range stack.Stack.AllBranches {
-				if branchName == m.cache.currentBranch {
-					m.cache.currentStackRoot = stack.RootBranch()
-					break
-				}
+			if slices.Contains(stack.Stack.AllBranches, m.cache.currentBranch) {
+				m.cache.currentStackRoot = stack.RootBranch()
 			}
 			if m.cache.currentStackRoot != "" {
 				break

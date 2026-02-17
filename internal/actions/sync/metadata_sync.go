@@ -174,7 +174,7 @@ func resolveOrphanedMetadata(ctx *app.Context, info engine.OrphanedMetadataInfo,
 }
 
 // printMetadataDiffs displays metadata differences in dry-run mode
-func printMetadataDiffs(diffs []*engine.MetadataDiff, splog interface{ Info(string, ...interface{}) }) {
+func printMetadataDiffs(diffs []*engine.MetadataDiff, splog interface{ Info(string, ...any) }) {
 	splog.Info("\n=== Metadata changes (dry run) ===")
 	for _, diff := range diffs {
 		splog.Info("\nBranch: %s", style.ColorBranchName(diff.Branch, false))

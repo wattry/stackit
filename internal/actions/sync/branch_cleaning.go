@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -96,9 +97,7 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 			if err != nil {
 				return nil, err
 			}
-			for name, shouldDelete := range confirmed {
-				branchesToDelete[name] = shouldDelete
-			}
+			maps.Copy(branchesToDelete, confirmed)
 		}
 	}
 

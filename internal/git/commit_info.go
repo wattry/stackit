@@ -200,8 +200,8 @@ func (r *runner) LoadAllBranchRevisions() error {
 		return nil //nolint:nilerr
 	}
 
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
+	for line := range lines {
 		if line == "" {
 			continue
 		}

@@ -59,8 +59,8 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 			if len(parts) >= 4 {
 				// parts[2] = "a/path/to/file", parts[3] = "b/path/to/file"
 				bPath := parts[len(parts)-1]
-				if strings.HasPrefix(bPath, "b/") {
-					currentFile = strings.TrimPrefix(bPath, "b/")
+				if after, ok := strings.CutPrefix(bPath, "b/"); ok {
+					currentFile = after
 				}
 			}
 			// Reset state for new file diff
@@ -73,16 +73,16 @@ func ParseDiffOutput(diffOutput string) ([]Hunk, error) {
 
 		// Detect new file mode (e.g., "new file mode 100644")
 		// This line appears between "diff --git" and "index" for new files
-		if strings.HasPrefix(line, "new file mode ") {
-			currentFileMode = strings.TrimPrefix(line, "new file mode ")
+		if after, ok := strings.CutPrefix(line, "new file mode "); ok {
+			currentFileMode = after
 			currentIsNewFile = true
 			continue
 		}
 
 		// Detect deleted file mode (e.g., "deleted file mode 100644")
 		// This line appears between "diff --git" and "index" for deleted files
-		if strings.HasPrefix(line, "deleted file mode ") {
-			currentFileMode = strings.TrimPrefix(line, "deleted file mode ")
+		if after, ok := strings.CutPrefix(line, "deleted file mode "); ok {
+			currentFileMode = after
 			currentIsDeletedFile = true
 			continue
 		}
@@ -324,8 +324,8 @@ func GenerateNewFileHunk(filePath string, content []byte) Hunk {
 
 // CountHunkLines returns the number of added and removed lines in a hunk
 func CountHunkLines(hunk Hunk) (added, removed int) {
-	lines := strings.Split(hunk.Content, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(hunk.Content, "\n")
+	for line := range lines {
 		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
 			added++
 		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {

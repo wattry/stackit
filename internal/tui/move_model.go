@@ -220,11 +220,9 @@ func NewMoveModel(eng engine.Engine, config MoveModelConfig) *MoveModel {
 	scrollOffset := 0
 	if len(branches) > maxVisibleBranches {
 		// Show the last maxVisibleBranches items (trunk at bottom)
-		scrollOffset = len(branches) - maxVisibleBranches
-		// But also try to show source branch
-		if sourceIndex < scrollOffset {
-			scrollOffset = sourceIndex
-		}
+		scrollOffset = min(
+			// But also try to show source branch
+			sourceIndex, len(branches)-maxVisibleBranches)
 	}
 
 	return &MoveModel{
@@ -458,10 +456,7 @@ func (m *MoveModel) viewSelecting() string {
 	sb.WriteString("\n\n")
 
 	// Branch list with scroll
-	visibleEnd := m.scrollOffset + maxVisibleBranches
-	if visibleEnd > len(m.branches) {
-		visibleEnd = len(m.branches)
-	}
+	visibleEnd := min(m.scrollOffset+maxVisibleBranches, len(m.branches))
 
 	// Show scroll indicator if needed
 	if m.scrollOffset > 0 {

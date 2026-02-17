@@ -162,10 +162,10 @@ func (r *runner) GetWorktreePathForBranch(ctx context.Context, branchName string
 	targetRef := "refs/heads/" + branchName
 
 	for _, line := range lines {
-		if strings.HasPrefix(line, "worktree ") {
-			currentWorktree = strings.TrimPrefix(line, "worktree ")
-		} else if strings.HasPrefix(line, "branch ") {
-			branch := strings.TrimPrefix(line, "branch ")
+		if after, ok := strings.CutPrefix(line, "worktree "); ok {
+			currentWorktree = after
+		} else if after, ok := strings.CutPrefix(line, "branch "); ok {
+			branch := after
 			if branch == targetRef && currentWorktree != "" {
 				return currentWorktree, nil
 			}

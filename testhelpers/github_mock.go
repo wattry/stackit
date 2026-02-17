@@ -72,14 +72,14 @@ func NewMockGitHubServer(t *testing.T, config *MockGitHubServerConfig) *httptest
 					// Request reviewers - just return success
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusCreated)
-					_ = json.NewEncoder(w).Encode(map[string]interface{}{"message": "Reviewers requested"})
+					_ = json.NewEncoder(w).Encode(map[string]any{"message": "Reviewers requested"})
 					return
 				}
 				if r.Method == "DELETE" {
 					// Remove reviewers - just return success
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
-					_ = json.NewEncoder(w).Encode(map[string]interface{}{"message": "Reviewers removed"})
+					_ = json.NewEncoder(w).Encode(map[string]any{"message": "Reviewers removed"})
 					return
 				}
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

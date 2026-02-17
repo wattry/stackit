@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"stackit.dev/stackit/internal/git"
 )
@@ -104,13 +105,7 @@ func (e *engineImpl) shouldReparentBranch(ctx context.Context, parentBranchName 
 	}
 
 	// Check if parent branch still exists locally
-	parentExists := false
-	for _, name := range e.state.branches {
-		if name == parentBranchName {
-			parentExists = true
-			break
-		}
-	}
+	parentExists := slices.Contains(e.state.branches, parentBranchName)
 	if !parentExists {
 		return true
 	}

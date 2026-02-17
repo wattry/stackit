@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,13 +105,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 	}
 
 	// Validate branch exists
-	branchExists := false
-	for _, name := range e.state.branches {
-		if name == branchName {
-			branchExists = true
-			break
-		}
-	}
+	branchExists := slices.Contains(e.state.branches, branchName)
 	if !branchExists {
 		// Refresh branches list
 		branches, err := e.git.GetAllBranchNames()
@@ -119,13 +114,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 			return fmt.Errorf("failed to get branches: %w", err)
 		}
 		e.state.setBranches(branches)
-		branchExists = false
-		for _, name := range e.state.branches {
-			if name == branchName {
-				branchExists = true
-				break
-			}
-		}
+		branchExists = slices.Contains(e.state.branches, branchName)
 		if !branchExists {
 			e.mu.Unlock()
 			return fmt.Errorf("branch %s does not exist", branchName)
@@ -134,13 +123,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 
 	// Validate parent exists (or is trunk)
 	if parentBranchName != e.trunk {
-		parentExists := false
-		for _, name := range e.state.branches {
-			if name == parentBranchName {
-				parentExists = true
-				break
-			}
-		}
+		parentExists := slices.Contains(e.state.branches, parentBranchName)
 		if !parentExists {
 			// Refresh branches list to check again
 			branches, err := e.git.GetAllBranchNames()
@@ -149,13 +132,7 @@ func (e *engineImpl) TrackBranch(ctx context.Context, branchName string, parentB
 				return fmt.Errorf("failed to get branches: %w", err)
 			}
 			e.state.setBranches(branches)
-			parentExists = false
-			for _, name := range e.state.branches {
-				if name == parentBranchName {
-					parentExists = true
-					break
-				}
-			}
+			parentExists = slices.Contains(e.state.branches, parentBranchName)
 			if !parentExists {
 				e.mu.Unlock()
 				return fmt.Errorf("parent branch %s does not exist", parentBranchName)
@@ -230,9 +207,10 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 
 	// Update children to point to parent (SetParent handles its own transactions)
 	parentBranch := e.GetBranch(parent)
+	var reparentErrs []error
 	for _, child := range children {
 		if err := e.SetParent(ctx, e.GetBranch(child), parentBranch); err != nil {
-			continue
+			reparentErrs = append(reparentErrs, fmt.Errorf("%s -> %s: %w", child, parent, err))
 		}
 	}
 
@@ -245,6 +223,10 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 	// Remove from branches list
 	if i := slices.Index(e.state.branches, branchName); i >= 0 {
 		e.state.setBranches(slices.Delete(e.state.branches, i, i+1))
+	}
+
+	if len(reparentErrs) > 0 {
+		return fmt.Errorf("deleted branch %s but failed to reparent %d child branch(es): %w", branchName, len(reparentErrs), errors.Join(reparentErrs...))
 	}
 
 	return nil
