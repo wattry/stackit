@@ -6,6 +6,8 @@
 - New workflows → Add examples to Common Workflows in README.md
 - Configuration changes → Update `docs/config.md`
 - TUI changes → Update `docs/tui.md`
+- Merge/shipping changes → Update `docs/shipping.md`
+- Worktree changes → Update `docs/worktree.md`
 
 ## Command Help Text
 
@@ -23,5 +25,18 @@ Examples:
 
 - `docs/config.md` - Configuration keys, layered config, adding new keys
 - `docs/tui.md` - TUI patterns, styling, components
+- `docs/shipping.md` - Merge strategies, commands, flags, flow diagrams
+- `docs/worktree.md` - Worktree management, create vs attach, workflows
 
 Keep these up-to-date when modifying related systems.
+
+### What to check in `docs/shipping.md`
+
+When changing merge commands (`internal/cli/stack/merge/` or `internal/actions/merge/`):
+
+- **Adding/removing flags** → Update the Command Reference flag tables
+- **Adding/removing subcommands** → Update Quick Reference and add a Command Reference section
+- **Changing default flag values** (e.g. `--wait`) → Update the Wait Behavior section and flag tables
+- **Changing types or constants** → Update the Key Types section
+- **Adding/removing files** → Update the Core Files listing
+- **Changing function names or flow** → Update the Flow diagrams

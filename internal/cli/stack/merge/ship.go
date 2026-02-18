@@ -38,11 +38,13 @@ func NewShipCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 This creates a new "consolidation" branch that contains all the commits from the stack,
 opens a PR for it, and enables GitHub's automerge.
 
-By default, the command returns immediately after enabling automerge (fire-and-forget).
-Use --wait to block until the PR is merged, then automatically:
-1. Pull the latest trunk
-2. Delete the merged branches
-3. Restack any remaining upstack branches
+By default, the command waits for the PR to merge, then automatically:
+1. Pulls the latest trunk
+2. Deletes the merged branches
+3. Restacks any remaining upstack branches
+
+Use --wait=false to return immediately after enabling automerge (fire-and-forget).
+In fire-and-forget mode, run 'stackit sync --restack' after the PR merges to clean up.
 
 Use --scope to consolidate all branches within a specific scope.
 Use --stacks to combine multiple independent stacks into a single PR.`,
@@ -75,7 +77,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
-	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for merge to complete (default: fire-and-forget)")
+	cmd.Flags().BoolVar(&wait, "wait", true, "Wait for merge to complete")
 	cmd.Flags().StringVar(&scope, "scope", "", "Consolidate all branches within the specified scope")
 	cmd.Flags().StringVar(&branch, "branch", "", "Target branch to merge from (default: current branch)")
 	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Combine multiple stacks (comma-separated stack roots)")

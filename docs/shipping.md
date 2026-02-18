@@ -4,10 +4,12 @@
 
 **Commands:**
 ```bash
-stackit merge              # Show your mergeable work, then wizard
-stackit merge --all        # Show entire team's mergeable work
-stackit merge next         # Merge bottom PR, enable automerge, return immediately
-stackit merge ship         # Consolidate stack into single atomic PR
+stackit merge              # Launch interactive merge wizard (requires TTY)
+stackit merge status       # Show your mergeable work
+stackit merge status --all # Show entire team's mergeable work
+stackit merge next         # Merge bottom PR (fire-and-forget by default)
+stackit merge drain        # Merge all PRs bottom-up, waiting for each
+stackit merge ship         # Consolidate stack into single atomic PR (waits by default)
 ```
 
 **Key files:**
@@ -27,11 +29,11 @@ stackit merge ship         # Consolidate stack into single atomic PR
 
 ## Overview
 
-Shipping stacked changes is fundamentally different from shipping linear PRs. Stackit provides two merge strategies optimized for different scenarios, plus advanced multi-stack consolidation for high-velocity teams.
+Shipping stacked changes is fundamentally different from shipping linear PRs. Stackit provides multiple merge strategies optimized for different scenarios, plus advanced multi-stack consolidation for high-velocity teams.
 
 ## Merge Status View
 
-When you run `stackit merge`, you first see a status overview of your mergeable work:
+Use `stackit merge status` to see an overview of your mergeable work:
 
 ```
 📦 Your Mergeable Work
@@ -74,6 +76,29 @@ stackit merge next
 - Incremental shipping as PRs get approved
 - When you want granular merge commits
 
+### Drain (Bottom-Up All)
+
+Merges all PRs in the stack bottom-up, waiting for each to complete before proceeding to the next.
+
+```bash
+stackit merge drain
+```
+
+**How it works:**
+1. Creates a plan of all unmerged PRs in the stack
+2. For each PR (bottom to top):
+   - Enables automerge on the bottom-most unmerged PR
+   - Waits for the PR to merge
+   - Syncs trunk and restacks remaining branches
+3. Repeats until all PRs are merged
+
+Equivalent to running `merge next --wait` in a loop.
+
+**Best for:**
+- Fully draining a stack in one command
+- CI/CD pipelines that need sequential merging
+- Stacks where each PR should land independently
+
 ### Ship (Consolidation)
 
 Consolidates the entire stack into a single PR for atomic merging.
@@ -86,7 +111,7 @@ stackit merge ship
 1. Creates a "consolidation branch" from trunk
 2. Performs an **octopus merge** - a single merge commit with multiple parents
 3. Creates a PR for the consolidation branch
-4. When merged, all changes land atomically
+4. Waits for CI to pass and the PR to merge (default behavior)
 5. Individual PRs are closed with references to the consolidation PR
 
 **Best for:**
@@ -142,9 +167,19 @@ All multi-stack operations happen in temporary worktrees:
 - Merge feasibility is validated before any GitHub operations
 - Local CI can run on combined code before creating PRs
 
-## Fire-and-Forget Merging
+## Wait Behavior
 
-By default, merge commands return immediately after enabling GitHub automerge:
+Different commands have different default wait behavior:
+
+| Command | Default | Behavior |
+|---------|---------|----------|
+| `merge next` | `--wait=false` | Fire-and-forget: enables automerge and returns immediately |
+| `merge drain` | Always waits | Waits for each PR to merge before proceeding to next |
+| `merge ship` | `--wait=true` | Waits for consolidation PR to merge, then cleans up |
+
+### Fire-and-Forget (`merge next`)
+
+By default, `merge next` returns immediately after enabling GitHub automerge:
 
 ```bash
 stackit merge next  # Returns in <1 second
@@ -152,15 +187,27 @@ stackit merge next  # Returns in <1 second
 
 This enables a workflow where you run `merge next` repeatedly as PRs become ready, without waiting for CI.
 
-### Blocking Mode
-
-For automation or when you need to wait:
+Use `--wait` to block until the merge completes:
 
 ```bash
 stackit merge next --wait
 ```
 
-This polls GitHub until:
+### Wait Mode (`merge ship`)
+
+By default, `merge ship` waits for the consolidation PR to merge:
+
+```bash
+stackit merge ship  # Waits for CI + merge, then cleans up
+```
+
+Use `--wait=false` to return immediately after creating the PR:
+
+```bash
+stackit merge ship --wait=false  # Fire-and-forget
+```
+
+When waiting, the command polls GitHub until:
 - CI checks pass
 - PR is merged
 - Timeout is reached (default: 10 minutes)
@@ -183,7 +230,7 @@ Access via the ship dashboard or programmatically through the shippable package.
 Interactive TUI for managing multiple stacks:
 
 ```bash
-stackit dashboard ship  # or: stackit ship
+stackit dashboard ship
 ```
 
 Features:
@@ -218,14 +265,21 @@ This PR was shipped as part of [#123](link) by @username
 
 ### `stackit merge`
 
-Shows your mergeable work status, then launches an interactive wizard.
+Launches an interactive merge wizard. Requires a TTY (use `merge next` or `merge ship` for non-interactive mode).
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Show merge plan without executing |
+| `--force` | Skip validation checks (draft PRs, failing CI) |
+| `--wait` | Wait for merge to complete (default: false) |
+
+### `stackit merge status`
+
+Show shippability status of your stacks.
 
 | Flag | Description |
 |------|-------------|
 | `--all` | Show all team members' stacks (default: your stacks only) |
-| `--dry-run` | Show merge plan without executing |
-| `--force` | Skip validation checks |
-| `--wait` | Wait for merge to complete |
 
 ### `stackit merge next`
 
@@ -233,8 +287,26 @@ Merge the bottom-most ready PR in the stack.
 
 | Flag | Description |
 |------|-------------|
-| `--wait` | Block until merge completes |
-| `--timeout` | Timeout for --wait (default: 10m) |
+| `--dry-run` | Show merge plan without executing |
+| `--yes`, `-y` | Skip confirmation prompt |
+| `--force` | Skip validation checks (draft PRs, failing CI) |
+| `--wait` | Wait for merge to complete (default: false) |
+| `--method` | Merge method: `squash`, `merge`, or `rebase` (uses config if not specified) |
+| `--branch` | Target branch to merge from (default: current branch) |
+| `--scope` | Merge the next PR within the specified scope |
+
+### `stackit merge drain`
+
+Merge all PRs in the stack bottom-up, waiting for each to complete.
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Show merge plan without executing |
+| `--yes`, `-y` | Skip confirmation prompt |
+| `--force` | Skip validation checks (draft PRs, failing CI) |
+| `--method` | Merge method: `squash`, `merge`, or `rebase` (uses config if not specified) |
+| `--branch` | Target branch to merge from (default: current branch) |
+| `--scope` | Merge PRs within the specified scope |
 
 ### `stackit merge ship`
 
@@ -242,10 +314,16 @@ Consolidate stack(s) into a single PR.
 
 | Flag | Description |
 |------|-------------|
-| `--scope <name>` | Merge all branches in a scope |
-| `--stacks <roots>` | Combine multiple stacks (comma-separated root branches) |
-| `--skip-local-ci` | Skip local CI validation |
-| `--wait` | Block until consolidation PR is merged |
+| `--dry-run` | Show merge plan without executing |
+| `--yes`, `-y` | Skip confirmation prompt |
+| `--force` | Skip validation checks (draft PRs, failing CI) |
+| `--wait` | Wait for merge to complete (default: true) |
+| `--scope` | Consolidate all branches within the specified scope |
+| `--branch` | Target branch to merge from (default: current branch) |
+| `--stacks` | Combine multiple stacks (comma-separated stack roots) |
+| `--skip-local-ci` | Skip local CI validation for multi-stack merge |
+
+**Mutual exclusions:** `--scope`/`--branch`, `--stacks`/`--scope`, `--stacks`/`--branch`, `--stacks`/`--force`
 
 ## Implementation
 
@@ -253,43 +331,55 @@ Consolidate stack(s) into a single PR.
 
 ```
 internal/actions/merge/
-├── merge.go              # Main action entry point
-├── consolidate.go        # Single-stack consolidation (octopus merge)
-├── multistack.go         # Multi-stack consolidation
-├── multistack_worktree.go # Worktree-based merge testing
-├── plan.go               # Merge planning engine
-├── interactive.go        # Handler interfaces for TUI
-├── wizard.go             # Interactive wizard logic
-├── cleanup.go            # Post-merge PR cleanup
-├── ci_waiter.go          # CI polling logic
-└── execute.go            # Merge execution
+├── merge.go               # Main action entry point (Action function)
+├── plan.go                # Merge planning, strategy types, plan building
+├── consolidate.go         # Single-stack consolidation (octopus merge)
+├── execute.go             # Merge execution orchestration
+├── execute_steps.go       # Individual step execution (CI wait, PR base update, consolidation)
+├── handler.go             # Event handler interfaces for progress reporting
+├── helpers.go             # Merge method resolution, CI estimation, error classification
+├── interactive.go         # Interactive prompt interfaces for TUI
+├── wizard.go              # Interactive wizard logic
+├── cleanup.go             # Post-merge PR cleanup
+├── ci_waiter.go           # CI polling logic
+├── pr_generator.go        # PR title/body generation for consolidation PRs
+├── worktree.go            # Worktree-based merge operations
+├── multistack.go          # Multi-stack consolidation orchestration
+├── multistack_worktree.go # Worktree-based merge testing for multi-stack
+├── multistack_ci.go       # Local CI for multi-stack validation
+├── multistack_discover.go # Stack discovery for multi-stack shipping
+├── multistack_pr.go       # PR creation for multi-stack consolidation
+└── multistack_types.go    # Types for multi-stack operations
 ```
 
 ### Key Types
 
 ```go
-// Merge strategies
-type Strategy int
+// Merge strategies (internal/actions/merge/plan.go)
+type Strategy string
 const (
-    StrategyBottomUp Strategy = iota
-    StrategyShip
+    StrategyBottomUp Strategy = "bottom-up"
+    StrategyShip     Strategy = "ship"
 )
 
 // Merge plan - created before execution
 type Plan struct {
-    Branches     []BranchPlan
-    Strategy     Strategy
-    Warnings     []string
-    Errors       []string
+    Strategy        Strategy
+    CurrentBranch   string
+    BranchesToMerge []BranchMergeInfo
+    UpstackBranches []string
+    Steps           []PlanStep
+    Warnings        []string
+    Infos           []string
 }
 
-// Shippability status
-type Status int
+// Shippability status (internal/shippable/types.go)
+type Status string
 const (
-    StatusShippable Status = iota
-    StatusPending
-    StatusBlocked
-    StatusIncomplete
+    StatusShippable  Status = "shippable"
+    StatusPending    Status = "pending"
+    StatusBlocked    Status = "blocked"
+    StatusIncomplete Status = "incomplete"
 )
 ```
 
@@ -297,17 +387,17 @@ const (
 
 ```
 merge next
-  → FindBottomMostMergeable()
-  → ValidatePRReady()
-  → EnableAutoMerge() (GraphQL API)
-  → Return immediately
+  → CreateMergePlan(StrategyBottomUp)
+  → Select bottom-most PR from plan
+  → orchestrateMerge() (direct merge → automerge → poll fallback)
+  → Return immediately (or wait if --wait)
 
 [GitHub merges PR when CI passes]
 
 merge next (again)
-  → DetectMergedBranches()
-  → RestackRemaining()
-  → FindNextMergeable()
+  → CreateMergePlan(StrategyBottomUp)
+  → Find next unmerged PR
+  → orchestrateMerge()
   → ...
 ```
 
@@ -315,24 +405,29 @@ merge next (again)
 
 ```
 merge ship
-  → PlanConsolidation()
-  → CreateConsolidationBranch()
-  → OctopusMerge(all branches)
-  → CreatePR(consolidation branch)
-  → [Optional: --wait for merge]
-  → CleanupIndividualPRs()
+  → CreateMergePlan(StrategyShip)
+  → Action()
+    → Execute()
+      → ConsolidateMergeExecutor.Execute()
+        → preValidateStack()
+        → createMergeBranch() (octopus merge)
+        → createConsolidationPR()
+        → waitForConsolidationMerge() (if --wait)
+        → lockAndNotifyIndividualPRs()
 ```
 
 ### Flow: Multi-Stack Consolidation
 
 ```
 merge ship --stacks a,b,c
-  → CreateWorktreeSession()
-  → TestGlobalMerge(all stacks)
-  → If fails: BinarySearchWorkingSubset()
-  → RunLocalCI()
-  → CreateConsolidationPR()
-  → CleanupAllIndividualPRs()
+  → DiscoverStacks()
+  → ExecuteMultiStack()
+    → CreateWorktreeSession()
+    → Test global merge feasibility
+    → If fails: binary search for working subset
+    → Run local CI (unless --skip-local-ci)
+    → Create consolidation PR
+    → lockAndNotifyMultiStackPRs()
 ```
 
 ## Why This Matters
@@ -354,6 +449,7 @@ Stackit's consolidation approach:
 
 1. **Use consolidation for stacks of 3+**: Reduces merge overhead significantly
 2. **Run local CI before consolidation**: Catches issues before creating PRs
-3. **Use fire-and-forget for incremental shipping**: Don't wait for each merge
-4. **Leverage multi-stack consolidation**: Ship related work together
-5. **Configure merge method once**: Set `stackit.merge.method` to avoid prompts
+3. **Use `merge next` for incremental shipping**: Fire-and-forget as PRs get approved
+4. **Use `merge drain` for full stack teardown**: Merges everything in one command
+5. **Leverage multi-stack consolidation**: Ship related work together
+6. **Configure merge method once**: Set `stackit.merge.method` to avoid prompts
