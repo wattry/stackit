@@ -61,7 +61,7 @@ Stacks naturally form a tree structure—a single branch can have multiple child
 - 🔒 **Branch protection** — `lock` or `freeze` branches to prevent accidental modifications
 - 🔍 **Branch inspection** — Easily see parent/child relationships with `children` and `parent` commands
 - ⚙️ **Advanced configuration** — Customize branch naming patterns and submit behavior
-- 🤖 **AI assistant integration** — Generate integration files for Cursor and Claude Code
+- 🤖 **AI assistant integration** — Generate integration files for Cursor, Claude Code, and Codex
 - 🐙 **GitHub Integration** — Install CI checks to prevent merging locked PRs
 - ⚓ **Git Hooks** — Automatically validate branch state before committing with `precommit`
 - 📂 **Worktrees** — Work on multiple stacks in parallel with dedicated directories and post-creation hooks
@@ -189,13 +189,13 @@ Stackit includes specialized commands designed for Claude Code, providing intell
 | `stack-fix` | Diagnose and fix common stack issues | Resolving compilation errors or structural problems |
 | `stack-describe` | Generate or update stack description from changes | Documenting your stack for PRs |
 
-### Setting Up Claude Integration
+### Setting Up AI Agent Integration
 
 ```bash
 stackit agent install
 ```
 
-This creates the necessary integration files for Claude Code to use these specialized commands. The commands are designed to:
+This creates integration files for Claude Code, Codex, and Cursor. The Claude commands are designed to:
 
 - **Understand Context**: Each command analyzes your current stack state and git status
 - **Provide Validation**: Commands include quality checks and error handling
@@ -275,7 +275,7 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 ### Integrations
 | Command | Description |
 |:---|:---|
-| `stackit agent install` | Setup integration files for Cursor and Claude Code |
+| `stackit agent install` | Setup integration files for Cursor, Claude Code, and Codex |
 | `stackit github install` | Install GitHub Action CI checks for branch locking |
 | `stackit precommit install` | Install git pre-commit hook for branch state validation |
 | `stackit precommit uninstall` | Remove the git pre-commit hook |

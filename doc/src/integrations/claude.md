@@ -25,7 +25,7 @@ Install the Claude integration files:
 stackit agent install
 ```
 
-This creates the necessary integration files for Claude Code to use specialized stacking commands.
+This creates the necessary integration files for Claude Code, plus Codex/Cursor agent formats.
 
 ## Available commands
 
