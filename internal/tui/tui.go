@@ -206,9 +206,10 @@ func (m SubmitTUIModel) View() tea.View {
 		completed := 0
 		failed := 0
 		for _, item := range m.items {
-			if item.Status == statusDone {
+			switch item.Status {
+			case statusDone:
 				completed++
-			} else if item.Status == statusError {
+			case statusError:
 				failed++
 			}
 		}

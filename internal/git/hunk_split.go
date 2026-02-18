@@ -126,8 +126,9 @@ func SplitHunk(hunk Hunk) ([]Hunk, error) {
 	}
 
 	// Recursively split if possible
-	result := []Hunk{firstHunk}
 	moreHunks, _ := SplitHunk(secondHunk)
+	result := make([]Hunk, 0, 1+len(moreHunks))
+	result = append(result, firstHunk)
 	result = append(result, moreHunks...)
 
 	return result, nil

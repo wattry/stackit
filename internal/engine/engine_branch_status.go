@@ -31,10 +31,7 @@ func (e *engineImpl) GetScope(branch Branch) Scope {
 
 	current := branchName
 	visited := make(map[string]bool)
-	for {
-		if visited[current] {
-			break
-		}
+	for !visited[current] {
 		visited[current] = true
 
 		state := e.state.branchState.GetByName(current)

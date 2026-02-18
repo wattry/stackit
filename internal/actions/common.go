@@ -64,7 +64,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	for i, b := range branches {
 		branchNames[i] = b.GetName()
 	}
-	ctx.Logger.Info("restack started", "branches", branchNames, "count", len(branches))
+	ctx.Logger.Info("restack started branches=%v count=%v", branchNames, len(branches))
 
 	// Pre-flight validation: check branch ancestry relationships
 	if err := validateBranchAncestry(ctx, branches); err != nil {
@@ -92,9 +92,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		// Else: conflict - continue with conflict workflow
 		// Log conflicting files for debugging
 		if len(validation.ConflictingFiles) > 0 {
-			ctx.Logger.Debug("conflict detected during validation",
-				"branch", validation.FailedBranch,
-				"files", validation.ConflictingFiles)
+			ctx.Logger.Debug("conflict detected during validation branch=%v files=%v", validation.FailedBranch, validation.ConflictingFiles)
 		}
 	}
 
@@ -120,7 +118,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		failedPos, failedExists := positionMap[validation.FailedBranch]
 		if !failedExists {
 			// This shouldn't happen, but handle gracefully
-			ctx.Logger.Warn("failed branch not found in specs", "branch", validation.FailedBranch)
+			ctx.Logger.Warn("failed branch not found in specs branch=%v", validation.FailedBranch)
 			failedPos = len(specs) // Treat as if it failed at the end
 		}
 
@@ -181,12 +179,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 			case engine.RestackConflict:
 				resultStr = "conflict"
 			}
-			ctx.Logger.Info("restack result",
-				"branch", branchName,
-				"result", resultStr,
-				"reparented", result.Reparented,
-				"oldParent", result.OldParent,
-				"newParent", result.NewParent)
+			ctx.Logger.Info("restack result branch=%v result=%v reparented=%v oldParent=%v newParent=%v", branchName, resultStr, result.Reparented, result.OldParent, result.NewParent)
 		}
 
 		// Report results via callback or output
@@ -353,9 +346,7 @@ func validateBranchAncestry(ctx *app.Context, branches []engine.Branch) error {
 			parentRev, err := parent.GetRevision()
 			if err != nil {
 				// Parent doesn't exist - this is OK, auto-reparenting will handle it
-				ctx.Logger.Debug("parent branch missing, will auto-reparent",
-					"branch", branchName,
-					"parent", parentName)
+				ctx.Logger.Debug("parent branch missing, will auto-reparent branch=%v parent=%v", branchName, parentName)
 				continue
 			}
 
@@ -375,7 +366,7 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 	specs := make([]engine.RebaseSpec, 0, len(branches))
 	branchMap := make(map[string]bool)
 
-	ctx.Logger.Debug("buildRebaseSpecs starting", "branchCount", len(branches))
+	ctx.Logger.Debug("buildRebaseSpecs starting branchCount=%v", len(branches))
 
 	for _, branch := range branches {
 		branchName := branch.GetName()
@@ -419,8 +410,7 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 		if oldParentRev != "" {
 			isAncestor, err := ctx.Engine.Git().IsAncestor(oldParentRev, branchName)
 			if err != nil {
-				ctx.Logger.Warn("failed to check ancestry, will try merge-base",
-					"oldParent", oldParentRev, "branch", branchName, "error", err)
+				ctx.Logger.Warn("failed to check ancestry, will try merge-base oldParent=%v branch=%v error=%v", oldParentRev, branchName, err)
 				isAncestor = false
 			}
 			if !isAncestor {
@@ -428,7 +418,7 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 					oldParentRev = mergeBase
 				} else {
 					// Can't determine merge base - skip this branch
-					ctx.Logger.Warn("failed to determine merge base", "branch", branchName, "parent", parentName, "error", err)
+					ctx.Logger.Warn("failed to determine merge base branch=%v parent=%v error=%v", branchName, parentName, err)
 					continue
 				}
 			}
@@ -438,7 +428,7 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 				oldParentRev = mergeBase
 			} else {
 				// Can't determine merge base - skip this branch
-				ctx.Logger.Warn("failed to determine merge base", "branch", branchName, "parent", parentName, "error", err)
+				ctx.Logger.Warn("failed to determine merge base branch=%v parent=%v error=%v", branchName, parentName, err)
 				continue
 			}
 		}
@@ -450,13 +440,10 @@ func buildRebaseSpecs(ctx *app.Context, branches []engine.Branch) ([]engine.Reba
 		})
 		branchMap[branchName] = true
 
-		ctx.Logger.Debug("buildRebaseSpecs added spec",
-			"branch", branchName,
-			"newParent", parentName,
-			"oldUpstream", oldParentRev)
+		ctx.Logger.Debug("buildRebaseSpecs added spec branch=%v newParent=%v oldUpstream=%v", branchName, parentName, oldParentRev)
 	}
 
-	ctx.Logger.Debug("buildRebaseSpecs completed", "specCount", len(specs))
+	ctx.Logger.Debug("buildRebaseSpecs completed specCount=%v", len(specs))
 	return specs, branchMap
 }
 

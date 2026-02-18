@@ -297,6 +297,7 @@ func writeStackitConfigs(dir string) error {
 }
 
 // writeDefaultConfigs writes the default Stackit configuration files.
+//
 // Deprecated: Use writeStackitConfigs directly for new code.
 func (s *Scene) writeDefaultConfigs() error {
 	return writeStackitConfigs(s.Dir)

@@ -177,13 +177,13 @@ func (m reorderModel) View() tea.View {
 			symbolStyled := selectionBg.Render(symbol)
 			arrowStyled := selectionBg.Render(arrow)
 			branchStyled := selectionBg.Render(branch)
-			b.WriteString(fmt.Sprintf("%s%s%s\n", symbolStyled, arrowStyled, branchStyled))
+			fmt.Fprintf(&b, "%s%s%s\n", symbolStyled, arrowStyled, branchStyled)
 		} else {
 			// Non-selected row: apply branch-specific color
 			symbolStyled := branchStyle.Render(symbol)
 			arrowStyled := branchStyle.Render(arrow)
 			branchStyled := branchStyle.Render(branch)
-			b.WriteString(fmt.Sprintf("%s%s%s\n", symbolStyled, arrowStyled, branchStyled))
+			fmt.Fprintf(&b, "%s%s%s\n", symbolStyled, arrowStyled, branchStyled)
 		}
 
 		// Add vertical connector line (except after the last branch before trunk)
@@ -196,10 +196,10 @@ func (m reorderModel) View() tea.View {
 	if m.trunk != "" {
 		symbol := branchSymbol
 		arrow := branchArrow
-		b.WriteString(fmt.Sprintf("%s%s%s\n",
+		fmt.Fprintf(&b, "%s%s%s\n",
 			trunkStyle.Render(symbol),
 			trunkStyle.Render(arrow),
-			trunkStyle.Render(m.trunk)))
+			trunkStyle.Render(m.trunk))
 	}
 
 	return tea.NewView(b.String())

@@ -30,7 +30,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	gctx := ctx.Context
 	summary := &Summary{}
 
-	ctx.Logger.Info("sync started", "restack", opts.Restack, "force", opts.Force)
+	ctx.Logger.Info("sync started restack=%v force=%v", opts.Restack, opts.Force)
 
 	// Use null handler if none provided
 	if handler == nil {
@@ -51,7 +51,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// If we're in a worktree with uncommitted changes, the worktree dirty check will skip that stack
 	uncommittedStart := time.Now()
 	hasUncommitted := ctx.Reader().HasUncommittedChanges(gctx)
-	ctx.Logger.Info("check uncommitted changes completed", "durationMs", time.Since(uncommittedStart).Milliseconds())
+	ctx.Logger.Info("check uncommitted changes completed durationMs=%v", time.Since(uncommittedStart).Milliseconds())
 	if hasUncommitted && !ctx.InManagedWorktree {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
 	}
@@ -79,7 +79,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		// Estimate based on tracked branches
 		progressCountStart := time.Now()
 		branchCount := len(ctx.Navigator().AllBranches())
-		ctx.Logger.Info("count branches for progress completed", "durationMs", time.Since(progressCountStart).Milliseconds(), "branchCount", branchCount)
+		ctx.Logger.Info("count branches for progress completed durationMs=%v branchCount=%v", time.Since(progressCountStart).Milliseconds(), branchCount)
 		totalOps += branchCount
 	}
 	handler.Start(totalOps)
@@ -102,30 +102,30 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Goroutine 1: Pull trunk
 	g.Go(func() error {
-		ctx.Logger.Info("goroutine trunk started", "delayMs", time.Since(parallelStart).Milliseconds())
+		ctx.Logger.Info("goroutine trunk started delayMs=%v", time.Since(parallelStart).Milliseconds())
 		trunkErr = syncTrunk(ctx, &opts, handler, &trunkSummary)
 		return nil // Don't fail the group, handle error after Wait
 	})
 
 	// Goroutine 2: Fetch remote metadata refs (network operation only)
 	g.Go(func() error {
-		ctx.Logger.Info("goroutine metadata started", "delayMs", time.Since(parallelStart).Milliseconds())
+		ctx.Logger.Info("goroutine metadata started delayMs=%v", time.Since(parallelStart).Milliseconds())
 		fetchStart := time.Now()
 		metadataFetchErr = ctx.RemoteMetadata().FetchRemoteMetadata(gctx)
-		ctx.Logger.Info("fetch remote metadata refs completed", "durationMs", time.Since(fetchStart).Milliseconds())
+		ctx.Logger.Info("fetch remote metadata refs completed durationMs=%v", time.Since(fetchStart).Milliseconds())
 
 		// Also fetch stack metadata refs (stack-level descriptions, etc.)
 		stackFetchStart := time.Now()
 		if err := ctx.Git().FetchStackMetaRefs(gctx); err != nil {
-			ctx.Logger.Debug("fetch stack metadata refs failed (non-fatal)", "error", err)
+			ctx.Logger.Debug("fetch stack metadata refs failed (non-fatal) error=%v", err)
 		}
-		ctx.Logger.Info("fetch stack metadata refs completed", "durationMs", time.Since(stackFetchStart).Milliseconds())
+		ctx.Logger.Info("fetch stack metadata refs completed durationMs=%v", time.Since(stackFetchStart).Milliseconds())
 		return nil
 	})
 
 	// Goroutine 3: Sync PR info from GitHub (network operation only)
 	g.Go(func() error {
-		ctx.Logger.Info("goroutine github started", "delayMs", time.Since(parallelStart).Milliseconds())
+		ctx.Logger.Info("goroutine github started delayMs=%v", time.Since(parallelStart).Milliseconds())
 		var err error
 		githubSyncResult, err = syncGitHubPRInfo(ctx)
 		githubErr = err
@@ -133,7 +133,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	})
 
 	_ = g.Wait()
-	ctx.Logger.Info("parallel phase completed", "durationMs", time.Since(parallelStart).Milliseconds())
+	ctx.Logger.Info("parallel phase completed durationMs=%v", time.Since(parallelStart).Milliseconds())
 
 	// Handle errors from parallel operations
 	if trunkErr != nil {
@@ -195,7 +195,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// GC orphaned stack metadata refs (after branch cleanup so we know what's been deleted)
 	gcResult := gcOrphanedStackMetadata(ctx)
 	if len(gcResult.DeletedStackIDs) > 0 {
-		ctx.Logger.Info("cleaned orphaned stack metadata", "count", len(gcResult.DeletedStackIDs))
+		ctx.Logger.Info("cleaned orphaned stack metadata count=%v", len(gcResult.DeletedStackIDs))
 	}
 	// Surface any GC errors as warnings (non-fatal)
 	for _, errMsg := range gcResult.Errors {
@@ -261,12 +261,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		summary.UpToDate = true
 	}
 
-	ctx.Logger.Info("sync completed",
-		"trunkUpdated", summary.TrunkUpdated,
-		"branchesRestacked", summary.BranchesRestacked,
-		"branchesDeleted", summary.BranchesDeleted,
-		"branchesSkipped", summary.BranchesSkipped,
-	)
+	ctx.Logger.Info("sync completed trunkUpdated=%v branchesRestacked=%v branchesDeleted=%v branchesSkipped=%v", summary.TrunkUpdated, summary.BranchesRestacked, summary.BranchesDeleted, summary.BranchesSkipped)
 
 	handler.Complete(*summary)
 	return nil

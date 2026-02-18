@@ -103,7 +103,11 @@ func (w *MultiStackWorktreeExecutor) ExecuteInWorktree(ctx context.Context, stac
 // This creates one merge commit with all branches as parents.
 func (w *MultiStackWorktreeExecutor) tryGlobalOctopusMerge(ctx context.Context, eng engine.Engine, stacks []MultiStackInfo) error {
 	// Collect all branches from all stacks
-	var allBranches []string
+	totalBranches := 0
+	for _, stack := range stacks {
+		totalBranches += len(stack.AllBranches)
+	}
+	allBranches := make([]string, 0, totalBranches)
 	for _, stack := range stacks {
 		allBranches = append(allBranches, stack.AllBranches...)
 	}

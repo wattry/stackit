@@ -29,7 +29,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		return nil
 	}
 
-	ctx.Logger.Info("restack started", "branchCount", len(branches))
+	ctx.Logger.Info("restack started branchCount=%v", len(branches))
 
 	// Take snapshot before modifying the repository
 	snapshotOpts := NewSnapshot("restack",
@@ -94,7 +94,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		return fmt.Errorf("restack failed: %w", err)
 	}
 
-	ctx.Logger.Info("restack completed", "restacked", restacked, "skipped", skipped, "conflicts", len(conflicts))
+	ctx.Logger.Info("restack completed restacked=%v skipped=%v conflicts=%v", restacked, skipped, len(conflicts))
 
 	handler.OnRestackComplete(restacked, skipped, conflicts)
 	return nil

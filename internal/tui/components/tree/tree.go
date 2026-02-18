@@ -1345,9 +1345,10 @@ func (r *StackTreeRenderer) FormatAnnotationColored(annotation BranchAnnotation)
 		parts = append(parts, style.IconFrozen()+" "+style.ColorDim("(frozen)"))
 	}
 
-	if annotation.PRState == PRStateMerged {
+	switch annotation.PRState {
+	case PRStateMerged:
 		parts = append(parts, style.ColorDim("(Merged)"))
-	} else if annotation.PRState == PRStateClosed {
+	case PRStateClosed:
 		parts = append(parts, style.ColorDim("(Closed)"))
 	}
 

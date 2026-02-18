@@ -217,8 +217,8 @@ func IsTTY() bool {
 		return false
 	}
 	// First check if stdin/stdout are terminals
-	if !((isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())) &&
-		(isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()))) {
+	if (!isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd())) ||
+		(!isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd())) {
 		return false
 	}
 	// Also try to open /dev/tty to verify it's actually available

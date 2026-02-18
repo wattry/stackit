@@ -459,7 +459,7 @@ func (m *shippableModel) tick() tea.Cmd {
 // Returns (handled, cmd) - if handled is true, the caller should return cmd.
 func (m *shippableModel) HandleSpinnerMsg(msg tea.Msg) (bool, tea.Cmd) {
 	// Use the BaseModel's spinner handling
-	return m.BaseModel.HandleCommonMsg(msg)
+	return m.HandleCommonMsg(msg)
 }
 
 // Messages for async operations

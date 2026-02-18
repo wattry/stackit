@@ -132,7 +132,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return nil
 	}
 
-	ctx.Logger.Info("submit started", "branchCount", len(branches), "dryRun", opts.DryRun)
+	ctx.Logger.Info("submit started branchCount=%v dryRun=%v", len(branches), opts.DryRun)
 
 	// Get current branch for display purposes (used to highlight in tree view)
 	currentBranch := nav.CurrentBranch()
@@ -312,7 +312,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return fmt.Errorf("failed to push metadata to remote: %w. Your PRs were created/updated successfully, but metadata sync failed. Run 'st sync' and try submitting again", err)
 	}
 
-	ctx.Logger.Info("submit completed", "branchCount", len(branches))
+	ctx.Logger.Info("submit completed branchCount=%v", len(branches))
 
 	handler.OnEvent(CompletionEvent{Success: true, Message: "Submit complete"})
 	return nil
@@ -475,10 +475,7 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 	// Check if base changed
 	branch := nav.GetBranch(submissionInfo.BranchName)
 	prInfo, _ := branch.GetPrInfo()
-	baseChanged := false
-	if prInfo != nil && prInfo.Base() != submissionInfo.Base {
-		baseChanged = true
-	}
+	baseChanged := prInfo != nil && prInfo.Base() != submissionInfo.Base
 
 	updateOpts := github.UpdatePROptions{
 		Title:           &submissionInfo.Metadata.Title,

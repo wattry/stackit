@@ -136,9 +136,10 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 			continue
 		}
 		branchCount++
-		if ann.ReviewStatus == "Approved" {
+		switch ann.ReviewStatus {
+		case "Approved":
 			approvedCount++
-		} else if ann.ReviewStatus == "In Review" {
+		case "In Review":
 			inReviewCount++
 		}
 	}

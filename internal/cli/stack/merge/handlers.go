@@ -450,7 +450,7 @@ func (h *InteractiveMergeEventHandler) PromptIndividualMerge(branches []mergeAct
 		if i > 0 {
 			branchList.WriteString(", ")
 		}
-		branchList.WriteString(fmt.Sprintf("PR #%d (%s)", b.PRNumber, b.BranchName))
+		fmt.Fprintf(&branchList, "PR #%d (%s)", b.PRNumber, b.BranchName)
 		if i >= 2 && branchCount > 3 {
 			fmt.Fprintf(&branchList, ", and %d more", branchCount-i-1)
 			break

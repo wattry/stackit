@@ -588,7 +588,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 - **Git 2.25+**
 - **GitHub CLI (`gh`)** for PR operations
-- **Go 1.25+** (if building from source)
+- **Go 1.26+** (if building from source)
 
 ## License
 

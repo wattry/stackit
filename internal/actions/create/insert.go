@@ -93,9 +93,10 @@ func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeC
 				continue
 			}
 
-			if res.Result == engine.RestackConflict {
+			switch res.Result {
+			case engine.RestackConflict:
 				runtimeCtx.Output.Info("Conflict restacking %s onto %s. Please resolve manually or run 'stackit sync --restack'.", child, newBranch)
-			} else if res.Result == engine.RestackDone {
+			case engine.RestackDone:
 				runtimeCtx.Output.Info("Restacked %s onto %s.", child, newBranch)
 			}
 		}

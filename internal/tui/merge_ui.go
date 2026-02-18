@@ -355,7 +355,7 @@ func (m MergeTUIModel) View() tea.View {
 	}
 	for _, info := range completedGroupInfos[startIdx:] {
 		group := m.groups[info.index]
-		b.WriteString(fmt.Sprintf("  %s %s\n", m.styles.doneStyle.Render("✓"), m.styles.doneStyle.Render(group.Label)))
+		fmt.Fprintf(&b, "  %s %s\n", m.styles.doneStyle.Render("✓"), m.styles.doneStyle.Render(group.Label))
 	}
 
 	// Show current running/error group with full details
@@ -364,12 +364,12 @@ func (m MergeTUIModel) View() tea.View {
 		var line strings.Builder
 
 		if runningGroupInfo.status == mergeStatusError {
-			line.WriteString(fmt.Sprintf("  %s %s ", m.styles.errorStyle.Render("✗"), m.styles.errorStyle.Render(group.Label)))
+			fmt.Fprintf(&line, "  %s %s ", m.styles.errorStyle.Render("✗"), m.styles.errorStyle.Render(group.Label))
 			if runningGroupInfo.failedStep != nil && runningGroupInfo.failedStep.Error != nil {
 				line.WriteString(m.styles.errorStyle.Render("→ " + runningGroupInfo.failedStep.Error.Error()))
 			}
 		} else {
-			line.WriteString(fmt.Sprintf("  %s %s ", m.spinner.View(), lipgloss.NewStyle().Bold(true).Render(group.Label)))
+			fmt.Fprintf(&line, "  %s %s ", m.spinner.View(), lipgloss.NewStyle().Bold(true).Render(group.Label))
 
 			if runningGroupInfo.activeStep != nil {
 				if runningGroupInfo.activeStep.Status == mergeStatusWaiting {
@@ -415,7 +415,7 @@ func (m MergeTUIModel) View() tea.View {
 	}
 	for _, info := range pendingToShow {
 		group := m.groups[info.index]
-		b.WriteString(fmt.Sprintf("  %s %s\n", m.styles.dimStyle.Render("○"), m.styles.dimStyle.Render(group.Label)))
+		fmt.Fprintf(&b, "  %s %s\n", m.styles.dimStyle.Render("○"), m.styles.dimStyle.Render(group.Label))
 	}
 
 	// Show ellipsis if we're hiding pending groups

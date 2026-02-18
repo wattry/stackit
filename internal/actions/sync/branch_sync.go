@@ -73,7 +73,7 @@ func syncStackBranches(ctx *app.Context, dirtyAnchors map[string]bool, handler H
 		// Pull the branch
 		pullStart := time.Now()
 		result, err := ctx.Git().PullBranch(gctx, remote, branchName)
-		ctx.Logger.Info("pull branch completed", "branch", branchName, "durationMs", time.Since(pullStart).Milliseconds())
+		ctx.Logger.Info("pull branch completed branch=%v durationMs=%v", branchName, time.Since(pullStart).Milliseconds())
 
 		if err != nil {
 			// Treat errors as conflicts - warn and continue

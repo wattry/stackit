@@ -12,6 +12,7 @@ import (
 )
 
 // syncRemoteMetadata fetches and processes remote metadata.
+//
 // Deprecated: Use FetchRemoteMetadata in parallel + processRemoteMetadata
 func syncRemoteMetadata(ctx *app.Context, opts *Options, handler Handler) error {
 	eng := ctx.RemoteMetadata()
