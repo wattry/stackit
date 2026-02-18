@@ -63,7 +63,7 @@ func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, 
 	}
 	if !mergeableState.Mergeable {
 		if strings.EqualFold(mergeableState.MergeStateText, "UNKNOWN") {
-			return 0, fmt.Errorf("PR #%d mergeability is still being calculated by GitHub. Try again shortly", opts.prNumber)
+			return 0, fmt.Errorf("PR #%d mergeability is still being calculated by GitHub after 5 retries. Try again shortly", opts.prNumber)
 		}
 		return 0, formatUnmergeableError(opts.prNumber, mergeableState)
 	}

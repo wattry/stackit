@@ -283,8 +283,8 @@ func TestMergeSquash(t *testing.T) {
 			URL:    "https://github.com/owner/repo/pull/102",
 		})
 
-		// Run merge squash --dry-run
-		sh.Run("merge squash --dry-run")
+		// Run merge ship --dry-run
+		sh.Run("merge ship --dry-run")
 
 		// Should show consolidation plan
 		sh.OutputContains("Consolidate").
@@ -300,8 +300,8 @@ func TestMergeSquash(t *testing.T) {
 		// Stay on main
 		sh.OnBranch("main")
 
-		// Should error when trying to squash from trunk
-		sh.RunExpectError("merge squash --dry-run")
+		// Should error when trying to ship from trunk
+		sh.RunExpectError("merge ship --dry-run")
 		sh.OutputContains("cannot merge from trunk")
 	})
 
@@ -324,8 +324,8 @@ func TestMergeSquash(t *testing.T) {
 		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
 		sh.SetPrMetadata("branch-c", PRMetadata{Number: 103, State: "OPEN"})
 
-		// Run merge squash --dry-run
-		sh.Run("merge squash --dry-run")
+		// Run merge ship --dry-run
+		sh.Run("merge ship --dry-run")
 
 		// Should show all branches
 		sh.OutputContains("branch-a").
@@ -344,8 +344,8 @@ func TestMergeSquash(t *testing.T) {
 		// Add PR info
 		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
 
-		// Try to squash with non-existent scope
-		sh.RunExpectError("merge squash --scope nonexistent --dry-run")
+		// Try to ship with non-existent scope
+		sh.RunExpectError("merge ship --scope nonexistent --dry-run")
 		sh.OutputContains("no branches found")
 	})
 
@@ -399,12 +399,12 @@ func TestMergeCommand(t *testing.T) {
 			OutputContains("--wait")
 	})
 
-	t.Run("squash subcommand is accessible", func(t *testing.T) {
+	t.Run("ship subcommand is accessible", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
-		// Run merge squash --help
-		sh.Run("merge squash --help")
+		// Run merge ship --help
+		sh.Run("merge ship --help")
 
 		sh.OutputContains("Consolidate").
 			OutputContains("--scope").
@@ -547,7 +547,7 @@ func TestMergeSquashValidation(t *testing.T) {
 		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
 
 		// Dry-run shows consolidation plan
-		sh.Run("merge squash --dry-run")
+		sh.Run("merge ship --dry-run")
 		sh.OutputContains("Consolidate").
 			OutputContains("branch-a").
 			OutputContains("branch-b")
@@ -565,7 +565,7 @@ func TestMergeSquashValidation(t *testing.T) {
 		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "MERGED"})
 
 		// Should error - no open PRs
-		sh.RunExpectError("merge squash --dry-run")
+		sh.RunExpectError("merge ship --dry-run")
 		sh.OutputContains("no open PRs")
 	})
 }
@@ -587,7 +587,7 @@ func TestMergeFlags(t *testing.T) {
 		sh.OutputContains("branch-a")
 	})
 
-	t.Run("yes flag works with merge squash", func(t *testing.T) {
+	t.Run("yes flag works with merge ship", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
@@ -598,7 +598,7 @@ func TestMergeFlags(t *testing.T) {
 		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
 
 		// --yes --dry-run should work
-		sh.Run("merge squash --yes --dry-run")
+		sh.Run("merge ship --yes --dry-run")
 		sh.OutputContains("Consolidate")
 	})
 
@@ -635,7 +635,7 @@ func TestMergeSingleBranchStack(t *testing.T) {
 		sh.OutputContains("branch-a")
 	})
 
-	t.Run("merge squash works for single branch", func(t *testing.T) {
+	t.Run("merge ship works for single branch", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)
 
@@ -645,8 +645,8 @@ func TestMergeSingleBranchStack(t *testing.T) {
 
 		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
 
-		// merge squash also works (trivial consolidation)
-		sh.Run("merge squash --dry-run")
+		// merge ship also works (trivial consolidation)
+		sh.Run("merge ship --dry-run")
 		sh.OutputContains("Consolidate")
 	})
 }

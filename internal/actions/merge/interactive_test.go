@@ -30,12 +30,12 @@ func TestDetermineRecommendedStrategy(t *testing.T) {
 		{
 			name:        "three branches returns squash",
 			branchCount: 3,
-			want:        StrategySquash,
+			want:        StrategyShip,
 		},
 		{
 			name:        "many branches returns squash",
 			branchCount: 10,
-			want:        StrategySquash,
+			want:        StrategyShip,
 		},
 	}
 

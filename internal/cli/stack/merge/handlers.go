@@ -332,16 +332,16 @@ func (h *InteractiveMergeEventHandler) PromptStrategy(plan *mergeAction.Plan, re
 	var defaultIndex int
 
 	// Build options based on recommended strategy
-	if recommended == mergeAction.StrategySquash {
+	if recommended == mergeAction.StrategyShip {
 		strategyOptions = []tui.SelectOption{
-			{Label: "🔀 Squash — Create single PR with all stack commits for atomic merge (recommended)", Value: "squash"},
+			{Label: "🔀 Ship — Create single PR with all stack commits for atomic merge (recommended)", Value: "ship"},
 			{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom", Value: "bottom-up"},
 		}
 		defaultIndex = 0
 	} else {
 		strategyOptions = []tui.SelectOption{
 			{Label: "🔄 Bottom-up — Merge PRs one at a time from bottom (recommended)", Value: "bottom-up"},
-			{Label: "🔀 Squash — Create single PR with all stack commits for atomic merge", Value: "squash"},
+			{Label: "🔀 Ship — Create single PR with all stack commits for atomic merge", Value: "ship"},
 		}
 		defaultIndex = 0
 	}
@@ -363,9 +363,9 @@ func (h *InteractiveMergeEventHandler) PromptStrategy(plan *mergeAction.Plan, re
 	switch selectedStrategy {
 	case "bottom-up":
 		strategy = mergeAction.StrategyBottomUp
-	case "squash":
-		strategy = mergeAction.StrategySquash
-		// Prompt for wait if squashing (default is fire-and-forget)
+	case "ship":
+		strategy = mergeAction.StrategyShip
+		// Prompt for wait if shipping (default is fire-and-forget)
 		wait, err = tui.PromptConfirm("Wait for merge to complete? (default: fire-and-forget)", false)
 		if err != nil {
 			return mergeAction.StrategyChoice{}, fmt.Errorf("wait selection canceled: %w", err)
@@ -507,9 +507,9 @@ func CalculateGroups(plan *mergeAction.Plan) []Group {
 	groups := make([]Group, 0, len(plan.BranchesToMerge)+len(plan.UpstackBranches)+4)
 	assigned := make(map[int]bool)
 
-	if plan.Strategy == mergeAction.StrategySquash {
-		// For squash strategy: group by step type, not by individual branch
-		groups = appendSquashGroups(groups, plan, assigned)
+	if plan.Strategy == mergeAction.StrategyShip {
+		// For ship strategy: group by step type, not by individual branch
+		groups = appendShipGroups(groups, plan, assigned)
 	} else {
 		// For bottom-up strategy: group by individual PR
 		groups = appendBottomUpGroups(groups, plan, assigned)
@@ -536,8 +536,8 @@ func CalculateGroups(plan *mergeAction.Plan) []Group {
 	return groups
 }
 
-// appendSquashGroups appends groups for squash strategy
-func appendSquashGroups(groups []Group, plan *mergeAction.Plan, assigned map[int]bool) []Group {
+// appendShipGroups appends groups for ship strategy
+func appendShipGroups(groups []Group, plan *mergeAction.Plan, assigned map[int]bool) []Group {
 	// 1. Consolidation step
 	var consolidationIndices []int
 	for i, step := range plan.Steps {

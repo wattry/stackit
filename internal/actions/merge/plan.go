@@ -21,8 +21,8 @@ type Strategy string
 const (
 	// StrategyBottomUp merges PRs from the bottom of the stack up to the current branch
 	StrategyBottomUp Strategy = "bottom-up"
-	// StrategySquash creates a single PR containing all stack commits for atomic merging
-	StrategySquash Strategy = "squash"
+	// StrategyShip creates a single PR containing all stack commits for atomic merging
+	StrategyShip Strategy = "ship"
 )
 
 // StepType represents the type of step in a merge plan
@@ -438,7 +438,7 @@ func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output
 func BuildMergePlan(collected *CollectedBranches, strategy Strategy, wait bool) *Plan {
 	var steps []PlanStep
 	switch strategy {
-	case StrategySquash:
+	case StrategyShip:
 		steps = buildSquashSteps(collected.BranchesToMerge, collected.UpstackBranches, wait)
 	default: // StrategyBottomUp or default
 		steps = buildBottomUpSteps(collected.BranchesToMerge, collected.UpstackBranches)
@@ -593,7 +593,7 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	}
 
 	result.WriteString("Merge Plan:\n")
-	if plan.Strategy == StrategySquash {
+	if plan.Strategy == StrategyShip {
 		// For squash strategy, show grouped steps that match the TUI display
 		result.WriteString(formatSquashPlanSteps(plan))
 	} else {

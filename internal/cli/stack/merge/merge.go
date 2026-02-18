@@ -51,7 +51,7 @@ Examples:
 			return common.Run(cmd, func(ctx *app.Context) error {
 				// Must be interactive for wizard mode
 				if !ctx.Interactive {
-					return fmt.Errorf("merge wizard requires a TTY. Use 'merge next' or 'merge ship' for non-interactive mode")
+					return fmt.Errorf("merge wizard requires a TTY. Use 'merge next' or 'merge ship' for non-interactive mode (add --yes to skip prompts)")
 				}
 
 				runner, handler := NewMergeUI(ctx.Output, ctx.Logger)
@@ -92,7 +92,7 @@ Examples:
 	// Add subcommands
 	cmd.AddCommand(NewStatusCmd())
 	cmd.AddCommand(NewNextCmd(postMergeHandler))
-	cmd.AddCommand(NewSquashCmd(postMergeHandler))
+	cmd.AddCommand(NewShipCmd(postMergeHandler))
 	cmd.AddCommand(NewDrainCmd(postMergeHandler))
 
 	return cmd

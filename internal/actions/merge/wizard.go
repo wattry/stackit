@@ -292,13 +292,13 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 
 // DetermineRecommendedStrategy returns the recommended strategy based on stack size.
 // - 1-2 branches: bottom-up (merge one at a time)
-// - 3+ branches: squash (atomic merge)
+// - 3+ branches: ship (atomic merge)
 func DetermineRecommendedStrategy(branchCount int) Strategy {
 	switch {
 	case branchCount <= 2:
 		return StrategyBottomUp
 	default:
-		return StrategySquash
+		return StrategyShip
 	}
 }
 
