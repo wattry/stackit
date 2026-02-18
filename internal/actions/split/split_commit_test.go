@@ -30,8 +30,8 @@ func TestBuildSplitResult(t *testing.T) {
 		currentBranch := testCurrentBranch
 
 		// Replicate the result construction logic
-		branchNames := []string{}
-		branchPoints := []int{}
+		branchNames := make([]string, 0, 1+len(groups))
+		branchPoints := make([]int, 0, 1+len(groups))
 
 		// Add group names in reverse order (oldest branches first)
 		for i := len(groups) - 1; i >= 0; i-- {
@@ -78,8 +78,8 @@ func TestBuildSplitResult(t *testing.T) {
 		}
 		currentBranch := testCurrentBranch
 
-		branchNames := []string{}
-		branchPoints := []int{}
+		branchNames := make([]string, 0, 1+len(groups))
+		branchPoints := make([]int, 0, 1+len(groups))
 
 		// Add group names in reverse order (oldest branches first)
 		for i := len(groups) - 1; i >= 0; i-- {

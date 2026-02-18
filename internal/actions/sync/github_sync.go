@@ -38,7 +38,7 @@ func syncGitHubPRInfo(ctx *app.Context) (*GitHubSyncResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository info: %w", err)
 	}
-	ctx.Logger.Info("github sync setup completed", "durationMs", time.Since(setupStart).Milliseconds(), "branchCount", len(branchNames))
+	ctx.Logger.Info("github sync setup completed durationMs=%v branchCount=%v", time.Since(setupStart).Milliseconds(), len(branchNames))
 
 	result := &GitHubSyncResult{
 		BranchNames: branchNames,

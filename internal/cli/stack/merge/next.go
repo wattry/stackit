@@ -244,14 +244,14 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 		result.WriteString("  (no branches to merge)\n")
 		return result.String()
 	}
-	result.WriteString(fmt.Sprintf("Current Branch: %s\n", plan.CurrentBranch))
+	fmt.Fprintf(&result, "Current Branch: %s\n", plan.CurrentBranch)
 	result.WriteString("\n")
 
 	if validation != nil {
 		if len(validation.Errors) > 0 {
 			result.WriteString("Errors:\n")
 			for _, err := range validation.Errors {
-				result.WriteString(fmt.Sprintf("  ✗ %s\n", err))
+				fmt.Fprintf(&result, "  ✗ %s\n", err)
 			}
 			result.WriteString("\n")
 		}
@@ -259,7 +259,7 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 		if len(validation.Warnings) > 0 {
 			result.WriteString("Warnings:\n")
 			for _, warn := range validation.Warnings {
-				result.WriteString(fmt.Sprintf("  ⚠ %s\n", warn))
+				fmt.Fprintf(&result, "  ⚠ %s\n", warn)
 			}
 			result.WriteString("\n")
 		}
@@ -267,7 +267,7 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 		if len(validation.Infos) > 0 {
 			result.WriteString("Information:\n")
 			for _, info := range validation.Infos {
-				result.WriteString(fmt.Sprintf("  • %s\n", info))
+				fmt.Fprintf(&result, "  • %s\n", info)
 			}
 			result.WriteString("\n")
 		}
@@ -281,23 +281,23 @@ func formatMergeNextPlan(plan *mergeAction.Plan, validation *mergeAction.PlanVal
 
 	bottom := plan.BranchesToMerge[0]
 	step := 1
-	result.WriteString(fmt.Sprintf("  %d. Enable automerge for PR #%d (%s)\n", step, bottom.PRNumber, bottom.BranchName))
+	fmt.Fprintf(&result, "  %d. Enable automerge for PR #%d (%s)\n", step, bottom.PRNumber, bottom.BranchName)
 	step++
 
 	remaining := len(plan.BranchesToMerge) - 1 + len(plan.UpstackBranches)
 	if wait {
-		result.WriteString(fmt.Sprintf("  %d. Wait for PR #%d to merge\n", step, bottom.PRNumber))
+		fmt.Fprintf(&result, "  %d. Wait for PR #%d to merge\n", step, bottom.PRNumber)
 		step++
 		if remaining > 0 {
-			result.WriteString(fmt.Sprintf("  %d. Sync trunk and restack %d remaining branches\n", step, remaining))
+			fmt.Fprintf(&result, "  %d. Sync trunk and restack %d remaining branches\n", step, remaining)
 		} else {
-			result.WriteString(fmt.Sprintf("  %d. Sync trunk\n", step))
+			fmt.Fprintf(&result, "  %d. Sync trunk\n", step)
 		}
 	} else {
 		if remaining > 0 {
-			result.WriteString(fmt.Sprintf("  %d. After merge, Restack %d remaining branches (run 'stackit sync --restack')\n", step, remaining))
+			fmt.Fprintf(&result, "  %d. After merge, Restack %d remaining branches (run 'stackit sync --restack')\n", step, remaining)
 		} else {
-			result.WriteString(fmt.Sprintf("  %d. After merge, sync trunk (run 'stackit sync --restack')\n", step))
+			fmt.Fprintf(&result, "  %d. After merge, sync trunk (run 'stackit sync --restack')\n", step)
 		}
 	}
 

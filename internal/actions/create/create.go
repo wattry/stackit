@@ -195,7 +195,7 @@ func Action(ctx *app.Context, opts Options, h Handler) (Result, error) {
 		h.OnStep(StepTracking, handler.StatusCompleted, "Branch tracked")
 	}
 
-	ctx.Logger.Info("branch created", "name", branchName, "parent", currentBranch, "hasCommit", hasStaged)
+	ctx.Logger.Info("branch created name=%v parent=%v hasCommit=%v", branchName, currentBranch, hasStaged)
 
 	// Create worktree if requested
 	var worktreePath string

@@ -172,9 +172,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	if !validation.Success {
 		errorMsg := validation.ErrorMessage
 		if len(validation.ConflictingFiles) > 0 {
-			ctx.Logger.Debug("conflict detected during pluck validation",
-				"branch", validation.FailedBranch,
-				"files", validation.ConflictingFiles)
+			ctx.Logger.Debug("conflict detected during pluck validation branch=%v files=%v", validation.FailedBranch, validation.ConflictingFiles)
 		}
 		handler.OnStep(StepValidating, basehandler.StatusFailed, errorMsg)
 		return fmt.Errorf("pluck would cause conflicts: %s on branch %s", errorMsg, validation.FailedBranch)

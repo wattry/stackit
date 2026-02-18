@@ -28,7 +28,8 @@ func NewInProcessCLI() *CLI {
 // Returns the combined stdout/stderr output and any error.
 func (c *CLI) Run(workDir string, args ...string) Result {
 	// Build args with --cwd for working directory and --no-interactive
-	fullArgs := []string{"stackit", "--cwd", workDir, "--no-interactive"}
+	fullArgs := make([]string, 0, 4+len(args))
+	fullArgs = append(fullArgs, "stackit", "--cwd", workDir, "--no-interactive")
 	fullArgs = append(fullArgs, args...)
 
 	// Capture output

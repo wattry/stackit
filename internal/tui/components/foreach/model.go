@@ -219,9 +219,10 @@ func (m *Model) View() tea.View {
 		completed := 0
 		failed := 0
 		for _, item := range m.Items {
-			if item.Status == core.StatusDone {
+			switch item.Status {
+			case core.StatusDone:
 				completed++
-			} else if item.Status == core.StatusError {
+			case core.StatusError:
 				failed++
 			}
 		}

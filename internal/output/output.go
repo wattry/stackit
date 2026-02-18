@@ -156,7 +156,7 @@ func joinArgs(args []string) string {
 		}
 		// Quote args containing spaces
 		if strings.Contains(arg, " ") {
-			result.WriteString(fmt.Sprintf("%q", arg))
+			fmt.Fprintf(&result, "%q", arg)
 		} else {
 			result.WriteString(arg)
 		}

@@ -314,7 +314,8 @@ func parseCheckNode(n map[string]any) *CheckDetail {
 		return nil
 	}
 
-	if typeName == "CheckRun" {
+	switch typeName {
+	case "CheckRun":
 		if name, ok := n["name"].(string); ok {
 			detail.Name = name
 		}
@@ -332,7 +333,7 @@ func parseCheckNode(n map[string]any) *CheckDetail {
 			t, _ := time.Parse(time.RFC3339, completedAt)
 			detail.FinishedAt = t
 		}
-	} else if typeName == "StatusContext" {
+	case "StatusContext":
 		if context, ok := n["context"].(string); ok {
 			detail.Name = context
 		}

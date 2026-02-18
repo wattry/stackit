@@ -15,7 +15,7 @@ func formatStackDescription(desc *git.StackDescription) string {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**%s**", desc.Title))
+	fmt.Fprintf(&sb, "**%s**", desc.Title)
 	if desc.Description != "" {
 		sb.WriteString("\n\n")
 		sb.WriteString(desc.Description)
@@ -183,7 +183,7 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 				for i := len(mergedHistory) - 1; i >= 0; i-- {
 					mp := mergedHistory[i]
 					if mp.PRNumber != nil {
-						content.WriteString(fmt.Sprintf("\n* ~~PR #%d~~ (merged)", *mp.PRNumber))
+						fmt.Fprintf(&content, "\n* ~~PR #%d~~ (merged)", *mp.PRNumber)
 					}
 				}
 			}

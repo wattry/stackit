@@ -229,7 +229,7 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 		isDeletedFile := fileDeletedFile[file]
 
 		// Write diff header
-		sb.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", file, file))
+		fmt.Fprintf(&sb, "diff --git a/%s b/%s\n", file, file)
 
 		// Add new file mode line if this is a new file
 		if isNewFile {
@@ -237,7 +237,7 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 			if mode == "" {
 				mode = "100644" // default mode for regular files
 			}
-			sb.WriteString(fmt.Sprintf("new file mode %s\n", mode))
+			fmt.Fprintf(&sb, "new file mode %s\n", mode)
 		}
 
 		// Add deleted file mode line if this is a deleted file
@@ -246,7 +246,7 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 			if mode == "" {
 				mode = "100644" // default mode for regular files
 			}
-			sb.WriteString(fmt.Sprintf("deleted file mode %s\n", mode))
+			fmt.Fprintf(&sb, "deleted file mode %s\n", mode)
 		}
 
 		// Add index line if available (needed for --3way)
@@ -271,15 +271,15 @@ func BuildPatchFromHunks(hunks []Hunk) string {
 		case isNewFile:
 			// New files use /dev/null as the old file path
 			sb.WriteString("--- /dev/null\n")
-			sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+			fmt.Fprintf(&sb, "+++ b/%s\n", file)
 		case isDeletedFile:
 			// Deleted files use /dev/null as the new file path
-			sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
+			fmt.Fprintf(&sb, "--- a/%s\n", file)
 			sb.WriteString("+++ /dev/null\n")
 		default:
 			// Modified files use normal paths
-			sb.WriteString(fmt.Sprintf("--- a/%s\n", file))
-			sb.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+			fmt.Fprintf(&sb, "--- a/%s\n", file)
+			fmt.Fprintf(&sb, "+++ b/%s\n", file)
 		}
 
 		// Write each hunk
@@ -305,7 +305,7 @@ func GenerateNewFileHunk(filePath string, content []byte) Hunk {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+	fmt.Fprintf(&sb, "@@ -0,0 +1,%d @@\n", len(lines))
 	for _, line := range lines {
 		sb.WriteString("+" + line + "\n")
 	}

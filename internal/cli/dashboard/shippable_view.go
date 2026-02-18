@@ -771,11 +771,11 @@ func (m *shippableModel) renderShipConfirmation() string {
 	var sb strings.Builder
 	sb.WriteString(helpTitleStyle.Render("SHIP CONFIRMATION") + "\n\n")
 
-	sb.WriteString(fmt.Sprintf("About to ship %d stacks (%d branches total):\n\n",
-		len(selected), totalBranches))
+	fmt.Fprintf(&sb, "About to ship %d stacks (%d branches total):\n\n",
+		len(selected), totalBranches)
 
 	for _, s := range selected {
-		sb.WriteString(fmt.Sprintf("  %s (%d branches)\n", s.RootBranch(), s.BranchCount()))
+		fmt.Fprintf(&sb, "  %s (%d branches)\n", s.RootBranch(), s.BranchCount())
 	}
 
 	sb.WriteString("\nThis will:\n")
@@ -794,8 +794,8 @@ func (m *shippableModel) renderSquashConfirmation() string {
 	var sb strings.Builder
 	sb.WriteString(helpTitleStyle.Render("SQUASH CONFIRMATION") + "\n\n")
 
-	sb.WriteString(fmt.Sprintf("Squash all commits in %s into a single commit?\n\n",
-		style.ColorCyan(m.confirmBranch)))
+	fmt.Fprintf(&sb, "Squash all commits in %s into a single commit?\n\n",
+		style.ColorCyan(m.confirmBranch))
 
 	sb.WriteString("This will:\n")
 	sb.WriteString("  - Combine all commits into one\n")

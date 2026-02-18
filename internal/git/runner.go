@@ -122,7 +122,7 @@ func (r *runner) DeleteRefsBatch(ctx context.Context, refNames []string) error {
 
 	var stdin strings.Builder
 	for _, refName := range refNames {
-		stdin.WriteString(fmt.Sprintf("delete %s\n", refName))
+		fmt.Fprintf(&stdin, "delete %s\n", refName)
 	}
 
 	_, err := r.runGitInternal(ctx, stdin.String(), nil, true, "update-ref", "--stdin")
@@ -685,7 +685,7 @@ func (r *runner) GetRevision(branchName string) (string, error) {
 func (r *runner) BatchGetRevisions(branchNames []string) (map[string]string, []error) {
 	repo, err := r.ensureRepo()
 	if err != nil {
-		var errors []error
+		errors := make([]error, 0, len(branchNames))
 		for range branchNames {
 			errors = append(errors, fmt.Errorf("failed to get repository: %w", err))
 		}
@@ -884,7 +884,8 @@ func (r *runner) GetCommitSHA(branchName string, offset int) (string, error) {
 }
 
 func (r *runner) CheckoutPaths(ctx context.Context, branch string, paths []string) error {
-	args := []string{"checkout", branch, "--"}
+	args := make([]string, 0, 3+len(paths))
+	args = append(args, "checkout", branch, "--")
 	args = append(args, paths...)
 	_, err := r.RunGitCommandWithContext(ctx, args...)
 	if err != nil {
@@ -894,7 +895,8 @@ func (r *runner) CheckoutPaths(ctx context.Context, branch string, paths []strin
 }
 
 func (r *runner) RemovePaths(ctx context.Context, paths []string) error {
-	args := []string{"rm"}
+	args := make([]string, 0, 1+len(paths))
+	args = append(args, "rm")
 	args = append(args, paths...)
 	_, err := r.RunGitCommandWithContext(ctx, args...)
 	if err != nil {

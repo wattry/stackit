@@ -134,7 +134,7 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions, handler CheckoutHand
 	if currentBranch != nil {
 		previousBranch = currentBranch.GetName()
 	}
-	ctx.Logger.Info("branch changed", "from", previousBranch, "to", branchName)
+	ctx.Logger.Info("branch changed from=%v to=%v", previousBranch, branchName)
 
 	out.Info("Checked out %s.", style.ColorBranchName(branchName, false))
 

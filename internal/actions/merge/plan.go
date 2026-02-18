@@ -336,7 +336,7 @@ func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output
 			matchesRemote = status.Matches()
 		}
 
-		if !matchesRemote && prInfo != nil && prInfo.Number() != nil {
+		if !matchesRemote {
 			// Get detailed difference information
 			diffInfo, _ := eng.GetBranchRemoteDifference(name)
 			if diffInfo != "" {
@@ -564,14 +564,14 @@ func buildSquashSteps(branchesToMerge []BranchMergeInfo, upstackBranches []strin
 func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	var result strings.Builder
 
-	result.WriteString(fmt.Sprintf("Merge Strategy: %s\n", plan.Strategy))
-	result.WriteString(fmt.Sprintf("Current Branch: %s\n", plan.CurrentBranch))
+	fmt.Fprintf(&result, "Merge Strategy: %s\n", plan.Strategy)
+	fmt.Fprintf(&result, "Current Branch: %s\n", plan.CurrentBranch)
 	result.WriteString("\n")
 
 	if len(validation.Errors) > 0 {
 		result.WriteString("Errors:\n")
 		for _, err := range validation.Errors {
-			result.WriteString(fmt.Sprintf("  ✗ %s\n", err))
+			fmt.Fprintf(&result, "  ✗ %s\n", err)
 		}
 		result.WriteString("\n")
 	}
@@ -579,7 +579,7 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	if len(validation.Warnings) > 0 {
 		result.WriteString("Warnings:\n")
 		for _, warn := range validation.Warnings {
-			result.WriteString(fmt.Sprintf("  ⚠ %s\n", warn))
+			fmt.Fprintf(&result, "  ⚠ %s\n", warn)
 		}
 		result.WriteString("\n")
 	}
@@ -587,7 +587,7 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	if len(validation.Infos) > 0 {
 		result.WriteString("Information:\n")
 		for _, info := range validation.Infos {
-			result.WriteString(fmt.Sprintf("  • %s\n", info))
+			fmt.Fprintf(&result, "  • %s\n", info)
 		}
 		result.WriteString("\n")
 	}
@@ -599,7 +599,7 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	} else {
 		// For bottom-up strategy, show individual steps
 		for i, step := range plan.Steps {
-			result.WriteString(fmt.Sprintf("  %d. %s\n", i+1, step.Description))
+			fmt.Fprintf(&result, "  %d. %s\n", i+1, step.Description)
 		}
 	}
 
@@ -616,7 +616,7 @@ func formatSquashPlanSteps(plan *Plan) string {
 	for _, step := range plan.Steps {
 		if step.StepType == StepConsolidate {
 			hasConsolidate = true
-			result.WriteString(fmt.Sprintf("  %d. %s\n", stepNum, step.Description))
+			fmt.Fprintf(&result, "  %d. %s\n", stepNum, step.Description)
 			stepNum++
 			break
 		}
@@ -625,7 +625,7 @@ func formatSquashPlanSteps(plan *Plan) string {
 	// 2. Sync trunk (if present)
 	for _, step := range plan.Steps {
 		if step.StepType == StepPullTrunk {
-			result.WriteString(fmt.Sprintf("  %d. Sync trunk\n", stepNum))
+			fmt.Fprintf(&result, "  %d. Sync trunk\n", stepNum)
 			stepNum++
 			break
 		}
@@ -639,20 +639,20 @@ func formatSquashPlanSteps(plan *Plan) string {
 		}
 	}
 	if deleteCount > 0 {
-		result.WriteString(fmt.Sprintf("  %d. Cleanup %d merged branches\n", stepNum, deleteCount))
+		fmt.Fprintf(&result, "  %d. Cleanup %d merged branches\n", stepNum, deleteCount)
 		stepNum++
 	}
 
 	// 4. Restack upstack branches (if any)
 	if len(plan.UpstackBranches) > 0 {
-		result.WriteString(fmt.Sprintf("  %d. Restack %d upstack branches\n", stepNum, len(plan.UpstackBranches)))
+		fmt.Fprintf(&result, "  %d. Restack %d upstack branches\n", stepNum, len(plan.UpstackBranches))
 	}
 
 	// If no consolidate step found (shouldn't happen), fall back to listing all steps
 	if !hasConsolidate {
 		result.Reset()
 		for i, step := range plan.Steps {
-			result.WriteString(fmt.Sprintf("  %d. %s\n", i+1, step.Description))
+			fmt.Fprintf(&result, "  %d. %s\n", i+1, step.Description)
 		}
 	}
 

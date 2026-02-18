@@ -441,7 +441,7 @@ func (m *HunkSelectorModel) updateViewportContent() {
 
 				if hasMore && !item.Expanded {
 					remaining := totalLines - m.previewLines
-					sb.WriteString(fmt.Sprintf("      %s\n", contextStyle.Render(fmt.Sprintf("...%d more lines", remaining))))
+					fmt.Fprintf(&sb, "      %s\n", contextStyle.Render(fmt.Sprintf("...%d more lines", remaining)))
 				}
 			}
 		}

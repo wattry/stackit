@@ -93,9 +93,10 @@ func TestForeachAction(t *testing.T) {
 		var doneBranches []string
 		for _, e := range events {
 			if bpe, ok := e.(foreach.BranchProgressEvent); ok {
-				if bpe.Status == foreach.StatusError {
+				switch bpe.Status {
+				case foreach.StatusError:
 					failedBranches = append(failedBranches, bpe.BranchName)
-				} else if bpe.Status == foreach.StatusDone {
+				case foreach.StatusDone:
 					doneBranches = append(doneBranches, bpe.BranchName)
 				}
 			}
@@ -162,9 +163,10 @@ func TestForeachAction(t *testing.T) {
 		var errorBranches []string
 		for _, e := range events {
 			if bpe, ok := e.(foreach.BranchProgressEvent); ok {
-				if bpe.Status == foreach.StatusDone {
+				switch bpe.Status {
+				case foreach.StatusDone:
 					executedBranches = append(executedBranches, bpe.BranchName)
-				} else if bpe.Status == foreach.StatusError {
+				case foreach.StatusError:
 					errorBranches = append(errorBranches, bpe.BranchName)
 					t.Logf("Branch %s failed: %v", bpe.BranchName, bpe.Error)
 				}

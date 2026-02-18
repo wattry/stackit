@@ -132,13 +132,13 @@ func (r *Runner) Start() {
 	if readyChan != nil {
 		select {
 		case <-readyChan:
-			r.logger.Debug("tui.Runner.Start ready signal received", "durationMs", time.Since(startTime).Milliseconds())
+			r.logger.Debug("tui.Runner.Start ready signal received durationMs=%v", time.Since(startTime).Milliseconds())
 		case <-time.After(2 * time.Second):
-			r.logger.Warn("tui.Runner.Start ready timeout, proceeding anyway", "durationMs", time.Since(startTime).Milliseconds())
+			r.logger.Warn("tui.Runner.Start ready timeout, proceeding anyway durationMs=%v", time.Since(startTime).Milliseconds())
 		}
 	}
 
-	r.logger.Debug("tui.Runner.Start completed", "durationMs", time.Since(startTime).Milliseconds())
+	r.logger.Debug("tui.Runner.Start completed durationMs=%v", time.Since(startTime).Milliseconds())
 }
 
 // Cleanup ensures the terminal is restored to normal mode.
@@ -286,7 +286,7 @@ func (r *Runner) SendWithTimeout(msg tea.Msg, timeout time.Duration) error {
 		// Runner was cleaned up, don't log as error
 		return ctx.Err()
 	case <-time.After(timeout):
-		r.logger.Error("TUI send timed out", "msgType", reflect.TypeOf(msg).String(), "timeout", timeout)
+		r.logger.Error("TUI send timed out msgType=%v timeout=%v", reflect.TypeOf(msg).String(), timeout)
 		return fmt.Errorf("send timed out after %v", timeout)
 	}
 }
@@ -296,7 +296,7 @@ func (r *Runner) SendWithTimeout(msg tea.Msg, timeout time.Duration) error {
 // when you want hang detection without blocking indefinitely.
 func (r *Runner) MustSend(msg tea.Msg) {
 	if err := r.SendWithTimeout(msg, 5*time.Second); err != nil {
-		r.logger.Error("MustSend failed", "error", err)
+		r.logger.Error("MustSend failed error=%v", err)
 	}
 }
 

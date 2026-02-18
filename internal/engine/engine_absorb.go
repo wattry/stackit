@@ -96,13 +96,13 @@ func (e *engineImpl) ApplyHunksToBranch(ctx context.Context, branch Branch, hunk
 				hunksByFile[hunk.File] = append(hunksByFile[hunk.File], hunk)
 			}
 			for file, fileHunks := range hunksByFile {
-				patchContent.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", file, file))
+				fmt.Fprintf(&patchContent, "diff --git a/%s b/%s\n", file, file)
 				// Include index line if available (needed for --3way merge)
 				if len(fileHunks) > 0 && fileHunks[0].IndexLine != "" {
 					patchContent.WriteString(fileHunks[0].IndexLine + "\n")
 				}
-				patchContent.WriteString(fmt.Sprintf("--- a/%s\n", file))
-				patchContent.WriteString(fmt.Sprintf("+++ b/%s\n", file))
+				fmt.Fprintf(&patchContent, "--- a/%s\n", file)
+				fmt.Fprintf(&patchContent, "+++ b/%s\n", file)
 				for _, hunk := range fileHunks {
 					patchContent.WriteString(hunk.Content)
 					if !strings.HasSuffix(hunk.Content, "\n") {

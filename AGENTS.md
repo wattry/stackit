@@ -2,7 +2,7 @@
 
 Go CLI for managing stacked changes in Git repositories.
 
-**Tech stack:** Go 1.25, Cobra, bubbletea, mise
+**Tech stack:** Go 1.26, Cobra, bubbletea, mise
 
 ## Stacking Workflow (CRITICAL)
 

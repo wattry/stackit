@@ -374,7 +374,7 @@ func NewInteractiveSyncHandler(runner tui.Sender, model *syncComponent.Model, ou
 
 // Start is called at the beginning of sync
 func (h *InteractiveSyncHandler) Start(totalOps int) {
-	h.logger.Debug("InteractiveSyncHandler.Start entering", "totalOps", totalOps)
+	h.logger.Debug("InteractiveSyncHandler.Start entering totalOps=%v", totalOps)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -399,7 +399,7 @@ var phaseMessages = map[syncAction.Phase]string{
 
 // EmitEvent handles progress updates
 func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
-	h.logger.Debug("InteractiveSyncHandler.EmitEvent", "phase", event.Phase, "type", event.Type, "branch", event.Branch)
+	h.logger.Debug("InteractiveSyncHandler.EmitEvent phase=%v type=%v branch=%v", event.Phase, event.Type, event.Branch)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -407,7 +407,7 @@ func (h *InteractiveSyncHandler) EmitEvent(event syncAction.Event) {
 	// Handle phase transitions
 	if event.Type == syncAction.EventStarted && event.Phase != h.currentPhase {
 		h.currentPhase = event.Phase
-		h.logger.Debug("InteractiveSyncHandler.EmitEvent phase transition", "phase", event.Phase)
+		h.logger.Debug("InteractiveSyncHandler.EmitEvent phase transition phase=%v", event.Phase)
 		h.runner.Send(syncComponent.PhaseStartMsg{
 			Phase:   syncComponent.Phase(event.Phase),
 			Message: phaseMessages[event.Phase],

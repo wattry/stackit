@@ -35,34 +35,34 @@ func RenderMovePreviewSimple(preview MovePreviewData) string {
 
 	// Current position (dimmed)
 	sb.WriteString(style.ColorDim("Current position:") + "\n")
-	sb.WriteString(fmt.Sprintf("  %s → %s %s\n",
+	fmt.Fprintf(&sb, "  %s → %s %s\n",
 		style.ColorDim(preview.OldParent),
 		style.ColorDim(preview.SourceBranch),
-		style.ColorDim("(moving from here)")))
+		style.ColorDim("(moving from here)"))
 	sb.WriteString("\n")
 
 	// New position (highlighted)
 	sb.WriteString("New position:\n")
-	sb.WriteString(fmt.Sprintf("  %s → %s %s\n",
+	fmt.Fprintf(&sb, "  %s → %s %s\n",
 		style.ColorBranchName(preview.NewParent, false),
 		style.ColorGreen(preview.SourceBranch),
-		style.ColorGreen("(moving to here)")))
+		style.ColorGreen("(moving to here)"))
 	sb.WriteString("\n")
 
 	// Commits being moved
 	if len(preview.Commits) > 0 {
-		sb.WriteString(fmt.Sprintf("Commits to move (%d):\n", len(preview.Commits)))
+		fmt.Fprintf(&sb, "Commits to move (%d):\n", len(preview.Commits))
 		for _, commit := range preview.Commits {
-			sb.WriteString(fmt.Sprintf("  • %s\n", commit))
+			fmt.Fprintf(&sb, "  • %s\n", commit)
 		}
 		sb.WriteString("\n")
 	}
 
 	// Descendants to restack
 	if len(preview.Descendants) > 0 {
-		sb.WriteString(fmt.Sprintf("Branches to restack (%d):\n", len(preview.Descendants)))
+		fmt.Fprintf(&sb, "Branches to restack (%d):\n", len(preview.Descendants))
 		for _, desc := range preview.Descendants {
-			sb.WriteString(fmt.Sprintf("  • %s\n", style.ColorBranchName(desc, false)))
+			fmt.Fprintf(&sb, "  • %s\n", style.ColorBranchName(desc, false))
 		}
 		sb.WriteString("\n")
 	}
@@ -71,8 +71,8 @@ func RenderMovePreviewSimple(preview MovePreviewData) string {
 	sb.WriteString(style.ColorDim("─────────────────────────────────────") + "\n")
 	if preview.HasConflicts {
 		sb.WriteString(style.ColorRed("✗ ") + style.ColorRed("Conflicts detected") + "\n")
-		sb.WriteString(fmt.Sprintf("  Branch: %s\n", style.ColorBranchName(preview.ConflictBranch, false)))
-		sb.WriteString(fmt.Sprintf("  Error: %s\n", preview.ConflictError))
+		fmt.Fprintf(&sb, "  Branch: %s\n", style.ColorBranchName(preview.ConflictBranch, false))
+		fmt.Fprintf(&sb, "  Error: %s\n", preview.ConflictError)
 	} else {
 		sb.WriteString(style.ColorGreen("✓ ") + style.ColorGreen("Move will complete without conflicts") + "\n")
 	}

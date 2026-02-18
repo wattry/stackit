@@ -609,7 +609,7 @@ func (m multiSelectModel) View() tea.View {
 			count++
 		}
 	}
-	s.WriteString(fmt.Sprintf("\n%d of %d selected\n", count, len(m.options)))
+	fmt.Fprintf(&s, "\n%d of %d selected\n", count, len(m.options))
 	s.WriteString("\n" + m.help.View(m.keys))
 
 	return tea.NewView(layoutStyles.Container.Render(s.String()))

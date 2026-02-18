@@ -528,9 +528,9 @@ func (m *MoveModel) viewConfirming() string {
 	sb.WriteString("\n\n")
 
 	// Show what we're doing
-	sb.WriteString(fmt.Sprintf("Move %s onto %s\n",
+	fmt.Fprintf(&sb, "Move %s onto %s\n",
 		style.ColorBranchName(m.sourceBranch, true),
-		style.ColorBranchName(m.selectedBranch(), false)))
+		style.ColorBranchName(m.selectedBranch(), false))
 	sb.WriteString("\n")
 
 	// Validation status

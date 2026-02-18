@@ -184,7 +184,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 	eng := ctx.Engine
 	c := ctx.Context
 
-	ctx.Logger.Info("identifyBranchesToDelete started", "force", opts.Force, "inManagedWorktree", opts.InManagedWorktree)
+	ctx.Logger.Info("identifyBranchesToDelete started force=%v inManagedWorktree=%v", opts.Force, opts.InManagedWorktree)
 
 	// Collect non-trunk candidate branch names
 	allTrackedBranches := eng.AllBranches()
@@ -214,7 +214,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 		// Skip current branch if in a managed worktree (can't checkout trunk to delete it)
 		if opts.InManagedWorktree && name == opts.CurrentBranch {
 			skippedInWorktree = append(skippedInWorktree, name)
-			ctx.Logger.Info("identifyBranchesToDelete skipped (worktree)", "branch", name)
+			ctx.Logger.Info("identifyBranchesToDelete skipped (worktree) branch=%v", name)
 			continue
 		}
 
@@ -226,12 +226,10 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 			utilityBranches[name] = true
 		}
 
-		ctx.Logger.Info("identifyBranchesToDelete marked for deletion", "branch", name, "reason", status.Reason)
+		ctx.Logger.Info("identifyBranchesToDelete marked for deletion branch=%v reason=%v", name, status.Reason)
 	}
 
-	ctx.Logger.Info("identifyBranchesToDelete completed",
-		"toDeleteCount", len(deleteStatuses),
-		"skippedCount", len(skippedInWorktree))
+	ctx.Logger.Info("identifyBranchesToDelete completed toDeleteCount=%v skippedCount=%v", len(deleteStatuses), len(skippedInWorktree))
 
 	return deleteStatuses, skippedInWorktree, utilityBranches, nil
 }
