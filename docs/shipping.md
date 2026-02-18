@@ -271,7 +271,11 @@ Launches an interactive merge wizard. Requires a TTY (use `merge next` or `merge
 |------|-------------|
 | `--dry-run` | Show merge plan without executing |
 | `--force` | Skip validation checks (draft PRs, failing CI) |
-| `--wait` | Wait for merge to complete (default: false) |
+| `--wait` | Wait for merge to complete (default: fire-and-forget) |
+| `--scope` | Pre-select scope to merge (skips scope prompt) |
+| `--branch` | Pre-select target branch to merge from (skips branch prompt) |
+
+**Mutual exclusions:** `--scope`/`--branch`
 
 ### `stackit merge status`
 
@@ -307,6 +311,7 @@ Merge all PRs in the stack bottom-up, waiting for each to complete.
 | `--method` | Merge method: `squash`, `merge`, or `rebase` (uses config if not specified) |
 | `--branch` | Target branch to merge from (default: current branch) |
 | `--scope` | Merge PRs within the specified scope |
+| `--count` | Maximum number of PRs to drain (0 = all) |
 
 ### `stackit merge ship`
 
@@ -318,6 +323,7 @@ Consolidate stack(s) into a single PR.
 | `--yes`, `-y` | Skip confirmation prompt |
 | `--force` | Skip validation checks (draft PRs, failing CI) |
 | `--wait` | Wait for merge to complete (default: true) |
+| `--method` | Merge method: `squash`, `merge`, or `rebase` (uses config if not specified) |
 | `--scope` | Consolidate all branches within the specified scope |
 | `--branch` | Target branch to merge from (default: current branch) |
 | `--stacks` | Combine multiple stacks (comma-separated stack roots) |
@@ -453,3 +459,39 @@ Stackit's consolidation approach:
 4. **Use `merge drain` for full stack teardown**: Merges everything in one command
 5. **Leverage multi-stack consolidation**: Ship related work together
 6. **Configure merge method once**: Set `stackit.merge.method` to avoid prompts
+
+## Troubleshooting
+
+### CI Timeout
+
+If CI takes longer than the default timeout (10 minutes), the merge command will fail with a timeout error. Workarounds:
+- Use `merge ship --wait=false` (fire-and-forget) and run `stackit sync --restack` after the PR merges
+- Use `merge next` without `--wait` for fire-and-forget behavior
+
+### Automerge Not Enabled
+
+If your repository doesn't have GitHub automerge enabled, you'll see an error like "auto-merge is not enabled for this repository". Solutions:
+- Enable automerge in your repository settings (Settings → General → Allow auto-merge)
+- Use `--wait` flag which falls back to polling + direct merge when automerge isn't available
+
+### Merge Conflicts During Consolidation
+
+If the octopus merge fails due to conflicts between branches:
+- Resolve conflicts in the individual branches first
+- Push the fixed branches
+- Re-run the merge command
+
+### PR Already Merged Externally
+
+If a PR is merged outside of stackit while a merge operation is in progress:
+- The merge command will detect this and skip the already-merged PR
+- Run `stackit sync --restack` to clean up and update your stack
+
+### Fire-and-Forget Cleanup
+
+After using `merge ship --wait=false`, clean up by running:
+```bash
+stackit sync --restack
+```
+
+This will pull merged changes, delete merged branches, and restack remaining branches.

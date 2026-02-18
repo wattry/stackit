@@ -163,7 +163,10 @@ if [ -d "$REPO_DIR/.git" ]; then
   echo "==> Reusing existing repo in $REPO_DIR"
   "$STACKIT" log --no-interactive || true
   echo "==> Running: stackit merge $@"
-  exec "$STACKIT" merge "$@"
+  "$STACKIT" merge "$@"
+  echo "==> Syncing to clean up merged branches"
+  "$STACKIT" sync --no-interactive
+  exit 0
 fi
 
 echo "==> Setting up fresh stack in $WORK_DIR"
@@ -234,4 +237,8 @@ sleep 2
 # Phase 5: Run merge
 echo "==> Running: stackit merge $@"
 "$STACKIT" merge "$@"
+
+# Phase 6: Sync to clean up merged branches (auto-confirms deletions)
+echo "==> Syncing to clean up merged branches"
+"$STACKIT" sync --no-interactive
 """

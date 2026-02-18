@@ -23,6 +23,8 @@ func NewMergeCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		dryRun bool
 		force  bool
 		wait   bool
+		scope  string
+		branch string
 	)
 
 	cmd := &cobra.Command{
@@ -39,13 +41,17 @@ Subcommands:
   drain   Merge all PRs bottom-up, waiting for each to complete
   ship    Consolidate all branches into a single PR and merge atomically
 
+Use --scope or --branch to skip the initial prompts and go straight to strategy selection.
+
 Examples:
-  stackit merge             # Launch interactive merge wizard
-  stackit merge status      # Show your mergeable work
-  stackit merge status --all # Show entire team's mergeable work
-  stackit merge next        # Merge bottom PR, restack, stop
-  stackit merge drain       # Merge all PRs bottom-up, wait for each
-  stackit merge ship        # Consolidate all branches into single PR`,
+  stackit merge                    # Launch interactive merge wizard
+  stackit merge --scope=PROJ-100   # Merge all branches in scope PROJ-100
+  stackit merge --branch=feature   # Merge from specific branch
+  stackit merge status             # Show your mergeable work
+  stackit merge status --all       # Show entire team's mergeable work
+  stackit merge next               # Merge bottom PR, restack, stop
+  stackit merge drain              # Merge all PRs bottom-up, wait for each
+  stackit merge ship               # Consolidate all branches into single PR`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
@@ -67,9 +73,11 @@ Examples:
 				}
 
 				err := mergeAction.RunWizard(ctx, interactiveHandler, mergeAction.WizardOptions{
-					DryRun: dryRun,
-					Force:  force,
-					Wait:   wait,
+					DryRun:       dryRun,
+					Force:        force,
+					Wait:         wait,
+					Scope:        scope,
+					TargetBranch: branch,
 				})
 
 				// Handle post-merge follow-up action
@@ -88,6 +96,9 @@ Examples:
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show merge plan without executing")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for merge to complete (default: fire-and-forget)")
+	cmd.Flags().StringVar(&scope, "scope", "", "Pre-select scope to merge (skips scope prompt)")
+	cmd.Flags().StringVar(&branch, "branch", "", "Pre-select target branch to merge from (skips branch prompt)")
+	cmd.MarkFlagsMutuallyExclusive("scope", "branch")
 
 	// Add subcommands
 	cmd.AddCommand(NewStatusCmd())

@@ -10,7 +10,6 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/config"
-	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -24,6 +23,7 @@ func NewShipCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 		yes         bool
 		force       bool
 		wait        bool
+		method      string
 		scope       string
 		branch      string
 		stacks      []string
@@ -31,8 +31,9 @@ func NewShipCmd(postMergeHandler PostMergeHandler) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "ship",
-		Short: "Consolidate all stack branches into a single PR and merge atomically",
+		Use:     "ship",
+		Aliases: []string{"squash"},
+		Short:   "Consolidate all stack branches into a single PR and merge atomically",
 		Long: `Consolidate all branches in the stack into a single PR for atomic merging.
 
 This creates a new "consolidation" branch that contains all the commits from the stack,
@@ -67,6 +68,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 					yes:    yes,
 					force:  force,
 					wait:   wait,
+					method: method,
 					scope:  scope,
 					branch: branch,
 				}, postMergeHandler)
@@ -78,6 +80,7 @@ Use --stacks to combine multiple independent stacks into a single PR.`,
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip validation checks (draft PRs, failing CI)")
 	cmd.Flags().BoolVar(&wait, "wait", true, "Wait for merge to complete")
+	cmd.Flags().StringVar(&method, "method", "", "Merge method (squash, merge, rebase). Uses config merge.method if not specified")
 	cmd.Flags().StringVar(&scope, "scope", "", "Consolidate all branches within the specified scope")
 	cmd.Flags().StringVar(&branch, "branch", "", "Target branch to merge from (default: current branch)")
 	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Combine multiple stacks (comma-separated stack roots)")
@@ -95,6 +98,7 @@ type mergeShipOptions struct {
 	yes    bool
 	force  bool
 	wait   bool
+	method string
 	scope  string
 	branch string
 }
@@ -110,8 +114,8 @@ type shipMultiStackOptions struct {
 func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler PostMergeHandler) error {
 	out := ctx.Output
 
-	// Create consolidation plan
-	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
+	// Collect branches once (expensive: GitHub API calls) then build plan
+	collected, err := mergeAction.CollectMergeBranches(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
 		Strategy:     mergeAction.StrategyShip,
 		Force:        opts.force,
 		Scope:        opts.scope,
@@ -121,6 +125,9 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 	if err != nil {
 		return err
 	}
+
+	plan := mergeAction.BuildMergePlan(collected, mergeAction.StrategyShip, opts.wait)
+	validation := collected.Validation
 
 	// Show plan
 	planText := mergeAction.FormatMergePlan(plan, validation)
@@ -137,21 +144,9 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 		return nil
 	}
 
+	// Fail fast if no GitHub client
 	if ctx.GitHubClient == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
-	}
-
-	// Check if individual merge is possible and user wants it
-	if !opts.yes && ctx.Interactive && len(plan.BranchesToMerge) > 0 {
-		// Build graph once and reuse for both leaf check and merge eligibility
-		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
-		merged, err := tryIndividualMerge(ctx, opts, plan, graph, postMergeHandler)
-		if err != nil {
-			return err
-		}
-		if merged {
-			return nil
-		}
 	}
 
 	// Confirm unless --yes
@@ -176,6 +171,16 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 		defer runner.Cleanup()
 	}
 
+	// Resolve merge method if specified via flag
+	var mergeMethod github.MergeMethod
+	if opts.method != "" {
+		var err error
+		mergeMethod, err = resolveMergeMethod(ctx, opts.method)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Execute consolidation merge using automerge
 	actionOpts := mergeAction.Options{
 		DryRun:         false,
@@ -188,6 +193,7 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 		Plan:           plan,
 		UndoStackDepth: undoStackDepth,
 		Handler:        eventHandler,
+		MergeMethod:    mergeMethod,
 	}
 
 	if err := mergeAction.Action(ctx, actionOpts); err != nil {
@@ -200,86 +206,6 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 	}
 
 	return nil
-}
-
-// tryIndividualMerge checks if all branches can be merged individually (all leaves,
-// all mergeable) and prompts the user to choose between individual and consolidation.
-// Returns (true, nil) if individual merge was executed, (false, nil) to continue with
-// consolidation, or (false, err) if an error occurred.
-//
-// The graph parameter is passed to avoid rebuilding it (the caller already has one).
-func tryIndividualMerge(ctx *app.Context, opts mergeShipOptions, plan *mergeAction.Plan, graph *engine.StackGraph, postMergeHandler PostMergeHandler) (bool, error) {
-	out := ctx.Output
-
-	if !mergeAction.AllBranchesAreLeaves(graph, plan.BranchesToMerge) {
-		return false, nil // Not all leaves - continue with consolidation
-	}
-
-	status, err := mergeAction.CanMergeIndividually(ctx.Context, ctx.Engine.Git(), ctx.GitHubClient, graph, plan.BranchesToMerge)
-	if err != nil {
-		out.Debug("Failed to check individual merge possibility: %v", err)
-		return false, nil // Fall back to consolidation
-	}
-	if !status.CanMerge {
-		return false, nil // Cannot merge individually - continue with consolidation
-	}
-
-	// Create a TUI handler for the prompt
-	runner, eventHandler := NewMergeUI(ctx.Output, ctx.Logger)
-	if runner != nil {
-		defer runner.Cleanup()
-	}
-
-	interactiveHandler, ok := eventHandler.(mergeAction.InteractiveHandler)
-	if !ok || !interactiveHandler.IsInteractive() {
-		return false, nil // Not interactive - continue with consolidation
-	}
-
-	useIndividual, err := interactiveHandler.PromptIndividualMerge(plan.BranchesToMerge)
-	if err != nil {
-		return false, fmt.Errorf("selection canceled: %w", err)
-	}
-	if !useIndividual {
-		return false, nil // User chose consolidation
-	}
-
-	// Switch to bottom-up strategy
-	out.Info("Switching to individual merge mode...")
-	plan, _, err = mergeAction.CreateMergePlan(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
-		Strategy:     mergeAction.StrategyBottomUp,
-		Force:        opts.force,
-		Scope:        opts.scope,
-		TargetBranch: opts.branch,
-		Wait:         true, // Individual merge always waits
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Execute bottom-up merge
-	cfg, _ := config.LoadConfig(ctx.RepoRoot)
-	actionOpts := mergeAction.Options{
-		DryRun:         false,
-		Confirm:        false,
-		Strategy:       mergeAction.StrategyBottomUp,
-		Force:          opts.force,
-		Wait:           true,
-		Scope:          opts.scope,
-		TargetBranch:   opts.branch,
-		Plan:           plan,
-		UndoStackDepth: cfg.UndoStackDepth(),
-		Handler:        eventHandler,
-	}
-
-	if err := mergeAction.Action(ctx, actionOpts); err != nil {
-		return false, err
-	}
-
-	// Post-merge cleanup
-	if postMergeHandler != nil {
-		return true, postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk)
-	}
-	return true, nil
 }
 
 func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {

@@ -439,7 +439,7 @@ func BuildMergePlan(collected *CollectedBranches, strategy Strategy, wait bool) 
 	var steps []PlanStep
 	switch strategy {
 	case StrategyShip:
-		steps = buildSquashSteps(collected.BranchesToMerge, collected.UpstackBranches, wait)
+		steps = buildShipSteps(collected.BranchesToMerge, collected.UpstackBranches, wait)
 	default: // StrategyBottomUp or default
 		steps = buildBottomUpSteps(collected.BranchesToMerge, collected.UpstackBranches)
 	}
@@ -515,7 +515,7 @@ func buildBottomUpSteps(branchesToMerge []BranchMergeInfo, upstackBranches []str
 	return steps
 }
 
-func buildSquashSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string, wait bool) []PlanStep {
+func buildShipSteps(branchesToMerge []BranchMergeInfo, upstackBranches []string, wait bool) []PlanStep {
 	steps := []PlanStep{}
 
 	desc := "Consolidate %d branches into single PR"
@@ -560,6 +560,38 @@ func buildSquashSteps(branchesToMerge []BranchMergeInfo, upstackBranches []strin
 	return steps
 }
 
+// FormatValidationSection writes validation errors, warnings, and info to the builder.
+// Used by all plan format functions to avoid duplication.
+func FormatValidationSection(result *strings.Builder, validation *PlanValidation) {
+	if validation == nil {
+		return
+	}
+
+	if len(validation.Errors) > 0 {
+		result.WriteString("Errors:\n")
+		for _, err := range validation.Errors {
+			fmt.Fprintf(result, "  ✗ %s\n", err)
+		}
+		result.WriteString("\n")
+	}
+
+	if len(validation.Warnings) > 0 {
+		result.WriteString("Warnings:\n")
+		for _, warn := range validation.Warnings {
+			fmt.Fprintf(result, "  ⚠ %s\n", warn)
+		}
+		result.WriteString("\n")
+	}
+
+	if len(validation.Infos) > 0 {
+		result.WriteString("Information:\n")
+		for _, info := range validation.Infos {
+			fmt.Fprintf(result, "  • %s\n", info)
+		}
+		result.WriteString("\n")
+	}
+}
+
 // FormatMergePlan returns a human-readable representation of a merge plan
 func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	var result strings.Builder
@@ -568,34 +600,12 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	fmt.Fprintf(&result, "Current Branch: %s\n", plan.CurrentBranch)
 	result.WriteString("\n")
 
-	if len(validation.Errors) > 0 {
-		result.WriteString("Errors:\n")
-		for _, err := range validation.Errors {
-			fmt.Fprintf(&result, "  ✗ %s\n", err)
-		}
-		result.WriteString("\n")
-	}
-
-	if len(validation.Warnings) > 0 {
-		result.WriteString("Warnings:\n")
-		for _, warn := range validation.Warnings {
-			fmt.Fprintf(&result, "  ⚠ %s\n", warn)
-		}
-		result.WriteString("\n")
-	}
-
-	if len(validation.Infos) > 0 {
-		result.WriteString("Information:\n")
-		for _, info := range validation.Infos {
-			fmt.Fprintf(&result, "  • %s\n", info)
-		}
-		result.WriteString("\n")
-	}
+	FormatValidationSection(&result, validation)
 
 	result.WriteString("Merge Plan:\n")
 	if plan.Strategy == StrategyShip {
-		// For squash strategy, show grouped steps that match the TUI display
-		result.WriteString(formatSquashPlanSteps(plan))
+		// For ship strategy, show grouped steps that match the TUI display
+		result.WriteString(formatShipPlanSteps(plan))
 	} else {
 		// For bottom-up strategy, show individual steps
 		for i, step := range plan.Steps {
@@ -606,8 +616,8 @@ func FormatMergePlan(plan *Plan, validation *PlanValidation) string {
 	return result.String()
 }
 
-// formatSquashPlanSteps formats squash plan steps in a grouped format
-func formatSquashPlanSteps(plan *Plan) string {
+// formatShipPlanSteps formats ship plan steps in a grouped format
+func formatShipPlanSteps(plan *Plan) string {
 	var result strings.Builder
 	stepNum := 1
 

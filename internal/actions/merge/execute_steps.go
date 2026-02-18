@@ -186,6 +186,7 @@ func updatePRBaseBranchFromContext(ctx context.Context, githubClient github.Clie
 func executeConsolidation(ctx *app.Context, eng mergeExecuteEngine, stepIndex int, opts ExecuteOptions) (*ConsolidationResult, error) {
 	consolidator := NewConsolidateMergeExecutor(opts.Plan, eng, ctx)
 	consolidator.SetProgressHandler(opts.Handler, stepIndex)
+	consolidator.mergeMethod = opts.MergeMethod
 	result, err := consolidator.Execute(ctx.Context, opts)
 	if err != nil {
 		return nil, err

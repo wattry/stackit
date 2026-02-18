@@ -164,6 +164,53 @@ func TestMergeNext(t *testing.T) {
 		sh.OutputContains("branch-a").
 			OutputContains("#101")
 	})
+
+	t.Run("branch flag targets specific branch", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		// Checkout main but target branch-b's stack
+		sh.Checkout("main")
+
+		sh.Run("merge next --branch branch-b --dry-run")
+
+		// Should find branch-a as bottom of branch-b's stack
+		sh.OutputContains("branch-a").
+			OutputContains("#101")
+	})
+
+	t.Run("scope flag filters branches", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Set a branch pattern that uses scope
+		sh.Run("config set branch.pattern \"{scope}/{message}\"")
+
+		// Create a stack with scope
+		sh.Write("a.txt", "content-a").
+			Run("create -m 'branch-a' --scope PROJ-100")
+		sh.Write("b.txt", "content-b").
+			Run("create -m 'branch-b' --scope PROJ-100")
+
+		sh.SetPrMetadata("PROJ-100/branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("PROJ-100/branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		// Use --scope flag
+		sh.Run("merge next --scope PROJ-100 --dry-run")
+
+		// Should show the scoped branch
+		sh.OutputContains("#101").
+			OutputContains("Dry-run mode")
+	})
 }
 
 func TestMergeDrain(t *testing.T) {
@@ -255,6 +302,130 @@ func TestMergeDrain(t *testing.T) {
 		sh.Run("merge drain --dry-run")
 
 		sh.OutputContains("Total: 2 PRs to drain")
+	})
+
+	t.Run("count flag limits plan", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with 3 PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+		sh.Write("c.txt", "content-c").
+			Run("create branch-c -m 'Add branch-c'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+		sh.SetPrMetadata("branch-c", PRMetadata{Number: 103, State: "OPEN"})
+
+		// Use --count 1 to limit to first PR only
+		sh.Run("merge drain --count 1 --dry-run")
+
+		// Should show count limit info
+		sh.OutputContains("Draining first 1 of 3").
+			OutputContains("Dry-run mode")
+	})
+
+	t.Run("count flag with negative value errors", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+
+		sh.RunExpectError("merge drain --count -1 --dry-run")
+		sh.OutputContains("--count must be non-negative")
+	})
+
+	t.Run("count flag equal to total PRs drains all", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with 2 PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		// --count=2 on 2-PR stack: drains all, no "Draining first N of M" message
+		sh.Run("merge drain --count 2 --dry-run")
+		sh.OutputNotContains("Draining first")
+	})
+
+	t.Run("count flag greater than total PRs drains all", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with 2 PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		// --count=10 on 2-PR stack: drains all, no limiting message
+		sh.Run("merge drain --count 10 --dry-run")
+		sh.OutputNotContains("Draining first")
+	})
+
+	t.Run("skips merged PRs in plan", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+		sh.Write("c.txt", "content-c").
+			Run("create branch-c -m 'Add branch-c'")
+
+		// Bottom PR already merged
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "MERGED"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+		sh.SetPrMetadata("branch-c", PRMetadata{Number: 103, State: "OPEN"})
+
+		sh.Run("merge drain --dry-run")
+
+		// Should show only open PRs
+		sh.OutputContains("#102").
+			OutputContains("#103").
+			OutputNotContains("#101").
+			OutputContains("Total: 2 PRs to drain")
+	})
+
+	t.Run("branch flag targets specific branch", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		// Checkout main but target branch-b
+		sh.Checkout("main")
+
+		sh.Run("merge drain --branch branch-b --dry-run")
+
+		// Should show the plan for branch-b's stack
+		sh.OutputContains("branch-a").
+			OutputContains("branch-b").
+			OutputContains("Dry-run mode")
 	})
 }
 
@@ -368,6 +539,26 @@ func TestMergeSquash(t *testing.T) {
 		sh.OutputContains("Dry-run mode").
 			OutputContains("stack-a").
 			OutputContains("stack-b")
+	})
+}
+
+func TestMergeSquashAlias(t *testing.T) {
+	t.Parallel()
+
+	t.Run("squash alias resolves to ship command", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+
+		// "merge squash" should work as an alias for "merge ship"
+		sh.Run("merge squash --dry-run")
+		sh.OutputContains("Consolidate").
+			OutputContains("Dry-run mode")
 	})
 }
 
@@ -567,6 +758,25 @@ func TestMergeSquashValidation(t *testing.T) {
 		// Should error - no open PRs
 		sh.RunExpectError("merge ship --dry-run")
 		sh.OutputContains("no open PRs")
+	})
+
+	t.Run("force flag bypasses validation errors", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a stack with PRs
+		sh.Write("a.txt", "content-a").
+			Run("create branch-a -m 'Add branch-a'")
+		sh.Write("b.txt", "content-b").
+			Run("create branch-b -m 'Add branch-b'")
+
+		sh.SetPrMetadata("branch-a", PRMetadata{Number: 101, State: "OPEN"})
+		sh.SetPrMetadata("branch-b", PRMetadata{Number: 102, State: "OPEN"})
+
+		// Ship with --force --dry-run should show the plan
+		sh.Run("merge ship --force --dry-run")
+		sh.OutputContains("Consolidate").
+			OutputContains("Dry-run mode")
 	})
 }
 

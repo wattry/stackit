@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/output"
 )
 
 const (
@@ -38,6 +39,41 @@ type orchestrateMergeOptions struct {
 	wait        bool
 }
 
+// prMergeAPI abstracts the external GitHub operations used by orchestrateMerge,
+// enabling unit testing without real GitHub calls.
+type prMergeAPI interface {
+	getMergeableState(ctx context.Context, runner git.Runner, prNodeID string) (*github.PRMergeableState, error)
+	enableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, method github.MergeMethod) error
+	waitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, timeout, interval time.Duration) error
+	waitForMergeable(ctx context.Context, runner git.Runner, prNodeID string, timeout, interval time.Duration) (*github.PRMergeableState, error)
+	mergePR(ctx context.Context, branchName string, method github.MergeMethod) error
+}
+
+// defaultPRMergeAPI delegates to the real GitHub functions and client.
+type defaultPRMergeAPI struct {
+	client github.Client
+}
+
+func (d *defaultPRMergeAPI) getMergeableState(ctx context.Context, runner git.Runner, prNodeID string) (*github.PRMergeableState, error) {
+	return getMergeableStateWithRetry(ctx, runner, prNodeID)
+}
+
+func (d *defaultPRMergeAPI) enableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, method github.MergeMethod) error {
+	return github.EnableAutoMerge(ctx, runner, prNodeID, method)
+}
+
+func (d *defaultPRMergeAPI) waitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, timeout, interval time.Duration) error {
+	return github.WaitForPRMerge(ctx, runner, prNodeID, timeout, interval)
+}
+
+func (d *defaultPRMergeAPI) waitForMergeable(ctx context.Context, runner git.Runner, prNodeID string, timeout, interval time.Duration) (*github.PRMergeableState, error) {
+	return github.WaitForMergeable(ctx, runner, prNodeID, timeout, interval)
+}
+
+func (d *defaultPRMergeAPI) mergePR(ctx context.Context, branchName string, method github.MergeMethod) error {
+	return d.client.MergePullRequest(ctx, branchName, method)
+}
+
 // orchestrateMerge implements a 3-tier merge strategy:
 //  1. If the PR is already ready (CLEAN/HAS_HOOKS), merge directly via REST API.
 //  2. Otherwise, try EnableAutoMerge. On success, optionally wait for merge.
@@ -46,11 +82,15 @@ type orchestrateMergeOptions struct {
 //     - "not enabled on repo" + wait → poll until mergeable, then merge directly.
 //     - "not enabled on repo" + no wait → error with --wait suggestion.
 func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, error) {
-	out := ctx.Output
-	eng := ctx.Engine
+	api := &defaultPRMergeAPI{client: ctx.GitHubClient}
+	return doOrchestrateMerge(ctx.Context, ctx.Output, ctx.Engine.Git(), api, opts)
+}
 
+// doOrchestrateMerge contains the core merge orchestration logic, accepting a prMergeAPI
+// for testability.
+func doOrchestrateMerge(ctx context.Context, out output.Output, runner git.Runner, api prMergeAPI, opts orchestrateMergeOptions) (Outcome, error) {
 	// Step 1: Check current merge state
-	mergeableState, err := getMergeableStateWithRetry(ctx.Context, eng.Git(), opts.prNodeID)
+	mergeableState, err := api.getMergeableState(ctx, runner, opts.prNodeID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to check PR mergeable state: %w", err)
 	}
@@ -71,7 +111,7 @@ func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, 
 	// If already CLEAN or HAS_HOOKS, merge directly
 	if isReadyToMerge(mergeableState.MergeStateText) {
 		out.Info("PR #%d is ready to merge — merging directly (method: %s)...", opts.prNumber, opts.mergeMethod)
-		if err := ctx.GitHubClient.MergePullRequest(ctx.Context, opts.branchName, opts.mergeMethod); err != nil {
+		if err := api.mergePR(ctx, opts.branchName, opts.mergeMethod); err != nil {
 			return 0, fmt.Errorf("failed to merge PR #%d: %w", opts.prNumber, err)
 		}
 		out.Success("PR #%d merged successfully!", opts.prNumber)
@@ -80,15 +120,15 @@ func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, 
 
 	// Step 2: Not immediately ready — try automerge
 	out.Info("Enabling automerge on PR #%d (method: %s)...", opts.prNumber, opts.mergeMethod)
-	if err := github.EnableAutoMerge(ctx.Context, eng.Git(), opts.prNodeID, opts.mergeMethod); err != nil {
-		return handleAutoMergeError(ctx, opts, err)
+	if err := api.enableAutoMerge(ctx, runner, opts.prNodeID, opts.mergeMethod); err != nil {
+		return handleAutoMergeError(ctx, out, runner, api, opts, err)
 	}
 	out.Success("Automerge enabled on PR #%d", opts.prNumber)
 
 	// Step 2a: If --wait, wait for merge to complete
 	if opts.wait {
 		out.Info("Waiting for PR #%d to be merged...", opts.prNumber)
-		if err := github.WaitForPRMerge(ctx.Context, eng.Git(), opts.prNodeID, DefaultMergeTimeout, DefaultMergePollInterval); err != nil {
+		if err := api.waitForPRMerge(ctx, runner, opts.prNodeID, DefaultMergeTimeout, DefaultMergePollInterval); err != nil {
 			return 0, fmt.Errorf("failed waiting for merge: %w", err)
 		}
 		out.Success("PR #%d merged successfully!", opts.prNumber)
@@ -100,13 +140,11 @@ func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, 
 }
 
 // handleAutoMergeError implements step 3 of the merge strategy: handling EnableAutoMerge failures.
-func handleAutoMergeError(ctx *app.Context, opts orchestrateMergeOptions, autoMergeErr error) (Outcome, error) {
-	out := ctx.Output
-
+func handleAutoMergeError(ctx context.Context, out output.Output, runner git.Runner, api prMergeAPI, opts orchestrateMergeOptions, autoMergeErr error) (Outcome, error) {
 	// "clean status" error → PR became ready between our check and the automerge call (race condition)
 	if errors.Is(autoMergeErr, github.ErrPRCleanStatus) {
 		out.Debug("Automerge returned clean status — PR became ready, merging directly")
-		if err := ctx.GitHubClient.MergePullRequest(ctx.Context, opts.branchName, opts.mergeMethod); err != nil {
+		if err := api.mergePR(ctx, opts.branchName, opts.mergeMethod); err != nil {
 			return 0, fmt.Errorf("failed to merge PR #%d: %w", opts.prNumber, err)
 		}
 		out.Success("PR #%d merged successfully!", opts.prNumber)
@@ -117,7 +155,7 @@ func handleAutoMergeError(ctx *app.Context, opts orchestrateMergeOptions, autoMe
 	if errors.Is(autoMergeErr, github.ErrAutoMergeNotEnabled) {
 		if opts.wait {
 			out.Info("Auto-merge not enabled on this repo — waiting for PR #%d to become mergeable...", opts.prNumber)
-			state, err := github.WaitForMergeable(ctx.Context, ctx.Engine.Git(), opts.prNodeID, DefaultMergeTimeout, DefaultMergePollInterval)
+			state, err := api.waitForMergeable(ctx, runner, opts.prNodeID, DefaultMergeTimeout, DefaultMergePollInterval)
 			if errors.Is(err, github.ErrPRAlreadyMerged) {
 				out.Success("PR #%d was merged externally!", opts.prNumber)
 				return OutcomeMerged, nil
@@ -127,7 +165,7 @@ func handleAutoMergeError(ctx *app.Context, opts orchestrateMergeOptions, autoMe
 			}
 
 			out.Info("PR #%d is now %s — merging directly (method: %s)...", opts.prNumber, state.MergeStateText, opts.mergeMethod)
-			if err := ctx.GitHubClient.MergePullRequest(ctx.Context, opts.branchName, opts.mergeMethod); err != nil {
+			if err := api.mergePR(ctx, opts.branchName, opts.mergeMethod); err != nil {
 				return 0, fmt.Errorf("failed to merge PR #%d: %w", opts.prNumber, err)
 			}
 			out.Success("PR #%d merged successfully!", opts.prNumber)
@@ -168,7 +206,6 @@ func getMergeableStateWithRetry(ctx context.Context, runner git.Runner, prNodeID
 
 	var lastState *github.PRMergeableState
 	for attempt := range maxAttempts {
-		_ = attempt
 		state, err := github.GetPRMergeableState(ctx, runner, prNodeID)
 		if err != nil {
 			return nil, err
@@ -177,7 +214,9 @@ func getMergeableStateWithRetry(ctx context.Context, runner git.Runner, prNodeID
 		if !strings.EqualFold(state.MergeStateText, "UNKNOWN") {
 			return state, nil
 		}
-		time.Sleep(retryDelay)
+		if attempt < maxAttempts-1 {
+			time.Sleep(retryDelay)
+		}
 	}
 
 	return lastState, nil

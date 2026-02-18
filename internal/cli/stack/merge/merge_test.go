@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mergeAction "stackit.dev/stackit/internal/actions/merge"
+	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -29,6 +30,12 @@ func TestNewMergeCmd(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, shipCmd)
 		require.Equal(t, "ship", shipCmd.Use)
+
+		// Squash alias resolves to ship
+		squashCmd, _, err := cmd.Find([]string{"squash"})
+		require.NoError(t, err)
+		require.NotNil(t, squashCmd)
+		require.Equal(t, "ship", squashCmd.Use)
 	})
 
 	t.Run("has expected flags", func(t *testing.T) {
@@ -43,6 +50,12 @@ func TestNewMergeCmd(t *testing.T) {
 
 		waitFlag := cmd.Flags().Lookup("wait")
 		require.NotNil(t, waitFlag)
+
+		scopeFlag := cmd.Flags().Lookup("scope")
+		require.NotNil(t, scopeFlag)
+
+		branchFlag := cmd.Flags().Lookup("branch")
+		require.NotNil(t, branchFlag)
 	})
 }
 
@@ -231,5 +244,121 @@ func TestMergeNextUsesCreateMergePlan(t *testing.T) {
 		require.NotEmpty(t, plan.BranchesToMerge)
 		require.Equal(t, "branch-a", plan.BranchesToMerge[0].BranchName)
 		require.Equal(t, 101, plan.BranchesToMerge[0].PRNumber)
+	})
+}
+
+func TestResolveMergeMethod(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		methodFlag string
+		expected   github.MergeMethod
+		wantErr    string
+	}{
+		{
+			name:       "squash method",
+			methodFlag: "squash",
+			expected:   github.MergeMethodSquash,
+		},
+		{
+			name:       "merge method",
+			methodFlag: "merge",
+			expected:   github.MergeMethodMerge,
+		},
+		{
+			name:       "rebase method",
+			methodFlag: "rebase",
+			expected:   github.MergeMethodRebase,
+		},
+		{
+			name:       "invalid method returns error",
+			methodFlag: "invalid",
+			wantErr:    "invalid merge method: invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// resolveMergeMethod with a non-empty flag doesn't need a full app.Context
+			result, err := resolveMergeMethod(nil, tt.methodFlag)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestFormatMergeDrainPlan(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil plan shows unknown branch", func(t *testing.T) {
+		t.Parallel()
+		result := formatMergeDrainPlan(nil, nil)
+		require.Contains(t, result, "(unknown)")
+		require.Contains(t, result, "(no branches to merge)")
+	})
+
+	t.Run("empty branches shows no branches", func(t *testing.T) {
+		t.Parallel()
+		plan := &mergeAction.Plan{
+			CurrentBranch:   "feature",
+			BranchesToMerge: nil,
+		}
+		result := formatMergeDrainPlan(plan, &mergeAction.PlanValidation{Valid: true})
+		require.Contains(t, result, "feature")
+		require.Contains(t, result, "(no branches to merge)")
+	})
+
+	t.Run("shows all branches in order", func(t *testing.T) {
+		t.Parallel()
+		plan := &mergeAction.Plan{
+			CurrentBranch: "branch-c",
+			BranchesToMerge: []mergeAction.BranchMergeInfo{
+				{BranchName: "branch-a", PRNumber: 101},
+				{BranchName: "branch-b", PRNumber: 102},
+				{BranchName: "branch-c", PRNumber: 103},
+			},
+		}
+		result := formatMergeDrainPlan(plan, &mergeAction.PlanValidation{Valid: true})
+		require.Contains(t, result, "1. Merge PR #101 (branch-a)")
+		require.Contains(t, result, "2. Merge PR #102 (branch-b)")
+		require.Contains(t, result, "3. Merge PR #103 (branch-c)")
+		require.Contains(t, result, "Total: 3 PRs to drain")
+	})
+}
+
+func TestNewShipCmdSquashAlias(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ship command has squash alias", func(t *testing.T) {
+		t.Parallel()
+		cmd := NewShipCmd(nil)
+		require.Contains(t, cmd.Aliases, "squash")
+	})
+}
+
+func TestShipDefaultWait(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ship defaults to wait=true", func(t *testing.T) {
+		t.Parallel()
+		cmd := NewShipCmd(nil)
+		waitFlag := cmd.Flags().Lookup("wait")
+		require.NotNil(t, waitFlag)
+		require.Equal(t, "true", waitFlag.DefValue)
+	})
+
+	t.Run("next defaults to wait=false", func(t *testing.T) {
+		t.Parallel()
+		cmd := NewNextCmd(nil)
+		waitFlag := cmd.Flags().Lookup("wait")
+		require.NotNil(t, waitFlag)
+		require.Equal(t, "false", waitFlag.DefValue)
 	})
 }
