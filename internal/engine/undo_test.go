@@ -415,7 +415,7 @@ func TestEnforceMaxStackDepth(t *testing.T) {
 		s.WithInitialCommit()
 
 		// Create more snapshots than default max (10)
-		for i := 0; i < 12; i++ {
+		for i := range 12 {
 			err := s.Engine.TakeSnapshot(snapshotOpts("test", string(rune('a'+i))))
 			require.NoError(t, err)
 			time.Sleep(10 * time.Millisecond) // Ensure different timestamps

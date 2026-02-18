@@ -122,8 +122,8 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	}
 
 	added, deleted := 0, 0
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
+	for line := range lines {
 		if line == "" {
 			continue
 		}

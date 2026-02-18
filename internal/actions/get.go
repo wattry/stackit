@@ -2,6 +2,7 @@ package actions
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -411,12 +412,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 }
 
 func contains(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, s)
 }
 
 // getPRNumber returns the PR number for a branch, or nil if not available

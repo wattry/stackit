@@ -3,6 +3,7 @@ package absorb
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"stackit.dev/stackit/internal/actions"
@@ -193,9 +194,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		// Flatten for printing
 		flatHunksByCommit := make(map[string][]git.Hunk)
 		for _, branchHunks := range hunksByBranch {
-			for commitSHA, hunks := range branchHunks {
-				flatHunksByCommit[commitSHA] = hunks
-			}
+			maps.Copy(flatHunksByCommit, branchHunks)
 		}
 		printDryRunOutput(flatHunksByCommit, unabsorbedHunks, eng, out)
 
@@ -227,9 +226,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Print what will be absorbed
 	flatHunksByCommit := make(map[string][]git.Hunk)
 	for _, branchHunks := range hunksByBranch {
-		for commitSHA, hunks := range branchHunks {
-			flatHunksByCommit[commitSHA] = hunks
-		}
+		maps.Copy(flatHunksByCommit, branchHunks)
 	}
 	printAbsorbPlan(flatHunksByCommit, unabsorbedHunks, eng, out)
 

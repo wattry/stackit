@@ -167,7 +167,7 @@ func Abort(ctx *app.Context) error {
 	// Find the original branch from reflog
 	reflog, _ := eng.GetReflog(ctx.Context, 20, "%gs")
 	var originalBranch string
-	for _, line := range strings.Split(reflog, "\n") {
+	for line := range strings.SplitSeq(reflog, "\n") {
 		if strings.Contains(line, "checkout: moving from") {
 			parts := strings.Split(line, "moving from ")
 			if len(parts) >= 2 {

@@ -250,6 +250,126 @@ func TestFoldAction(t *testing.T) {
 		require.Contains(t, logOutput, "c3")
 	})
 
+	t.Run("folding middle branch preserves all commits when folded branch has multiple commits", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+				"branch3": "branch2",
+				"branch4": "branch3",
+			})
+
+		// Add unique commits on each branch and two commits on branch3.
+		s.Checkout("branch1")
+		s.Scene.Repo.CreateChangeAndCommit("a1", "a1.txt")
+		s.Checkout("branch2")
+		s.Scene.Repo.CreateChangeAndCommit("b1", "b1.txt")
+		s.Checkout("branch3")
+		s.Scene.Repo.CreateChangeAndCommit("c1", "c1.txt")
+		s.Scene.Repo.CreateChangeAndCommit("c2", "c2.txt")
+		s.Checkout("branch4")
+		s.Scene.Repo.CreateChangeAndCommit("d1", "d1.txt")
+
+		// Fold branch3 into branch2.
+		s.Checkout("branch3")
+		err := Action(s.Context, Options{Keep: false}, nil)
+		require.NoError(t, err)
+
+		// branch3 should be deleted and branch4 should now be a child of branch2.
+		branches, err := s.Engine.Git().GetAllBranchNames()
+		require.NoError(t, err)
+		require.NotContains(t, branches, "branch3")
+		require.Equal(t, "branch2", s.Engine.GetBranch("branch4").GetParent().GetName())
+
+		// branch2 should contain both branch3 commits after fold.
+		logBranch2, err := s.Scene.Repo.RunGitCommandAndGetOutput("log", "--oneline", "main..branch2")
+		require.NoError(t, err)
+		require.Contains(t, logBranch2, "c1")
+		require.Contains(t, logBranch2, "c2")
+
+		// branch4 should keep all folded history plus its own commit.
+		logBranch4, err := s.Scene.Repo.RunGitCommandAndGetOutput("log", "--oneline", "main..branch4")
+		require.NoError(t, err)
+		require.Contains(t, logBranch4, "c1")
+		require.Contains(t, logBranch4, "c2")
+		require.Contains(t, logBranch4, "d1")
+	})
+
+	t.Run("folding middle branch moves no-op descendants to new parent tip", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Build main -> branch1 -> branch2 -> branch3, and create branch4 from branch3 with no unique commits.
+		s.CreateBranch("branch1")
+		s.Scene.Repo.CreateChangeAndCommit("a1", "a1.txt")
+		s.TrackBranch("branch1", "main")
+
+		s.CreateBranch("branch2")
+		s.Scene.Repo.CreateChangeAndCommit("b1", "b1.txt")
+		s.TrackBranch("branch2", "branch1")
+
+		s.CreateBranch("branch3")
+		s.Scene.Repo.CreateChangeAndCommit("c1", "c1.txt")
+		s.TrackBranch("branch3", "branch2")
+
+		s.CreateBranch("branch4")
+		s.TrackBranch("branch4", "branch3")
+
+		// Add another commit to branch3 after branch4 diverged, so branch4 is behind with zero unique commits.
+		s.Checkout("branch3")
+		s.Scene.Repo.CreateChangeAndCommit("c2", "c2.txt")
+
+		// Fold branch3 into branch2.
+		err := Action(s.Context, Options{Keep: false}, nil)
+		require.NoError(t, err)
+
+		// branch4 should now point to branch2 tip (contains c2) even though it had no unique commits.
+		branch2Rev, err := s.Scene.Repo.GetRevision("branch2")
+		require.NoError(t, err)
+		branch4Rev, err := s.Scene.Repo.GetRevision("branch4")
+		require.NoError(t, err)
+		require.Equal(t, branch2Rev, branch4Rev)
+
+		logBranch4, err := s.Scene.Repo.RunGitCommandAndGetOutput("log", "--oneline", "main..branch4")
+		require.NoError(t, err)
+		require.Contains(t, logBranch4, "c2")
+	})
+
+	t.Run("folding middle branch preserves folded commits for descendants that diverged earlier", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Build main -> branch1 -> branch2 -> branch3.
+		s.CreateBranch("branch1")
+		s.Scene.Repo.CreateChangeAndCommit("a1", "a1.txt")
+		s.TrackBranch("branch1", "main")
+
+		s.CreateBranch("branch2")
+		s.Scene.Repo.CreateChangeAndCommit("b1", "b1.txt")
+		s.TrackBranch("branch2", "branch1")
+
+		s.CreateBranch("branch3")
+		s.Scene.Repo.CreateChangeAndCommit("c1", "c1.txt")
+		s.TrackBranch("branch3", "branch2")
+
+		// Create branch4 from branch3 at c1, then diverge branch3 with c2 and branch4 with d1.
+		s.CreateBranch("branch4")
+		s.TrackBranch("branch4", "branch3")
+		s.Checkout("branch3")
+		s.Scene.Repo.CreateChangeAndCommit("c2", "c2.txt")
+		s.Checkout("branch4")
+		s.Scene.Repo.CreateChangeAndCommit("d1", "d1.txt")
+
+		// Fold branch3 into branch2.
+		s.Checkout("branch3")
+		err := Action(s.Context, Options{Keep: false}, nil)
+		require.NoError(t, err)
+
+		// branch4 should include c2 from folded parent and keep d1.
+		logBranch4, err := s.Scene.Repo.RunGitCommandAndGetOutput("log", "--oneline", "main..branch4")
+		require.NoError(t, err)
+		require.Contains(t, logBranch4, "c2")
+		require.Contains(t, logBranch4, "d1")
+	})
+
 	t.Run("fails when rebase is in progress", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
 			WithStack(map[string]string{

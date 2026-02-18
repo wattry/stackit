@@ -2,6 +2,7 @@ package navigation
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -61,13 +62,7 @@ func handleAddTrunk(ctx *app.Context, trunkName string) error {
 		return fmt.Errorf("failed to get branches: %w", err)
 	}
 
-	found := false
-	for _, b := range branches {
-		if b == trunkName {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(branches, trunkName)
 	if !found {
 		return fmt.Errorf("branch '%s' does not exist", trunkName)
 	}
@@ -156,10 +151,8 @@ func findTrunkForBranch(eng engine.Engine, branchName string, repoRoot string) s
 		visited[currentBranch.GetName()] = true
 
 		// Check if current is a trunk
-		for _, t := range trunks {
-			if currentBranch.GetName() == t {
-				return currentBranch.GetName()
-			}
+		if slices.Contains(trunks, currentBranch.GetName()) {
+			return currentBranch.GetName()
 		}
 
 		// Get parent

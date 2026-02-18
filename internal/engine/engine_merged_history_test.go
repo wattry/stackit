@@ -165,7 +165,7 @@ func TestRestackBranch_LimitsHistoryGrowth(t *testing.T) {
 		mergedState := prStateMerged
 
 		// Merge each branch one by one, causing reparenting up the chain
-		for i := 0; i < 6; i++ {
+		for i := range 6 {
 			branchToMerge := branchNames[i]
 			childBranch := branchNames[i+1]
 

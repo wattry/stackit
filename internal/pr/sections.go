@@ -202,11 +202,11 @@ func UpdatePRBodyFooter(existingBody, footer string) string {
 	// 1. Try markers
 	if strings.Contains(existingBody, SectionStart) {
 		startIdx := strings.Index(existingBody, SectionStart)
-		if endIdx := strings.Index(existingBody, SectionEnd); endIdx >= 0 {
+		if _, after, ok := strings.Cut(existingBody, SectionEnd); ok {
 			// Find the beginning of the block (including potential leading newlines and <hr/>)
 			blockStart := startIdx
 			// Look back for up to 3 newlines
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				if blockStart > 0 && existingBody[blockStart-1] == '\n' {
 					blockStart--
 				} else {
@@ -227,7 +227,7 @@ func UpdatePRBodyFooter(existingBody, footer string) string {
 					}
 				}
 			}
-			return existingBody[:blockStart] + footer + existingBody[endIdx+len(SectionEnd):]
+			return existingBody[:blockStart] + footer + after
 		}
 	}
 
@@ -243,11 +243,11 @@ func StripFooter(body string) string {
 	}
 
 	startIdx := strings.Index(body, SectionStart)
-	if endIdx := strings.Index(body, SectionEnd); endIdx >= 0 {
+	if _, after, ok := strings.Cut(body, SectionEnd); ok {
 		// Find the beginning of the block (including potential leading newlines and <hr/>)
 		blockStart := startIdx
 		// Look back for up to 3 newlines
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			if blockStart > 0 && body[blockStart-1] == '\n' {
 				blockStart--
 			} else {
@@ -268,7 +268,7 @@ func StripFooter(body string) string {
 				}
 			}
 		}
-		return strings.TrimRight(body[:blockStart]+body[endIdx+len(SectionEnd):], "\n")
+		return strings.TrimRight(body[:blockStart]+after, "\n")
 	}
 
 	return body
@@ -320,15 +320,11 @@ func StripLockSection(body string) string {
 		return body
 	}
 
-	startIdx := strings.Index(body, LockSectionStart)
-	endIdx := strings.Index(body, LockSectionEnd)
-	if endIdx < 0 {
+	before, _, _ := strings.Cut(body, LockSectionStart)
+	_, after, ok := strings.Cut(body, LockSectionEnd)
+	if !ok {
 		return body
 	}
-
-	// Remove the lock section and any trailing newlines
-	before := body[:startIdx]
-	after := body[endIdx+len(LockSectionEnd):]
 
 	// Trim leading newlines from the part after the section
 	after = strings.TrimPrefix(after, "\n")

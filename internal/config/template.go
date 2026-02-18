@@ -168,7 +168,7 @@ func writeArrayValue(sb *strings.Builder, opt Option, overrides map[string]strin
 	// Check for override
 	if overrides != nil {
 		if override, ok := overrides[opt.YAMLPath]; ok {
-			for _, item := range strings.Split(override, ",") {
+			for item := range strings.SplitSeq(override, ",") {
 				fmt.Fprintf(sb, "%s- %s\n", indent, strings.TrimSpace(item))
 			}
 			return
@@ -177,7 +177,7 @@ func writeArrayValue(sb *strings.Builder, opt Option, overrides map[string]strin
 
 	// Use example if available
 	if opt.Example != "" {
-		for _, ex := range strings.Split(opt.Example, ",") {
+		for ex := range strings.SplitSeq(opt.Example, ",") {
 			fmt.Fprintf(sb, "%s- %s\n", indent, strings.TrimSpace(ex))
 		}
 		return

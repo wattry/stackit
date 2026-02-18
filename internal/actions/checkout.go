@@ -176,10 +176,7 @@ func printBranchInfo(ctx *app.Context, branch engine.Branch) {
 
 	// Limit the number of branches we check to avoid slow metadata reads
 	const maxDownstackChecks = 10
-	startIdx := len(downstack) - maxDownstackChecks
-	if startIdx < 0 {
-		startIdx = 0
-	}
+	startIdx := max(len(downstack)-maxDownstackChecks, 0)
 
 	// Check from trunk upward (but limit to last maxDownstackChecks branches)
 	for i := len(downstack) - 1; i >= startIdx; i-- {
@@ -297,7 +294,7 @@ func resolveBranchName(eng engine.Engine, out output.Output, input string) (stri
 		// Multiple matches - return error with suggestions
 		limit := min(5, len(matches))
 		suggestions := make([]string, limit)
-		for i := 0; i < limit; i++ {
+		for i := range limit {
 			suggestions[i] = matches[i].Str
 		}
 		return "", fmt.Errorf("ambiguous match %q - did you mean: %s", input, strings.Join(suggestions, ", "))

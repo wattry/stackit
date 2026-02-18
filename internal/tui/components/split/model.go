@@ -2,6 +2,7 @@ package split
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -415,10 +416,8 @@ func (m *Model) validateBranchName(name string) error {
 		return fmt.Errorf("branch name cannot be empty")
 	}
 	// Check if name is already used in this session
-	for _, existing := range m.sessionNames {
-		if existing == name {
-			return fmt.Errorf("branch name %q is already used in this split", name)
-		}
+	if slices.Contains(m.sessionNames, name) {
+		return fmt.Errorf("branch name %q is already used in this split", name)
 	}
 	// Check if name exists in repo (except original branch)
 	if name != m.originalBranchName && m.existingBranchNames[name] {
@@ -843,10 +842,8 @@ func (v *virtualTree) Parent(branchName string) string {
 		if branchName == newBranchPlaceholder {
 			return v.currentBranch
 		}
-		for _, child := range v.children {
-			if branchName == child {
-				return newBranchPlaceholder
-			}
+		if slices.Contains(v.children, branchName) {
+			return newBranchPlaceholder
 		}
 	}
 

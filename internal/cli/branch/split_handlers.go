@@ -180,7 +180,7 @@ func (h *TUISplitHandler) PromptDirection(ctx split.DirectionContext) (split.Dir
 // ShowHunkSummary displays a summary of the remaining changes
 func (h *TUISplitHandler) ShowHunkSummary(diff string) {
 	h.Output.Info("Remaining changes:")
-	for _, line := range strings.Split(diff, "\n") {
+	for line := range strings.SplitSeq(diff, "\n") {
 		h.Output.Info("  %s", line)
 	}
 	h.Output.Info("")

@@ -9,7 +9,7 @@ _.path = ["{{ config_root }}/bin", "{{ env.HOME }}/go/bin"]
 
 [tools]
 # Go toolchain
-go = "1.25.5"
+go = "1.26"
 
 # Test runner with prettier output
 "go:gotest.tools/gotestsum" = "latest"

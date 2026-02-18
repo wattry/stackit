@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -126,10 +127,8 @@ func (v *virtualDirectionTree) Parent(branchName string) string {
 			return v.currentBranch
 		}
 		// Re-parented children now have [new branch] as parent
-		for _, child := range v.children {
-			if branchName == child {
-				return newBranchPlaceholder
-			}
+		if slices.Contains(v.children, branchName) {
+			return newBranchPlaceholder
 		}
 	}
 

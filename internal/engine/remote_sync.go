@@ -365,8 +365,8 @@ type MetadataDiff struct {
 // FieldDiff represents a difference in a single metadata field
 type FieldDiff struct {
 	Field       string
-	LocalValue  interface{}
-	RemoteValue interface{}
+	LocalValue  any
+	RemoteValue any
 }
 
 // OrphanedMetadataAction represents the action to take for orphaned metadata

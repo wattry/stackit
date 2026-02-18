@@ -4,6 +4,7 @@ package init
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
@@ -52,13 +53,7 @@ func Action(ctx context.Context, repoRoot string, opts Options, handler Handler)
 		}
 		trunkName = selected
 	} else {
-		found := false
-		for _, name := range branchNames {
-			if name == trunkName {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(branchNames, trunkName)
 		if !found {
 			return fmt.Errorf("branch '%s' not found", trunkName)
 		}
@@ -100,10 +95,8 @@ func Action(ctx context.Context, repoRoot string, opts Options, handler Handler)
 func InferTrunk(ctx context.Context, runner git.Runner, branchNames []string) string {
 	remoteBranch, err := runner.FindRemoteBranch(ctx, "origin")
 	if err == nil && remoteBranch != "" {
-		for _, name := range branchNames {
-			if name == remoteBranch {
-				return remoteBranch
-			}
+		if slices.Contains(branchNames, remoteBranch) {
+			return remoteBranch
 		}
 	}
 
@@ -127,11 +120,8 @@ func FindCommonlyNamedTrunk(branchNames []string) string {
 	var found []string
 
 	for _, name := range branchNames {
-		for _, common := range commonNames {
-			if name == common {
-				found = append(found, name)
-				break
-			}
+		if slices.Contains(commonNames, name) {
+			found = append(found, name)
 		}
 	}
 

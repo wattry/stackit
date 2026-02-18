@@ -88,7 +88,7 @@ func BatchGetPRChecksStatusGraphQL(ctx context.Context, runner git.Runner, owner
 	// Build GraphQL query - query pullRequests to get both CI status and review decision
 	query := buildPRStatusQuery(aliasMap)
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner": owner,
 		"repo":  repo,
 	}
@@ -150,13 +150,13 @@ func buildPRStatusQuery(aliasMap map[string]string) string {
 // parsePRStatusResponse parses the GraphQL response for PR status queries
 func parsePRStatusResponse(body []byte, aliasToBranch map[string]string) (map[string]*CheckStatus, error) {
 	var graphqlResponse struct {
-		Data map[string]interface{} `json:"data"`
+		Data map[string]any `json:"data"`
 	}
 	if err := json.Unmarshal(body, &graphqlResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse GraphQL response: %w", err)
 	}
 
-	repository, ok := graphqlResponse.Data["repository"].(map[string]interface{})
+	repository, ok := graphqlResponse.Data["repository"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("invalid GraphQL response format: missing repository")
 	}
@@ -181,18 +181,18 @@ func parsePRStatusResponse(body []byte, aliasToBranch map[string]string) (map[st
 }
 
 // parseBranchStatus parses the status data for a single branch from the GraphQL response
-func parseBranchStatus(data interface{}) *CheckStatus {
-	prData, ok := data.(map[string]interface{})
+func parseBranchStatus(data any) *CheckStatus {
+	prData, ok := data.(map[string]any)
 	if !ok {
 		return nil
 	}
-	prNodes, ok := prData["nodes"].([]interface{})
+	prNodes, ok := prData["nodes"].([]any)
 	if !ok || len(prNodes) == 0 {
 		// No open PR for this branch
 		return nil
 	}
 
-	prNode, ok := prNodes[0].(map[string]interface{})
+	prNode, ok := prNodes[0].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -205,7 +205,7 @@ func parseBranchStatus(data interface{}) *CheckStatus {
 
 	// Extract author
 	var author string
-	if authorData, ok := prNode["author"].(map[string]interface{}); ok {
+	if authorData, ok := prNode["author"].(map[string]any); ok {
 		if login, ok := authorData["login"].(string); ok {
 			author = login
 		}
@@ -218,26 +218,26 @@ func parseBranchStatus(data interface{}) *CheckStatus {
 	}
 
 	// Navigate to commit's statusCheckRollup
-	commits, ok := prNode["commits"].(map[string]interface{})
+	commits, ok := prNode["commits"].(map[string]any)
 	if !ok {
 		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
-	commitNodes, ok := commits["nodes"].([]interface{})
+	commitNodes, ok := commits["nodes"].([]any)
 	if !ok || len(commitNodes) == 0 {
 		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
-	commitNode, ok := commitNodes[0].(map[string]interface{})
+	commitNode, ok := commitNodes[0].(map[string]any)
 	if !ok {
 		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
-	commit, ok := commitNode["commit"].(map[string]interface{})
+	commit, ok := commitNode["commit"].(map[string]any)
 	if !ok {
 		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
 	}
 
-	rollup, ok := commit["statusCheckRollup"].(map[string]interface{})
+	rollup, ok := commit["statusCheckRollup"].(map[string]any)
 	if !ok || rollup == nil {
 		// No status checks
 		return &CheckStatus{Passing: true, Pending: false, ReviewDecision: reviewDecision, Author: author, State: prState}
@@ -249,16 +249,16 @@ func parseBranchStatus(data interface{}) *CheckStatus {
 }
 
 // parseCheckRollup parses the statusCheckRollup data from the GraphQL response
-func parseCheckRollup(rollup map[string]interface{}, reviewDecision, author string) *CheckStatus {
+func parseCheckRollup(rollup map[string]any, reviewDecision, author string) *CheckStatus {
 	// First pass: collect all checks and deduplicate by name, keeping the most recent
 	checksByName := make(map[string]*CheckDetail)
 
-	contexts, ok := rollup["contexts"].(map[string]interface{})
+	contexts, ok := rollup["contexts"].(map[string]any)
 	if ok && contexts != nil {
-		nodes, ok := contexts["nodes"].([]interface{})
+		nodes, ok := contexts["nodes"].([]any)
 		if ok {
 			for _, node := range nodes {
-				n, ok := node.(map[string]interface{})
+				n, ok := node.(map[string]any)
 				if !ok {
 					continue
 				}
@@ -307,7 +307,7 @@ func parseCheckRollup(rollup map[string]interface{}, reviewDecision, author stri
 }
 
 // parseCheckNode parses a single check node from the GraphQL response
-func parseCheckNode(n map[string]interface{}) *CheckDetail {
+func parseCheckNode(n map[string]any) *CheckDetail {
 	detail := &CheckDetail{}
 	typeName, ok := n["__typename"].(string)
 	if !ok {

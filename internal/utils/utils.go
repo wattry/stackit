@@ -247,10 +247,7 @@ func Run[T any](items []T, worker func(item T)) {
 		return
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
-	if numWorkers > len(items) {
-		numWorkers = len(items)
-	}
+	numWorkers := min(runtime.GOMAXPROCS(0), len(items))
 
 	jobs := make(chan T, len(items))
 	for _, item := range items {

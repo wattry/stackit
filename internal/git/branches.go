@@ -27,8 +27,8 @@ func (r *runner) GetAllBranchNames() ([]string, error) {
 	}
 
 	var names []string
-	lines := strings.Split(out, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(out, "\n")
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			names = append(names, line)
@@ -125,8 +125,8 @@ func (r *runner) GetMergedBranches(ctx context.Context, target string) (map[stri
 	}
 
 	merged := make(map[string]bool)
-	lines := strings.Split(out, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(out, "\n")
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

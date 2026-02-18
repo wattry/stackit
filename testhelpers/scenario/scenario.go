@@ -401,13 +401,13 @@ func (s *Scenario) RunExpectError(args ...string) *Scenario {
 }
 
 // Log logs a message using the testing.T object.
-func (s *Scenario) Log(args ...interface{}) {
+func (s *Scenario) Log(args ...any) {
 	s.T.Helper()
 	s.T.Log(args...)
 }
 
 // Logf logs a formatted message using the testing.T object.
-func (s *Scenario) Logf(format string, args ...interface{}) {
+func (s *Scenario) Logf(format string, args ...any) {
 	s.T.Helper()
 	s.T.Logf(format, args...)
 }

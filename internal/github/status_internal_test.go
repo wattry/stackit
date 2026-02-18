@@ -13,11 +13,11 @@ func TestParseCheckRollup_DeduplicatesByName(t *testing.T) {
 
 	// Simulate GitHub returning multiple runs of the same check
 	// (happens when a check is re-run after failure)
-	rollup := map[string]interface{}{
-		"contexts": map[string]interface{}{
-			"nodes": []interface{}{
+	rollup := map[string]any{
+		"contexts": map[string]any{
+			"nodes": []any{
 				// Older run that failed
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Test",
 					"status":      "COMPLETED",
@@ -26,7 +26,7 @@ func TestParseCheckRollup_DeduplicatesByName(t *testing.T) {
 					"completedAt": "2024-01-01T10:05:00Z",
 				},
 				// Newer run that succeeded (re-run)
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Test",
 					"status":      "COMPLETED",
@@ -52,11 +52,11 @@ func TestParseCheckRollup_KeepsLatestByFinishedAt(t *testing.T) {
 	t.Parallel()
 
 	// Test that we keep the most recently finished check, not just any check
-	rollup := map[string]interface{}{
-		"contexts": map[string]interface{}{
-			"nodes": []interface{}{
+	rollup := map[string]any{
+		"contexts": map[string]any{
+			"nodes": []any{
 				// This one finished later but started earlier
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Build",
 					"status":      "COMPLETED",
@@ -65,7 +65,7 @@ func TestParseCheckRollup_KeepsLatestByFinishedAt(t *testing.T) {
 					"completedAt": "2024-01-01T10:30:00Z", // finished last
 				},
 				// This one started later but finished earlier
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Build",
 					"status":      "COMPLETED",
@@ -90,18 +90,18 @@ func TestParseCheckRollup_KeepsLatestByFinishedAt(t *testing.T) {
 func TestParseCheckRollup_FiltersStackitChecks(t *testing.T) {
 	t.Parallel()
 
-	rollup := map[string]interface{}{
-		"contexts": map[string]interface{}{
-			"nodes": []interface{}{
+	rollup := map[string]any{
+		"contexts": map[string]any{
+			"nodes": []any{
 				// Stackit's own checks that should be ignored
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Check Lock Status",
 					"status":      "COMPLETED",
 					"conclusion":  "FAILURE",
 					"completedAt": "2024-01-01T10:00:00Z",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Check Stack Order",
 					"status":      "COMPLETED",
@@ -109,7 +109,7 @@ func TestParseCheckRollup_FiltersStackitChecks(t *testing.T) {
 					"completedAt": "2024-01-01T10:00:00Z",
 				},
 				// Real CI check that passes
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "CI",
 					"status":      "COMPLETED",
@@ -145,11 +145,11 @@ func TestParseBranchStatus_ExtractsPRState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			data := map[string]interface{}{
-				"nodes": []interface{}{
-					map[string]interface{}{
+			data := map[string]any{
+				"nodes": []any{
+					map[string]any{
 						"state":          tt.prState,
-						"author":         map[string]interface{}{"login": "testuser"},
+						"author":         map[string]any{"login": "testuser"},
 						"reviewDecision": "APPROVED",
 					},
 				},
@@ -165,8 +165,8 @@ func TestParseBranchStatus_ExtractsPRState(t *testing.T) {
 func TestParseBranchStatus_NoPRReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	data := map[string]interface{}{
-		"nodes": []interface{}{},
+	data := map[string]any{
+		"nodes": []any{},
 	}
 
 	status := parseBranchStatus(data)
@@ -176,24 +176,24 @@ func TestParseBranchStatus_NoPRReturnsNil(t *testing.T) {
 func TestParseCheckRollup_MultipleDistinctChecks(t *testing.T) {
 	t.Parallel()
 
-	rollup := map[string]interface{}{
-		"contexts": map[string]interface{}{
-			"nodes": []interface{}{
-				map[string]interface{}{
+	rollup := map[string]any{
+		"contexts": map[string]any{
+			"nodes": []any{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Build",
 					"status":      "COMPLETED",
 					"conclusion":  "SUCCESS",
 					"completedAt": "2024-01-01T10:00:00Z",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Test",
 					"status":      "COMPLETED",
 					"conclusion":  "SUCCESS",
 					"completedAt": "2024-01-01T10:00:00Z",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"__typename":  "CheckRun",
 					"name":        "Lint",
 					"status":      "COMPLETED",

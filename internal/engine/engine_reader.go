@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"slices"
 
 	"stackit.dev/stackit/internal/errors"
 )
@@ -155,7 +156,7 @@ func (e *engineImpl) FindMostRecentTrackedAncestors(ctx context.Context, branchN
 	}
 
 	// Iterate through history (newest to oldest) and find the first tracked tip(s)
-	for i := 0; i < len(history); i++ {
+	for i := range history {
 		sha := history[i]
 		if ancestors, ok := trackedBranchTips[sha]; ok {
 			// Found the most recent tracked commit(s)
@@ -179,10 +180,8 @@ func (e *engineImpl) FindBranchForCommit(commitSHA string) (string, error) {
 			continue
 		}
 
-		for _, sha := range commits {
-			if sha == commitSHA {
-				return branchName, nil
-			}
+		if slices.Contains(commits, commitSHA) {
+			return branchName, nil
 		}
 	}
 

@@ -71,7 +71,7 @@ func printIndentedOutput(text string, logFn func(string, ...any)) {
 	if trimmed == "" {
 		return
 	}
-	for _, line := range strings.Split(trimmed, "\n") {
+	for line := range strings.SplitSeq(trimmed, "\n") {
 		if strings.TrimSpace(line) != "" {
 			logFn("    %s", line)
 		}

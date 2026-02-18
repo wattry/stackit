@@ -270,6 +270,36 @@ func TestDeleteBranch(t *testing.T) {
 		require.Contains(t, mainChildNames, "C3")
 	})
 
+	t.Run("returns error when child cannot be reparented", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create main -> branch1 -> branch2 and track both.
+		s.CreateBranch("branch1").
+			Commit("branch1 change").
+			CreateBranch("branch2").
+			Commit("branch2 change").
+			Checkout("main")
+		require.NoError(t, s.Engine.TrackBranch(context.Background(), "branch1", "main"))
+		require.NoError(t, s.Engine.TrackBranch(context.Background(), "branch2", "branch1"))
+
+		// Force branch2 onto an unrelated orphan root so merge-base(branch2, main) fails.
+		s.Checkout("branch2")
+		s.RunGit("checkout", "--orphan", "orphan-tmp")
+		s.RunGit("commit", "--allow-empty", "-m", "orphan root")
+		orphanRev, err := s.Scene.Repo.GetRevision("HEAD")
+		require.NoError(t, err)
+		s.Checkout("main")
+		s.RunGit("branch", "-f", "branch2", orphanRev)
+
+		require.NoError(t, s.Engine.Rebuild("main"))
+
+		err = s.Engine.DeleteBranch(context.Background(), s.Engine.GetBranch("branch1"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to reparent")
+		require.Contains(t, err.Error(), "branch2")
+	})
+
 	t.Run("fails when trying to delete trunk", func(t *testing.T) {
 		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
@@ -873,7 +903,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 		// Concurrent reads should be safe
 		done := make(chan bool, 10)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			go func() {
 				branch := s.Engine.GetBranch("branch1")
 				_ = branch.GetParent()
@@ -886,7 +916,7 @@ func TestConcurrentAccess(t *testing.T) {
 		}
 
 		// Wait for all goroutines
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 	})

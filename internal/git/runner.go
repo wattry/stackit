@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -601,10 +602,8 @@ func (r *runner) EnsureMetadataRefspecConfigured() error {
 	}
 
 	// Check if already configured
-	for _, rs := range refspecs {
-		if rs == metadataRefspec {
-			return nil // Already configured
-		}
+	if slices.Contains(refspecs, metadataRefspec) {
+		return nil // Already configured
 	}
 
 	// Add refspec for metadata refs
@@ -620,10 +619,8 @@ func (r *runner) EnsureStackMetaRefspecConfigured() error {
 	}
 
 	// Check if already configured
-	for _, rs := range refspecs {
-		if rs == stackMetaRefspec {
-			return nil // Already configured
-		}
+	if slices.Contains(refspecs, stackMetaRefspec) {
+		return nil // Already configured
 	}
 
 	// Add refspec for stack metadata refs
@@ -642,8 +639,8 @@ func (r *runner) FindRemoteBranch(ctx context.Context, remote string) (string, e
 		return "", nil
 	}
 
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
+	for line := range lines {
 		// Line format: "branch.<name>.remote <remote>"
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
@@ -689,7 +686,7 @@ func (r *runner) BatchGetRevisions(branchNames []string) (map[string]string, []e
 	repo, err := r.ensureRepo()
 	if err != nil {
 		var errors []error
-		for i := 0; i < len(branchNames); i++ {
+		for range branchNames {
 			errors = append(errors, fmt.Errorf("failed to get repository: %w", err))
 		}
 		return nil, errors
@@ -872,7 +869,7 @@ func (r *runner) GetCommitSHA(branchName string, offset int) (string, error) {
 	}
 
 	// Walk back offset number of commits
-	for i := 0; i < offset; i++ {
+	for i := range offset {
 		if commit.NumParents() == 0 {
 			return "", fmt.Errorf("commit has no parent at offset %d", i)
 		}
@@ -981,8 +978,8 @@ func (r *runner) ListRefs(prefix string) (map[string]string, error) {
 	output, _ := r.RunGitCommandWithContext(context.Background(), "show-ref")
 
 	result := make(map[string]string)
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
+	for line := range lines {
 		parts := strings.Split(line, " ")
 		if len(parts) == 2 {
 			sha := parts[0]
@@ -1135,7 +1132,7 @@ func (r *runner) CheckCommutation(hunk Hunk, commitSHA, parentSHA string) (bool,
 	commitHunks := parseDiffHunks(commitDiff, hunk.File)
 
 	fileInDiff := false
-	for _, line := range strings.Split(commitDiff, "\n") {
+	for line := range strings.SplitSeq(commitDiff, "\n") {
 		if strings.Contains(line, hunk.File) {
 			fileInDiff = true
 			break
