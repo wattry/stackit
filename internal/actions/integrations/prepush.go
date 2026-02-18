@@ -141,7 +141,7 @@ func PrepushUninstallAction(ctx *app.Context) error {
 	}
 
 	lines := strings.Split(string(content), "\n")
-	var newLines []string
+	newLines := make([]string, 0, len(lines))
 	removed := false
 
 	for i := range lines {
