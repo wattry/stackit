@@ -1,0 +1,3 @@
+interface:
+  display_name: "Stackit"
+  short_description: "Manage stacked Git branches"

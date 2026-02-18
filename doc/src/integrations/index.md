@@ -12,13 +12,13 @@ Stackit integrates with your development tools to provide a seamless stacking wo
 
 <div class="grid cards" markdown>
 
--   :material-robot:{ .lg .middle } **Claude Code**
+-   :material-robot:{ .lg .middle } **AI Agents**
 
     ---
 
-    AI-assisted stacking with intelligent commands for creating, syncing, and managing stacks.
+    AI-assisted stacking with intelligent commands and skill files for Claude Code, Codex, and Cursor.
 
-    [Setup Claude →](claude.md)
+    [Setup agents →](claude.md)
 
 -   :material-github:{ .lg .middle } **GitHub**
 
@@ -51,7 +51,7 @@ Stackit integrates with your development tools to provide a seamless stacking wo
 Install all recommended integrations:
 
 ```bash
-# Claude Code integration
+# Agent integration (Claude Code + Codex + Cursor)
 stackit agent install
 
 # GitHub Actions
@@ -69,7 +69,7 @@ eval "$(stackit shell zsh)"  # or bash/fish
 
 | Integration | Purpose | Setup Command |
 |:------------|:--------|:--------------|
-| Claude Code | AI-assisted stacking commands | `stackit agent install` |
+| AI Agents (Claude/Codex/Cursor) | AI-assisted stacking commands | `stackit agent install` |
 | GitHub | CI checks for PRs | `stackit github install` |
 | Pre-commit hook | Block commits to locked branches | `stackit precommit install` |
 | Pre-push hook | Block pushes to locked branches | `stackit prepush install` |

@@ -1,11 +1,16 @@
 package integrations
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	stackiterrors "stackit.dev/stackit/internal/errors"
+	"stackit.dev/stackit/internal/tui"
 )
 
 func TestReplaceWorkflowBlock(t *testing.T) {
@@ -285,4 +290,489 @@ func TestInstallWorkflowBlock(t *testing.T) {
 		// Should have proper spacing between original content and block
 		require.Contains(t, string(content), "# Header\n\n<!-- stackit:start -->")
 	})
+}
+
+// Not parallel: subtests mutate tui.PromptConfirm.
+func TestPromptAndInstallWorkflowBlockConfirmDefaultsToSkip(t *testing.T) {
+	t.Run("only CLAUDE.md exists uses false default", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte("# Project"), 0600)
+		require.NoError(t, err)
+
+		originalPromptConfirm := tui.PromptConfirm
+		t.Cleanup(func() {
+			tui.PromptConfirm = originalPromptConfirm
+		})
+
+		var called bool
+		tui.PromptConfirm = func(_ string, defaultValue bool) (bool, error) {
+			called = true
+			require.False(t, defaultValue)
+			return false, nil
+		}
+
+		installed, path, err := promptAndInstallWorkflowBlock(tmpDir, false)
+		require.NoError(t, err)
+		require.False(t, installed)
+		require.Empty(t, path)
+		require.True(t, called)
+	})
+
+	t.Run("no agent files exist uses false default", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		originalPromptConfirm := tui.PromptConfirm
+		t.Cleanup(func() {
+			tui.PromptConfirm = originalPromptConfirm
+		})
+
+		var called bool
+		tui.PromptConfirm = func(_ string, defaultValue bool) (bool, error) {
+			called = true
+			require.False(t, defaultValue)
+			return false, nil
+		}
+
+		installed, path, err := promptAndInstallWorkflowBlock(tmpDir, false)
+		require.NoError(t, err)
+		require.False(t, installed)
+		require.Empty(t, path)
+		require.True(t, called)
+	})
+}
+
+// Not parallel: mutates promptSelect.
+func TestPromptAndInstallWorkflowBlockBothFilesDefaultsToSkip(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte("# Claude"), 0600)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte("# Agents"), 0600)
+	require.NoError(t, err)
+
+	originalPromptSelect := promptSelect
+	t.Cleanup(func() {
+		promptSelect = originalPromptSelect
+	})
+
+	var called bool
+	promptSelect = func(_ string, options []tui.SelectOption, defaultIndex int) (string, error) {
+		called = true
+		require.Equal(t, 3, len(options))
+		require.Equal(t, "skip", options[0].Value)
+		require.Equal(t, "CLAUDE.md", options[1].Value)
+		require.Equal(t, "AGENTS.md", options[2].Value)
+		require.Equal(t, 0, defaultIndex)
+		return "skip", nil
+	}
+
+	installed, path, err := promptAndInstallWorkflowBlock(tmpDir, false)
+	require.NoError(t, err)
+	require.False(t, installed)
+	require.Empty(t, path)
+	require.True(t, called)
+}
+
+// Not parallel: mutates promptMultiSelectWithDefault.
+func TestSelectInstallTargetsPromptsWithoutSkipOption(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	originalPromptMultiSelect := promptMultiSelectWithDefault
+	t.Cleanup(func() {
+		promptMultiSelectWithDefault = originalPromptMultiSelect
+	})
+
+	var called bool
+	promptMultiSelectWithDefault = func(_ string, options []string, preSelected []bool) ([]string, error) {
+		called = true
+		require.Equal(t, []string{
+			"Claude Code - Claude Code CLI skill format (~/.claude/skills/stackit)",
+			"Codex - Codex skill format (~/.codex/skills/stackit)",
+		}, options)
+		require.Equal(t, []bool{true, false}, preSelected)
+		return []string{options[0]}, nil
+	}
+
+	targets, err := selectInstallTargets(tmpDir, nil)
+	require.NoError(t, err)
+	require.True(t, called)
+	require.Len(t, targets, 1)
+	require.Equal(t, "~/.claude/skills/stackit", targets[0].displayPath)
+}
+
+func TestBuildAgentFileGroups(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes codex metadata group", func(t *testing.T) {
+		t.Parallel()
+		target := installTargetForFormat(agentSkillFormatCodex)
+		groups := buildAgentFileGroups(target)
+
+		var found bool
+		for _, g := range groups {
+			if g.destDir == filepath.Join(".codex", "skills", "stackit", "agents") {
+				require.Equal(t, "agents/templates/skill/agents", g.templateDir)
+				require.Equal(t, []string{"openai.yaml"}, g.files)
+				found = true
+				break
+			}
+		}
+		require.True(t, found)
+	})
+
+	t.Run("includes claude slash commands group", func(t *testing.T) {
+		t.Parallel()
+		target := installTargetForFormat(agentSkillFormatClaude)
+		groups := buildAgentFileGroups(target)
+
+		var found bool
+		for _, g := range groups {
+			if g.destDir == filepath.Join(".claude", "commands") {
+				require.Equal(t, "agents/templates/commands", g.templateDir)
+				require.Equal(t, len(claudeCommandFiles), len(g.files))
+				found = true
+				break
+			}
+		}
+		require.True(t, found)
+	})
+
+	t.Run("codex does not include claude slash commands group", func(t *testing.T) {
+		t.Parallel()
+		target := installTargetForFormat(agentSkillFormatCodex)
+		groups := buildAgentFileGroups(target)
+
+		for _, g := range groups {
+			require.NotEqual(t, filepath.Join(".claude", "commands"), g.destDir)
+		}
+	})
+}
+
+func TestCheckExistingInstallation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns error for claude version mismatch", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".claude", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
+		require.NoError(t, err)
+
+		var out bytes.Buffer
+		err = checkExistingInstallation(tmpDir, agentSkillFormatClaude, "2.0.0", &out)
+		require.Error(t, err)
+		require.Contains(t, out.String(), "existing installation")
+		require.Contains(t, out.String(), "1.0.0")
+	})
+
+	t.Run("returns error for codex version mismatch", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
+		require.NoError(t, err)
+
+		var out bytes.Buffer
+		err = checkExistingInstallation(tmpDir, agentSkillFormatCodex, "2.0.0", &out)
+		require.Error(t, err)
+		require.Contains(t, out.String(), "existing installation")
+		require.Contains(t, out.String(), "1.0.0")
+	})
+
+	t.Run("does not error when versions match", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte(testSkillContent("2.0.0")), 0600)
+		require.NoError(t, err)
+
+		var out bytes.Buffer
+		err = checkExistingInstallation(tmpDir, agentSkillFormatCodex, "2.0.0", &out)
+		require.NoError(t, err)
+		require.Empty(t, out.String())
+	})
+}
+
+// Not parallel: subtests mutate tui.PromptConfirm.
+func TestConfirmOverwriteIfNeeded(t *testing.T) {
+	t.Run("continues when user confirms overwrite", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".claude", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
+		require.NoError(t, err)
+
+		originalPromptConfirm := tui.PromptConfirm
+		t.Cleanup(func() {
+			tui.PromptConfirm = originalPromptConfirm
+		})
+
+		called := false
+		tui.PromptConfirm = func(prompt string, defaultValue bool) (bool, error) {
+			called = true
+			require.Contains(t, prompt, "Existing skill installations detected")
+			require.Contains(t, prompt, "~/.claude/skills/stackit")
+			return true, nil
+		}
+
+		err = confirmOverwriteIfNeeded(
+			tmpDir,
+			[]agentInstallTarget{installTargetForFormat(agentSkillFormatClaude)},
+			false,
+			"2.0.0",
+			io.Discard,
+		)
+		require.NoError(t, err)
+		require.True(t, called)
+	})
+
+	t.Run("aborts when user declines overwrite", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
+		require.NoError(t, err)
+
+		originalPromptConfirm := tui.PromptConfirm
+		t.Cleanup(func() {
+			tui.PromptConfirm = originalPromptConfirm
+		})
+		tui.PromptConfirm = func(_ string, _ bool) (bool, error) {
+			return false, nil
+		}
+
+		err = confirmOverwriteIfNeeded(
+			tmpDir,
+			[]agentInstallTarget{installTargetForFormat(agentSkillFormatCodex)},
+			false,
+			"2.0.0",
+			io.Discard,
+		)
+		require.ErrorIs(t, err, stackiterrors.ErrCanceled)
+	})
+
+	t.Run("requires force in non-interactive mode", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
+		require.NoError(t, err)
+
+		originalPromptConfirm := tui.PromptConfirm
+		t.Cleanup(func() {
+			tui.PromptConfirm = originalPromptConfirm
+		})
+		tui.PromptConfirm = func(_ string, _ bool) (bool, error) {
+			return false, tui.ErrInteractiveDisabled
+		}
+
+		var out bytes.Buffer
+		err = confirmOverwriteIfNeeded(
+			tmpDir,
+			[]agentInstallTarget{installTargetForFormat(agentSkillFormatCodex)},
+			false,
+			"2.0.0",
+			&out,
+		)
+		require.Error(t, err)
+		require.Contains(t, out.String(), "Run with --force to overwrite")
+	})
+
+	t.Run("reports all conflicts in non-interactive mode", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Install both claude and codex skills
+		for _, dir := range []string{".claude", ".codex"} {
+			skillPath := filepath.Join(tmpDir, dir, "skills", "stackit", "SKILL.md")
+			err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+			require.NoError(t, err)
+			err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
+			require.NoError(t, err)
+		}
+
+		originalPromptConfirm := tui.PromptConfirm
+		t.Cleanup(func() {
+			tui.PromptConfirm = originalPromptConfirm
+		})
+		tui.PromptConfirm = func(_ string, _ bool) (bool, error) {
+			return false, tui.ErrInteractiveDisabled
+		}
+
+		var out bytes.Buffer
+		err := confirmOverwriteIfNeeded(
+			tmpDir,
+			[]agentInstallTarget{
+				installTargetForFormat(agentSkillFormatClaude),
+				installTargetForFormat(agentSkillFormatCodex),
+			},
+			false,
+			"2.0.0",
+			&out,
+		)
+		require.Error(t, err)
+		require.Contains(t, out.String(), ".claude")
+		require.Contains(t, out.String(), ".codex")
+	})
+}
+
+func TestIsAnySkillInstalled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("detects codex skill", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte("skill"), 0600)
+		require.NoError(t, err)
+
+		require.True(t, isAnySkillInstalled(tmpDir))
+	})
+
+	t.Run("detects legacy lowercase claude skill", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".claude", "skills", "stackit", "skill.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte("skill"), 0600)
+		require.NoError(t, err)
+
+		require.True(t, isAnySkillInstalled(tmpDir))
+	})
+
+	t.Run("returns false when no skill files exist", func(t *testing.T) {
+		t.Parallel()
+		require.False(t, isAnySkillInstalled(t.TempDir()))
+	})
+}
+
+func TestPrintSuccessMessageIncludesCodex(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	printSuccessMessage(&out, []agentInstallTarget{installTargetForFormat(agentSkillFormatCodex)}, false, "", len(claudeCommandFiles))
+
+	require.Contains(t, out.String(), "Installed agent files")
+	require.Contains(t, out.String(), "~/.codex/skills/stackit")
+	require.NotContains(t, out.String(), "Slash commands:")
+}
+
+func TestPrintSuccessMessageIncludesClaudeCommands(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	printSuccessMessage(&out, []agentInstallTarget{installTargetForFormat(agentSkillFormatClaude)}, false, "", len(claudeCommandFiles))
+
+	require.Contains(t, out.String(), "~/.claude/skills/stackit")
+	require.Contains(t, out.String(), "Slash commands:")
+}
+
+func TestPrintSuccessMessageIncludesMultipleTargets(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	printSuccessMessage(
+		&out,
+		[]agentInstallTarget{
+			installTargetForFormat(agentSkillFormatClaude),
+			installTargetForFormat(agentSkillFormatCodex),
+		},
+		false,
+		"",
+		len(claudeCommandFiles),
+	)
+
+	require.Contains(t, out.String(), "~/.claude/skills/stackit")
+	require.Contains(t, out.String(), "~/.codex/skills/stackit")
+	require.Contains(t, out.String(), "Slash commands:")
+}
+
+func TestParseAgentSkillFormat(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := parseAgentSkillFormat("claude")
+	require.NoError(t, err)
+	require.Equal(t, agentSkillFormatClaude, parsed)
+
+	parsed, err = parseAgentSkillFormat("codex")
+	require.NoError(t, err)
+	require.Equal(t, agentSkillFormatCodex, parsed)
+
+	_, err = parseAgentSkillFormat("invalid")
+	require.Error(t, err)
+}
+
+func TestParseAgentSkillFormats(t *testing.T) {
+	t.Parallel()
+
+	formats, err := parseAgentSkillFormats([]string{"claude", "codex"})
+	require.NoError(t, err)
+	require.Equal(t, []agentSkillFormat{agentSkillFormatClaude, agentSkillFormatCodex}, formats)
+
+	formats, err = parseAgentSkillFormats([]string{"claude,codex", "claude"})
+	require.NoError(t, err)
+	require.Equal(t, []agentSkillFormat{agentSkillFormatClaude, agentSkillFormatCodex}, formats)
+
+	_, err = parseAgentSkillFormats([]string{"bad-format"})
+	require.Error(t, err)
+}
+
+func TestParseSelectedFormatLabels(t *testing.T) {
+	t.Parallel()
+
+	formats, err := parseSelectedFormatLabels([]string{
+		"Claude Code - Claude Code CLI skill format (~/.claude/skills/stackit)",
+		"Codex - Codex skill format (~/.codex/skills/stackit)",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []agentSkillFormat{agentSkillFormatClaude, agentSkillFormatCodex}, formats)
+
+	_, err = parseSelectedFormatLabels([]string{"Skip (don't install agent skills)"})
+	require.Error(t, err)
+}
+
+func TestTargetsForFormats(t *testing.T) {
+	t.Parallel()
+
+	targets := targetsForFormats([]agentSkillFormat{agentSkillFormatClaude, agentSkillFormatCodex})
+	require.Len(t, targets, 2)
+	require.Equal(t, "~/.claude/skills/stackit", targets[0].displayPath)
+	require.Equal(t, "~/.codex/skills/stackit", targets[1].displayPath)
+}
+
+func TestInstalledSkillManifestPathsForFormat(t *testing.T) {
+	t.Parallel()
+
+	base := "/tmp/test"
+	paths := installedSkillManifestPathsForFormat(base, agentSkillFormatClaude)
+	require.Len(t, paths, 2)
+	require.Contains(t, paths[0], filepath.Join(".claude", "skills", "stackit"))
+
+	paths = installedSkillManifestPathsForFormat(base, agentSkillFormatCodex)
+	require.Len(t, paths, 2)
+	require.Contains(t, paths[0], filepath.Join(".codex", "skills", "stackit"))
+}
+
+// Not parallel: uses t.Setenv.
+func TestResolveInstallBaseDirUsesHomeDirectory(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	baseDir, err := resolveInstallBaseDir()
+	require.NoError(t, err)
+	require.Equal(t, homeDir, baseDir)
+}
+
+func testSkillContent(version string) string {
+	return "---\nversion: " + version + "\n---\n"
 }

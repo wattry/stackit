@@ -44,8 +44,31 @@ func InstallPrepush(runner git.Runner, out io.Writer) error {
 
 // InstallAgents installs AI agent integration files.
 // This is a convenience wrapper for use during init.
+// It auto-detects formats from existing directories to avoid a nested prompt.
 func InstallAgents(runner git.Runner, local, force bool, version string, out io.Writer) error {
-	return runAgentInstall(runner, local, force, version, out)
+	formats := autoDetectFormats()
+	return runAgentInstall(runner, local, force, formats, version, out)
+}
+
+// autoDetectFormats returns format flags based on which agent directories exist,
+// defaulting to claude if none are found.
+func autoDetectFormats() []string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return []string{"claude"}
+	}
+
+	var formats []string
+	if dirExists(filepath.Join(homeDir, ".claude")) {
+		formats = append(formats, "claude")
+	}
+	if dirExists(filepath.Join(homeDir, ".codex")) {
+		formats = append(formats, "codex")
+	}
+	if len(formats) == 0 {
+		formats = []string{"claude"}
+	}
+	return formats
 }
 
 // stackitWorkflowMarker is a string that identifies a stackit-generated GitHub workflow.
@@ -108,24 +131,18 @@ func IsPrepushInstalled(runner git.Runner) bool {
 }
 
 // IsAgentsInstalled checks if agent integration files are already installed.
-// Checks both global (~/.claude/) and local (.claude/) installations.
+// Checks both global (~/.claude/, ~/.codex/) and local (.claude/, .codex/) installations.
 func IsAgentsInstalled(runner git.Runner) bool {
 	// Check global installation
 	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		skillPath := filepath.Join(homeDir, ".claude", "skills", "stackit", "skill.md")
-		if _, err := os.Stat(skillPath); err == nil {
-			return true
-		}
+	if err == nil && isAnySkillInstalled(homeDir) {
+		return true
 	}
 
 	// Check local installation
 	repoRoot, err := runner.DiscoverRepoRoot()
-	if err == nil {
-		skillPath := filepath.Join(repoRoot, ".claude", "skills", "stackit", "skill.md")
-		if _, err := os.Stat(skillPath); err == nil {
-			return true
-		}
+	if err == nil && isAnySkillInstalled(repoRoot) {
+		return true
 	}
 
 	return false
