@@ -119,7 +119,7 @@ func TestNewShipCmd(t *testing.T) {
 
 func TestNewDrainCmd(t *testing.T) {
 	t.Run("has expected flags", func(t *testing.T) {
-		cmd := NewDrainCmd(nil)
+		cmd := NewDrainCmd()
 
 		require.Equal(t, "drain", cmd.Use)
 

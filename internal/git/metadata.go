@@ -20,6 +20,8 @@ const (
 	LockReasonUser LockReason = "user"
 	// LockReasonConsolidating indicates the branch is being consolidated
 	LockReasonConsolidating LockReason = "consolidating"
+	// LockReasonDraining indicates the branch is being drained (merge drain in progress)
+	LockReasonDraining LockReason = "draining"
 )
 
 // IsLocked returns true if the lock reason indicates the branch is locked

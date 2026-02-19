@@ -9,32 +9,39 @@ import (
 	"stackit.dev/stackit/internal/engine"
 )
 
-// restackBranches handles restacking branches after sync operations
-func restackBranches(ctx *app.Context, branchesToRestack []string, dirtyAnchors map[string]bool, handler Handler, summary *Summary) error {
+// restackBranches handles restacking branches after sync operations.
+// When restackScope is non-nil, only those branches are restacked (skipping current-branch expansion).
+func restackBranches(ctx *app.Context, branchesToRestack []string, restackScope []string, dirtyAnchors map[string]bool, handler Handler, summary *Summary) error {
 	nav := ctx.Navigator()
-	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 
-	// Add current branch stack to restack list
-	currentBranch := nav.CurrentBranch()
-	if currentBranch != nil {
-		if currentBranch.IsTracked() {
-			// Get full stack (up to trunk)
-			stack := graph.Range(*currentBranch, engine.StackRange{
-				RecursiveParents:  true,
-				IncludeCurrent:    true,
-				RecursiveChildren: true,
-			})
-			// Add branches to restack list
-			for _, b := range stack {
-				branchesToRestack = append(branchesToRestack, b.GetName())
-			}
-		} else if currentBranch.IsTrunk() {
-			// If on trunk, restack all branches
-			stack := graph.Range(*currentBranch, engine.StackRange{
-				RecursiveChildren: true,
-			})
-			for _, b := range stack {
-				branchesToRestack = append(branchesToRestack, b.GetName())
+	if restackScope != nil {
+		// Scoped restack: use only the explicitly provided branches
+		branchesToRestack = append(branchesToRestack, restackScope...)
+	} else {
+		// Default behavior: expand from current branch position
+		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+
+		currentBranch := nav.CurrentBranch()
+		if currentBranch != nil {
+			if currentBranch.IsTracked() {
+				// Get full stack (up to trunk)
+				stack := graph.Range(*currentBranch, engine.StackRange{
+					RecursiveParents:  true,
+					IncludeCurrent:    true,
+					RecursiveChildren: true,
+				})
+				// Add branches to restack list
+				for _, b := range stack {
+					branchesToRestack = append(branchesToRestack, b.GetName())
+				}
+			} else if currentBranch.IsTrunk() {
+				// If on trunk, restack all branches
+				stack := graph.Range(*currentBranch, engine.StackRange{
+					RecursiveChildren: true,
+				})
+				for _, b := range stack {
+					branchesToRestack = append(branchesToRestack, b.GetName())
+				}
 			}
 		}
 	}
