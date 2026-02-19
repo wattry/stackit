@@ -31,6 +31,8 @@ const (
 	LockReasonUser LockReason = git.LockReasonUser
 	// LockReasonConsolidating indicates the branch is being consolidated
 	LockReasonConsolidating LockReason = git.LockReasonConsolidating
+	// LockReasonDraining indicates the branch is being drained (merge drain in progress)
+	LockReasonDraining LockReason = git.LockReasonDraining
 )
 
 // StackRange specifies the range of branches to include in stack operations

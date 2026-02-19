@@ -17,10 +17,11 @@ import (
 
 // Options contains options for the sync command
 type Options struct {
-	All     bool
-	Force   bool
-	Restack bool
-	DryRun  bool
+	All          bool
+	Force        bool
+	Restack      bool
+	DryRun       bool
+	RestackScope []string // When non-nil, only restack these branches (skip current-branch expansion)
 }
 
 // Action performs the sync operation
@@ -233,7 +234,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Phase 4: Restack branches
 	handler.EmitEvent(Event{Phase: PhaseRestack, Type: EventStarted})
 
-	if err := restackBranches(ctx, branchesToRestack, dirtyAnchors, handler, summary); err != nil {
+	if err := restackBranches(ctx, branchesToRestack, opts.RestackScope, dirtyAnchors, handler, summary); err != nil {
 		// Even on error, complete with summary
 		handler.Complete(*summary)
 		return err

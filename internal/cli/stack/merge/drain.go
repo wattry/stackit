@@ -7,9 +7,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/actions"
 	mergeAction "stackit.dev/stackit/internal/actions/merge"
+	"stackit.dev/stackit/internal/actions/sync"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
+	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui"
 )
@@ -17,7 +20,7 @@ import (
 // NewDrainCmd creates the merge drain subcommand.
 // This command merges all PRs in the stack bottom-up, waiting for each merge
 // to complete before proceeding to the next one.
-func NewDrainCmd(postMergeHandler PostMergeHandler) *cobra.Command {
+func NewDrainCmd() *cobra.Command {
 	var (
 		dryRun bool
 		yes    bool
@@ -59,7 +62,7 @@ Examples:
 					branch: branch,
 					scope:  scope,
 					count:  count,
-				}, postMergeHandler)
+				})
 			})
 		},
 	}
@@ -87,7 +90,7 @@ type mergeDrainOptions struct {
 	count  int // Maximum number of PRs to drain (0 = all)
 }
 
-func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler PostMergeHandler) error {
+func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 	out := ctx.Output
 	eng := ctx.Engine
 
@@ -165,6 +168,16 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 		return err
 	}
 
+	// Lock all drain branches to prevent external modification
+	branchesToLock := make([]engine.Branch, len(plan.BranchesToMerge))
+	for i, b := range plan.BranchesToMerge {
+		branchesToLock[i] = eng.GetBranch(b.BranchName)
+	}
+	if _, err := eng.SetLocked(ctx.Context, branchesToLock, engine.LockReasonDraining); err != nil {
+		return fmt.Errorf("failed to lock drain branches: %w", err)
+	}
+	defer unlockDrainBranches(ctx, plan.BranchesToMerge)
+
 	// Drain loop: merge one PR at a time, bottom-up
 	merged := 0
 	for drainTarget == 0 || merged < drainTarget {
@@ -223,18 +236,70 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions, postMergeHandler Po
 
 		merged++
 
-		// Post-merge cleanup: sync trunk + restack for next iteration
-		if postMergeHandler != nil {
-			out.Info("Syncing trunk and restacking...")
-			if err := postMergeHandler(ctx, mergeAction.PostMergeSyncTrunk); err != nil {
-				return fmt.Errorf("post-merge sync failed after PR #%d: %w", bottomPR.PRNumber, err)
-			}
+		// Post-merge cleanup: checkout trunk, then scoped sync + restack
+		out.Info("Syncing trunk and restacking...")
+
+		// Checkout trunk
+		if _, checkoutErr := actions.CheckoutAction(ctx, actions.CheckoutOptions{
+			CheckoutTrunk: true,
+		}, nil); checkoutErr != nil {
+			return fmt.Errorf("post-merge checkout trunk failed after PR #%d: %w", bottomPR.PRNumber, checkoutErr)
+		}
+
+		// Compute remaining branches to restack (everything after the one we just merged)
+		restackScope := remainingBranchNames(plan.BranchesToMerge[1:])
+
+		// Run sync with scoped restack and no interactive prompts
+		drainHandler := &drainSyncHandler{}
+		if syncErr := sync.Action(ctx, sync.Options{
+			Restack:      true,
+			RestackScope: restackScope,
+		}, drainHandler); syncErr != nil {
+			return fmt.Errorf("post-merge sync failed after PR #%d: %w", bottomPR.PRNumber, syncErr)
+		}
+
+		// Check for conflicts in drain branches — hard error
+		if len(drainHandler.summary.ConflictBranches) > 0 {
+			return fmt.Errorf("restack conflict in %s — resolve before continuing drain", drainHandler.summary.ConflictBranches[0])
 		}
 	}
 
 	out.Newline()
 	out.Success("Drained %d PRs from the stack", merged)
 	return nil
+}
+
+// drainSyncHandler is a non-interactive sync handler that captures the summary.
+// It embeds sync.NullHandler so all prompts return non-interactive defaults.
+type drainSyncHandler struct {
+	sync.NullHandler
+	summary sync.Summary
+}
+
+// Complete captures the sync summary for conflict detection.
+func (h *drainSyncHandler) Complete(s sync.Summary) { h.summary = s }
+
+// remainingBranchNames extracts branch names from a slice of MergeBranch.
+func remainingBranchNames(branches []mergeAction.BranchMergeInfo) []string {
+	names := make([]string, len(branches))
+	for i, b := range branches {
+		names[i] = b.BranchName
+	}
+	return names
+}
+
+// unlockDrainBranches unlocks any remaining drain-locked branches that still exist.
+func unlockDrainBranches(ctx *app.Context, branches []mergeAction.BranchMergeInfo) {
+	var toUnlock []engine.Branch
+	for _, b := range branches {
+		branch := ctx.Engine.GetBranch(b.BranchName)
+		if branch.IsTracked() && branch.GetLockReason() == engine.LockReasonDraining {
+			toUnlock = append(toUnlock, branch)
+		}
+	}
+	if len(toUnlock) > 0 {
+		_, _ = ctx.Engine.SetLocked(ctx.Context, toUnlock, engine.LockReasonNone)
+	}
 }
 
 func resolveMergeMethod(ctx *app.Context, methodFlag string) (github.MergeMethod, error) {

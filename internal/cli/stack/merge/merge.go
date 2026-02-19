@@ -104,7 +104,7 @@ Examples:
 	cmd.AddCommand(NewStatusCmd())
 	cmd.AddCommand(NewNextCmd(postMergeHandler))
 	cmd.AddCommand(NewShipCmd(postMergeHandler))
-	cmd.AddCommand(NewDrainCmd(postMergeHandler))
+	cmd.AddCommand(NewDrainCmd())
 
 	return cmd
 }
