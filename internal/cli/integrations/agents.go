@@ -118,7 +118,7 @@ var (
 
 	claudeCommandFiles = []string{
 		"stack-absorb.md", "stack-create.md", "stack-describe.md", "stack-extract.md",
-		"stack-fix.md", "stack-fold.md", "stack-plan.md", "stack-restack.md",
+		"stack-fix.md", "stack-fold.md", "stack-modify.md", "stack-plan.md", "stack-restack.md",
 		"stack-review.md", "stack-split.md", "stack-status.md", "stack-submit.md",
 		"stack-sync.md", "stack-verify.md",
 	}
@@ -522,8 +522,8 @@ func printSuccessMessage(out io.Writer, targets []agentInstallTarget, workflowBl
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Available commands: /stack-absorb, /stack-create, /stack-describe, /stack-extract,")
-	_, _ = fmt.Fprintln(out, "/stack-fix, /stack-fold, /stack-plan, /stack-restack, /stack-review, /stack-split,")
-	_, _ = fmt.Fprintln(out, "/stack-status, /stack-submit, /stack-sync, /stack-verify")
+	_, _ = fmt.Fprintln(out, "/stack-fix, /stack-fold, /stack-modify, /stack-plan, /stack-restack, /stack-review,")
+	_, _ = fmt.Fprintln(out, "/stack-split, /stack-status, /stack-submit, /stack-sync, /stack-verify")
 }
 
 func checkExistingInstallation(baseDir string, format agentSkillFormat, version string, out io.Writer) error {
