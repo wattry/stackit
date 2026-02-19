@@ -1,10 +1,14 @@
 package sync
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -173,4 +177,83 @@ func TestSyncAction(t *testing.T) {
 		// 1-Failure should NOT be fixed (conflict detected via validation)
 		s.ExpectBranchNotFixed("1-Failure")
 	})
+
+	t.Run("sync mode aborts unexpected runtime restack conflict and restores branch", func(t *testing.T) {
+		s := scenario.NewScenario(t, nil).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Move trunk so branch1 needs restacking.
+		s.Checkout("main").
+			CommitChange("main-update", "advance trunk")
+		s.Checkout("branch1")
+
+		// Recreate the engine with a wrapper that injects a runtime rebase conflict.
+		wrappedGit := &runtimeConflictRunner{
+			Runner:         s.Engine.Git(),
+			conflictBranch: "branch1",
+		}
+
+		eng, err := engine.NewEngine(engine.Options{
+			RepoRoot: s.Scene.Dir,
+			Trunk:    "main",
+			Git:      wrappedGit,
+		})
+		require.NoError(t, err)
+		s.Engine = eng
+		s.Context.Engine = eng
+
+		err = Action(s.Context, Options{
+			Restack: true,
+		}, nil)
+		require.NoError(t, err)
+		require.True(t, wrappedGit.abortCalled, "sync should abort an unexpected in-progress rebase")
+		require.False(t, wrappedGit.IsRebaseInProgress(s.Context), "sync should finish with no rebase in progress")
+
+		current := s.Engine.CurrentBranch()
+		require.NotNil(t, current, "sync should restore original branch checkout")
+		require.Equal(t, "branch1", current.GetName())
+	})
+}
+
+type runtimeConflictRunner struct {
+	git.Runner
+	conflictBranch   string
+	rebaseInProgress bool
+	abortCalled      bool
+	injected         bool
+}
+
+func (r *runtimeConflictRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (git.RebaseResult, error) {
+	if branchName == r.conflictBranch && !r.injected {
+		r.injected = true
+		r.rebaseInProgress = true
+		_ = r.CheckoutDetached(ctx, branchName)
+		return git.RebaseConflict, nil
+	}
+	return r.Runner.Rebase(ctx, branchName, upstream, oldUpstream)
+}
+
+func (r *runtimeConflictRunner) CheckoutBranch(ctx context.Context, branchName string) error {
+	if r.rebaseInProgress {
+		return fmt.Errorf("cannot checkout %s while rebase is in progress", branchName)
+	}
+	return r.Runner.CheckoutBranch(ctx, branchName)
+}
+
+func (r *runtimeConflictRunner) IsRebaseInProgress(ctx context.Context) bool {
+	if r.rebaseInProgress {
+		return true
+	}
+	return r.Runner.IsRebaseInProgress(ctx)
+}
+
+func (r *runtimeConflictRunner) RebaseAbort(ctx context.Context) error {
+	if r.rebaseInProgress {
+		r.rebaseInProgress = false
+		r.abortCalled = true
+		return nil
+	}
+	return r.Runner.RebaseAbort(ctx)
 }

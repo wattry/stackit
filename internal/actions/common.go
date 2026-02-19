@@ -163,9 +163,43 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 	// For sync mode (or standalone with no conflicts), restack all successful branches
 	if len(successBranches) > 0 {
+		// Keep track of where we started so sync mode can recover if a runtime conflict
+		// slips past validation and leaves a rebase in progress.
+		originalBranch := ctx.Engine.CurrentBranch()
+		originalRev := ""
+		if originalBranch == nil {
+			originalRev, _ = ctx.Engine.Git().GetCurrentRevision(ctx.Context)
+		}
+
 		batchResult, err := ctx.Engine.RestackBranches(ctx.Context, successBranches)
 		if err != nil {
 			return fmt.Errorf("batch restack failed: %w", err)
+		}
+
+		// Sync mode should never leave the repo in a conflict workflow unless explicitly requested.
+		// If a runtime conflict occurred despite validation, clean it up and restore checkout state.
+		if !shouldEnterConflictWorkflow && ctx.Engine.Git().IsRebaseInProgress(ctx.Context) {
+			conflictBranch := batchResult.ConflictBranch
+			if conflictBranch == "" {
+				conflictBranch = "unknown"
+			}
+
+			ctx.Logger.Warn("unexpected rebase state after sync restack; aborting branch=%v", conflictBranch)
+			if abortErr := ctx.Engine.Git().RebaseAbort(ctx.Context); abortErr != nil {
+				return fmt.Errorf("unexpected restack conflict on %s: failed to abort rebase: %w", conflictBranch, abortErr)
+			}
+
+			if originalBranch != nil {
+				if checkoutErr := ctx.Engine.CheckoutBranch(ctx.Context, *originalBranch); checkoutErr != nil {
+					return fmt.Errorf("unexpected restack conflict on %s: aborted rebase but failed to restore branch %s: %w",
+						conflictBranch, originalBranch.GetName(), checkoutErr)
+				}
+			} else if originalRev != "" {
+				if detachErr := ctx.Engine.Git().CheckoutDetached(ctx.Context, originalRev); detachErr != nil {
+					return fmt.Errorf("unexpected restack conflict on %s: aborted rebase but failed to restore detached HEAD %s: %w",
+						conflictBranch, originalRev, detachErr)
+				}
+			}
 		}
 
 		// Log restack results for diagnostics
