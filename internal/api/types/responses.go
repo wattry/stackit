@@ -5,6 +5,14 @@
 // to evolve independently.
 package types
 
+// ViewResponse is the combined response for the frontend view.
+// It bundles repo metadata and all stack details into a single payload
+// to avoid N+1 API calls.
+type ViewResponse struct {
+	Repo   RepoResponse  `json:"repo"`
+	Stacks []StackDetail `json:"stacks"`
+}
+
 // RepoResponse contains repository metadata.
 type RepoResponse struct {
 	Owner         string `json:"owner"`

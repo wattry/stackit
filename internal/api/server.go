@@ -52,6 +52,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
 	// Register handlers
+	mux.Handle("/api/view", handlers.NewViewHandler(s.eng, s.gh, s.config.Remote))
 	mux.Handle("/api/repo", handlers.NewRepoHandler(s.eng, s.gh, s.config.Remote))
 	mux.Handle("/api/stacks", handlers.NewStacksHandler(s.eng, s.gh))
 	mux.Handle("/api/stacks/", handlers.NewStacksHandler(s.eng, s.gh))
