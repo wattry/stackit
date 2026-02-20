@@ -272,7 +272,7 @@ func (e *engineImpl) GetDeletionStatus(ctx context.Context, branchName string) (
 	if status, ok := statuses[branchName]; ok {
 		return status, nil
 	}
-	return DeletionStatus{SafeToDelete: false, Reason: ""}, nil
+	return DeletionStatus{SafeToDelete: false, Reason: "", Kind: DeletionReasonNone}, nil
 }
 
 // BatchGetDeletionStatuses checks deletion status for multiple branches in a single batch.
@@ -326,12 +326,12 @@ func (e *engineImpl) BatchGetDeletionStatuses(ctx context.Context, branchNames [
 func (e *engineImpl) evaluateDeletionStatus(ctx context.Context, branchName string, branch Branch, meta *git.Meta, revisions map[string]string, mergedBranches map[string]bool, trunkName string) DeletionStatus {
 	// 1. Never delete trunk
 	if e.IsTrunk(branch) {
-		return DeletionStatus{SafeToDelete: false, Reason: ""}
+		return DeletionStatus{SafeToDelete: false, Reason: "", Kind: DeletionReasonNone}
 	}
 
 	// 2. Never delete worktree anchor branches
 	if e.IsWorktreeAnchor(branch) {
-		return DeletionStatus{SafeToDelete: false, Reason: ""}
+		return DeletionStatus{SafeToDelete: false, Reason: "", Kind: DeletionReasonNone}
 	}
 
 	// 3. Check PR state from metadata
@@ -343,21 +343,29 @@ func (e *engineImpl) evaluateDeletionStatus(ctx context.Context, branchName stri
 				prStateMerged = "MERGED"
 			)
 			if prInfo.State() == prStateClosed {
-				return DeletionStatus{SafeToDelete: true, Reason: "closed on GitHub"}
+				return DeletionStatus{SafeToDelete: true, Reason: "closed on GitHub", Kind: DeletionReasonClosedPR}
 			}
 			if prInfo.State() == prStateMerged {
 				base := prInfo.Base()
 				if base == "" {
 					base = trunkName
 				}
-				return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", base)}
+				return DeletionStatus{
+					SafeToDelete: true,
+					Reason:       fmt.Sprintf("merged into %s", base),
+					Kind:         DeletionReasonMergedPR,
+				}
 			}
 		}
 	}
 
 	// 4. Check if merged into trunk
 	if mergedBranches != nil && mergedBranches[branchName] {
-		return DeletionStatus{SafeToDelete: true, Reason: fmt.Sprintf("merged into %s", trunkName)}
+		return DeletionStatus{
+			SafeToDelete: true,
+			Reason:       fmt.Sprintf("merged into %s", trunkName),
+			Kind:         DeletionReasonMergedIntoTrunk,
+		}
 	}
 
 	// 5. Check if empty (no diff from parent) with an associated PR
@@ -380,13 +388,13 @@ func (e *engineImpl) evaluateDeletionStatus(ctx context.Context, branchName stri
 			if meta != nil {
 				metaPrInfo := meta.GetPrInfo()
 				if metaPrInfo != nil && metaPrInfo.Number != nil && *metaPrInfo.Number != 0 {
-					return DeletionStatus{SafeToDelete: true, Reason: "empty"}
+					return DeletionStatus{SafeToDelete: true, Reason: "empty", Kind: DeletionReasonEmptyWithPR}
 				}
 			}
 		}
 	}
 
-	return DeletionStatus{SafeToDelete: false, Reason: ""}
+	return DeletionStatus{SafeToDelete: false, Reason: "", Kind: DeletionReasonNone}
 }
 
 // GetRemote returns the default remote name

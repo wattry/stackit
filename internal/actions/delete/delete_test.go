@@ -1,6 +1,7 @@
 package delete
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -143,6 +144,43 @@ func TestDelete(t *testing.T) {
 		parent2 := branchparent2.GetParent()
 		require.NotNil(t, parent2)
 		require.Equal(t, "main", parent2.GetName())
+	})
+
+	t.Run("preserves child commit boundaries when deleting squash-merged parent", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("branch1").
+			CommitChange("shared.txt", "branch1-v1").
+			CommitChange("shared.txt", "branch1-v2").
+			TrackBranch("branch1", "main")
+
+		s.CreateBranch("branch2").
+			CommitChange("child.txt", "branch2-change").
+			TrackBranch("branch2", "branch1")
+
+		// Simulate squash merge by adding branch1's final state to main in one commit.
+		s.Checkout("main")
+		s.CommitChange("shared.txt", "branch1-v2")
+
+		// Mark branch1 as merged so delete uses merged deletion semantics.
+		err := s.Engine.UpsertPrInfo(context.Background(), s.Engine.GetBranch("branch1"), testhelpers.NewTestPrInfoMerged(1, "main"))
+		require.NoError(t, err)
+
+		_, err = Action(s.Context, Options{
+			BranchName: "branch1",
+			Force:      true,
+		}, nil)
+		require.NoError(t, err)
+
+		require.False(t, s.Engine.GetBranch("branch1").IsTracked())
+		require.True(t, s.Engine.GetBranch("branch2").IsTracked())
+		parent := s.Engine.GetBranch("branch2").GetParent()
+		require.NotNil(t, parent)
+		require.Equal(t, "main", parent.GetName())
+
+		commitCount, err := s.Engine.GetCommitCount(s.Engine.GetBranch("branch2"))
+		require.NoError(t, err)
+		require.Equal(t, 1, commitCount)
 	})
 }
 

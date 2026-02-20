@@ -77,16 +77,18 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 
 	handler.Start(len(toDelete))
 
+	// Precompute deletion statuses once (used for confirmation and divergence-preserving reparenting).
+	toDeleteNames := make([]string, len(toDelete))
+	for i, b := range toDelete {
+		toDeleteNames[i] = b.GetName()
+	}
+	statuses, err := eng.BatchGetDeletionStatuses(ctx.Context, toDeleteNames)
+	if err != nil {
+		return Result{}, fmt.Errorf("failed to check deletion statuses: %w", err)
+	}
+
 	// Confirm if not forced and not merged/closed
 	if !opts.Force {
-		toDeleteNames := make([]string, len(toDelete))
-		for i, b := range toDelete {
-			toDeleteNames[i] = b.GetName()
-		}
-		statuses, err := eng.BatchGetDeletionStatuses(ctx.Context, toDeleteNames)
-		if err != nil {
-			return Result{}, fmt.Errorf("failed to check deletion statuses: %w", err)
-		}
 		for _, b := range toDelete {
 			status := statuses[b.GetName()]
 			if !status.SafeToDelete {
@@ -108,6 +110,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 		}
 	}
 
+	// Preserve divergence for survivors whose parent is being deleted as merged/empty.
+	// This mirrors clean-branches behavior and avoids replaying already-merged parent commits.
+	preReparentedChildren, err := preReparentChildrenWithPreservedDivergence(ctx, toDelete, statuses)
+	if err != nil {
+		return Result{}, err
+	}
+
 	// Track children that will need restacking (only for the last branch in the stack if deleting multiple)
 	// Actually, if we delete a middle branch, its children are reparented to its parent.
 	// If we delete a whole stack, only children of the stack need restacking onto the stack's parent.
@@ -117,12 +126,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	childrenToRestack = mergeUniqueBranchNames(childrenToRestack, preReparentedChildren)
 
 	// Batch delete remote metadata for deleted branches
-	branchNames := make([]string, len(toDelete))
-	for i, b := range toDelete {
-		branchNames[i] = b.GetName()
-	}
+	branchNames := toDeleteNames
 	if err := eng.Git().BatchDeleteRemoteMetadataRefs(ctx.Context, branchNames); err != nil {
 		out.Debug("Failed to batch delete remote metadata: %v", err)
 	}
@@ -165,6 +172,95 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 
 	handler.Complete(len(toDelete), 0)
 	return Result{MainRepoDirForSwitch: mainRepoDirForSwitch}, nil
+}
+
+func preReparentChildrenWithPreservedDivergence(ctx *app.Context, toDelete []engine.Branch, statuses map[string]engine.DeletionStatus) ([]string, error) {
+	eng := ctx.Engine
+	gctx := ctx.Context
+	out := ctx.Output
+
+	toDeleteSet := make(map[string]bool, len(toDelete))
+	for _, b := range toDelete {
+		toDeleteSet[b.GetName()] = true
+	}
+
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	reparentedChildren := make([]string, 0)
+	reparentedSet := make(map[string]bool)
+
+	for _, deleted := range toDelete {
+		deletedName := deleted.GetName()
+		status := statuses[deletedName]
+		if !shouldPreserveDivergenceOnDelete(status.Kind) {
+			continue
+		}
+
+		targetParentName := deleted.GetParentOrTrunk()
+		targetParentName = findNearestNonDeletingAncestorForDelete(eng, toDeleteSet, targetParentName)
+
+		for _, child := range graph.ChildBranches(deleted) {
+			childName := child.GetName()
+			if toDeleteSet[childName] {
+				continue
+			}
+
+			oldDivergencePoint, _ := eng.GetDivergencePoint(childName)
+			if err := eng.SetParentPreservingDivergence(gctx, child, eng.GetBranch(targetParentName), oldDivergencePoint); err != nil {
+				return nil, fmt.Errorf("failed to preserve divergence while reparenting %s to %s: %w", childName, targetParentName, err)
+			}
+			out.Debug("Pre-reparented %s to %s while preserving divergence", childName, targetParentName)
+			if !reparentedSet[childName] {
+				reparentedSet[childName] = true
+				reparentedChildren = append(reparentedChildren, childName)
+			}
+		}
+	}
+
+	return reparentedChildren, nil
+}
+
+func shouldPreserveDivergenceOnDelete(kind engine.DeletionReasonKind) bool {
+	switch kind {
+	case engine.DeletionReasonMergedPR, engine.DeletionReasonMergedIntoTrunk, engine.DeletionReasonEmptyWithPR:
+		return true
+	default:
+		return false
+	}
+}
+
+func findNearestNonDeletingAncestorForDelete(eng engine.Engine, toDeleteSet map[string]bool, startParent string) string {
+	current := startParent
+	for toDeleteSet[current] {
+		parent := eng.GetBranch(current).GetParent()
+		if parent == nil {
+			return eng.Trunk().GetName()
+		}
+		current = parent.GetName()
+	}
+	return current
+}
+
+func mergeUniqueBranchNames(a []string, b []string) []string {
+	if len(b) == 0 {
+		return a
+	}
+
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, name := range a {
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	for _, name := range b {
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+
+	return out
 }
 
 // cleanupWorktreesForDeletedStacks removes worktrees for stack roots that have been deleted.

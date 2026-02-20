@@ -46,8 +46,9 @@ type BranchDeletionPlan struct {
 
 // branchDeletionInfo stores information about a branch marked for deletion
 type branchDeletionInfo struct {
-	reason   string
-	blockers map[string]bool
+	reason     string
+	reasonKind engine.DeletionReasonKind
+	blockers   map[string]bool
 }
 
 // deletionPlan manages the state of branches being deleted
@@ -61,10 +62,11 @@ func newDeletionPlan() *deletionPlan {
 	}
 }
 
-func (p *deletionPlan) add(name, reason string, blockers map[string]bool) {
+func (p *deletionPlan) add(name string, status engine.DeletionStatus, blockers map[string]bool) {
 	p.branches[name] = &branchDeletionInfo{
-		reason:   reason,
-		blockers: blockers,
+		reason:     status.Reason,
+		reasonKind: status.Kind,
+		blockers:   blockers,
 	}
 }
 
@@ -180,7 +182,7 @@ func ExecuteBranchDeletions(ctx *app.Context, plannedDeletion *BranchDeletionPla
 // identifyBranchesToDelete pre-calculates deletion status for all tracked branches.
 // Returns the branches to delete, any branches that were skipped due to being in a worktree,
 // and which branches are utility branches (e.g., consolidated merge branches).
-func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[string]string, []string, map[string]bool, error) {
+func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[string]engine.DeletionStatus, []string, map[string]bool, error) {
 	eng := ctx.Engine
 	c := ctx.Context
 
@@ -201,8 +203,8 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 		return nil, nil, nil, fmt.Errorf("failed to get deletion statuses: %w", err)
 	}
 
-	deleteStatuses := make(map[string]string) // name -> reason
-	utilityBranches := make(map[string]bool)  // branches that are utility type
+	deleteStatuses := make(map[string]engine.DeletionStatus) // name -> status
+	utilityBranches := make(map[string]bool)                 // branches that are utility type
 	var skippedInWorktree []string
 
 	for _, name := range candidateNames {
@@ -218,7 +220,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 			continue
 		}
 
-		deleteStatuses[name] = status.Reason
+		deleteStatuses[name] = status
 
 		// Track utility branches using in-memory branch state (no extra fetch)
 		branch := eng.GetBranch(name)
@@ -235,7 +237,7 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 }
 
 // buildDeletionPlanAndReparent constructs the deletion hierarchy and updates parents of surviving branches.
-func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]string) (*deletionPlan, []string, error) {
+func buildDeletionPlanAndReparent(ctx *app.Context, deleteStatuses map[string]engine.DeletionStatus) (*deletionPlan, []string, error) {
 	eng := ctx.Engine
 	out := ctx.Output
 	c := ctx.Context
@@ -264,7 +266,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 		}
 		visited[branchName] = true
 
-		reason, shouldDelete := deleteReasons[branchName]
+		status, shouldDelete := deleteStatuses[branchName]
 		branch := eng.GetBranch(branchName)
 		children := graph.ChildBranches(branch)
 
@@ -279,8 +281,8 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 			for _, child := range children {
 				blockers[child.GetName()] = true
 			}
-			plan.add(branchName, reason, blockers)
-			out.Debug("Marked %s for deletion. Reason: %s. Blockers: %v", branchName, reason, blockers)
+			plan.add(branchName, status, blockers)
+			out.Debug("Marked %s for deletion. Reason: %s. Blockers: %v", branchName, status.Reason, blockers)
 		} else {
 			// Branch is NOT being deleted. Check if it needs a new parent.
 			newParentName, err := reparentBranchIfNecessary(c, branch, plan, eng, out)
@@ -294,12 +296,12 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteReasons map[string]str
 	}
 
 	// NEW: Handle "orphan" branches (untracked branches identified for deletion)
-	for branchName, reason := range deleteReasons {
+	for branchName, status := range deleteStatuses {
 		if !visited[branchName] {
 			// This branch is disconnected from the trunk hierarchy but should still be deleted
-			plan.add(branchName, reason, make(map[string]bool))
+			plan.add(branchName, status, make(map[string]bool))
 			visited[branchName] = true
-			out.Debug("Marked orphan branch %s for deletion. Reason: %s", branchName, reason)
+			out.Debug("Marked orphan branch %s for deletion. Reason: %s", branchName, status.Reason)
 		}
 	}
 
@@ -477,8 +479,12 @@ func shouldPreserveDivergenceOnReparent(plan *deletionPlan, oldParentName string
 		return false
 	}
 
-	reason := strings.ToLower(info.reason)
-	return strings.HasPrefix(reason, "merged into ") || reason == "empty"
+	switch info.reasonKind {
+	case engine.DeletionReasonMergedPR, engine.DeletionReasonMergedIntoTrunk, engine.DeletionReasonEmptyWithPR:
+		return true
+	default:
+		return false
+	}
 }
 
 func readDivergencePoint(eng engine.Engine, branchName string, out output.Output) string {
