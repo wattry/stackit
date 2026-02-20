@@ -82,7 +82,7 @@ func MapBranch(eng engine.BranchReader, branch engine.Branch, node *engine.Stack
 }
 
 // MapStackSummary creates a StackSummary from stack discovery info.
-func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBranch string, allBranches []string, prCount int, scope string) StackSummary {
+func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBranch string, allBranches []string, prCount int, scope string, owner string) StackSummary {
 	currentBranch := eng.CurrentBranch().GetName()
 	isCurrent := slices.Contains(allBranches, currentBranch)
 
@@ -114,12 +114,21 @@ func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBran
 		PRCount:     prCount,
 		IsCurrent:   isCurrent,
 		Description: description,
+		Owner:       owner,
 	}
 }
 
 // MapStackDetail creates a full StackDetail with all branch info.
 func MapStackDetail(eng engine.BranchReader, graph *engine.StackGraph, rootBranch string, allBranches []string, prCount int, scope string, checksMap map[string]*github.CheckStatus) StackDetail {
-	summary := MapStackSummary(eng, graph, rootBranch, allBranches, prCount, scope)
+	// Derive owner from root branch's PR author
+	var owner string
+	if checksMap != nil {
+		if rootCheck := checksMap[rootBranch]; rootCheck != nil {
+			owner = rootCheck.Author
+		}
+	}
+
+	summary := MapStackSummary(eng, graph, rootBranch, allBranches, prCount, scope, owner)
 
 	branches := make([]BranchResponse, 0, len(allBranches))
 	for _, name := range allBranches {

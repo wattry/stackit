@@ -20,6 +20,7 @@ type RepoResponse struct {
 	Trunk         string `json:"trunk"`
 	CurrentBranch string `json:"currentBranch"`
 	Remote        string `json:"remote"`
+	CurrentUser   string `json:"currentUser,omitempty"`
 }
 
 // StackSummary is a lightweight summary of a stack for list views.
@@ -32,6 +33,7 @@ type StackSummary struct {
 	PRCount     int    `json:"prCount"`
 	IsCurrent   bool   `json:"isCurrent"`
 	Description string `json:"description,omitempty"`
+	Owner       string `json:"owner,omitempty"`
 }
 
 // StackDetail is a full stack with all branch details.

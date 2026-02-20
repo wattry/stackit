@@ -50,7 +50,7 @@ func (h *StacksHandler) listStacks(w http.ResponseWriter) {
 
 	summaries := make([]types.StackSummary, 0, len(stacks))
 	for _, stack := range stacks {
-		summary := types.MapStackSummary(h.eng, graph, stack.RootBranch, stack.AllBranches, stack.PRCount, stack.Scope)
+		summary := types.MapStackSummary(h.eng, graph, stack.RootBranch, stack.AllBranches, stack.PRCount, stack.Scope, "")
 		summaries = append(summaries, summary)
 	}
 

@@ -30,8 +30,10 @@ func (h *ViewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Build repo info
 	owner, repo := "", ""
+	var currentUser string
 	if h.gh != nil {
 		owner, repo = h.gh.GetOwnerRepo()
+		currentUser, _ = h.gh.GetCurrentUser(r.Context())
 	}
 	repoResp := types.RepoResponse{
 		Owner:         owner,
@@ -39,6 +41,7 @@ func (h *ViewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Trunk:         h.eng.Trunk().GetName(),
 		CurrentBranch: h.eng.CurrentBranch().GetName(),
 		Remote:        h.remote,
+		CurrentUser:   currentUser,
 	}
 
 	// Discover all stacks
