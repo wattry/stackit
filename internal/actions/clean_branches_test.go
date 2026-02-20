@@ -196,4 +196,50 @@ func TestCleanBranches(t *testing.T) {
 		require.False(t, s.Engine.GetBranch("branch2").IsTracked())
 		require.True(t, s.Engine.GetBranch("branch1").IsTracked())
 	})
+
+	t.Run("preserves divergence when reparenting after squash-merged parent deletion", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create main -> branch1 (2 commits) -> branch2.
+		// Multi-commit parent is important: squash merge can make git IsMerged() false
+		// even when PR is merged, which used to reset branch2's divergence point.
+		s.CreateBranch("branch1")
+		s.CommitChange("shared.txt", "branch1-v1")
+		s.CommitChange("shared.txt", "branch1-v2")
+		s.TrackBranch("branch1", "main")
+
+		s.CreateBranch("branch2")
+		s.CommitChange("child.txt", "branch2-change")
+		s.TrackBranch("branch2", "branch1")
+
+		branch1Rev, err := s.Engine.GetBranch("branch1").GetRevision()
+		require.NoError(t, err)
+
+		// Simulate squash merge of branch1 by adding branch1's final tree state to main in one commit.
+		s.Checkout("main")
+		s.CommitChange("shared.txt", "branch1-v2")
+
+		// Mark branch1 as merged in PR metadata so cleanup deletes it.
+		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
+		err = s.Engine.UpsertPrInfo(context.Background(), s.Engine.GetBranch("branch1"), prInfo)
+		require.NoError(t, err)
+
+		_, err = actions.CleanBranches(s.Context, actions.CleanBranchesOptions{
+			Force: true,
+		})
+		require.NoError(t, err)
+
+		// branch1 should be deleted and branch2 reparented to main.
+		require.False(t, s.Engine.GetBranch("branch1").IsTracked())
+		parent := s.Engine.GetBranch("branch2").GetParent()
+		require.NotNil(t, parent)
+		require.Equal(t, "main", parent.GetName())
+
+		// Critical regression assertion: preserve old divergence at branch1 tip.
+		// If this regresses, restack can replay branch1 commits and cause avoidable conflicts.
+		meta2, err := s.Engine.Git().ReadMetadata("branch2")
+		require.NoError(t, err)
+		require.NotNil(t, meta2.GetParentBranchRevision())
+		require.Equal(t, branch1Rev, *meta2.GetParentBranchRevision())
+	})
 }
