@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/api/handlers"
+	"stackit.dev/stackit/internal/api/watcher"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 )
@@ -28,6 +29,7 @@ type Server struct {
 	gh          github.Client
 	broadcaster *handlers.EventBroadcaster
 	httpServer  *http.Server
+	refWatcher  *watcher.RefWatcher
 }
 
 // NewServer creates a new API server.
@@ -61,6 +63,23 @@ func (s *Server) Start() error {
 	handler := corsMiddleware(s.config.CORSOrigins, mux)
 	handler = loggingMiddleware(handler)
 
+	// Start watching git refs for changes so the engine stays current
+	if s.config.RepoRoot != "" {
+		trunkName := s.eng.Trunk().GetName()
+		s.refWatcher = watcher.NewRefWatcher(s.config.RepoRoot, 200*time.Millisecond, func() {
+			if err := s.eng.Rebuild(trunkName); err != nil {
+				log.Printf("engine rebuild failed: %v", err)
+				return
+			}
+			s.broadcaster.Broadcast("refresh", "{}")
+		})
+		go func() {
+			if err := s.refWatcher.Start(); err != nil {
+				log.Printf("ref watcher stopped: %v", err)
+			}
+		}()
+	}
+
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.config.Port),
 		Handler:           handler,
@@ -73,6 +92,9 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.refWatcher != nil {
+		s.refWatcher.Stop()
+	}
 	if s.httpServer != nil {
 		return s.httpServer.Shutdown(ctx)
 	}

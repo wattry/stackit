@@ -23,7 +23,13 @@ func FormatStackLabel(stack MultiStackInfo) string {
 // Each stack is represented by its root branch (direct child of trunk)
 // and includes all branches in the stack in topological order.
 func DiscoverStacks(eng engine.BranchReader) ([]MultiStackInfo, error) {
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	return DiscoverStacksWithSort(eng, engine.SortStrategyAlphabetical)
+}
+
+// DiscoverStacksWithSort is like DiscoverStacks but allows specifying the sort strategy.
+// Use SortStrategySmart to match the ordering of `stackit log`.
+func DiscoverStacksWithSort(eng engine.BranchReader, strategy engine.SortStrategy) ([]MultiStackInfo, error) {
+	graph := engine.BuildStackGraph(eng, strategy, nil)
 	trunk := eng.Trunk()
 
 	// Get the trunk node to find its direct children (stack roots)

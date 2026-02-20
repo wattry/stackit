@@ -40,13 +40,13 @@ func (h *StacksHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *StacksHandler) listStacks(w http.ResponseWriter) {
-	stacks, err := merge.DiscoverStacks(h.eng)
+	stacks, err := merge.DiscoverStacksWithSort(h.eng, engine.SortStrategySmart)
 	if err != nil {
 		http.Error(w, "failed to discover stacks: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	graph := engine.BuildStackGraph(h.eng, engine.SortStrategyAlphabetical, nil)
+	graph := engine.BuildStackGraph(h.eng, engine.SortStrategySmart, nil)
 
 	summaries := make([]types.StackSummary, 0, len(stacks))
 	for _, stack := range stacks {
@@ -58,7 +58,7 @@ func (h *StacksHandler) listStacks(w http.ResponseWriter) {
 }
 
 func (h *StacksHandler) getStack(w http.ResponseWriter, r *http.Request, rootBranch string) {
-	stacks, err := merge.DiscoverStacks(h.eng)
+	stacks, err := merge.DiscoverStacksWithSort(h.eng, engine.SortStrategySmart)
 	if err != nil {
 		http.Error(w, "failed to discover stacks: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -77,7 +77,7 @@ func (h *StacksHandler) getStack(w http.ResponseWriter, r *http.Request, rootBra
 		return
 	}
 
-	graph := engine.BuildStackGraph(h.eng, engine.SortStrategyAlphabetical, nil)
+	graph := engine.BuildStackGraph(h.eng, engine.SortStrategySmart, nil)
 
 	// Fetch CI checks if GitHub client is available
 	var checksMap map[string]*github.CheckStatus
