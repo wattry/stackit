@@ -27,6 +27,7 @@ Thumbs.db
 bin/
 stackit
 st
+stackit-web
 
 .gocache/
 st-tui
