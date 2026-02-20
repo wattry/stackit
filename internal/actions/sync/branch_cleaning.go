@@ -71,8 +71,14 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 			len(plan.BranchesToDelete), strings.Join(logDetails, ", "))
 	}
 
-	// Phase 2: Get user confirmation for deletions (interactive mode only)
-	var branchesToDelete map[string]bool
+	// Phase 2: Build final deletion set.
+	// Always pass an explicit filter to ExecuteBranchDeletions so any upstream
+	// filtering (e.g. dirty stack exclusions) is enforced in both interactive
+	// and non-interactive flows.
+	branchesToDelete := make(map[string]bool, len(plan.BranchesToDelete))
+	for name := range plan.BranchesToDelete {
+		branchesToDelete[name] = true
+	}
 	if handler.IsInteractive() && len(plan.BranchesToDelete) > 0 {
 		// Auto-confirm utility branches (e.g., consolidated merge branches)
 		// These don't need user confirmation since their PRs are already closed/merged

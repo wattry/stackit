@@ -422,6 +422,71 @@ func TestSyncRemoteMetadata(t *testing.T) {
 	})
 }
 
+func TestSyncSquashMergedRootPreservesChildCommitBoundaries(t *testing.T) {
+	t.Parallel()
+	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	// Create stack: main -> A(2 commits) -> B -> C
+	sh.CreateBranch("branch-a").
+		CommitChange("shared.txt", "a-v1").
+		CommitChange("shared.txt", "a-v2").
+		TrackBranch("branch-a", "main")
+
+	sh.CreateBranch("branch-b").
+		CommitChange("child-b.txt", "b-change").
+		TrackBranch("branch-b", "branch-a")
+
+	sh.CreateBranch("branch-c").
+		CommitChange("child-c.txt", "c-change").
+		TrackBranch("branch-c", "branch-b")
+
+	eng := sh.Engine
+	mainBranchName := eng.Trunk().GetName()
+
+	// Simulate squash merge of branch-a: apply final A tree state on main as one commit.
+	sh.Checkout("main")
+	sh.CommitChange("shared.txt", "a-v2")
+
+	// Mark branch-a PR as merged so sync cleanup deletes it.
+	metaA, err := eng.Git().ReadMetadata("branch-a")
+	require.NoError(t, err)
+	prNum := 1
+	state := prStateMerged
+	base := mainBranchName
+	metaA = metaA.WithPrInfo(&git.PrInfoPersistence{
+		Number: &prNum,
+		State:  &state,
+		Base:   &base,
+	})
+	err = eng.Git().WriteMetadata("branch-a", metaA)
+	require.NoError(t, err)
+
+	// Run sync+restack from main.
+	sh.Checkout("main")
+	err = sync.Action(sh.Context, sync.Options{Restack: true}, nil)
+	require.NoError(t, err)
+
+	allLocalBranches, err := sh.Scene.Repo.GetLocalBranches()
+	require.NoError(t, err)
+	require.NotContains(t, allLocalBranches, "branch-a")
+
+	require.Equal(t, "main", eng.GetBranch("branch-b").GetParent().GetName())
+	require.Equal(t, "branch-b", eng.GetBranch("branch-c").GetParent().GetName())
+
+	// Core regression assertions: B and C keep their own commit boundaries.
+	// If A commits were replayed into B/C, these counts would be inflated.
+	bCount, err := eng.GetCommitCount(eng.GetBranch("branch-b"))
+	require.NoError(t, err)
+	require.Equal(t, 1, bCount)
+
+	cCount, err := eng.GetCommitCount(eng.GetBranch("branch-c"))
+	require.NoError(t, err)
+	require.Equal(t, 1, cCount)
+
+	sh.ExpectBranchFixed("branch-b").
+		ExpectBranchFixed("branch-c")
+}
+
 // createRemoteMetadataRefForSync creates a ref at refs/stackit/remote-metadata/<branch>
 func createRemoteMetadataRefForSync(t *testing.T, sh *scenario.Scenario, branchName string, meta *git.Meta) {
 	t.Helper()

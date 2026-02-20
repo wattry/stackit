@@ -157,9 +157,21 @@ func (s Scope) TitleNeedsUpdate(title string) bool {
 
 // DeletionStatus represents the deletion status of a branch
 type DeletionStatus struct {
-	SafeToDelete bool   // True if the branch is merged, closed, or empty (with PR)
-	Reason       string // Reason why it's safe (or not) to delete
+	SafeToDelete bool               // True if the branch is merged, closed, or empty (with PR)
+	Reason       string             // Human-readable reason why it's safe (or not) to delete
+	Kind         DeletionReasonKind // Machine-readable deletion reason
 }
+
+// DeletionReasonKind is a machine-readable reason for branch deletion eligibility.
+type DeletionReasonKind string
+
+const (
+	DeletionReasonNone            DeletionReasonKind = "none"
+	DeletionReasonClosedPR        DeletionReasonKind = "closed_pr"
+	DeletionReasonMergedPR        DeletionReasonKind = "merged_pr"
+	DeletionReasonMergedIntoTrunk DeletionReasonKind = "merged_into_trunk"
+	DeletionReasonEmptyWithPR     DeletionReasonKind = "empty_with_pr"
+)
 
 // PendingChange represents a changed file in the working directory
 type PendingChange struct {
