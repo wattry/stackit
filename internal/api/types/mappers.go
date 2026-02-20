@@ -98,6 +98,13 @@ func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBran
 	// Compute stack status
 	status := computeStackStatus(graph, allBranches)
 
+	var description string
+	if rootNode != nil {
+		if stackDesc := eng.GetStackDescription(rootNode.Branch); stackDesc != nil && !stackDesc.IsEmpty() {
+			description = stackDesc.Description
+		}
+	}
+
 	return StackSummary{
 		RootBranch:  rootBranch,
 		Title:       title,
@@ -106,6 +113,7 @@ func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBran
 		BranchCount: len(allBranches),
 		PRCount:     prCount,
 		IsCurrent:   isCurrent,
+		Description: description,
 	}
 }
 
