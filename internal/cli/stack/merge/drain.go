@@ -115,6 +115,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 	}
 
 	totalPRs := len(plan.BranchesToMerge)
+	targetBranch := resolveDrainTargetBranch(opts, plan)
 
 	// Apply count limit: 0 means unlimited, positive caps at totalPRs
 	drainTarget := 0 // 0 = unlimited
@@ -185,7 +186,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 		plan, _, err = mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, mergeAction.CreatePlanOptions{
 			Strategy:     mergeAction.StrategyBottomUp,
 			Force:        opts.force,
-			TargetBranch: opts.branch,
+			TargetBranch: targetBranch,
 			Scope:        opts.scope,
 		})
 		if err != nil {
@@ -286,6 +287,16 @@ func remainingBranchNames(branches []mergeAction.BranchMergeInfo) []string {
 		names[i] = b.BranchName
 	}
 	return names
+}
+
+func resolveDrainTargetBranch(opts mergeDrainOptions, plan *mergeAction.Plan) string {
+	if opts.branch != "" {
+		return opts.branch
+	}
+	if plan != nil {
+		return plan.CurrentBranch
+	}
+	return ""
 }
 
 // unlockDrainBranches unlocks any remaining drain-locked branches that still exist.

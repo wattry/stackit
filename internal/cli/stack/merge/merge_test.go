@@ -333,6 +333,32 @@ func TestFormatMergeDrainPlan(t *testing.T) {
 	})
 }
 
+func TestResolveDrainTargetBranch(t *testing.T) {
+	t.Parallel()
+
+	t.Run("uses explicit branch option", func(t *testing.T) {
+		t.Parallel()
+		branch := resolveDrainTargetBranch(mergeDrainOptions{branch: "explicit-branch"}, &mergeAction.Plan{
+			CurrentBranch: "plan-branch",
+		})
+		require.Equal(t, "explicit-branch", branch)
+	})
+
+	t.Run("falls back to plan current branch", func(t *testing.T) {
+		t.Parallel()
+		branch := resolveDrainTargetBranch(mergeDrainOptions{}, &mergeAction.Plan{
+			CurrentBranch: "plan-branch",
+		})
+		require.Equal(t, "plan-branch", branch)
+	})
+
+	t.Run("returns empty when neither option nor plan branch exist", func(t *testing.T) {
+		t.Parallel()
+		branch := resolveDrainTargetBranch(mergeDrainOptions{}, nil)
+		require.Empty(t, branch)
+	})
+}
+
 func TestNewShipCmdSquashAlias(t *testing.T) {
 	t.Parallel()
 
