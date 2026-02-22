@@ -283,3 +283,24 @@ func TestSubmitPreservesLockStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, git.LockReasonUser, meta.GetLockReason(), "Metadata LockReason field should be set")
 }
+
+func TestSubmitDryRunWithWorktreeAnchorParent(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+		WithStack(map[string]string{
+			"wt-anchor": "main",
+			"feature":   "wt-anchor",
+		})
+
+	err := s.Engine.SetBranchType(s.Engine.GetBranch("wt-anchor"), git.BranchTypeWorktreeAnchor)
+	require.NoError(t, err)
+
+	s.Checkout("feature")
+
+	opts := submit.Options{
+		DryRun: true,
+		NoEdit: true,
+	}
+
+	err = submit.Action(s.Context, opts, &noopHandler{})
+	require.NoError(t, err, "submit dry-run should treat worktree-anchor parent as trunk for validation/base resolution")
+}

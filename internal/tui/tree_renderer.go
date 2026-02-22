@@ -35,8 +35,10 @@ func NewStackTreeRendererWithOptions(eng engine.BranchReader, strategy engine.So
 // graphData implements tree.Data using an engine.StackGraph.
 // This decouples the tree renderer from the engine package.
 type graphData struct {
-	graph *engine.StackGraph
-	eng   engine.BranchReader
+	graph            *engine.StackGraph
+	eng              engine.BranchReader
+	visibleAnchors   map[string]bool
+	flattenedChildOf map[string][]string
 }
 
 // CurrentBranch returns the currently checked out branch.
@@ -55,7 +57,32 @@ func (d *graphData) Children(branchName string) []string {
 	if node == nil {
 		return nil
 	}
-	return d.graph.Children(node.Branch)
+
+	// Cache flattened children for this parent since tree rendering
+	// repeatedly asks for children during traversal.
+	if d.flattenedChildOf != nil {
+		if cached, ok := d.flattenedChildOf[branchName]; ok {
+			return cached
+		}
+	}
+
+	rawChildren := d.graph.Children(node.Branch)
+	if len(rawChildren) == 0 {
+		if d.flattenedChildOf != nil {
+			d.flattenedChildOf[branchName] = nil
+		}
+		return nil
+	}
+
+	result := make([]string, 0, len(rawChildren))
+	for _, childName := range rawChildren {
+		result = append(result, d.flattenHiddenAnchors(childName)...)
+	}
+
+	if d.flattenedChildOf != nil {
+		d.flattenedChildOf[branchName] = result
+	}
+	return result
 }
 
 // Parent returns the parent branch of the given branch.
@@ -64,7 +91,20 @@ func (d *graphData) Parent(branchName string) string {
 	if node == nil {
 		return ""
 	}
-	return d.graph.Parent(node.Branch)
+
+	parent := d.graph.Parent(node.Branch)
+	for parent != "" {
+		if !d.isHiddenAnchor(parent) {
+			return parent
+		}
+		parentNode := d.graph.GetNode(parent)
+		if parentNode == nil {
+			return ""
+		}
+		parent = d.graph.Parent(parentNode.Branch)
+	}
+
+	return ""
 }
 
 // IsTrunk returns whether the given branch is the trunk branch.
@@ -81,15 +121,42 @@ func (d *graphData) IsFixed(branchName string) bool {
 	return d.eng.IsUpToDate(node.Branch)
 }
 
+func (d *graphData) isHiddenAnchor(branchName string) bool {
+	node := d.graph.GetNode(branchName)
+	if node == nil || !node.Branch.IsWorktreeAnchor() {
+		return false
+	}
+	return !d.visibleAnchors[branchName]
+}
+
+func (d *graphData) flattenHiddenAnchors(branchName string) []string {
+	node := d.graph.GetNode(branchName)
+	if node == nil {
+		return nil
+	}
+	if !d.isHiddenAnchor(branchName) {
+		return []string{branchName}
+	}
+
+	children := d.graph.Children(node.Branch)
+	if len(children) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(children))
+	for _, childName := range children {
+		result = append(result, d.flattenHiddenAnchors(childName)...)
+	}
+	return result
+}
+
 // newStackTreeRendererInternal is the internal implementation that handles all renderer options
 func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortStrategy, filter func(string) bool, emptyWorktrees map[string]bool) *tree.StackTreeRenderer {
 	branchFilter := func(b engine.Branch) bool {
 		if b.IsWorktreeAnchor() {
-			// Show empty worktree anchors if they're in the set
-			if emptyWorktrees != nil {
-				return emptyWorktrees[b.GetName()]
-			}
-			return false
+			// Keep anchors in the graph so children remain connected even when
+			// anchors are hidden from rendering.
+			return true
 		}
 		// Apply user-provided filter if any
 		if filter != nil {
@@ -102,8 +169,10 @@ func newStackTreeRendererInternal(eng engine.BranchReader, strategy engine.SortS
 
 	// Use the Data interface instead of callback functions
 	data := &graphData{
-		graph: graph,
-		eng:   eng,
+		graph:            graph,
+		eng:              eng,
+		visibleAnchors:   emptyWorktrees,
+		flattenedChildOf: make(map[string][]string),
 	}
 
 	return tree.NewRenderer(data)
@@ -181,7 +250,8 @@ func GetMinimalAnnotationWithWorktreeAndEmpty(eng engine.Engine, branch engine.B
 
 // addWorktreeInfo populates worktree-related fields on a BranchAnnotation.
 // If the branch is an empty worktree anchor, it sets IsEmptyWorktree and WorktreePath.
-// Otherwise, if the branch is a stack root with a managed worktree, it sets WorktreePath.
+// Otherwise, if the branch belongs to a stack that has a managed worktree,
+// it sets WorktreePath so stack ownership is visible on every branch.
 // When wtData is provided, uses O(1) map lookups instead of calling GetWorktreeForStack.
 func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAnnotation, wtData *WorktreeData) {
 	if wtData != nil {
@@ -193,15 +263,13 @@ func addWorktreeInfo(eng engine.Engine, branch engine.Branch, ann *tree.BranchAn
 	}
 
 	stackRoot := eng.GetStackRootForBranch(branch)
-	if stackRoot == branch.GetName() {
-		// Use pre-built map if available, otherwise fall back to engine call
-		if wtData != nil {
-			if wtInfo, ok := wtData.WorktreeByStackRoot[stackRoot]; ok {
-				ann.WorktreePath = wtInfo.Path
-			}
-		} else if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+	// Use pre-built map if available, otherwise fall back to engine call.
+	if wtData != nil {
+		if wtInfo, ok := wtData.WorktreeByStackRoot[stackRoot]; ok {
 			ann.WorktreePath = wtInfo.Path
 		}
+	} else if wtInfo, err := eng.GetWorktreeForStack(stackRoot); err == nil && wtInfo != nil {
+		ann.WorktreePath = wtInfo.Path
 	}
 }
 
