@@ -71,10 +71,11 @@ func ValidateBranchesToSubmit(ctx *app.Context, branches []string) error {
 // 3. Its base matches the existing head for its parent's PR
 func validateBaseRevisions(branches []string, eng engine.BranchStatus, ctx *app.Context) error {
 	validatedBranches := make(map[string]bool)
+	nav := ctx.Navigator()
 
 	for _, branchName := range branches {
 		branch := eng.GetBranch(branchName)
-		parentBranchName := branch.GetParentOrTrunk()
+		parentBranchName := resolveSubmitParentName(nav, branch)
 
 		parentBranch := eng.GetBranch(parentBranchName)
 		switch {
