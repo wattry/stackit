@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/errors"
@@ -80,11 +81,17 @@ as an argument to move multiple levels at once.`,
 				}
 
 				// Checkout the target branch
-				if err := ctx.Engine.CheckoutBranch(ctx.Context, targetBranch); err != nil {
-					return fmt.Errorf("failed to checkout branch %s: %w", targetBranch.GetName(), err)
+				result, err := actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch.GetName()}, nil)
+				if err != nil {
+					return err
 				}
-
-				ctx.Output.Info("Checked out %s.", style.ColorBranchName(targetBranch.GetName(), false))
+				if common.HandleCheckoutResult(ctx.Output, result) {
+					return nil
+				}
+				if result.WorktreeSwitchPath != "" {
+					_, err = actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch.GetName(), SkipWorktreeSwitch: true}, nil)
+					return err
+				}
 				return nil
 			})
 		},

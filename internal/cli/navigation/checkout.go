@@ -57,21 +57,13 @@ by typing. Use flags to customize which branches are shown.`,
 				}
 
 				if result.WorktreeSwitchPath != "" {
-					if common.HasShellIntegration() {
-						ctx.Output.DirectiveCD(result.WorktreeSwitchPath)
-						if len(result.RerunArgs) > 0 {
-							ctx.Output.DirectiveRerun(result.RerunArgs...)
-						}
-					} else {
-						// No shell integration - print tips and fall back to regular checkout
-						for _, tip := range result.FallbackTips {
-							ctx.Output.Tip("%s", tip)
-						}
-						// Retry with worktree switch logic disabled to perform actual checkout
-						opts.SkipWorktreeSwitch = true
-						_, err = actions.CheckoutAction(ctx, opts, handler)
-						return err
+					if common.HandleCheckoutResult(ctx.Output, result) {
+						return nil
 					}
+					// No shell integration - fall back to regular checkout
+					opts.SkipWorktreeSwitch = true
+					_, err = actions.CheckoutAction(ctx, opts, handler)
+					return err
 				}
 
 				return nil

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
@@ -133,12 +134,17 @@ the --to flag is used to specify a target branch to navigate towards.`,
 				}
 
 				// Checkout the target branch
-				targetBranchObj := ctx.Engine.GetBranch(targetBranch)
-				if err := ctx.Engine.CheckoutBranch(ctx.Context, targetBranchObj); err != nil {
-					return fmt.Errorf("failed to checkout branch %s: %w", targetBranch, err)
+				result, err := actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch}, nil)
+				if err != nil {
+					return err
 				}
-
-				ctx.Output.Info("Checked out %s.", style.ColorBranchName(targetBranch, false))
+				if common.HandleCheckoutResult(ctx.Output, result) {
+					return nil
+				}
+				if result.WorktreeSwitchPath != "" {
+					_, err = actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch, SkipWorktreeSwitch: true}, nil)
+					return err
+				}
 				return nil
 			})
 		},
