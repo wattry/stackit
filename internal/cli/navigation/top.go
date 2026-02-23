@@ -25,7 +25,14 @@ to follow.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
 				handler := stack.NewNavigationUI(ctx.Output, utils.IsInteractive())
-				return navigation.SwitchBranchAction(navigation.DirectionTop, ctx, handler)
+				result, err := navigation.SwitchBranchAction(navigation.DirectionTop, ctx, handler)
+				if err != nil {
+					return err
+				}
+				if common.HandleCheckoutResult(ctx.Output, result) {
+					return nil
+				}
+				return nil
 			})
 		},
 	}

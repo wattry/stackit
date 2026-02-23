@@ -43,7 +43,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch2")
 
 		// Traverse downward should go to branch1 (first branch from trunk)
-		err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should be on branch1
@@ -63,7 +63,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		// Traverse upward should go to branch2 (top of stack)
-		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, nil)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should be on branch2
@@ -78,7 +78,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		// Detach HEAD
 		s.RunGit("checkout", "HEAD~0").Rebuild()
 
-		err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
 		require.Error(t, err)
 	})
 
@@ -92,7 +92,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		// Already on branch1 (bottom of stack)
-		err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionBottom, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should still be on branch1
@@ -111,7 +111,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		s.Checkout("branch1")
 
 		// Already at top
-		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, nil)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, nil)
 		require.NoError(t, err)
 
 		// Should still be on branch1
@@ -137,7 +137,7 @@ func TestSwitchBranchAction(t *testing.T) {
 		}
 
 		// Should return error because multiple children and non-interactive
-		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, handler)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, handler)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "multiple branches found")
 		require.Contains(t, err.Error(), "non-interactive")
@@ -160,7 +160,7 @@ func TestSwitchBranchAction(t *testing.T) {
 			branchToReturn: "child1",
 		}
 
-		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, handler)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, handler)
 		require.NoError(t, err)
 		require.True(t, handler.promptSelectCalled)
 		require.Contains(t, handler.lastBranches, "child1")
@@ -190,7 +190,7 @@ func TestSwitchBranchAction(t *testing.T) {
 			branchToReturn: "child1",
 		}
 
-		err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, handler)
+		_, err := navigation.SwitchBranchAction(navigation.DirectionTop, s.Context, handler)
 		require.NoError(t, err)
 		require.True(t, handler.promptSelectCalled)
 

@@ -39,16 +39,7 @@ func handlePostMergeAction(ctx *app.Context, action mergeAction.PostMergeAction)
 		}
 
 		if result.WorktreeSwitchPath != "" {
-			if common.HasShellIntegration() {
-				ctx.Output.DirectiveCD(result.WorktreeSwitchPath)
-				if len(result.RerunArgs) > 0 {
-					ctx.Output.DirectiveRerun(result.RerunArgs...)
-				}
-			} else {
-				for _, tip := range result.FallbackTips {
-					ctx.Output.Tip("%s", tip)
-				}
-			}
+			common.HandleCheckoutResult(ctx.Output, result)
 		}
 
 		runner, handler := NewSyncUI(ctx.Output, ctx.Logger)

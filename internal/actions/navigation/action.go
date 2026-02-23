@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -20,7 +21,7 @@ const (
 )
 
 // SwitchBranchAction switches to a branch based on the given direction
-func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) error {
+func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) (actions.CheckoutResult, error) {
 	if handler == nil {
 		handler = &NullHandler{}
 	}
@@ -28,7 +29,7 @@ func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) 
 
 	currentBranch := ctx.Engine.CurrentBranch()
 	if currentBranch == nil {
-		return errors.ErrNotOnBranch
+		return actions.CheckoutResult{}, errors.ErrNotOnBranch
 	}
 
 	var targetBranch string
@@ -42,10 +43,10 @@ func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) 
 	case DirectionTop:
 		targetBranch, err = traverseUpward(currentBranch.GetName(), ctx, graph, handler)
 		if err != nil {
-			return err
+			return actions.CheckoutResult{}, err
 		}
 	default:
-		return fmt.Errorf("invalid direction: %s", direction)
+		return actions.CheckoutResult{}, fmt.Errorf("invalid direction: %s", direction)
 	}
 
 	if targetBranch == currentBranch.GetName() {
@@ -54,17 +55,16 @@ func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) 
 			directionText = "top most"
 		}
 		ctx.Output.Info("Already at the %s branch in the stack.", directionText)
-		return nil
+		return actions.CheckoutResult{}, nil
 	}
 
 	// Checkout the target branch
-	targetBranchObj := ctx.Engine.GetBranch(targetBranch)
-	if err := ctx.Engine.CheckoutBranch(ctx.Context, targetBranchObj); err != nil {
-		return fmt.Errorf("failed to checkout branch %s: %w", targetBranch, err)
+	result, err := actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch}, nil)
+	if err != nil {
+		return actions.CheckoutResult{}, fmt.Errorf("failed to checkout branch %s: %w", targetBranch, err)
 	}
 
-	ctx.Output.Info("Checked out %s.", targetBranch)
-	return nil
+	return result, nil
 }
 
 // traverseDownward walks down the parent chain to find the first branch from trunk
