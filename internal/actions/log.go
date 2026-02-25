@@ -37,7 +37,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 	// If interactive mode is requested or auto-detected
 	if opts.Interactive || (utils.IsInteractive() && opts.Steps == nil) {
 		// Run interactive TUI
-		m := tui.NewLogModel(ctx.Context, ctx.Engine, ctx.GitHubClient, tui.LogOptions{
+		m := tui.NewLogModel(ctx.Context, ctx.Engine, ctx.GitHub(), tui.LogOptions{
 			Style:         opts.Style,
 			ShowUntracked: opts.ShowUntracked,
 			Logger:        ctx.Logger,
@@ -81,7 +81,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 
 	// Prefetch CI status in batch if in FULL style
 	var ciStatuses map[string]*github.CheckStatus
-	if opts.Style == LogStyleFull && ctx.GitHubClient != nil {
+	if opts.Style == LogStyleFull && ctx.GitHub() != nil {
 		branchNames := make([]string, 0, len(allBranches))
 		for _, b := range allBranches {
 			if !b.IsTrunk() {
@@ -89,7 +89,7 @@ func LogAction(ctx *app.Context, opts LogOptions) error {
 			}
 		}
 		if len(branchNames) > 0 {
-			ciStatuses, _ = ctx.GitHubClient.BatchGetPRChecksStatus(ctx.Context, branchNames)
+			ciStatuses, _ = ctx.GitHub().BatchGetPRChecksStatus(ctx.Context, branchNames)
 		}
 	}
 

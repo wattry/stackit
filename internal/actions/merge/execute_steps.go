@@ -86,7 +86,7 @@ func validateStepPreconditions(ctx context.Context, step PlanStep, eng mergeExec
 func executeUpdatePRBase(ctx *app.Context, eng mergeExecuteEngine, step PlanStep) error {
 	trunk := eng.Trunk()
 	trunkName := trunk.GetName()
-	githubClient := ctx.GitHubClient
+	githubClient := ctx.GitHub()
 
 	// Get the parent revision (old base)
 	branch := eng.GetBranch(step.BranchName)
@@ -214,7 +214,7 @@ func executeWaitCIWithProgress(ctx *app.Context, step PlanStep, stepIndex int, e
 	}
 
 	waiter := NewCIWaiter(CIWaiterOptions{
-		Client:  ctx.GitHubClient,
+		Client:  ctx.GitHub(),
 		Output:  ctx.Output,
 		Timeout: timeout,
 	})

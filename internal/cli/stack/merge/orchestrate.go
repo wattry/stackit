@@ -82,7 +82,7 @@ func (d *defaultPRMergeAPI) mergePR(ctx context.Context, branchName string, meth
 //     - "not enabled on repo" + wait → poll until mergeable, then merge directly.
 //     - "not enabled on repo" + no wait → error with --wait suggestion.
 func orchestrateMerge(ctx *app.Context, opts orchestrateMergeOptions) (Outcome, error) {
-	api := &defaultPRMergeAPI{client: ctx.GitHubClient}
+	api := &defaultPRMergeAPI{client: ctx.GitHub()}
 	return doOrchestrateMerge(ctx.Context, ctx.Output, ctx.Engine.Git(), api, opts)
 }
 

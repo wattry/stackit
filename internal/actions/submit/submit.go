@@ -385,8 +385,8 @@ func submitBranch(ctx *app.Context, info Info, opts Options, handler Handler, re
 
 // getGitHubClient returns the GitHub client from context
 func getGitHubClient(ctx *app.Context) (github.Client, error) {
-	if ctx.GitHubClient != nil {
-		return ctx.GitHubClient, nil
+	if ctx.GitHub() != nil {
+		return ctx.GitHub(), nil
 	}
 	return nil, fmt.Errorf("no GitHub client available - check your GITHUB_TOKEN")
 }
@@ -438,7 +438,7 @@ func createPullRequestQuiet(ctx *app.Context, submissionInfo Info, repoOwner, re
 		Labels:        submissionInfo.Metadata.Labels,
 		Assignees:     submissionInfo.Metadata.Assignees,
 	}
-	prResult, err := ctx.GitHubClient.CreatePullRequest(ctx.Context, repoOwner, repoName, createOpts)
+	prResult, err := ctx.GitHub().CreatePullRequest(ctx.Context, repoOwner, repoName, createOpts)
 	if err != nil {
 		return "", fmt.Errorf("failed to create PR for %s: %w", submissionInfo.BranchName, err)
 	}
@@ -523,7 +523,7 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		}
 	}
 
-	updateWarnings, err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts)
+	updateWarnings, err := ctx.GitHub().UpdatePullRequest(ctx.Context, repoOwner, repoName, *submissionInfo.PRNumber, updateOpts)
 	if err != nil {
 		return "", fmt.Errorf("failed to update PR for %s: %w", submissionInfo.BranchName, err)
 	}
@@ -540,7 +540,7 @@ func updatePullRequestQuiet(ctx *app.Context, submissionInfo Info, opts Options,
 		prURL = prInfo.URL()
 	} else {
 		// Get from GitHub
-		prResult, err := ctx.GitHubClient.GetPullRequestByBranch(ctx.Context, repoOwner, repoName, submissionInfo.BranchName)
+		prResult, err := ctx.GitHub().GetPullRequestByBranch(ctx.Context, repoOwner, repoName, submissionInfo.BranchName)
 		if err == nil && prResult != nil {
 			prURL = prResult.HTMLURL
 		}

@@ -80,10 +80,10 @@ func PreparePRMetadata(branch engine.Branch, opts MetadataOptions, ctx *app.Cont
 	shouldEditBody := opts.EditDescription || (opts.Edit && !opts.NoEditDescription)
 
 	// If PR exists and local metadata is missing title or body, fetch from GitHub
-	if prInfo != nil && prInfo.Number() != nil && (metadata.Title == "" || metadata.Body == "") && ctx.GitHubClient != nil {
-		repoOwner, repoName := ctx.GitHubClient.GetOwnerRepo()
+	if prInfo != nil && prInfo.Number() != nil && (metadata.Title == "" || metadata.Body == "") && ctx.GitHub() != nil {
+		repoOwner, repoName := ctx.GitHub().GetOwnerRepo()
 		if repoOwner != "" && repoName != "" {
-			currentPR, err := ctx.GitHubClient.GetPullRequest(ctx.Context, repoOwner, repoName, *prInfo.Number())
+			currentPR, err := ctx.GitHub().GetPullRequest(ctx.Context, repoOwner, repoName, *prInfo.Number())
 			if err == nil && currentPR != nil {
 				if metadata.Title == "" {
 					metadata.Title = currentPR.Title

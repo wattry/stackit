@@ -115,7 +115,7 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 	out := ctx.Output
 
 	// Collect branches once (expensive: GitHub API calls) then build plan
-	collected, err := mergeAction.CollectMergeBranches(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHubClient, mergeAction.CreatePlanOptions{
+	collected, err := mergeAction.CollectMergeBranches(ctx.Context, ctx.Engine, ctx.Output, ctx.GitHub(), mergeAction.CreatePlanOptions{
 		Strategy:     mergeAction.StrategyShip,
 		Force:        opts.force,
 		Scope:        opts.scope,
@@ -145,7 +145,7 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 	}
 
 	// Fail fast if no GitHub client
-	if ctx.GitHubClient == nil {
+	if ctx.GitHub() == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
@@ -221,7 +221,7 @@ func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {
 		return fmt.Errorf("no independent stacks found rooted at trunk")
 	}
 
-	if !opts.dryRun && ctx.GitHubClient == nil {
+	if !opts.dryRun && ctx.GitHub() == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
@@ -311,7 +311,7 @@ func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {
 			out.Warn("Could not enable automerge: %v", err)
 			out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
 		} else {
-			mergeMethod, methodErr := mergeAction.GetMergeMethod(ctx, ctx.GitHubClient)
+			mergeMethod, methodErr := mergeAction.GetMergeMethod(ctx, ctx.GitHub())
 			if methodErr != nil {
 				out.Warn("Could not determine merge method: %v", methodErr)
 				out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
@@ -334,8 +334,8 @@ func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {
 
 // getPRNodeID fetches the NodeID for a PR by number
 func getPRNodeID(ctx *app.Context, prNumber int) (string, error) {
-	owner, repo := ctx.GitHubClient.GetOwnerRepo()
-	prInfo, err := ctx.GitHubClient.GetPullRequest(ctx.Context, owner, repo, prNumber)
+	owner, repo := ctx.GitHub().GetOwnerRepo()
+	prInfo, err := ctx.GitHub().GetPullRequest(ctx.Context, owner, repo, prNumber)
 	if err != nil {
 		return "", err
 	}
