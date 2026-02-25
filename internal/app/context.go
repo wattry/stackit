@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/engine"
@@ -29,6 +30,9 @@ type Context struct {
 	GitHubClient github.Client
 	Config       config.Configurer // Cached config to avoid repeated loading
 
+	// Lazy GitHub client initialization (pointer so Context is safe to copy)
+	githubLazy *githubLazy
+
 	// Global settings from flags
 	Interactive bool
 	Verify      bool
@@ -40,6 +44,13 @@ type Context struct {
 	WorktreeInfo      *engine.WorktreeInfo // Info about current worktree (nil if not in managed worktree)
 }
 
+// githubLazy holds the lazy-initialization state for the GitHub client.
+// Stored as a pointer in Context so copying Context is safe (no sync.Once copy).
+type githubLazy struct {
+	once     sync.Once
+	initFunc func() github.Client
+}
+
 // Git returns the git runner from the engine.
 // Panics if the Engine is nil, which indicates a programming error.
 func (c *Context) Git() git.Runner {
@@ -47,6 +58,20 @@ func (c *Context) Git() git.Runner {
 		panic("Context.Git() called with nil Engine - this is a programming error")
 	}
 	return c.Engine.Git()
+}
+
+// GitHub returns the GitHub client, lazily initializing it on first access.
+// If GitHubClient was set directly (e.g. in tests), it is returned immediately.
+func (c *Context) GitHub() github.Client {
+	if c.GitHubClient != nil {
+		return c.GitHubClient
+	}
+	if c.githubLazy != nil {
+		c.githubLazy.once.Do(func() {
+			c.GitHubClient = c.githubLazy.initFunc()
+		})
+	}
+	return c.GitHubClient
 }
 
 // Navigator returns the stack navigator from the engine.
@@ -298,10 +323,15 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 	runtimeCtx.Context = ctx
 	runtimeCtx.Config = cfg // Store config for reuse
 
-	// Try to create real GitHub client (may fail if no token)
-	ghClient, err := github.NewGitHubClient(ctx, runtimeCtx.Git())
-	if err == nil {
-		runtimeCtx.GitHubClient = ghClient
+	// Lazy-initialize GitHub client on first access via GitHub()
+	runtimeCtx.githubLazy = &githubLazy{
+		initFunc: func() github.Client {
+			ghClient, err := github.NewGitHubClient(context.Background(), gitRunner)
+			if err != nil {
+				return nil
+			}
+			return ghClient
+		},
 	}
 
 	return runtimeCtx, nil
