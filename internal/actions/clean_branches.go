@@ -26,6 +26,7 @@ type CleanBranchesResult struct {
 	DeletedBranches        map[string]string // name -> reason
 	BranchesWithNewParents []string
 	SkippedInWorktree      []string // branches that couldn't be deleted from worktree
+	SkippedUnpushed        []string // branches skipped due to unpushed local changes
 }
 
 // BranchDeletionPlan contains the planned branch deletions before execution
@@ -40,6 +41,9 @@ type BranchDeletionPlan struct {
 	// (e.g., consolidated merge branches). These can be auto-confirmed for deletion
 	// when their associated PR is closed/merged.
 	UtilityBranches map[string]bool
+	// UnpushedBranches tracks which branches in BranchesToDelete have unpushed local changes
+	// (local branch is ahead of or diverged from remote)
+	UnpushedBranches map[string]bool
 	// internal plan for execution
 	plan *deletionPlan
 }
@@ -135,8 +139,14 @@ func PlanBranchDeletions(ctx *app.Context, opts CleanBranchesOptions) (*BranchDe
 
 	// Build the public plan
 	branchesToDelete := make(map[string]string)
+	unpushedBranches := make(map[string]bool)
 	for name, info := range plan.branches {
 		branchesToDelete[name] = info.reason
+	}
+	for name, status := range deleteStatuses {
+		if status.HasUnpushedChanges {
+			unpushedBranches[name] = true
+		}
 	}
 
 	return &BranchDeletionPlan{
@@ -144,6 +154,7 @@ func PlanBranchDeletions(ctx *app.Context, opts CleanBranchesOptions) (*BranchDe
 		BranchesWithNewParents: branchesWithNewParents,
 		SkippedInWorktree:      skippedInWorktree,
 		UtilityBranches:        utilityBranches,
+		UnpushedBranches:       unpushedBranches,
 		plan:                   plan,
 	}, nil
 }
@@ -220,15 +231,22 @@ func identifyBranchesToDelete(ctx *app.Context, opts CleanBranchesOptions) (map[
 			continue
 		}
 
+		// Check if local branch has unpushed changes relative to remote
+		branch := eng.GetBranch(name)
+		remoteStatus, err := eng.GetBranchRemoteStatus(branch)
+		if err == nil && (remoteStatus.Ahead() || remoteStatus.Diverged()) {
+			status.HasUnpushedChanges = true
+			ctx.Logger.Info("identifyBranchesToDelete branch has unpushed changes branch=%v ahead=%v diverged=%v", name, remoteStatus.Ahead(), remoteStatus.Diverged())
+		}
+
 		deleteStatuses[name] = status
 
 		// Track utility branches using in-memory branch state (no extra fetch)
-		branch := eng.GetBranch(name)
 		if eng.GetBranchType(branch) == git.BranchTypeUtility {
 			utilityBranches[name] = true
 		}
 
-		ctx.Logger.Info("identifyBranchesToDelete marked for deletion branch=%v reason=%v", name, status.Reason)
+		ctx.Logger.Info("identifyBranchesToDelete marked for deletion branch=%v reason=%v unpushed=%v", name, status.Reason, status.HasUnpushedChanges)
 	}
 
 	ctx.Logger.Info("identifyBranchesToDelete completed toDeleteCount=%v skippedCount=%v", len(deleteStatuses), len(skippedInWorktree))
