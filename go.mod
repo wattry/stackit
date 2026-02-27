@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.0
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/gertd/go-pluralize v0.2.1
-	github.com/go-git/go-git/v5 v5.17.0
+	github.com/go-git/go-git/v5 v5.16.5
 	github.com/google/go-github/v62 v62.0.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/sahilm/fuzzy v0.1.1
