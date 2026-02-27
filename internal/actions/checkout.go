@@ -29,6 +29,7 @@ type CheckoutResult struct {
 	WorktreeSwitchPath string
 	RerunArgs          []string
 	FallbackTips       []string
+	TargetBranch       string
 }
 
 // CheckoutHandler abstracts TTY vs non-TTY interactions for checkout operations
@@ -119,6 +120,7 @@ func CheckoutAction(ctx *app.Context, opts CheckoutOptions, handler CheckoutHand
 				WorktreeSwitchPath: switchPath,
 				RerunArgs:          rerunArgs,
 				FallbackTips:       fallbackTips,
+				TargetBranch:       branchName,
 			}, nil
 		}
 	}

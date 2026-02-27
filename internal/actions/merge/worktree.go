@@ -49,8 +49,8 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 		return fmt.Errorf("failed to initialize engine in worktree: %w", err)
 	}
 
-	// Create a sub-context for the worktree
-	worktreeCtx := *ctx //nolint:govet // copylocks: sync.Once is zero-valued here; both copies independently lazy-init
+	// Create a sub-context for the worktree.
+	worktreeCtx := *ctx //nolint:govet // Copying Context by value is intentional when overriding engine/repo output fields.
 	worktreeCtx.Engine = worktreeEng
 	worktreeCtx.RepoRoot = worktreePath
 

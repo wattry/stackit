@@ -62,8 +62,8 @@ func (p *MultiStackPRCreator) CreateAndPushBranch(ctx context.Context, branchNam
 
 // CreatePR creates the multi-stack pull request
 func (p *MultiStackPRCreator) CreatePR(ctx context.Context, branchName string, included []MultiStackInfo, excluded []MultiStackExcluded) (*github.PullRequestInfo, error) {
-	if p.ctx.GitHub() == nil {
-		return nil, fmt.Errorf("GitHub client not available")
+	if _, err := p.ctx.RequireGitHub(); err != nil {
+		return nil, err
 	}
 
 	owner, repo := p.ctx.GitHub().GetOwnerRepo()
@@ -91,8 +91,8 @@ func (p *MultiStackPRCreator) CreatePR(ctx context.Context, branchName string, i
 
 // WaitAndMerge waits for CI to pass and auto-merges the PR
 func (p *MultiStackPRCreator) WaitAndMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo) error {
-	if p.ctx.GitHub() == nil {
-		return fmt.Errorf("GitHub client not available for wait")
+	if _, err := p.ctx.RequireGitHub(); err != nil {
+		return err
 	}
 
 	// Load config for merge method

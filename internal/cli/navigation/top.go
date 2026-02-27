@@ -3,6 +3,7 @@ package navigation
 import (
 	"github.com/spf13/cobra"
 
+	"stackit.dev/stackit/internal/actions"
 	"stackit.dev/stackit/internal/actions/navigation"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/cli/common"
@@ -31,6 +32,13 @@ to follow.`,
 				}
 				if common.HandleCheckoutResult(ctx.Output, result) {
 					return nil
+				}
+				if result.WorktreeSwitchPath != "" {
+					_, err = actions.CheckoutAction(ctx, actions.CheckoutOptions{
+						BranchName:         result.TargetBranch,
+						SkipWorktreeSwitch: true,
+					}, nil)
+					return err
 				}
 				return nil
 			})

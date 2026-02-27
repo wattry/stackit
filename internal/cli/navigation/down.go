@@ -60,6 +60,10 @@ as an argument to move multiple levels at once.`,
 				targetBranch := *currentBranch
 				for i := 0; i < steps; i++ {
 					parent := targetBranch.GetParent()
+					// Skip worktree anchors transparently
+					for parent != nil && parent.IsWorktreeAnchor() {
+						parent = parent.GetParent()
+					}
 					if parent == nil {
 						// No parent found - branch is untracked or we've gone past trunk
 						if i == 0 {

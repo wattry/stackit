@@ -49,6 +49,7 @@ type Context struct {
 type githubLazy struct {
 	once     sync.Once
 	initFunc func() (github.Client, error)
+	client   github.Client
 	initErr  error
 }
 
@@ -75,8 +76,13 @@ func (c *Context) GitHub() github.Client {
 				c.githubLazy.initErr = err
 				return
 			}
-			c.GitHubClient = client
+			c.githubLazy.client = client
 		})
+		// Cache on this specific Context instance for compatibility with
+		// existing direct field reads, while source of truth stays shared.
+		if c.githubLazy.client != nil {
+			c.GitHubClient = c.githubLazy.client
+		}
 	}
 	return c.GitHubClient
 }
@@ -87,6 +93,19 @@ func (c *Context) GitHubError() error {
 		return c.githubLazy.initErr
 	}
 	return nil
+}
+
+// RequireGitHub returns the GitHub client or an error explaining why it's unavailable.
+// Use this instead of checking GitHub() == nil manually.
+func (c *Context) RequireGitHub() (github.Client, error) {
+	client := c.GitHub()
+	if client != nil {
+		return client, nil
+	}
+	if err := c.GitHubError(); err != nil {
+		return nil, fmt.Errorf("GitHub client not available: %w", err)
+	}
+	return nil, fmt.Errorf("GitHub client not available — check your GITHUB_TOKEN or run 'gh auth login'")
 }
 
 // Navigator returns the stack navigator from the engine.
@@ -341,7 +360,7 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 	// Lazy-initialize GitHub client on first access via GitHub()
 	runtimeCtx.githubLazy = &githubLazy{
 		initFunc: func() (github.Client, error) {
-			return github.NewGitHubClient(context.Background(), gitRunner)
+			return github.NewGitHubClient(ctx, gitRunner)
 		},
 	}
 

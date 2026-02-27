@@ -286,7 +286,7 @@ func (m *shippableModel) selectedStacks() []shippable.Stack {
 // Use this for actions running inside tea.Cmd to prevent stdout writes
 // from conflicting with the running bubbletea program.
 func (m *shippableModel) quietCtx() *app.Context {
-	ctx := *m.ctx //nolint:govet // copylocks: sync.Once is zero-valued here; both copies independently lazy-init
+	ctx := *m.ctx //nolint:govet // Copying Context by value is intentional when silencing output for background TUI actions.
 	ctx.Output = output.NewNullOutput()
 	return &ctx
 }

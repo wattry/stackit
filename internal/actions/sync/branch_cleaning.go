@@ -2,6 +2,7 @@ package sync
 
 import (
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -86,8 +87,8 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 		branchesToPrompt := make(map[string]string)
 
 		for name, reason := range plan.BranchesToDelete {
-			if plan.UtilityBranches[name] {
-				// Utility branch - auto-confirm without prompting
+			if plan.UtilityBranches[name] && !plan.UnpushedBranches[name] {
+				// Utility branch with no unpushed local changes - auto-confirm without prompting.
 				branchesToDelete[name] = true
 				ctx.Output.Info("Auto-deleting utility branch %s (%s)",
 					style.ColorBranchName(name, false), reason)
@@ -124,6 +125,7 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 			result.SkippedUnpushed = append(result.SkippedUnpushed, name)
 		}
 	}
+	slices.Sort(result.SkippedUnpushed)
 
 	ctx.Logger.Info("clean branches completed durationMs=%d deletedCount=%d", time.Since(cleanStart).Milliseconds(), len(result.DeletedBranches))
 

@@ -125,8 +125,8 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	} else {
 		// Check if it's a PR number
 		if prNum, err := strconv.Atoi(branchOrPR); err == nil {
-			if ctx.GitHub() == nil {
-				return fmt.Errorf("GitHub client not configured; cannot resolve PR #%d", prNum)
+			if _, err := ctx.RequireGitHub(); err != nil {
+				return fmt.Errorf("cannot resolve PR #%d: %w", prNum, err)
 			}
 			owner, repo := ctx.GitHub().GetOwnerRepo()
 			pr, err := ctx.GitHub().GetPullRequest(gctx, owner, repo, prNum)
