@@ -1,7 +1,6 @@
 package merge
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -12,10 +11,7 @@ import (
 
 // viewString extracts the string content from a tea.View for test assertions.
 func viewString(v tea.View) string {
-	if v.Content == nil {
-		return ""
-	}
-	return fmt.Sprint(v.Content)
+	return v.Content
 }
 
 func TestModel_EmptyPlan(t *testing.T) {
