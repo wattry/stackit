@@ -124,7 +124,7 @@ func trackBranchRecursively(ctx *app.Context, branchName string, handler Handler
 
 		// If auto-detection didn't find a valid parent, prompt interactively
 		if parentBranch == "" {
-			parentBranch, err = handler.PromptSelectParent(ctx.Context, ctx.Engine, ctx.GitHubClient, ctx.Logger, branchName)
+			parentBranch, err = handler.PromptSelectParent(ctx.Context, ctx.Engine, ctx.GitHub(), ctx.Logger, branchName)
 			if err != nil {
 				return err
 			}

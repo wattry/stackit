@@ -31,7 +31,7 @@ func Action(ctx *app.Context, opts Options) error {
 		var validation *PlanValidation
 		if plan == nil {
 			var err error
-			plan, validation, err = CreateMergePlan(ctx.Context, eng, ctx.Output, ctx.GitHubClient, CreatePlanOptions{
+			plan, validation, err = CreateMergePlan(ctx.Context, eng, ctx.Output, ctx.GitHub(), CreatePlanOptions{
 				Strategy:     opts.Strategy,
 				Force:        opts.Force,
 				Scope:        opts.Scope,

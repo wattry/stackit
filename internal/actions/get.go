@@ -125,11 +125,11 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	} else {
 		// Check if it's a PR number
 		if prNum, err := strconv.Atoi(branchOrPR); err == nil {
-			if ctx.GitHubClient == nil {
+			if ctx.GitHub() == nil {
 				return fmt.Errorf("GitHub client not configured; cannot resolve PR #%d", prNum)
 			}
-			owner, repo := ctx.GitHubClient.GetOwnerRepo()
-			pr, err := ctx.GitHubClient.GetPullRequest(gctx, owner, repo, prNum)
+			owner, repo := ctx.GitHub().GetOwnerRepo()
+			pr, err := ctx.GitHub().GetPullRequest(gctx, owner, repo, prNum)
 			if err != nil {
 				return fmt.Errorf("failed to get PR #%d: %w", prNum, err)
 			}
@@ -168,11 +168,11 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	parentMap := make(map[string]string)
 
 	// Crawl ancestors using GitHub PR info if possible
-	if ctx.GitHubClient != nil {
+	if ctx.GitHub() != nil {
 		current := targetBranch
-		owner, repo := ctx.GitHubClient.GetOwnerRepo()
+		owner, repo := ctx.GitHub().GetOwnerRepo()
 		for {
-			pr, err := ctx.GitHubClient.GetPullRequestByBranch(gctx, owner, repo, current)
+			pr, err := ctx.GitHub().GetPullRequestByBranch(gctx, owner, repo, current)
 			if err != nil || pr == nil {
 				break
 			}
@@ -217,8 +217,8 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	branchFrozenStatus := make(map[string]bool) // branch -> is frozen
 
 	// Fetch PR info for branches in parallel if possible
-	if ctx.GitHubClient != nil {
-		owner, repo := ctx.GitHubClient.GetOwnerRepo()
+	if ctx.GitHub() != nil {
+		owner, repo := ctx.GitHub().GetOwnerRepo()
 		trunkName := eng.Trunk().GetName()
 
 		// Filter out trunk before parallel fetch
@@ -231,7 +231,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 
 		var mu sync.Mutex
 		utils.Run(branchesToFetch, func(branchName string) {
-			if pr, err := ctx.GitHubClient.GetPullRequestByBranch(gctx, owner, repo, branchName); err == nil && pr != nil {
+			if pr, err := ctx.GitHub().GetPullRequestByBranch(gctx, owner, repo, branchName); err == nil && pr != nil {
 				prNum := pr.Number
 				mu.Lock()
 				branchPRInfo[branchName] = &prNum

@@ -32,7 +32,7 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 	prNumber := *prInfo.Number()
 
 	// 1. Fetch latest PR state from GitHub (Option 1)
-	latestPR, err := ctx.GitHubClient.GetPullRequest(ctx.Context, repoOwner, repoName, prNumber)
+	latestPR, err := ctx.GitHub().GetPullRequest(ctx.Context, repoOwner, repoName, prNumber)
 	if err != nil {
 		ctx.Output.Debug("Failed to fetch PR #%d for %s: %v", prNumber, name, err)
 		return
@@ -89,7 +89,7 @@ func UpdateBranchPRMetadata(ctx *app.Context, name string, repoOwner, repoName s
 		}
 
 		ctx.Output.Debug("Updating PR #%d for %s: titleChanged=%v, bodyChanged=%v", prNumber, name, updatedTitle != currentTitle, shouldUpdateBody)
-		warnings, err := ctx.GitHubClient.UpdatePullRequest(ctx.Context, repoOwner, repoName, prNumber, updateOpts)
+		warnings, err := ctx.GitHub().UpdatePullRequest(ctx.Context, repoOwner, repoName, prNumber, updateOpts)
 		if err != nil {
 			ctx.Output.Debug("Failed to update PR #%d for %s: %v", prNumber, name, err)
 			return
@@ -127,7 +127,7 @@ func deleteNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 	// Try cached comment ID first
 	commentID, err := ctx.Engine.GetNavigationCommentID(branch)
 	if err == nil && commentID != 0 {
-		if err := ctx.GitHubClient.DeletePRComment(ctx.Context, repoOwner, repoName, commentID); err == nil {
+		if err := ctx.GitHub().DeletePRComment(ctx.Context, repoOwner, repoName, commentID); err == nil {
 			_ = ctx.Engine.ClearNavigationCommentID(branch)
 			ctx.Output.Debug("Deleted navigation comment %d on PR #%d", commentID, prNumber)
 			return
@@ -137,7 +137,7 @@ func deleteNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 	}
 
 	// Fall back to search for existing comment
-	comments, err := ctx.GitHubClient.ListPRComments(ctx.Context, repoOwner, repoName, prNumber)
+	comments, err := ctx.GitHub().ListPRComments(ctx.Context, repoOwner, repoName, prNumber)
 	if err != nil {
 		ctx.Output.Debug("Failed to list comments on PR #%d: %v", prNumber, err)
 		return
@@ -145,7 +145,7 @@ func deleteNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 
 	for _, c := range comments {
 		if pr.IsStackitComment(c.Body) {
-			if err := ctx.GitHubClient.DeletePRComment(ctx.Context, repoOwner, repoName, c.ID); err == nil {
+			if err := ctx.GitHub().DeletePRComment(ctx.Context, repoOwner, repoName, c.ID); err == nil {
 				ctx.Output.Debug("Deleted navigation comment %d on PR #%d", c.ID, prNumber)
 			}
 			break
@@ -170,7 +170,7 @@ func updateNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 	commentID, _ := ctx.Engine.GetNavigationCommentID(branch)
 	if commentID != 0 {
 		// Try to update existing comment
-		if err := ctx.GitHubClient.UpdatePRComment(ctx.Context, repoOwner, repoName, commentID, commentBody); err == nil {
+		if err := ctx.GitHub().UpdatePRComment(ctx.Context, repoOwner, repoName, commentID, commentBody); err == nil {
 			ctx.Output.Debug("Updated navigation comment %d on PR #%d", commentID, prNumber)
 			return
 		}
@@ -179,7 +179,7 @@ func updateNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 	}
 
 	// Search for existing comment (cache miss or stale)
-	comments, err := ctx.GitHubClient.ListPRComments(ctx.Context, repoOwner, repoName, prNumber)
+	comments, err := ctx.GitHub().ListPRComments(ctx.Context, repoOwner, repoName, prNumber)
 	if err != nil {
 		ctx.Output.Debug("Failed to list comments on PR #%d: %v", prNumber, err)
 		return
@@ -188,7 +188,7 @@ func updateNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 	for _, c := range comments {
 		if pr.IsStackitComment(c.Body) {
 			// Found existing - update it and cache ID
-			if err := ctx.GitHubClient.UpdatePRComment(ctx.Context, repoOwner, repoName, c.ID, commentBody); err == nil {
+			if err := ctx.GitHub().UpdatePRComment(ctx.Context, repoOwner, repoName, c.ID, commentBody); err == nil {
 				_ = ctx.Engine.SetNavigationCommentID(branch, c.ID)
 				ctx.Output.Debug("Updated navigation comment %d on PR #%d", c.ID, prNumber)
 			}
@@ -197,7 +197,7 @@ func updateNavigationComment(ctx *app.Context, branchName string, prNumber int, 
 	}
 
 	// No existing comment - create new one and cache ID
-	newID, err := ctx.GitHubClient.CreatePRComment(ctx.Context, repoOwner, repoName, prNumber, commentBody)
+	newID, err := ctx.GitHub().CreatePRComment(ctx.Context, repoOwner, repoName, prNumber, commentBody)
 	if err == nil {
 		_ = ctx.Engine.SetNavigationCommentID(branch, newID)
 		ctx.Output.Debug("Created navigation comment %d on PR #%d", newID, prNumber)
@@ -240,8 +240,8 @@ func PushMetadataAndSyncPRs(ctx *app.Context, branchNames []string) error {
 	}
 
 	// If GitHub client is available, update PRs to trigger CI checks (and update footers/titles)
-	if ctx.GitHubClient != nil {
-		owner, repo := ctx.GitHubClient.GetOwnerRepo()
+	if ctx.GitHub() != nil {
+		owner, repo := ctx.GitHub().GetOwnerRepo()
 		if owner != "" && repo != "" {
 			UpdateStackPRMetadata(ctx, branchNames, owner, repo)
 		}

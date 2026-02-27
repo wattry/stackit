@@ -235,7 +235,7 @@ var keys = keyMap{
 
 // newShippableModel creates a new shippable dashboard model.
 func newShippableModel(ctx *app.Context, cfg config.Configurer, opts ShippableOptions) *shippableModel {
-	analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHubClient)
+	analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHub())
 	combiner := shippable.NewCombiner(ctx.Engine, cfg, output.NewNullOutput())
 
 	// Create progress bar
@@ -286,7 +286,7 @@ func (m *shippableModel) selectedStacks() []shippable.Stack {
 // Use this for actions running inside tea.Cmd to prevent stdout writes
 // from conflicting with the running bubbletea program.
 func (m *shippableModel) quietCtx() *app.Context {
-	ctx := *m.ctx
+	ctx := *m.ctx //nolint:govet // copylocks: sync.Once is zero-valued here; both copies independently lazy-init
 	ctx.Output = output.NewNullOutput()
 	return &ctx
 }

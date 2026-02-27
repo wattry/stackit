@@ -116,7 +116,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 
 	// Collect branches once (expensive: GitHub API calls, CI status checks)
 	out.Debug("merge wizard: collecting branches with scope=%q, targetBranch=%q", scope, targetBranch)
-	collected, err := CollectMergeBranches(ctx.Context, eng, out, ctx.GitHubClient, CreatePlanOptions{
+	collected, err := CollectMergeBranches(ctx.Context, eng, out, ctx.GitHub(), CreatePlanOptions{
 		Strategy:     StrategyBottomUp,
 		Force:        opts.Force,
 		Scope:        scope,

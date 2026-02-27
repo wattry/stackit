@@ -27,15 +27,15 @@ Examples:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHubClient)
+				analyzer := shippable.NewAnalyzer(ctx.Engine, ctx.GitHub())
 				analysisResult, err := analyzer.AnalyzeAll(ctx.Context)
 				if err != nil {
 					return err
 				}
 
 				// Filter by current user unless --all is specified
-				if !showAll && ctx.GitHubClient != nil {
-					currentUser, userErr := ctx.GitHubClient.GetCurrentUser(ctx.Context)
+				if !showAll && ctx.GitHub() != nil {
+					currentUser, userErr := ctx.GitHub().GetCurrentUser(ctx.Context)
 					if userErr == nil && currentUser != "" {
 						analysisResult = analysisResult.FilterByAuthor(currentUser)
 					}

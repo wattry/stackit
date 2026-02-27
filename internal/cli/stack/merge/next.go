@@ -81,7 +81,7 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 	eng := ctx.Engine
 
 	// Use CreateMergePlan with bottom-up strategy to find what to merge
-	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, mergeAction.CreatePlanOptions{
+	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHub(), mergeAction.CreatePlanOptions{
 		Strategy:     mergeAction.StrategyBottomUp,
 		Force:        opts.force,
 		TargetBranch: opts.branch,
@@ -117,7 +117,7 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 	}
 
 	// Fail fast if no GitHub client
-	if ctx.GitHubClient == nil {
+	if ctx.GitHub() == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
@@ -140,8 +140,8 @@ func runMergeNext(ctx *app.Context, opts mergeNextOptions, postMergeHandler Post
 	}
 
 	// Get the PR's NodeID for merge operations
-	owner, repo := ctx.GitHubClient.GetOwnerRepo()
-	prInfo, err := ctx.GitHubClient.GetPullRequest(ctx.Context, owner, repo, bottomPR.PRNumber)
+	owner, repo := ctx.GitHub().GetOwnerRepo()
+	prInfo, err := ctx.GitHub().GetPullRequest(ctx.Context, owner, repo, bottomPR.PRNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR info: %w", err)
 	}
