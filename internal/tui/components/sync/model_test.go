@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"fmt"
 	"testing"
 
 	"charm.land/bubbles/v2/spinner"
@@ -14,10 +13,7 @@ import (
 
 // viewString extracts the string content from a tea.View for test assertions.
 func viewString(v tea.View) string {
-	if v.Content == nil {
-		return ""
-	}
-	return fmt.Sprint(v.Content)
+	return v.Content
 }
 
 func TestNewModel(t *testing.T) {
