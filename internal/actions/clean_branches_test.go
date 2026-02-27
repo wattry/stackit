@@ -197,6 +197,80 @@ func TestCleanBranches(t *testing.T) {
 		require.True(t, s.Engine.GetBranch("branch1").IsTracked())
 	})
 
+	t.Run("marks branch with unpushed changes when merged", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Set up remote and push
+		_, err := s.Scene.Repo.CreateBareRemote("origin")
+		require.NoError(t, err)
+		err = s.Scene.Repo.PushBranch("origin", "main")
+		require.NoError(t, err)
+		err = s.Scene.Repo.PushBranch("origin", "branch1")
+		require.NoError(t, err)
+
+		// Add an unpushed local commit
+		s.Checkout("branch1").
+			CommitChange("extra.txt", "unpushed work")
+
+		// Mark branch1 as merged via PR info
+		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
+		branch := s.Engine.GetBranch("branch1")
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
+		require.NoError(t, err)
+
+		// Populate remote SHAs so GetBranchRemoteStatus works
+		err = s.Engine.PopulateRemoteShas()
+		require.NoError(t, err)
+
+		s.Checkout("main")
+
+		plan, err := actions.PlanBranchDeletions(s.Context, actions.CleanBranchesOptions{
+			Force: true,
+		})
+		require.NoError(t, err)
+
+		// branch1 should be in BranchesToDelete but also in UnpushedBranches
+		require.Contains(t, plan.BranchesToDelete, "branch1")
+		require.True(t, plan.UnpushedBranches["branch1"], "branch1 should be marked as having unpushed changes")
+	})
+
+	t.Run("does not mark branch without unpushed changes as unpushed", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+			})
+
+		// Set up remote and push
+		_, err := s.Scene.Repo.CreateBareRemote("origin")
+		require.NoError(t, err)
+		err = s.Scene.Repo.PushBranch("origin", "main")
+		require.NoError(t, err)
+		err = s.Scene.Repo.PushBranch("origin", "branch1")
+		require.NoError(t, err)
+
+		// Mark branch1 as merged via PR info (no extra local commits)
+		prInfo := testhelpers.NewTestPrInfoMerged(1, "main")
+		branch := s.Engine.GetBranch("branch1")
+		err = s.Engine.UpsertPrInfo(context.Background(), branch, prInfo)
+		require.NoError(t, err)
+
+		// Populate remote SHAs
+		err = s.Engine.PopulateRemoteShas()
+		require.NoError(t, err)
+
+		plan, err := actions.PlanBranchDeletions(s.Context, actions.CleanBranchesOptions{
+			Force: true,
+		})
+		require.NoError(t, err)
+
+		// branch1 should be in BranchesToDelete but NOT in UnpushedBranches
+		require.Contains(t, plan.BranchesToDelete, "branch1")
+		require.False(t, plan.UnpushedBranches["branch1"], "branch1 should not be marked as having unpushed changes")
+	})
+
 	t.Run("preserves divergence when reparenting after squash-merged parent deletion", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
 

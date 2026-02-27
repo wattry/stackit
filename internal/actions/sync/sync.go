@@ -377,9 +377,10 @@ type Handler interface {
 	PromptOrphanedMetadata(info engine.OrphanedMetadataInfo) (pushLocal bool, err error)
 
 	// PromptBranchDeletions displays planned branch deletions and asks user to confirm each one.
+	// unpushedBranches identifies branches with local commits not yet pushed to remote.
 	// Returns a map of branch names that the user confirmed for deletion.
-	// In non-interactive mode, returns all branches (auto-confirm).
-	PromptBranchDeletions(branches map[string]string) (confirmed map[string]bool, err error)
+	// In non-interactive mode, returns all branches except unpushed ones (which are skipped by default).
+	PromptBranchDeletions(branches map[string]string, unpushedBranches map[string]bool) (confirmed map[string]bool, err error)
 
 	// PromptResolveConflicts asks user if they want to resolve restack conflicts now or skip them.
 	// Returns true to start conflict resolution workflow, false to skip and continue.
@@ -432,11 +433,11 @@ func (h *NullHandler) PromptResolveConflicts(_ []string) (bool, error) {
 	return false, nil
 }
 
-// PromptBranchDeletions implements Handler. Returns all branches (auto-confirm) in non-interactive mode.
-func (h *NullHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
+// PromptBranchDeletions implements Handler. Skips unpushed branches, auto-confirms the rest.
+func (h *NullHandler) PromptBranchDeletions(branches map[string]string, unpushedBranches map[string]bool) (map[string]bool, error) {
 	confirmed := make(map[string]bool)
 	for name := range branches {
-		confirmed[name] = true
+		confirmed[name] = !unpushedBranches[name]
 	}
 	return confirmed, nil
 }

@@ -99,11 +99,16 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 
 		// Prompt user for non-utility branches only
 		if len(branchesToPrompt) > 0 {
-			confirmed, err := handler.PromptBranchDeletions(branchesToPrompt)
+			confirmed, err := handler.PromptBranchDeletions(branchesToPrompt, plan.UnpushedBranches)
 			if err != nil {
 				return nil, err
 			}
 			maps.Copy(branchesToDelete, confirmed)
+		}
+	} else if len(plan.UnpushedBranches) > 0 {
+		// Non-interactive: skip unpushed branches by default
+		for name := range plan.UnpushedBranches {
+			delete(branchesToDelete, name)
 		}
 	}
 
@@ -111,6 +116,13 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 	result, err := actions.ExecuteBranchDeletions(ctx, plan, branchesToDelete)
 	if err != nil {
 		return nil, err
+	}
+
+	// Collect branches that were skipped due to unpushed changes
+	for name := range plan.UnpushedBranches {
+		if _, wasDeleted := result.DeletedBranches[name]; !wasDeleted {
+			result.SkippedUnpushed = append(result.SkippedUnpushed, name)
+		}
 	}
 
 	ctx.Logger.Info("clean branches completed durationMs=%d deletedCount=%d", time.Since(cleanStart).Milliseconds(), len(result.DeletedBranches))
@@ -130,6 +142,12 @@ func cleanBranches(ctx *app.Context, opts *Options, dirtyAnchors map[string]bool
 	for _, name := range result.SkippedInWorktree {
 		ctx.Output.Warn("Cannot delete %s from worktree. Run sync from the main repository to clean up.",
 			style.ColorBranchName(name, true))
+	}
+
+	// Warn about branches skipped due to unpushed changes
+	for _, name := range result.SkippedUnpushed {
+		ctx.Output.Warn("Skipped %s — has unpushed local changes. Push first or delete manually with 'git branch -D %s'.",
+			style.ColorBranchName(name, false), name)
 	}
 
 	return result, nil

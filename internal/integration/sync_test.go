@@ -685,4 +685,65 @@ func TestSyncDoesNotLeaveIndexState(t *testing.T) {
 		require.NotNil(t, childBranch.GetParent())
 		require.Equal(t, mainBranchName, childBranch.GetParent().GetName())
 	})
+
+	t.Run("sync skips deletion of branch with unpushed commits", func(t *testing.T) {
+		t.Parallel()
+		sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		// Create a branch and track it
+		sh.CreateBranch("feature").
+			CommitChange("feature-file", "content").
+			TrackBranch("feature", "main")
+
+		eng := sh.Engine
+		mainBranchName := eng.Trunk().GetName()
+
+		// Set up remote and push everything
+		_, err := sh.Scene.Repo.CreateBareRemote("origin")
+		require.NoError(t, err)
+		sh.Checkout("main")
+		err = sh.Scene.Repo.PushBranch("origin", "main")
+		require.NoError(t, err)
+		sh.Checkout("feature")
+		err = sh.Scene.Repo.PushBranch("origin", "feature")
+		require.NoError(t, err)
+
+		// Add an unpushed local commit
+		sh.CommitChange("extra.txt", "unpushed work")
+
+		// Mark feature as merged via PR metadata
+		meta, err := eng.Git().ReadMetadata("feature")
+		require.NoError(t, err)
+		prNum := 1
+		state := prStateMerged
+		base := mainBranchName
+		meta = meta.WithPrInfo(&git.PrInfoPersistence{
+			Number: &prNum,
+			State:  &state,
+			Base:   &base,
+		})
+		err = eng.Git().WriteMetadata("feature", meta)
+		require.NoError(t, err)
+
+		// Go back to main for sync
+		sh.Checkout("main")
+
+		// Populate remote SHAs so GetBranchRemoteStatus can detect ahead
+		err = eng.PopulateRemoteShas()
+		require.NoError(t, err)
+
+		// Run sync (non-interactive - should skip unpushed branches)
+		err = sync.Action(sh.Context, sync.Options{}, nil)
+		require.NoError(t, err)
+
+		// Feature branch should NOT be deleted because it has unpushed commits
+		allLocalBranches, err := sh.Scene.Repo.GetLocalBranches()
+		require.NoError(t, err)
+		require.Contains(t, allLocalBranches, "feature",
+			"branch with unpushed changes should not be deleted during sync")
+
+		// A warning should have been emitted (check output buffer)
+		require.Contains(t, sh.Output.String(), "unpushed",
+			"sync should warn about branches with unpushed changes")
+	})
 }

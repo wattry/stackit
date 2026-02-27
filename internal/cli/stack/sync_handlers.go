@@ -123,11 +123,11 @@ func (h *SimpleSyncHandler) PromptResolveConflicts(_ []string) (bool, error) {
 	return false, nil
 }
 
-// PromptBranchDeletions implements Handler. In non-interactive mode, auto-confirms all deletions.
-func (h *SimpleSyncHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
+// PromptBranchDeletions implements Handler. In non-interactive mode, skips unpushed branches and auto-confirms the rest.
+func (h *SimpleSyncHandler) PromptBranchDeletions(branches map[string]string, unpushedBranches map[string]bool) (map[string]bool, error) {
 	confirmed := make(map[string]bool)
 	for name := range branches {
-		confirmed[name] = true
+		confirmed[name] = !unpushedBranches[name]
 	}
 	return confirmed, nil
 }
@@ -702,7 +702,7 @@ func (h *InteractiveSyncHandler) PromptResolveConflicts(conflictBranches []strin
 }
 
 // PromptBranchDeletions implements Handler. Pauses TUI, displays planned deletions, prompts for each.
-func (h *InteractiveSyncHandler) PromptBranchDeletions(branches map[string]string) (map[string]bool, error) {
+func (h *InteractiveSyncHandler) PromptBranchDeletions(branches map[string]string, unpushedBranches map[string]bool) (map[string]bool, error) {
 	h.runner.Pause()
 	defer h.runner.Resume()
 
@@ -731,8 +731,11 @@ func (h *InteractiveSyncHandler) PromptBranchDeletions(branches map[string]strin
 	preSelected := make([]bool, len(names))
 	for i, name := range names {
 		reason := branches[name]
+		if unpushedBranches[name] {
+			reason += " — has unpushed changes"
+		}
 		options[i] = fmt.Sprintf("%s (%s)", style.ColorBranchName(name, false), style.ColorDim(reason))
-		preSelected[i] = true // Pre-select all for deletion
+		preSelected[i] = !unpushedBranches[name] // Don't pre-select branches with unpushed changes
 	}
 
 	h.output.Newline()
