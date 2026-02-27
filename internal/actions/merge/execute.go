@@ -150,7 +150,7 @@ type ExecuteOptions struct {
 // Execute executes a validated merge plan step by step
 func Execute(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions) error {
 	plan := opts.Plan
-	githubClient := ctx.GitHubClient
+	githubClient := ctx.GitHub()
 	out := ctx.Output
 
 	// Use null handler if none provided
@@ -210,7 +210,7 @@ func executeSteps(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOptions)
 		})
 
 		// 1. Re-validate preconditions for this step
-		if err := validateStepPreconditions(ctx.Context, step, eng, ctx.GitHubClient, opts); err != nil {
+		if err := validateStepPreconditions(ctx.Context, step, eng, ctx.GitHub(), opts); err != nil {
 			opts.Handler.EmitEvent(Event{
 				Phase:     phaseFromStep(stepRef),
 				Type:      EventFailed,
@@ -258,7 +258,7 @@ func executeStepWithProgress(ctx *app.Context, step PlanStep, stepIndex int, eng
 // executeStep executes a single step
 func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecuteEngine, opts ExecuteOptions) error {
 	trunk := eng.Trunk() // Cache trunk for this function scope
-	githubClient := ctx.GitHubClient
+	githubClient := ctx.GitHub()
 	out := ctx.Output
 	repoRoot := ctx.RepoRoot
 

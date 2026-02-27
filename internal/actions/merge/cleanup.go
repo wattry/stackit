@@ -74,7 +74,7 @@ func NewPRCleaner(ctx *app.Context, eng prCleanupEngine, config PRCleanupConfig)
 func (c *PRCleaner) CleanupBranches(ctx context.Context, branchNames []string) PRCleanupResult {
 	result := PRCleanupResult{}
 	out := c.ctx.Output
-	githubClient := c.ctx.GitHubClient
+	githubClient := c.ctx.GitHub()
 
 	if githubClient == nil {
 		out.Debug("No GitHub client available for PR cleanup")

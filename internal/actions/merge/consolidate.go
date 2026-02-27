@@ -227,7 +227,7 @@ func (c *ConsolidateMergeExecutor) createConsolidationPR(ctx context.Context, br
 		Draft: false,
 	}
 
-	pr, err := c.ctx.GitHubClient.CreatePullRequest(ctx, owner, repo, opts)
+	pr, err := c.ctx.GitHub().CreatePullRequest(ctx, owner, repo, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PR: %w", err)
 	}
@@ -246,7 +246,7 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 	}
 
 	waiter := NewCIWaiter(CIWaiterOptions{
-		Client: c.ctx.GitHubClient,
+		Client: c.ctx.GitHub(),
 		Output: c.ctx.Output,
 	})
 	waiter.SetProgressHandler(c.handler, c.stepIndex)
@@ -335,7 +335,7 @@ func (c *ConsolidateMergeExecutor) getStackScope() string {
 }
 
 func (c *ConsolidateMergeExecutor) getOwnerRepo() (owner, repo string) {
-	return c.ctx.GitHubClient.GetOwnerRepo()
+	return c.ctx.GitHub().GetOwnerRepo()
 }
 
 // resolveMergeMethod returns the merge method to use, preferring the override if set.
@@ -343,5 +343,5 @@ func (c *ConsolidateMergeExecutor) resolveMergeMethod() (github.MergeMethod, err
 	if c.mergeMethod != "" {
 		return c.mergeMethod, nil
 	}
-	return getMergeMethodWithPause(c.ctx, c.ctx.GitHubClient, c.handler)
+	return getMergeMethodWithPause(c.ctx, c.ctx.GitHub(), c.handler)
 }

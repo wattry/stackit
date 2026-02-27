@@ -114,7 +114,7 @@ func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, dirtyAn
 	}
 
 	// Update PR body footers only for branches flagged as needing updates
-	if ctx.GitHubClient != nil && result.RepoOwner != "" && result.RepoName != "" {
+	if ctx.GitHub() != nil && result.RepoOwner != "" && result.RepoName != "" {
 		flaggedBranches := ctx.Engine.GetBranchesNeedingPRBodyUpdate()
 		if len(flaggedBranches) > 0 {
 			updateMetaStart := time.Now()
@@ -136,7 +136,7 @@ func processGitHubSyncResult(ctx *app.Context, result *GitHubSyncResult, dirtyAn
 	// Push local parent changes to GitHub PR bases
 	// Local metadata is authoritative - if local parent differs from GitHub PR base, update GitHub
 	parentsStart := time.Now()
-	if ctx.GitHubClient != nil && result.RepoOwner != "" && result.RepoName != "" {
+	if ctx.GitHub() != nil && result.RepoOwner != "" && result.RepoName != "" {
 		syncResult, err := PushParentsToGitHub(ctx, result, dirtyAnchors)
 		ctx.Logger.Info("sync parents to github completed durationMs=%d", time.Since(parentsStart).Milliseconds())
 		if err != nil {
@@ -160,7 +160,7 @@ func PushParentsToGitHub(ctx *app.Context, result *GitHubSyncResult, dirtyAnchor
 	eng := ctx.Engine
 	out := ctx.Output
 	gctx := ctx.Context
-	githubClient := ctx.GitHubClient
+	githubClient := ctx.GitHub()
 
 	allBranches := eng.AllBranches()
 	updated := []string{}

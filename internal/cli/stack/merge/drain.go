@@ -99,7 +99,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 	}
 
 	// Create initial plan to discover what needs to be merged
-	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, mergeAction.CreatePlanOptions{
+	plan, validation, err := mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHub(), mergeAction.CreatePlanOptions{
 		Strategy:     mergeAction.StrategyBottomUp,
 		Force:        opts.force,
 		TargetBranch: opts.branch,
@@ -143,7 +143,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 	}
 
 	// Fail fast if no GitHub client
-	if ctx.GitHubClient == nil {
+	if ctx.GitHub() == nil {
 		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
 	}
 
@@ -183,7 +183,7 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 	merged := 0
 	for drainTarget == 0 || merged < drainTarget {
 		// Re-read state each iteration (branches change after merges + sync)
-		plan, _, err = mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHubClient, mergeAction.CreatePlanOptions{
+		plan, _, err = mergeAction.CreateMergePlan(ctx.Context, eng, out, ctx.GitHub(), mergeAction.CreatePlanOptions{
 			Strategy:     mergeAction.StrategyBottomUp,
 			Force:        opts.force,
 			TargetBranch: targetBranch,
@@ -213,8 +213,8 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 		out.Info("Merging PR #%d (%s) [%d/%d]...", bottomPR.PRNumber, bottomPR.BranchName, merged+1, displayTotal)
 
 		// Get the PR's NodeID for merge operations
-		owner, repo := ctx.GitHubClient.GetOwnerRepo()
-		prInfo, err := ctx.GitHubClient.GetPullRequest(ctx.Context, owner, repo, bottomPR.PRNumber)
+		owner, repo := ctx.GitHub().GetOwnerRepo()
+		prInfo, err := ctx.GitHub().GetPullRequest(ctx.Context, owner, repo, bottomPR.PRNumber)
 		if err != nil {
 			return fmt.Errorf("failed to get PR #%d info: %w", bottomPR.PRNumber, err)
 		}
@@ -326,7 +326,7 @@ func resolveMergeMethod(ctx *app.Context, methodFlag string) (github.MergeMethod
 			return "", fmt.Errorf("invalid merge method: %s (must be squash, merge, or rebase)", methodFlag)
 		}
 	}
-	return mergeAction.GetMergeMethod(ctx, ctx.GitHubClient)
+	return mergeAction.GetMergeMethod(ctx, ctx.GitHub())
 }
 
 func formatMergeDrainPlan(plan *mergeAction.Plan, validation *mergeAction.PlanValidation) string {

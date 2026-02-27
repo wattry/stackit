@@ -50,7 +50,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	}
 
 	// Create a sub-context for the worktree
-	worktreeCtx := *ctx
+	worktreeCtx := *ctx //nolint:govet // copylocks: sync.Once is zero-valued here; both copies independently lazy-init
 	worktreeCtx.Engine = worktreeEng
 	worktreeCtx.RepoRoot = worktreePath
 
@@ -80,7 +80,7 @@ func ExecuteInWorktree(ctx *app.Context, eng mergeExecuteEngine, opts ExecuteOpt
 	if plan == nil {
 		// Create plan in worktree
 		var err error
-		plan, _, err = CreateMergePlan(ctx.Context, worktreeEng, out, ctx.GitHubClient, CreatePlanOptions{
+		plan, _, err = CreateMergePlan(ctx.Context, worktreeEng, out, ctx.GitHub(), CreatePlanOptions{
 			Strategy:     opts.Strategy,
 			Force:        opts.Force,
 			Scope:        scope,
