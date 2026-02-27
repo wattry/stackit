@@ -385,8 +385,11 @@ func submitBranch(ctx *app.Context, info Info, opts Options, handler Handler, re
 
 // getGitHubClient returns the GitHub client from context
 func getGitHubClient(ctx *app.Context) (github.Client, error) {
-	if ctx.GitHub() != nil {
-		return ctx.GitHub(), nil
+	if client := ctx.GitHub(); client != nil {
+		return client, nil
+	}
+	if err := ctx.GitHubError(); err != nil {
+		return nil, fmt.Errorf("GitHub client initialization failed: %w", err)
 	}
 	return nil, fmt.Errorf("no GitHub client available - check your GITHUB_TOKEN")
 }

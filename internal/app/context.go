@@ -48,7 +48,8 @@ type Context struct {
 // Stored as a pointer in Context so copying Context is safe (no sync.Once copy).
 type githubLazy struct {
 	once     sync.Once
-	initFunc func() github.Client
+	initFunc func() (github.Client, error)
+	initErr  error
 }
 
 // Git returns the git runner from the engine.
@@ -62,16 +63,30 @@ func (c *Context) Git() git.Runner {
 
 // GitHub returns the GitHub client, lazily initializing it on first access.
 // If GitHubClient was set directly (e.g. in tests), it is returned immediately.
+// Returns nil if initialization failed; use GitHubError() to get the reason.
 func (c *Context) GitHub() github.Client {
 	if c.GitHubClient != nil {
 		return c.GitHubClient
 	}
 	if c.githubLazy != nil {
 		c.githubLazy.once.Do(func() {
-			c.GitHubClient = c.githubLazy.initFunc()
+			client, err := c.githubLazy.initFunc()
+			if err != nil {
+				c.githubLazy.initErr = err
+				return
+			}
+			c.GitHubClient = client
 		})
 	}
 	return c.GitHubClient
+}
+
+// GitHubError returns the error from lazy GitHub client initialization, if any.
+func (c *Context) GitHubError() error {
+	if c.githubLazy != nil {
+		return c.githubLazy.initErr
+	}
+	return nil
 }
 
 // Navigator returns the stack navigator from the engine.
@@ -325,12 +340,8 @@ func NewContextAutoWithWriter(ctx context.Context, repoRoot string, opts GlobalO
 
 	// Lazy-initialize GitHub client on first access via GitHub()
 	runtimeCtx.githubLazy = &githubLazy{
-		initFunc: func() github.Client {
-			ghClient, err := github.NewGitHubClient(context.Background(), gitRunner)
-			if err != nil {
-				return nil
-			}
-			return ghClient
+		initFunc: func() (github.Client, error) {
+			return github.NewGitHubClient(context.Background(), gitRunner)
 		},
 	}
 
