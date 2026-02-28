@@ -48,9 +48,10 @@ jobs:
 
       - name: Build
         run: |
-          go build -v ./apps/cli
-          go build -v ./apps/api
-          go build -v ./apps/st-tui
+          mkdir -p bin
+          go build -v -o bin/stackit ./apps/cli
+          go build -v -o bin/stackit-api ./apps/api
+          go build -v -o bin/st-tui ./apps/st-tui
 
   goreleaser:
     needs: [lint, build]
