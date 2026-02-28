@@ -106,30 +106,38 @@ export function StackColumn({
   );
 }
 
-const statusConfig: Record<string, { label: string; bg: string; text: string; shadow: string }> = {
+const statusConfig: Record<string, { label: string; bg: string; selectedBg: string; text: string; shadow: string; selectedShadow: string }> = {
   shippable: {
     label: "Ready to ship",
     bg: "bg-green-100 dark:bg-green-950/60",
+    selectedBg: "bg-green-200 dark:bg-green-900/80",
     text: "text-green-700 dark:text-green-400",
     shadow: "shadow-[0_2px_8px_rgba(34,197,94,0.2)] dark:shadow-[0_2px_8px_rgba(34,197,94,0.15)]",
+    selectedShadow: "shadow-[0_4px_16px_rgba(34,197,94,0.4)] dark:shadow-[0_4px_16px_rgba(34,197,94,0.3)]",
   },
   pending: {
     label: "Needs restack",
     bg: "bg-amber-100 dark:bg-amber-950/60",
+    selectedBg: "bg-amber-200 dark:bg-amber-900/80",
     text: "text-amber-700 dark:text-amber-400",
     shadow: "shadow-[0_2px_8px_rgba(245,158,11,0.2)] dark:shadow-[0_2px_8px_rgba(245,158,11,0.15)]",
+    selectedShadow: "shadow-[0_4px_16px_rgba(245,158,11,0.4)] dark:shadow-[0_4px_16px_rgba(245,158,11,0.3)]",
   },
   blocked: {
     label: "Blocked",
     bg: "bg-red-100 dark:bg-red-950/60",
+    selectedBg: "bg-red-200 dark:bg-red-900/80",
     text: "text-red-700 dark:text-red-400",
     shadow: "shadow-[0_2px_8px_rgba(239,68,68,0.2)] dark:shadow-[0_2px_8px_rgba(239,68,68,0.15)]",
+    selectedShadow: "shadow-[0_4px_16px_rgba(239,68,68,0.4)] dark:shadow-[0_4px_16px_rgba(239,68,68,0.3)]",
   },
   incomplete: {
     label: "Incomplete",
     bg: "bg-muted",
+    selectedBg: "bg-muted/80",
     text: "text-muted-foreground",
     shadow: "shadow-[0_2px_8px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.15)]",
+    selectedShadow: "shadow-[0_4px_16px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)]",
   },
 };
 
@@ -139,7 +147,7 @@ function StackStatusFooter({ status, selected, onClick }: { status: string; sele
   return (
     <button
       onClick={onClick}
-      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.bg} ${c.text} ${c.shadow} ${selected ? "ring-2 ring-ring" : "hover:brightness-95 dark:hover:brightness-110"}`}
+      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.text} ${selected ? `${c.selectedBg} ${c.selectedShadow} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
     >
       {c.label}
     </button>

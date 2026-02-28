@@ -170,9 +170,14 @@ run = """
   cp -R apps/web/out/. apps/api/static/
 """
 
+[tasks."web-test"]
+description = "Run frontend tests"
+run = "pnpm --filter @stackit/web test"
+
 [tasks."check-web"]
-description = "Run frontend type checks and build"
+description = "Run frontend tests, type checks, and build"
 run = """
+  pnpm --filter @stackit/web test
   pnpm --filter @stackit/web typecheck
   pnpm --filter @stackit/web build
 """
