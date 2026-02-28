@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { PRBadge, DiffStats } from "@/components/status/status-badge";
 import { AnimatedCheckmark, AnimatedX, PulsingDot } from "@/components/ui/animated-ci-icons";
-import { FolderGit2 } from "lucide-react";
+import { FolderGit2, ChevronDown } from "lucide-react";
+import Markdown from "react-markdown";
 
 interface StackColumnProps {
   stack: StackDetail;
@@ -24,27 +26,20 @@ export function StackColumn({
     <div className="flex flex-col w-64 shrink-0">
       {/* Stack header */}
       <div className="px-1 pb-2">
-        <div className="flex items-center gap-2">
-          {stack.prCount > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {stack.prCount} PR{stack.prCount !== 1 ? "s" : ""}
-            </span>
-          )}
-          {stack.hasWorktree && (
+        {stack.hasWorktree && (
+          <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
               <FolderGit2 className="w-3 h-3" />
             </span>
-          )}
-        </div>
+          </div>
+        )}
         {stack.title && (
-          <p className="text-xs text-muted-foreground mt-1 truncate" title={stack.title}>
+          <p className="text-xs font-medium text-muted-foreground mt-1 truncate" title={stack.title}>
             {stack.title}
           </p>
         )}
         {stack.description && (
-          <p className="text-xs text-muted-foreground/60 mt-1 line-clamp-2" title={stack.description}>
-            {stack.description}
-          </p>
+          <StackDescription text={stack.description} />
         )}
       </div>
 
@@ -59,10 +54,10 @@ export function StackColumn({
             <button
               key={branch.name}
               onClick={() => onSelectBranch(branch)}
-              className={`text-left px-3 py-2.5 border-x border-t transition-all duration-200 animate-fade-in-up
-                ${isLast ? "border-b" : ""}
+              className={`text-left px-3 py-2.5 border-x border-t transition-all duration-200 animate-fade-in-up bg-card
+                ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
                 ${isFirst ? "rounded-t-lg" : ""}
-                ${isSelected ? "bg-accent ring-2 ring-ring z-10 relative shadow-[0_0_15px_var(--glow-color)]" : "hover:bg-muted/50 hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
+                ${isSelected ? "!bg-accent ring-2 ring-ring z-10 relative shadow-[0_0_15px_var(--glow-color)]" : "hover:!bg-muted/50 hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
                 ${branch.isCurrent && !isSelected ? "animate-breathe-glow" : ""}
               `}
               style={{ animationDelay: `${i * 50}ms` }}
@@ -135,7 +130,7 @@ function StackStatusFooter({ status }: { status: string }) {
 
   return (
     <div
-      className={`flex items-center justify-center px-3 py-1.5 rounded-b-lg border-x border-b text-xs font-medium ${c.bg} ${c.text} ${c.shadow}`}
+      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium ${c.bg} ${c.text} ${c.shadow}`}
     >
       {c.label}
     </div>
@@ -178,6 +173,29 @@ function orderBranches(branches: BranchResponse[]): BranchResponse[] {
   }
 
   return ordered;
+}
+
+const DESCRIPTION_COLLAPSE_LENGTH = 80;
+
+function StackDescription({ text }: { text: string }) {
+  const canCollapse = text.length > DESCRIPTION_COLLAPSE_LENGTH;
+  const [collapsed, setCollapsed] = useState(canCollapse);
+
+  return (
+    <div
+      onClick={canCollapse ? () => setCollapsed(!collapsed) : undefined}
+      className={`text-xs text-muted-foreground mt-1 flex items-start gap-1 ${canCollapse ? "cursor-pointer hover:text-foreground/70" : ""}`}
+    >
+      <div className={`prose prose-xs dark:prose-invert max-w-none [&>*]:text-xs [&>*]:text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_li]:my-0 [&_p]:my-0.5 ${collapsed ? "line-clamp-2" : ""}`}>
+        <Markdown>{text}</Markdown>
+      </div>
+      {canCollapse && (
+        <ChevronDown
+          className={`w-3 h-3 shrink-0 mt-0.5 transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`}
+        />
+      )}
+    </div>
+  );
 }
 
 /** Strip common prefixes like "user/timestamp/" to show a shorter name. */

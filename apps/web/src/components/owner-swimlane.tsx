@@ -34,25 +34,17 @@ export function OwnerSwimlane({
 
   return (
     <div className="flex flex-col shrink-0">
-      <motion.div
+      <div
         className="flex gap-4 items-end px-3 pt-3"
         style={{ backgroundColor: color }}
-        initial="hidden"
-        animate="visible"
-        variants={{
-          hidden: {},
-          visible: { transition: { staggerChildren: 0.08 } },
-        }}
       >
         <AnimatePresence mode="popLayout">
           {visibleStacks.map((stack) => (
             <motion.div
               key={stack.rootBranch}
               layout
-              variants={{
-                hidden: { opacity: 0, y: 12 },
-                visible: { opacity: 1, y: 0 },
-              }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
             >
@@ -75,7 +67,7 @@ export function OwnerSwimlane({
             </span>
           </motion.button>
         )}
-      </motion.div>
+      </div>
       <SwimlaneLabel label={label} lastActive={lastActive} color={color} />
     </div>
   );
