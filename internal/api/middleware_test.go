@@ -90,6 +90,7 @@ func TestIsLocalDevOrigin(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := isLocalDevOrigin(tc.origin); got != tc.want {
 				t.Fatalf("isLocalDevOrigin(%q): want %v, got %v", tc.origin, tc.want, got)
 			}
