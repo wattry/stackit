@@ -21,6 +21,7 @@ export interface StackSummary {
   branchCount: number;
   prCount: number;
   isCurrent: boolean;
+  hasWorktree?: boolean;
   description?: string;
   owner?: string;
 }

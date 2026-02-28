@@ -3,6 +3,7 @@
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { PRBadge, DiffStats } from "@/components/status/status-badge";
 import { AnimatedCheckmark, AnimatedX, PulsingDot } from "@/components/ui/animated-ci-icons";
+import { FolderGit2 } from "lucide-react";
 
 interface StackColumnProps {
   stack: StackDetail;
@@ -23,11 +24,18 @@ export function StackColumn({
     <div className="flex flex-col w-64 shrink-0">
       {/* Stack header */}
       <div className="px-1 pb-2">
-        {stack.prCount > 0 && (
-          <span className="text-xs text-muted-foreground">
-            {stack.prCount} PR{stack.prCount !== 1 ? "s" : ""}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {stack.prCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {stack.prCount} PR{stack.prCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {stack.hasWorktree && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
+              <FolderGit2 className="w-3 h-3" />
+            </span>
+          )}
+        </div>
         {stack.title && (
           <p className="text-xs text-muted-foreground mt-1 truncate" title={stack.title}>
             {stack.title}

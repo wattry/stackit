@@ -87,17 +87,39 @@ func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBran
 	currentBranch := eng.CurrentBranch().GetName()
 	isCurrent := slices.Contains(allBranches, currentBranch)
 
-	// Get title from root branch's PR or commit subject
-	title := rootBranch
+	// Detect worktree anchor and filter it from display branches
+	hasWorktree := false
+	displayBranches := allBranches
 	rootNode := graph.GetNode(rootBranch)
+	if rootNode != nil && rootNode.Branch.IsWorktreeAnchor() {
+		hasWorktree = true
+		displayBranches = make([]string, 0, len(allBranches)-1)
+		for _, name := range allBranches {
+			if name != rootBranch {
+				displayBranches = append(displayBranches, name)
+			}
+		}
+	}
+
+	// Get title from root branch's PR, or first child's PR for worktree anchors
+	title := rootBranch
 	if rootNode != nil {
-		if prInfo, err := rootNode.Branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Title() != "" {
+		if hasWorktree {
+			// Anchor has no PR — derive title from first child
+			if len(rootNode.Children) > 0 {
+				if childNode := graph.GetNode(rootNode.Children[0]); childNode != nil {
+					if prInfo, err := childNode.Branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Title() != "" {
+						title = prInfo.Title()
+					}
+				}
+			}
+		} else if prInfo, err := rootNode.Branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Title() != "" {
 			title = prInfo.Title()
 		}
 	}
 
-	// Compute stack status
-	status := computeStackStatus(graph, allBranches)
+	// Compute stack status using display branches (anchor excluded)
+	status := computeStackStatus(graph, displayBranches)
 
 	var description string
 	if rootNode != nil {
@@ -111,9 +133,10 @@ func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBran
 		Title:       title,
 		Status:      status,
 		Scope:       scope,
-		BranchCount: len(allBranches),
+		BranchCount: len(displayBranches),
 		PRCount:     prCount,
 		IsCurrent:   isCurrent,
+		HasWorktree: hasWorktree,
 		Description: description,
 		Owner:       owner,
 	}
@@ -131,8 +154,15 @@ func MapStackDetail(eng engine.BranchReader, graph *engine.StackGraph, rootBranc
 
 	summary := MapStackSummary(eng, graph, rootBranch, allBranches, prCount, scope, owner)
 
+	// Check if root is a worktree anchor to filter it from branches
+	isAnchor := summary.HasWorktree
+	anchorName := rootBranch
+
 	branches := make([]BranchResponse, 0, len(allBranches))
 	for _, name := range allBranches {
+		if isAnchor && name == anchorName {
+			continue
+		}
 		node := graph.GetNode(name)
 		if node == nil {
 			continue
@@ -141,7 +171,16 @@ func MapStackDetail(eng engine.BranchReader, graph *engine.StackGraph, rootBranc
 		if checksMap != nil {
 			checks = checksMap[name]
 		}
-		branches = append(branches, MapBranch(eng, node.Branch, node, checks))
+		br := MapBranch(eng, node.Branch, node, checks)
+		if isAnchor {
+			// Anchor's direct children become display roots
+			if br.Parent == anchorName {
+				br.Parent = ""
+			}
+			// All branches shift up one depth level
+			br.Depth--
+		}
+		branches = append(branches, br)
 	}
 
 	return StackDetail{
