@@ -582,6 +582,52 @@ stackit doctor
 
 ---
 
+## Monorepo Apps
+
+This repository includes multiple first-class applications:
+
+- `apps/cli` - main `stackit` CLI
+- `apps/api` - HTTP API server (serves `/api/v1` and compatibility `/api`) plus embedded web assets
+- `apps/st-tui` - TUI storyboard binary
+- `apps/web` - React/Vite frontend
+
+### Full-Stack Local Development
+
+Recommended: run both API and web UI with one command via overmind + Procfile:
+
+```bash
+# install overmind once if needed (e.g. brew install tmux overmind)
+mise run dev
+```
+
+This starts:
+- `api`: `go run ./apps/api --port 8080`
+- `web`: `pnpm --filter @stackit/web dev`
+
+Stop all dev processes:
+
+```bash
+mise run dev-stop
+```
+
+Manual two-terminal flow is also supported:
+
+```bash
+# Terminal 1: API
+go run ./apps/api --port 8080
+
+# Terminal 2: Web (requires pnpm)
+pnpm install
+pnpm web:dev
+```
+
+For production-style serving via Go, build and sync web assets into `apps/api/static`:
+
+```bash
+mise run sync-web-static
+go run ./apps/api
+```
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -591,6 +637,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 - **Git 2.25+**
 - **GitHub CLI (`gh`)** for PR operations
 - **Go 1.26+** (if building from source)
+- **Node.js + pnpm** (for `apps/web`)
 
 ## License
 
