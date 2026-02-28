@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { StackColumn } from "@/components/stack-column";
 import { SwimlaneLabel, swimlaneColor } from "@/components/swimlane-label";
@@ -33,29 +34,48 @@ export function OwnerSwimlane({
 
   return (
     <div className="flex flex-col shrink-0">
-      <div
+      <motion.div
         className="flex gap-4 items-end px-3 pt-3"
         style={{ backgroundColor: color }}
+        initial="hidden"
+        animate="visible"
+        variants={{
+          hidden: {},
+          visible: { transition: { staggerChildren: 0.08 } },
+        }}
       >
-        {visibleStacks.map((stack) => (
-          <StackColumn
-            key={stack.rootBranch}
-            stack={stack}
-            selectedBranch={selectedBranch}
-            onSelectBranch={onSelectBranch}
-          />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {visibleStacks.map((stack) => (
+            <motion.div
+              key={stack.rootBranch}
+              layout
+              variants={{
+                hidden: { opacity: 0, y: 12 },
+                visible: { opacity: 1, y: 0 },
+              }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+            >
+              <StackColumn
+                stack={stack}
+                selectedBranch={selectedBranch}
+                onSelectBranch={onSelectBranch}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
         {canCollapse && (
-          <button
+          <motion.button
+            layout
             onClick={() => setExpanded(!expanded)}
             className="flex items-center justify-center w-8 shrink-0 self-stretch rounded border border-dashed border-muted-foreground/30 text-xs text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground transition-colors"
           >
             <span className="-rotate-90 whitespace-nowrap">
               {expanded ? "Show less" : `+${hiddenCount} more`}
             </span>
-          </button>
+          </motion.button>
         )}
-      </div>
+      </motion.div>
       <SwimlaneLabel label={label} lastActive={lastActive} color={color} />
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "motion/react";
 import type { BranchResponse } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +19,12 @@ interface BranchDetailProps {
 
 export function BranchDetail({ branch }: BranchDetailProps) {
   return (
+    <motion.div
+      key={branch.name}
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+    >
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
@@ -56,6 +63,7 @@ export function BranchDetail({ branch }: BranchDetailProps) {
         <CIChecks ci={branch.ci} />
       </CardContent>
     </Card>
+    </motion.div>
   );
 }
 

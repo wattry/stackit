@@ -26,7 +26,8 @@ export function SwimlaneLabel({ label, lastActive, color }: SwimlaneLabelProps) 
 
 /**
  * Generate a soft pastel background color from a string.
- * Returns an HSL color with fixed saturation/lightness and a hue derived from the input.
+ * Returns a CSS `light-dark()` value that adapts to the color scheme.
+ * Light mode uses high lightness (95%), dark mode uses low lightness (18%).
  */
 export function swimlaneColor(name: string): string {
   let hash = 0;
@@ -34,7 +35,7 @@ export function swimlaneColor(name: string): string {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   const hue = ((hash % 360) + 360) % 360;
-  return `hsl(${hue} 30% 95%)`;
+  return `light-dark(hsl(${hue} 30% 95%), hsl(${hue} 20% 18%))`;
 }
 
 function TimeAgo({ date }: { date: Date }) {

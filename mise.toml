@@ -23,6 +23,9 @@ pnpm = "10"
 # Linting
 golangci-lint = "latest"
 
+# Development tools
+"aqua:watchexec/watchexec" = "latest" # File watcher for dev auto-reload
+
 # CLI utilities (recommended in AGENTS.md)
 "aqua:BurntSushi/ripgrep" = "latest"  # Fast text search (rg)
 "aqua:sharkdp/fd" = "latest"          # Fast file search
@@ -143,8 +146,8 @@ description = "Run the web app in development mode"
 run = "pnpm --filter @stackit/web dev"
 
 [tasks."api-dev"]
-description = "Run the API server in development mode"
-run = "go run ./apps/api --port 8080"
+description = "Run the API server in development mode (auto-reloads on file changes)"
+run = "watchexec -r -e go -w apps/api -w internal -w api -- go run ./apps/api --port 8080"
 
 [tasks.dev]
 description = "Run API + web dev servers using overmind and Procfile.dev"

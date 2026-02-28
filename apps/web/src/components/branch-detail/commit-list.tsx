@@ -11,8 +11,12 @@ export function CommitList({ commits }: { commits?: CommitResponse[] }) {
         Commits
       </h4>
       <div className="space-y-0.5">
-        {commits.map((commit) => (
-          <div key={commit.sha} className="flex items-baseline gap-2 text-sm">
+        {commits.map((commit, i) => (
+          <div
+            key={commit.sha}
+            className="flex items-baseline gap-2 text-sm animate-fade-in-up"
+            style={{ animationDelay: `${i * 40}ms` }}
+          >
             <code className="text-xs text-muted-foreground font-mono shrink-0">
               {commit.sha}
             </code>

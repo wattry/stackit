@@ -33,7 +33,21 @@ export function BranchNode({
       transform={`translate(${x - NODE_WIDTH / 2}, ${y - NODE_HEIGHT / 2})`}
       onClick={() => onClick(branch)}
       className="cursor-pointer"
+      style={{ transition: "transform 0.15s ease" }}
     >
+      {/* Glow behind selected node */}
+      {isSelected && (
+        <rect
+          width={NODE_WIDTH + 8}
+          height={NODE_HEIGHT + 8}
+          x={-4}
+          y={-4}
+          rx={12}
+          filter="url(#glow)"
+          className="fill-transparent stroke-transparent"
+          style={{ opacity: 0.6 }}
+        />
+      )}
       <rect
         width={NODE_WIDTH}
         height={NODE_HEIGHT}

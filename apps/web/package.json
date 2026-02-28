@@ -11,9 +11,11 @@
     "test": "echo \"No frontend tests configured yet\""
   },
   "dependencies": {
+    "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.574.0",
+    "motion": "^12.34.3",
     "next": "16.1.6",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

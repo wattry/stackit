@@ -35,6 +35,17 @@ export function StackTree({
         className="mx-auto"
         style={{ minWidth: layout.width, minHeight: layout.height }}
       >
+        <defs>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feFlood floodColor="var(--glow-color)" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="shadow" />
+            <feMerge>
+              <feMergeNode in="shadow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
         {/* Edges first (below nodes) */}
         {layout.edges.map((edge) => (
           <BranchEdge

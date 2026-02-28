@@ -2,6 +2,7 @@
 
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { PRBadge, DiffStats, StackStatusBadge } from "@/components/status/status-badge";
+import { AnimatedCheckmark, AnimatedX, PulsingDot } from "@/components/ui/animated-ci-icons";
 
 interface StackColumnProps {
   stack: StackDetail;
@@ -43,7 +44,7 @@ export function StackColumn({
       </div>
 
       {/* Stacked branch cards */}
-      <div className="flex flex-col bg-white rounded-lg">
+      <div className="flex flex-col bg-card rounded-lg">
         {displayBranches.map((branch, i) => {
           const isFirst = i === 0;
           const isLast = i === displayBranches.length - 1;
@@ -53,12 +54,14 @@ export function StackColumn({
             <button
               key={branch.name}
               onClick={() => onSelectBranch(branch)}
-              className={`text-left px-3 py-2.5 border-x border-t transition-colors
+              className={`text-left px-3 py-2.5 border-x border-t transition-all duration-200 animate-fade-in-up
                 ${isLast ? "border-b" : ""}
                 ${isFirst ? "rounded-t-lg" : ""}
                 ${isLast ? "rounded-b-lg" : ""}
-                ${isSelected ? "bg-accent ring-2 ring-ring z-10 relative" : "hover:bg-muted/50"}
+                ${isSelected ? "bg-accent ring-2 ring-ring z-10 relative shadow-[0_0_15px_var(--glow-color)]" : "hover:bg-muted/50 hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
+                ${branch.isCurrent && !isSelected ? "animate-breathe-glow" : ""}
               `}
+              style={{ animationDelay: `${i * 50}ms` }}
             >
               <div className="flex items-center gap-2 min-w-0">
                 {branch.isCurrent && (
@@ -98,23 +101,11 @@ function CIStatusIcon({ status }: { status?: string }) {
 
   switch (status) {
     case "passing":
-      return (
-        <span className="text-green-600 text-xs" title="CI passing">
-          &#x2713;
-        </span>
-      );
+      return <AnimatedCheckmark />;
     case "failing":
-      return (
-        <span className="text-red-600 text-xs" title="CI failing">
-          &#x2717;
-        </span>
-      );
+      return <AnimatedX />;
     case "pending":
-      return (
-        <span className="text-amber-500 text-xs" title="CI pending">
-          &#x23F3;
-        </span>
-      );
+      return <PulsingDot />;
     default:
       return null;
   }
