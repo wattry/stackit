@@ -1,17 +1,21 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
 import { useRepo } from "@/components/providers/repo-provider";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { RecentlyMerged } from "@/components/recently-merged";
+import { EventFeed } from "@/components/event-feed";
 import { Separator } from "@/components/ui/separator";
 import { BackgroundMesh } from "@/components/ui/background-mesh";
 import { SkeletonSwimlane } from "@/components/ui/skeleton-shimmer";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { formatTimeAgo } from "@/lib/time";
+
+type Selection =
+  | { type: "branch"; name: string }
+  | { type: "stack"; rootBranch: string };
 
 export default function Home() {
   const {
@@ -23,31 +27,61 @@ export default function Home() {
     lastUpdated,
     refresh,
   } = useRepo();
-  const [selectedBranchName, setSelectedBranchName] = useState<string | null>(
-    () => {
-      if (typeof window === "undefined") return null;
-      return new URLSearchParams(window.location.search).get("branch");
-    }
-  );
+  const [selection, setSelection] = useState<Selection | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const branch = params.get("branch");
+    if (branch) return { type: "branch", name: branch };
+    const stack = params.get("stack");
+    if (stack) return { type: "stack", rootBranch: stack };
+    return null;
+  });
 
   const selectedBranch = useMemo(() => {
-    if (!selectedBranchName) return null;
+    if (!selection || selection.type !== "branch") return null;
     for (const stack of stackDetails) {
-      const found = stack.branches.find((b) => b.name === selectedBranchName);
+      const found = stack.branches.find((b) => b.name === selection.name);
       if (found) return found;
     }
     return null;
-  }, [selectedBranchName, stackDetails]);
+  }, [selection, stackDetails]);
+
+  const selectedStack = useMemo(() => {
+    if (!selection || selection.type !== "stack") return null;
+    return stackDetails.find((s) => s.rootBranch === selection.rootBranch) ?? null;
+  }, [selection, stackDetails]);
 
   const handleSelectBranch = useCallback((branch: BranchResponse | null) => {
-    setSelectedBranchName(branch?.name ?? null);
     const url = new URL(window.location.href);
+    url.searchParams.delete("stack");
     if (branch) {
+      setSelection({ type: "branch", name: branch.name });
       url.searchParams.set("branch", branch.name);
     } else {
+      setSelection(null);
       url.searchParams.delete("branch");
     }
     window.history.replaceState({}, "", url.toString());
+  }, []);
+
+  const handleSelectStack = useCallback((stack: StackDetail) => {
+    setSelection((prev) => {
+      const deselecting = prev?.type === "stack" && prev.rootBranch === stack.rootBranch;
+      const next = deselecting ? null : { type: "stack" as const, rootBranch: stack.rootBranch };
+
+      queueMicrotask(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("branch");
+        if (next) {
+          url.searchParams.set("stack", stack.rootBranch);
+        } else {
+          url.searchParams.delete("stack");
+        }
+        window.history.replaceState({}, "", url.toString());
+      });
+
+      return next;
+    });
   }, []);
 
   const currentUser = repo?.currentUser;
@@ -72,6 +106,8 @@ export default function Home() {
     );
     return { yourStacks: yours, otherOwners: sortedOthers };
   }, [stackDetails, currentUser]);
+
+  const hasSelection = selectedBranch || selectedStack;
 
   if (loading) {
     return (
@@ -149,8 +185,10 @@ export default function Home() {
                   <OwnerSwimlane
                     label="You"
                     stacks={yourStacks}
-                    selectedBranch={selectedBranch?.name ?? null}
+                    selectedBranch={selection?.type === "branch" ? selection.name : null}
+                    selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
                     onSelectBranch={handleSelectBranch}
+                    onSelectStack={handleSelectStack}
                   />
                 )}
 
@@ -161,8 +199,10 @@ export default function Home() {
                     label={`@${owner}`}
                     lastActive={getLastActiveDate(stacks)}
                     stacks={stacks}
-                    selectedBranch={selectedBranch?.name ?? null}
+                    selectedBranch={selection?.type === "branch" ? selection.name : null}
+                    selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
                     onSelectBranch={handleSelectBranch}
+                    onSelectStack={handleSelectStack}
                   />
                 ))}
               </div>
@@ -188,24 +228,21 @@ export default function Home() {
           )}
         </div>
 
-        {/* Right: branch detail */}
-        <AnimatePresence>
-          {selectedBranch && (
-            <motion.div
-              key="detail-panel"
-              className="flex shrink-0"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 400, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-            >
-              <Separator orientation="vertical" />
-              <div className="w-[400px] shrink-0 overflow-auto p-4">
-                <BranchDetail branch={selectedBranch} />
+        {/* Right: detail + event feed panel (always visible) */}
+        <div className="flex shrink-0">
+          <Separator orientation="vertical" />
+          <div className="w-[400px] shrink-0 flex flex-col overflow-hidden">
+            {hasSelection && (
+              <div className="flex-1 overflow-auto p-4">
+                {selectedBranch && <BranchDetail branch={selectedBranch} />}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            )}
+            {hasSelection && <Separator />}
+            <div className="p-3 overflow-auto">
+              <EventFeed />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

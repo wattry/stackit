@@ -141,3 +141,53 @@ export function fetchBranch(name: string): Promise<BranchResponse> {
     `/api/branches/${encodeURIComponent(name)}`
   );
 }
+
+// --- Event Feed Types ---
+
+export type EventKind =
+  | "branch_created"
+  | "branch_deleted"
+  | "branch_switched"
+  | "pr_opened"
+  | "pr_merged"
+  | "pr_closed"
+  | "ci_changed"
+  | "needs_restack"
+  | "restack_resolved"
+  | "stack_created"
+  | "stack_deleted"
+  | "revision_updated";
+
+export interface FeedEvent {
+  kind: EventKind;
+  timestamp: string;
+  branch?: string;
+  detail?: string;
+}
+
+// --- Mutation Types ---
+
+export interface SubmitResponse {
+  success: boolean;
+  message: string;
+  branches?: {
+    name: string;
+    status: string;
+    url?: string;
+    error?: string;
+  }[];
+}
+
+// --- Mutation Functions ---
+
+export async function submitStack(rootBranch: string): Promise<SubmitResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/submit/${encodeURIComponent(rootBranch)}`,
+    { method: "POST" }
+  );
+  const data: SubmitResponse = await res.json();
+  if (!res.ok && !data.message) {
+    throw new Error(`API error: ${res.status} ${res.statusText}`);
+  }
+  return data;
+}

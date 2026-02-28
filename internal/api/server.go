@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -29,12 +30,13 @@ type ServerConfig struct {
 
 // Server is the stackit-web HTTP server.
 type Server struct {
-	config      ServerConfig
-	eng         engine.Engine
-	gh          github.Client
-	broadcaster *handlers.EventBroadcaster
-	httpServer  *http.Server
-	refWatcher  *watcher.RefWatcher
+	config            ServerConfig
+	eng               engine.Engine
+	gh                github.Client
+	broadcaster       *handlers.EventBroadcaster
+	httpServer        *http.Server
+	refWatcher        *watcher.RefWatcher
+	lastCurrentBranch string
 }
 
 // NewServer creates a new API server.
@@ -95,11 +97,28 @@ func (s *Server) Start() error {
 	// Start watching git refs for changes so the engine stays current
 	if s.config.RepoRoot != "" {
 		trunkName := s.eng.Trunk().GetName()
+		if cb := s.eng.CurrentBranch(); cb != nil {
+			s.lastCurrentBranch = cb.GetName()
+		}
 		s.refWatcher = watcher.NewRefWatcher(s.config.RepoRoot, 200*time.Millisecond, func() {
 			if err := s.eng.Rebuild(trunkName); err != nil {
 				log.Printf("engine rebuild failed: %v", err)
 				return
 			}
+
+			if cb := s.eng.CurrentBranch(); cb != nil {
+				newBranch := cb.GetName()
+				if s.lastCurrentBranch != "" && newBranch != s.lastCurrentBranch {
+					data, _ := json.Marshal(map[string]string{
+						"from":      s.lastCurrentBranch,
+						"to":        newBranch,
+						"timestamp": time.Now().Format(time.RFC3339),
+					})
+					s.broadcaster.Broadcast("branch_switched", string(data))
+				}
+				s.lastCurrentBranch = newBranch
+			}
+
 			s.broadcaster.Broadcast("refresh", "{}")
 		})
 		go func() {

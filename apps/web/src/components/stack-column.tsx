@@ -10,13 +10,17 @@ import Markdown from "react-markdown";
 interface StackColumnProps {
   stack: StackDetail;
   selectedBranch: string | null;
+  selectedStack: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
+  onSelectStack: (stack: StackDetail) => void;
 }
 
 export function StackColumn({
   stack,
   selectedBranch,
+  selectedStack,
   onSelectBranch,
+  onSelectStack,
 }: StackColumnProps) {
   // Order branches root→leaf, then reverse so leaf is at top (stacking metaphor)
   const orderedBranches = orderBranches(stack.branches);
@@ -93,7 +97,11 @@ export function StackColumn({
       </div>
 
       {/* Status footer */}
-      <StackStatusFooter status={stack.status} />
+      <StackStatusFooter
+        status={stack.status}
+        selected={selectedStack === stack.rootBranch}
+        onClick={() => onSelectStack(stack)}
+      />
     </div>
   );
 }
@@ -125,15 +133,16 @@ const statusConfig: Record<string, { label: string; bg: string; text: string; sh
   },
 };
 
-function StackStatusFooter({ status }: { status: string }) {
+function StackStatusFooter({ status, selected, onClick }: { status: string; selected: boolean; onClick: () => void }) {
   const c = statusConfig[status] || statusConfig.incomplete;
 
   return (
-    <div
-      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium ${c.bg} ${c.text} ${c.shadow}`}
+    <button
+      onClick={onClick}
+      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.bg} ${c.text} ${c.shadow} ${selected ? "ring-2 ring-ring" : "hover:brightness-95 dark:hover:brightness-110"}`}
     >
       {c.label}
-    </div>
+    </button>
   );
 }
 

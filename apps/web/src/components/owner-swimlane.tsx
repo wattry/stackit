@@ -13,7 +13,9 @@ interface OwnerSwimlaneProps {
   lastActive?: Date;
   stacks: StackDetail[];
   selectedBranch: string | null;
+  selectedStack: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
+  onSelectStack: (stack: StackDetail) => void;
 }
 
 export function OwnerSwimlane({
@@ -21,7 +23,9 @@ export function OwnerSwimlane({
   lastActive,
   stacks,
   selectedBranch,
+  selectedStack,
   onSelectBranch,
+  onSelectStack,
 }: OwnerSwimlaneProps) {
   const [expanded, setExpanded] = useState(false);
   const color = swimlaneColor(label);
@@ -51,7 +55,9 @@ export function OwnerSwimlane({
               <StackColumn
                 stack={stack}
                 selectedBranch={selectedBranch}
+                selectedStack={selectedStack}
                 onSelectBranch={onSelectBranch}
+                onSelectStack={onSelectStack}
               />
             </motion.div>
           ))}

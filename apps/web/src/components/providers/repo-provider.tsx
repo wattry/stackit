@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import {
@@ -13,8 +14,13 @@ import {
   type RepoResponse,
   type StackDetail,
   type TrunkCommitResponse,
+  type ViewResponse,
+  type FeedEvent,
 } from "@/lib/api";
 import { useSSE } from "@/lib/use-sse";
+import { diffViews } from "@/lib/diff-views";
+
+const MAX_EVENTS = 100;
 
 interface RepoState {
   repo: RepoResponse | null;
@@ -23,7 +29,9 @@ interface RepoState {
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
+  events: FeedEvent[];
   refresh: () => void;
+  clearEvents: () => void;
 }
 
 const RepoContext = createContext<RepoState | null>(null);
@@ -43,6 +51,22 @@ export function RepoProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [events, setEvents] = useState<FeedEvent[]>([]);
+
+  const prevViewRef = useRef<ViewResponse | null>(null);
+
+  const addEvents = useCallback((newEvents: FeedEvent[]) => {
+    if (newEvents.length === 0) return;
+    setEvents((prev) => [...newEvents, ...prev].slice(0, MAX_EVENTS));
+  }, []);
+
+  const addEvent = useCallback((event: FeedEvent) => {
+    setEvents((prev) => [event, ...prev].slice(0, MAX_EVENTS));
+  }, []);
+
+  const clearEvents = useCallback(() => {
+    setEvents([]);
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -142,9 +166,20 @@ export function RepoProvider({ children }: { children: ReactNode }) {
         },
       ];
 
-      setStackDetails([...view.stacks, ...sampleStacks]);
+      const augmentedView: ViewResponse = {
+        repo: view.repo,
+        stacks: [...view.stacks, ...sampleStacks],
+      };
       setRecentlyMerged(view.recentlyMerged ?? []);
 
+      // Diff against previous view to detect changes
+      if (prevViewRef.current) {
+        const detected = diffViews(prevViewRef.current, augmentedView);
+        addEvents(detected);
+      }
+      prevViewRef.current = augmentedView;
+
+      setStackDetails(augmentedView.stacks);
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
@@ -152,15 +187,15 @@ export function RepoProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addEvents]);
 
   // Initial load
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // SSE updates trigger refresh
-  useSSE(loadData);
+  // SSE updates trigger refresh; server events get added directly
+  useSSE(loadData, addEvent);
 
   return (
     <RepoContext.Provider
@@ -171,7 +206,9 @@ export function RepoProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         lastUpdated,
+        events,
         refresh: loadData,
+        clearEvents,
       }}
     >
       {children}
