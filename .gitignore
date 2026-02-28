@@ -27,8 +27,14 @@ Thumbs.db
 bin/
 stackit
 st
+stackit-web
 
 .gocache/
 st-tui
 
 tmp/
+node_modules/
+apps/web/.next/
+apps/web/out/
+apps/api/static/assets/
+.overmind.sock
