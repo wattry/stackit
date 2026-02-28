@@ -90,7 +90,14 @@ jobs:
           mkdir -p bin
           go build -v -o bin/stackit ./apps/cli
           go build -v -o bin/stackit-api ./apps/api
-          go build -v -o bin/st-tui ./apps/st-tui
+          if [ -d ./apps/st-tui ]; then
+            go build -v -o bin/st-tui ./apps/st-tui
+          elif [ -d ./cmd/st-tui ]; then
+            go build -v -o bin/st-tui ./cmd/st-tui
+          else
+            echo "st-tui entrypoint not found (expected apps/st-tui or cmd/st-tui)"
+            exit 1
+          fi
 
   web:
     name: Web
