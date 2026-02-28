@@ -145,8 +145,8 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 	}
 
 	// Fail fast if no GitHub client
-	if ctx.GitHub() == nil {
-		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
+	if _, err := ctx.RequireGitHub(); err != nil {
+		return err
 	}
 
 	// Confirm unless --yes
@@ -221,8 +221,10 @@ func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {
 		return fmt.Errorf("no independent stacks found rooted at trunk")
 	}
 
-	if !opts.dryRun && ctx.GitHub() == nil {
-		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
+	if !opts.dryRun {
+		if _, err := ctx.RequireGitHub(); err != nil {
+			return err
+		}
 	}
 
 	// Show available stacks

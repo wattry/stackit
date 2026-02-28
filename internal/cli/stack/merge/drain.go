@@ -143,8 +143,8 @@ func runMergeDrain(ctx *app.Context, opts mergeDrainOptions) error {
 	}
 
 	// Fail fast if no GitHub client
-	if ctx.GitHub() == nil {
-		return fmt.Errorf("GitHub client not available - check your GITHUB_TOKEN or gh auth login")
+	if _, err := ctx.RequireGitHub(); err != nil {
+		return err
 	}
 
 	// Confirm unless --yes

@@ -67,7 +67,8 @@ func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) 
 	return result, nil
 }
 
-// traverseDownward walks down the parent chain to find the first branch from trunk
+// traverseDownward walks down the parent chain to find the first branch from trunk.
+// It skips worktree anchor branches transparently.
 func traverseDownward(currentBranch string, ctx *app.Context) string {
 	currentBranchObj := ctx.Engine.GetBranch(currentBranch)
 	if currentBranchObj.IsTrunk() {
@@ -80,8 +81,12 @@ func traverseDownward(currentBranch string, ctx *app.Context) string {
 		return currentBranch
 	}
 
-	// If parent is trunk, we're at the first branch from trunk
-	if parent.IsTrunk() {
+	// Skip worktree anchors — walk through them transparently
+	for parent != nil && parent.IsWorktreeAnchor() {
+		parent = parent.GetParent()
+	}
+
+	if parent == nil || parent.IsTrunk() {
 		return currentBranch
 	}
 
@@ -89,9 +94,14 @@ func traverseDownward(currentBranch string, ctx *app.Context) string {
 	return traverseDownward(parent.GetName(), ctx)
 }
 
-// traverseUpward walks up the children chain to find the tip branch
+// traverseUpward walks up the children chain to find the tip branch.
+// It skips worktree anchor branches transparently.
 func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackGraph, handler Handler) (string, error) {
 	children := graph.ChildBranches(ctx.Engine.GetBranch(currentBranch))
+
+	// Filter out worktree anchors, but include their children
+	children = flattenThroughAnchors(children, graph)
+
 	if len(children) == 0 {
 		// No children, we're at the tip
 		return currentBranch, nil
@@ -117,6 +127,21 @@ func traverseUpward(currentBranch string, ctx *app.Context, graph *engine.StackG
 
 	ctx.Output.Info("⮑  %s", nextBranch)
 	return traverseUpward(nextBranch, ctx, graph, handler)
+}
+
+// flattenThroughAnchors replaces worktree anchor branches with their non-anchor children.
+func flattenThroughAnchors(branches []engine.Branch, graph *engine.StackGraph) []engine.Branch {
+	var result []engine.Branch
+	for _, b := range branches {
+		if b.IsWorktreeAnchor() {
+			// Replace anchor with its children (recursively flatten)
+			grandchildren := graph.ChildBranches(b)
+			result = append(result, flattenThroughAnchors(grandchildren, graph)...)
+		} else {
+			result = append(result, b)
+		}
+	}
+	return result
 }
 
 // handleMultipleChildren prompts the user to select a branch when multiple children exist
