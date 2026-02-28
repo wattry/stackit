@@ -47,14 +47,16 @@ run = """
 """
 
 [tasks.build]
-description = "Build CLI, API, and TUI binaries with local version info"
+description = "Build CLI and API binaries with local version info"
 run = """
   mkdir -p bin
   COMMIT=$(git rev-parse --short HEAD)
   DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   go build -ldflags "-X main.version=dev-local -X main.commit=$COMMIT -X main.date=$DATE" -o bin/stackit ./apps/cli
   go build -o bin/stackit-api ./apps/api
-  go build -o bin/st-tui ./apps/st-tui
+  if [ -d ./apps/st-tui ]; then
+    go build -o bin/st-tui ./apps/st-tui
+  fi
   if [ ! -L ./bin/st ] && [ ! -f ./bin/st ]; then
     ln -s stackit ./bin/st
     echo "Created symlink: bin/st -> stackit"
