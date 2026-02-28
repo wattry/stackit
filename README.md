@@ -589,20 +589,26 @@ This repository includes multiple first-class applications:
 - `apps/cli` - main `stackit` CLI
 - `apps/api` - HTTP API server (serves `/api/v1` and compatibility `/api`) plus embedded web assets
 - `apps/st-tui` - TUI storyboard binary
-- `apps/web` - React/Vite frontend
+- `apps/web` - Next.js frontend
 
 ### Full-Stack Local Development
 
 Recommended: run both API and web UI with one command via overmind + Procfile:
 
 ```bash
-# install overmind once if needed (e.g. brew install tmux overmind)
+# one-time setup
+mise install
+mise run web-install
+
+# tmux is still required by overmind (install via system package manager)
 mise run dev
 ```
 
 This starts:
 - `api`: `go run ./apps/api --port 8080`
 - `web`: `pnpm --filter @stackit/web dev`
+
+Open the web UI at `http://localhost:3000`.
 
 Stop all dev processes:
 
@@ -637,7 +643,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 - **Git 2.25+**
 - **GitHub CLI (`gh`)** for PR operations
 - **Go 1.26+** (if building from source)
-- **Node.js + pnpm** (for `apps/web`)
+- **tmux** (required by overmind)
 
 ## License
 

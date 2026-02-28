@@ -32,7 +32,7 @@ func run() error {
 		port          = flag.Int("port", 8080, "Port to listen on")
 		cwd           = flag.String("cwd", "", "Working directory for repository detection")
 		remote        = flag.String("remote", "origin", "Git remote name used in API responses")
-		corsOrigins   = flag.String("cors", "http://localhost:5173", "Comma-separated allowed CORS origins")
+		corsOrigins   = flag.String("cors", "http://localhost:3000,http://localhost:5173", "Comma-separated allowed CORS origins")
 		apiPrefix     = flag.String("api-prefix", "/api/v1", "Canonical API prefix")
 		enableLegacy  = flag.Bool("legacy-api-prefix", true, "Also expose legacy /api endpoints")
 		shutdownGrace = flag.Duration("shutdown-timeout", 10*time.Second, "Graceful shutdown timeout")

@@ -10,12 +10,15 @@ _.path = ["{{ config_root }}/bin", "{{ env.HOME }}/go/bin"]
 [tools]
 # Go toolchain
 go = "1.26"
+node = "22"
+pnpm = "10"
 
 # Test runner with prettier output
 "go:gotest.tools/gotestsum" = "latest"
 
 # Code formatting
 "go:golang.org/x/tools/cmd/goimports" = "latest"
+"go:github.com/DarthSim/overmind/v2" = "latest"
 
 # Linting
 golangci-lint = "latest"
@@ -159,7 +162,7 @@ depends = ["web-build"]
 run = """
   mkdir -p apps/api/static
   rm -rf apps/api/static/assets
-  cp -R apps/web/dist/. apps/api/static/
+  cp -R apps/web/out/. apps/api/static/
 """
 
 [tasks."check-web"]

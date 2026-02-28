@@ -180,7 +180,7 @@ stackit/
 │   ├── cli/        # CLI entry point
 │   ├── api/        # HTTP API and static web serving binary
 │   ├── st-tui/     # TUI storyboard binary
-│   └── web/        # React/Vite frontend
+│   └── web/        # Next.js frontend
 ├── internal/
 │   ├── actions/       # High-level business logic for CLI commands
 │   ├── engine/        # Core logic for branch relationships and metadata

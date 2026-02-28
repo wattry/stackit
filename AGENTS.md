@@ -79,7 +79,7 @@ apps/
 ├── cli/        CLI entry point
 ├── api/        HTTP API + embedded static web assets
 ├── st-tui/     TUI storyboard binary
-└── web/        React/Vite frontend workspace
+└── web/        Next.js frontend workspace
 internal/
 ├── actions/       Business logic for commands (create, submit, sync, etc.)
 ├── cli/           Command definitions, handlers
