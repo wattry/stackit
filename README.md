@@ -333,6 +333,8 @@ stackit sync
 ```
 This pulls the latest changes from `main`, deletes branches that have already been merged, and restacks your remaining branches on top of the new `main`.
 
+**Safety:** Sync protects branches that have unpushed local commits. If a branch has been merged on GitHub but has local commits that were never pushed, sync will skip deleting it and warn you, preventing accidental data loss.
+
 ### Working on Multiple Stacks in Parallel
 To work on separate features simultaneously, each in their own directory:
 ```bash
