@@ -151,6 +151,37 @@ stackit worktree prune --dry-run  # Preview what would be removed
 
 ---
 
+## How Anchor Branches Work
+
+When you create a worktree with `wt create`, Stackit creates an **anchor branch** — a special marker branch with no commits that connects your worktree's stack to trunk. Anchors are an implementation detail that you generally don't need to think about; Stackit handles them transparently.
+
+### Anchors Are Hidden
+
+Anchor branches are automatically hidden from most UI surfaces:
+
+- **`stackit log`** — Anchors are filtered out of the tree. A stack like `main → wt-anchor → feature` renders as `main → feature`.
+- **Navigation (`up`, `down`, `top`, `bottom`)** — Navigation commands skip over anchors. Moving "down" from a feature branch in a worktree goes straight to trunk, not to the anchor.
+- **`stackit submit`** — PR parent resolution skips anchors. A branch parented to an anchor will have its PR base set to trunk (or the nearest real ancestor), not the anchor branch.
+
+### Anchors Cannot Be Modified
+
+Anchor branches are protected from modification. You cannot `modify`, `squash`, `absorb`, or `checkout` an anchor directly. If you try to check out an anchor, Stackit will suggest using `stackit worktree open` instead.
+
+### Worktree-Aware Checkout
+
+When you check out a branch that lives in a different worktree, Stackit detects this and switches you to the correct worktree automatically (with shell integration enabled). Without shell integration, it prints the path and a fallback command:
+
+```bash
+# From main repo, checking out a branch in a worktree:
+stackit checkout feature
+# → "Switching to worktree for stack payments."
+# → cd ../myapp-stacks/payments && stackit co feature
+```
+
+Similarly, checking out trunk or an untracked branch from within a worktree switches you back to the main repository.
+
+---
+
 ## Create vs Attach
 
 | | `wt create` | `wt attach` |
