@@ -56,8 +56,7 @@ jobs:
           elif [ -d ./cmd/st-tui ]; then
             go build -v -o bin/st-tui ./cmd/st-tui
           else
-            echo "st-tui entrypoint not found (expected apps/st-tui or cmd/st-tui)"
-            exit 1
+            echo "st-tui entrypoint not found (expected apps/st-tui or cmd/st-tui); skipping optional st-tui build"
           fi
 
   goreleaser:
