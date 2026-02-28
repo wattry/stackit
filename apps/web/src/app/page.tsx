@@ -4,9 +4,10 @@ import { useCallback, useMemo, useState } from "react";
 import { useRepo } from "@/components/providers/repo-provider";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
-import { RecentlyMerged } from "@/components/recently-merged";
+import { StackDetailPanel } from "@/components/branch-detail/stack-detail";
 import { EventFeed } from "@/components/event-feed";
 import { Separator } from "@/components/ui/separator";
+import { RecentlyMerged } from "@/components/recently-merged";
 import { BackgroundMesh } from "@/components/ui/background-mesh";
 import { SkeletonSwimlane } from "@/components/ui/skeleton-shimmer";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -214,12 +215,8 @@ export default function Home() {
                 <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
               </div>
 
-              {/* Recently merged history */}
-              <RecentlyMerged
-                commits={recentlyMerged}
-                owner={repo?.owner}
-                repo={repo?.repo}
-              />
+              {/* Recent trunk commits */}
+              <RecentlyMerged />
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -235,6 +232,7 @@ export default function Home() {
             {hasSelection && (
               <div className="flex-1 overflow-auto p-4">
                 {selectedBranch && <BranchDetail branch={selectedBranch} />}
+                {selectedStack && <StackDetailPanel stack={selectedStack} />}
               </div>
             )}
             {hasSelection && <Separator />}

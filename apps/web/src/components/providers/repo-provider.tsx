@@ -45,9 +45,7 @@ export function useRepo() {
 export function RepoProvider({ children }: { children: ReactNode }) {
   const [repo, setRepo] = useState<RepoResponse | null>(null);
   const [stackDetails, setStackDetails] = useState<StackDetail[]>([]);
-  const [recentlyMerged, setRecentlyMerged] = useState<TrunkCommitResponse[]>(
-    []
-  );
+  const [recentlyMerged, setRecentlyMerged] = useState<TrunkCommitResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -170,7 +168,6 @@ export function RepoProvider({ children }: { children: ReactNode }) {
         repo: view.repo,
         stacks: [...view.stacks, ...sampleStacks],
       };
-      setRecentlyMerged(view.recentlyMerged ?? []);
 
       // Diff against previous view to detect changes
       if (prevViewRef.current) {
@@ -180,6 +177,7 @@ export function RepoProvider({ children }: { children: ReactNode }) {
       prevViewRef.current = augmentedView;
 
       setStackDetails(augmentedView.stacks);
+      setRecentlyMerged(view.recentlyMerged ?? []);
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
