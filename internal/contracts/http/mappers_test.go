@@ -53,6 +53,57 @@ func TestMapTrunkCommits(t *testing.T) {
 	require.Empty(t, got[1].StackPRs)
 }
 
+func TestMapTrunkCommits_FiltersCoveredPRs(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	commits := []git.RecentCommit{
+		{
+			SHA:            "aaaa000000000000",
+			Subject:        "Consolidate stack (#99)",
+			Author:         "alice",
+			Date:           now,
+			PRNumber:       99,
+			Kind:           git.RecentCommitKindStackMerge,
+			StackSize:      3,
+			StackPRNumbers: []int{45, 46, 47},
+		},
+		{
+			SHA:      "bbbb000000000000",
+			Subject:  "feat: add auth (#45)",
+			Author:   "alice",
+			Date:     now,
+			PRNumber: 45,
+			Kind:     git.RecentCommitKindRegular,
+		},
+		{
+			SHA:      "cccc000000000000",
+			Subject:  "feat: add middleware (#46)",
+			Author:   "alice",
+			Date:     now,
+			PRNumber: 46,
+			Kind:     git.RecentCommitKindRegular,
+		},
+		{
+			SHA:      "dddd000000000000",
+			Subject:  "unrelated fix (#50)",
+			Author:   "bob",
+			Date:     now,
+			PRNumber: 50,
+			Kind:     git.RecentCommitKindRegular,
+		},
+	}
+
+	got := MapTrunkCommits(commits)
+	require.Len(t, got, 2, "commits covered by stack-merge should be filtered out")
+
+	require.Equal(t, "aaaa000", got[0].SHA)
+	require.Equal(t, TrunkCommitKindStackMerge, got[0].Kind)
+
+	require.Equal(t, "dddd000", got[1].SHA)
+	require.Equal(t, "unrelated fix (#50)", got[1].Message)
+}
+
 func TestMapTrunkCommits_DefaultKindFallback(t *testing.T) {
 	t.Parallel()
 

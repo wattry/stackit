@@ -12,6 +12,7 @@ import (
 const trailerValueSeparator = "\x1e"
 
 var prNumberSuffixRe = regexp.MustCompile(`\(#(\d+)\)\s*$`)
+var mergeSubjectRe = regexp.MustCompile(`^Merge pull request #(\d+) from `)
 
 // RecentCommitKind describes the presentation type of a trunk commit.
 type RecentCommitKind string
@@ -36,12 +37,14 @@ type RecentCommit struct {
 
 // GetRecentCommits returns the most recent commits from a branch, including stack trailer metadata.
 // Uses git log with a custom format string that includes trailer values.
+// For merge commits ("Merge pull request #N from ..."), the subject is replaced with the
+// first line of the body, which contains the actual PR title.
 func (r *runner) GetRecentCommits(branchName string, count int) ([]RecentCommit, error) {
-	// Format: SHA\x1fsubject\x1fauthor\x1fdate\x1fstack-size\x1fprs\x1fscope
-	// Use a non-empty trailer separator so duplicate keys remain parseable.
-	format := "%H\x1f%s\x1f%an\x1f%aI\x1f%(trailers:key=Stackit-Stack-Size,valueonly,separator=%x1e)\x1f%(trailers:key=Stackit-PRs,valueonly,separator=%x1e)\x1f%(trailers:key=Stackit-Scope,valueonly,separator=%x1e)"
+	// Format: SHA\x1fsubject\x1fauthor\x1fdate\x1fbody\x1fstack-size\x1fprs\x1fscope\x00
+	// Records are separated by null bytes so multi-line bodies don't break parsing.
+	format := "%H\x1f%s\x1f%an\x1f%aI\x1f%b\x1f%(trailers:key=Stackit-Stack-Size,valueonly,separator=%x1e)\x1f%(trailers:key=Stackit-PRs,valueonly,separator=%x1e)\x1f%(trailers:key=Stackit-Scope,valueonly,separator=%x1e)%x00"
 
-	output, err := r.runGitCommandInternal("log", fmt.Sprintf("-%d", count), "--format="+format, branchName)
+	output, err := r.runGitCommandInternal("log", "--first-parent", fmt.Sprintf("-%d", count), "--format="+format, branchName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent commits for %s: %w", branchName, err)
 	}
@@ -52,19 +55,30 @@ func (r *runner) GetRecentCommits(branchName string, count int) ([]RecentCommit,
 	}
 
 	var commits []RecentCommit
-	for line := range strings.SplitSeq(output, "\n") {
-		if line == "" {
+	for record := range strings.SplitSeq(output, "\x00") {
+		record = strings.TrimSpace(record)
+		if record == "" {
 			continue
 		}
 
-		fields := strings.SplitN(line, "\x1f", 7)
+		fields := strings.SplitN(record, "\x1f", 8)
 		if len(fields) < 4 {
 			continue
 		}
 
+		subject := fields[1]
+		body := ""
+		if len(fields) > 4 {
+			body = fields[4]
+		}
+
+		// For GitHub merge commits, the subject is "Merge pull request #N from ...".
+		// The actual PR title is the first line of the body.
+		subject = resolveSubject(subject, body)
+
 		commit := RecentCommit{
 			SHA:     fields[0],
-			Subject: fields[1],
+			Subject: subject,
 			Author:  fields[2],
 		}
 
@@ -72,25 +86,65 @@ func (r *runner) GetRecentCommits(branchName string, count int) ([]RecentCommit,
 			commit.Date = date
 		}
 
-		if len(fields) > 4 {
-			commit.StackSize = parseStackSizeTrailer(fields[4])
-		}
-
 		if len(fields) > 5 {
-			commit.StackPRNumbers = parseStackPRsTrailer(fields[5])
+			commit.StackSize = parseStackSizeTrailer(fields[5])
 		}
 
 		if len(fields) > 6 {
-			commit.StackScope = parseStackScopeTrailer(fields[6])
+			commit.StackPRNumbers = parseStackPRsTrailer(fields[6])
+		}
+
+		if len(fields) > 7 {
+			commit.StackScope = parseStackScopeTrailer(fields[7])
 		}
 
 		commit.PRNumber = parsePRNumberFromSubject(commit.Subject)
+		if commit.PRNumber == 0 {
+			commit.PRNumber = parseMergePRNumber(fields[1])
+		}
 		commit.Kind = deriveRecentCommitKind(commit)
 
 		commits = append(commits, commit)
 	}
 
 	return commits, nil
+}
+
+// resolveSubject returns a human-readable subject for a commit.
+// For GitHub merge commits ("Merge pull request #N from ..."), it extracts the
+// actual PR title from the first line of the body.
+func resolveSubject(subject, body string) string {
+	if !mergeSubjectRe.MatchString(subject) {
+		return subject
+	}
+	firstLine := firstNonEmptyLine(body)
+	if firstLine != "" {
+		return firstLine
+	}
+	return subject
+}
+
+// parseMergePRNumber extracts the PR number from a "Merge pull request #N from ..." subject.
+func parseMergePRNumber(subject string) int {
+	matches := mergeSubjectRe.FindStringSubmatch(subject)
+	if len(matches) < 2 {
+		return 0
+	}
+	n, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func firstNonEmptyLine(s string) string {
+	for line := range strings.SplitSeq(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func parseStackSizeTrailer(raw string) int {

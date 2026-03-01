@@ -297,10 +297,28 @@ func computeStackStatus(graph *engine.StackGraph, branchNames []string) string {
 }
 
 // MapTrunkCommits converts git RecentCommit values to API TrunkCommitResponse values.
-// Parsing/normalization is done in the git layer; this function maps fields.
+// Commits whose PR number is already represented by a stack-merge's StackPRs are
+// filtered out so that consolidated stacks don't show duplicate entries.
 func MapTrunkCommits(commits []git.RecentCommit) []TrunkCommitResponse {
+	// Collect all PR numbers that are covered by stack-merge consolidation commits.
+	coveredPRs := make(map[int]struct{})
+	for _, c := range commits {
+		if c.StackSize > 0 {
+			for _, pr := range c.StackPRNumbers {
+				coveredPRs[pr] = struct{}{}
+			}
+		}
+	}
+
 	result := make([]TrunkCommitResponse, 0, len(commits))
 	for _, c := range commits {
+		// Skip commits whose PR is already represented by a stack-merge.
+		if c.PRNumber != 0 && c.StackSize == 0 {
+			if _, covered := coveredPRs[c.PRNumber]; covered {
+				continue
+			}
+		}
+
 		resp := TrunkCommitResponse{
 			SHA:        shortSHA(c.SHA),
 			Message:    c.Subject,
