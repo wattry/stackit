@@ -1,5 +1,7 @@
 # Web App Architecture
 
+> **Experimental:** The web dashboard is under active development and may change significantly.
+
 The stackit web app is a dashboard for visualizing stacked branches. It displays branch stacks in a swimlane layout organized by owner, with real-time updates via server-sent events.
 
 ## Tech Stack

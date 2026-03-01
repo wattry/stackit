@@ -65,6 +65,7 @@ Stacks naturally form a tree structure—a single branch can have multiple child
 - 🐙 **GitHub Integration** — Install CI checks to prevent merging locked PRs
 - ⚓ **Git Hooks** — Automatically validate branch state before committing with `precommit`
 - 📂 **Worktrees** — Work on multiple stacks in parallel with dedicated directories and post-creation hooks
+- 🧪 **Web dashboard** *(experimental)* — Visualize your stacks in a swimlane dashboard with real-time updates ([docs](docs/web.md))
 
 ---
 
