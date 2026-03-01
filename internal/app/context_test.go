@@ -75,7 +75,7 @@ func (f *fakeGitHubClient) GetPullRequest(_ context.Context, _, _ string, _ int)
 	return nil, nil
 }
 
-func (f *fakeGitHubClient) MergePullRequest(_ context.Context, _ string, _ github.MergeMethod) error {
+func (f *fakeGitHubClient) MergePullRequest(_ context.Context, _ string, _ github.MergePROptions) error {
 	return nil
 }
 

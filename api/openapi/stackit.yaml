@@ -115,6 +115,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StackDetail"
+        recentlyMerged:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrunkCommitResponse"
     RepoResponse:
       type: object
       required: [owner, repo, trunk, currentBranch, remote]
@@ -254,4 +258,26 @@ components:
         status:
           type: string
         conclusion:
+          type: string
+    TrunkCommitResponse:
+      type: object
+      required: [sha, message, author, date]
+      properties:
+        sha:
+          type: string
+        message:
+          type: string
+        author:
+          type: string
+        date:
+          type: string
+        prNumber:
+          type: integer
+        stackSize:
+          type: integer
+        stackPRs:
+          type: array
+          items:
+            type: integer
+        stackScope:
           type: string

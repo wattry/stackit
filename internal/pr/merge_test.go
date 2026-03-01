@@ -116,6 +116,9 @@ func TestFormatMergeBody(t *testing.T) {
 main
   └─ feature-a (#123)
 ` + "```" + `
+
+Stackit-Stack-Size: 1
+Stackit-PRs: 123
 `
 		assert.Equal(t, expected, result)
 	})
@@ -141,6 +144,9 @@ main
   └─ feature-a (#1)
     └─ feature-a-1 (#2)
 ` + "```" + `
+
+Stackit-Stack-Size: 2
+Stackit-PRs: 1,2
 `
 		assert.Equal(t, expected, result)
 	})
@@ -163,6 +169,8 @@ main
 main
   └─ feature-a
 ` + "```" + `
+
+Stackit-Stack-Size: 1
 `
 		assert.Equal(t, expected, result)
 	})
@@ -194,6 +202,9 @@ main
 main
   └─ feature-a (#1)
 ` + "```" + `
+
+Stackit-Stack-Size: 1
+Stackit-PRs: 1
 `
 		assert.Equal(t, expected, result)
 	})
@@ -208,6 +219,9 @@ main
 		expected := `This PR merges the following changes:
 
 1. **#1** Add feature A
+
+Stackit-Stack-Size: 1
+Stackit-PRs: 1
 `
 		assert.Equal(t, expected, result)
 	})
@@ -238,6 +252,10 @@ This PR merges the following changes:
 main
   └─ feature-a (#1)
 ` + "```" + `
+
+Stackit-Stack-Size: 1
+Stackit-PRs: 1
+Stackit-Scope: Add user authentication
 `
 		assert.Equal(t, expected, result)
 	})
@@ -265,6 +283,10 @@ This PR merges the following changes:
 main
   └─ feature-a (#1)
 ` + "```" + `
+
+Stackit-Stack-Size: 1
+Stackit-PRs: 1
+Stackit-Scope: Add user authentication
 `
 		assert.Equal(t, expected, result)
 	})
@@ -289,6 +311,9 @@ main
 main
   └─ feature-a (#1)
 ` + "```" + `
+
+Stackit-Stack-Size: 1
+Stackit-PRs: 1
 `
 		assert.Equal(t, expected, result)
 	})

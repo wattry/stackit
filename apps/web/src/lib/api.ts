@@ -85,11 +85,23 @@ export interface RemoteStatus {
   missingRemote: boolean;
 }
 
+export interface TrunkCommitResponse {
+  sha: string;
+  message: string;
+  author: string;
+  date: string;
+  prNumber?: number;
+  stackSize?: number;
+  stackPRs?: number[];
+  stackScope?: string;
+}
+
 // --- Combined View Response ---
 
 export interface ViewResponse {
   repo: RepoResponse;
   stacks: StackDetail[];
+  recentlyMerged?: TrunkCommitResponse[];
 }
 
 // --- Fetch Functions ---

@@ -416,6 +416,13 @@ func (t *tracingRunner) GetCommitLog(sha, format string) (string, error) {
 	return result, err
 }
 
+func (t *tracingRunner) GetRecentCommits(branchName string, count int) ([]RecentCommit, error) {
+	start := time.Now()
+	result, err := t.inner.GetRecentCommits(branchName, count)
+	t.trace("GetRecentCommits", time.Since(start), err == nil, err, slog.String("branch", branchName), slog.Int("count", count))
+	return result, err
+}
+
 func (t *tracingRunner) GetCommitTemplate(ctx context.Context) (string, error) {
 	start := time.Now()
 	result, err := t.inner.GetCommitTemplate(ctx)

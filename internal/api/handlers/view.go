@@ -71,8 +71,15 @@ func (h *ViewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		details = append(details, detail)
 	}
 
+	// Fetch recently merged trunk commits with stack metadata
+	var recentlyMerged []httpcontract.TrunkCommitResponse
+	if recentCommits, err := h.eng.GetRecentTrunkCommits(10); err == nil && len(recentCommits) > 0 {
+		recentlyMerged = httpcontract.MapTrunkCommits(recentCommits)
+	}
+
 	writeJSON(w, httpcontract.ViewResponse{
-		Repo:   repoResp,
-		Stacks: details,
+		Repo:           repoResp,
+		Stacks:         details,
+		RecentlyMerged: recentlyMerged,
 	})
 }

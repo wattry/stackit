@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/pr"
 )
 
 // ConsolidationResult contains information about a completed consolidation
@@ -108,7 +109,7 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 		if err != nil {
 			return nil, fmt.Errorf("failed to get merge method: %w", err)
 		}
-		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, mergeMethod); err != nil {
+		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, mergeMethod, c.buildTrailerMessage()); err != nil {
 			splog.Warn("Could not enable automerge: %v", err)
 			splog.Tip("Enable automerge manually on the PR: %s", pr.HTMLURL)
 		} else {
@@ -195,6 +196,11 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 		commitMsg += fmt.Sprintf(" (%d branches)", len(branches))
 	}
 
+	// Append stack trailers for history tracking
+	prNumbers := c.collectPRNumbers()
+	trailers := pr.FormatStackTrailers(len(branches), prNumbers, scope)
+	commitMsg += "\n\n" + trailers
+
 	splog.Info("  Merging %d branches via octopus merge...", len(branches))
 	splog.Debug("Consolidation merge: merging branches %v", branches)
 
@@ -251,7 +257,11 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 	})
 	waiter.SetProgressHandler(c.handler, c.stepIndex)
 
-	return waiter.WaitAndMerge(ctx, branchName, pr, expectChecks, mergeMethod)
+	mergeOpts := github.MergePROptions{
+		Method:        mergeMethod,
+		CommitMessage: c.buildTrailerMessage(),
+	}
+	return waiter.WaitAndMerge(ctx, branchName, pr, expectChecks, mergeOpts)
 }
 
 func (c *ConsolidateMergeExecutor) postMergeCleanup(_ context.Context) {
@@ -336,6 +346,28 @@ func (c *ConsolidateMergeExecutor) getStackScope() string {
 
 func (c *ConsolidateMergeExecutor) getOwnerRepo() (owner, repo string) {
 	return c.ctx.GitHub().GetOwnerRepo()
+}
+
+// collectPRNumbers returns PR numbers from all branches in the merge plan.
+func (c *ConsolidateMergeExecutor) collectPRNumbers() []int {
+	var nums []int
+	for _, b := range c.plan.BranchesToMerge {
+		if b.PRNumber > 0 {
+			nums = append(nums, b.PRNumber)
+		}
+	}
+	return nums
+}
+
+// buildTrailerMessage returns the trailer block for the consolidation merge commit.
+func (c *ConsolidateMergeExecutor) buildTrailerMessage() string {
+	scope := c.getStackScope()
+	prNumbers := c.collectPRNumbers()
+	branches := make([]string, len(c.plan.BranchesToMerge))
+	for i, b := range c.plan.BranchesToMerge {
+		branches[i] = b.BranchName
+	}
+	return pr.FormatStackTrailers(len(branches), prNumbers, scope)
 }
 
 // resolveMergeMethod returns the merge method to use, preferring the override if set.

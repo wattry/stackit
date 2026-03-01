@@ -99,9 +99,11 @@ func FormatMergeBody(params MergeBodyParams) string {
 	body.WriteString("This PR merges the following changes:\n\n")
 
 	// Branch list with PR info
+	prNumbers := make([]int, 0, len(params.Branches))
 	for i, branch := range params.Branches {
 		if branch.PRNumber > 0 {
 			fmt.Fprintf(&body, "%d. **#%d** %s\n", i+1, branch.PRNumber, branch.PRTitle)
+			prNumbers = append(prNumbers, branch.PRNumber)
 		} else {
 			fmt.Fprintf(&body, "%d. %s\n", i+1, branch.Name)
 		}
@@ -121,6 +123,17 @@ func FormatMergeBody(params MergeBodyParams) string {
 		body.WriteString("```\n")
 		body.WriteString(params.StackTree)
 		body.WriteString("```\n")
+	}
+
+	// Append stack trailers as a fallback for repos whose squash merge commit
+	// message setting uses "PR body". Trailers survive automatically in that case.
+	if len(params.Branches) > 0 {
+		scope := ""
+		if params.StackDescription != nil {
+			scope = params.StackDescription.Title
+		}
+		body.WriteString("\n")
+		body.WriteString(FormatStackTrailers(len(params.Branches), prNumbers, scope))
 	}
 
 	return body.String()
