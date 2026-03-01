@@ -10,6 +10,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/pr"
 )
 
 // MultiStackPRCreator handles creating the multi-stack PR
@@ -90,15 +91,58 @@ func (p *MultiStackPRCreator) CreatePR(ctx context.Context, branchName string, i
 }
 
 // WaitAndMerge waits for CI to pass and auto-merges the PR
-func (p *MultiStackPRCreator) WaitAndMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo) error {
+func (p *MultiStackPRCreator) WaitAndMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo, commitBody string) error {
 	if _, err := p.ctx.RequireGitHub(); err != nil {
 		return err
 	}
 
-	// Load config for merge method
+	mergeMethod, err := p.resolveMergeMethod()
+	if err != nil {
+		return fmt.Errorf("failed to get merge method: %w", err)
+	}
+
+	waiter := NewCIWaiter(CIWaiterOptions{
+		Client: p.ctx.GitHub(),
+		Output: p.ctx.Output,
+	})
+
+	return waiter.WaitAndMerge(ctx, branchName, pr, true, github.MergePROptions{
+		Method:     mergeMethod,
+		CommitBody: commitBody,
+	})
+}
+
+// EnableAutoMerge enables GitHub auto-merge for a multi-stack PR.
+func (p *MultiStackPRCreator) EnableAutoMerge(ctx context.Context, pr *github.PullRequestInfo, commitBody string) error {
+	if _, err := p.ctx.RequireGitHub(); err != nil {
+		return err
+	}
+	if pr == nil || pr.NodeID == "" {
+		return fmt.Errorf("missing pull request node id")
+	}
+
+	mergeMethod, err := p.resolveMergeMethod()
+	if err != nil {
+		return fmt.Errorf("failed to get merge method: %w", err)
+	}
+
+	return github.EnableAutoMerge(ctx, p.ctx.Git(), pr.NodeID, github.EnableAutoMergeOptions{
+		MergeMethod: mergeMethod,
+		CommitBody:  commitBody,
+	})
+}
+
+// BuildStackMetadata builds stack trailer metadata for the included multi-stack branches.
+func (p *MultiStackPRCreator) BuildStackMetadata(included []MultiStackInfo) pr.StackMetadata {
+	branches := p.prGenerator.collectMultiStackBranches(included)
+	scopes := p.prGenerator.collectScopes(branches)
+	return pr.BuildStackMetadata(branches, pr.ResolveUnifiedScope(scopes))
+}
+
+func (p *MultiStackPRCreator) resolveMergeMethod() (github.MergeMethod, error) {
 	cfg, err := config.LoadConfig(p.ctx.RepoRoot)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return "", fmt.Errorf("failed to load config: %w", err)
 	}
 
 	mergeMethod := github.MergeMethodSquash // default
@@ -111,10 +155,5 @@ func (p *MultiStackPRCreator) WaitAndMerge(ctx context.Context, branchName strin
 		}
 	}
 
-	waiter := NewCIWaiter(CIWaiterOptions{
-		Client: p.ctx.GitHub(),
-		Output: p.ctx.Output,
-	})
-
-	return waiter.WaitAndMerge(ctx, branchName, pr, true, github.MergePROptions{Method: mergeMethod})
+	return mergeMethod, nil
 }
