@@ -181,12 +181,14 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 
 	out.Success("Created PR #%d: %s", pr.Number, pr.HTMLURL)
 	out.Debug("multistack: PR created successfully")
+	metadata := prCreator.BuildStackMetadata(result.IncludedStacks)
+	trailers := metadata.ToTrailers()
 
 	// 7. Optionally wait for CI and auto-merge
 	if opts.Wait {
 		out.Info("Waiting for CI to pass...")
 		out.Debug("multistack: waiting for CI and auto-merge")
-		if err := prCreator.WaitAndMerge(ctx.Context, branchName, pr); err != nil {
+		if err := prCreator.WaitAndMerge(ctx.Context, branchName, pr, trailers); err != nil {
 			out.Debug("multistack: wait and merge failed: %v", err)
 			return nil, fmt.Errorf("failed to wait and merge: %w", err)
 		}
@@ -209,6 +211,14 @@ func ExecuteMultiStack(ctx *app.Context, opts MultiStackOptions) (*MultiStackRes
 
 		cleanupResult := cleaner.CleanupBranches(ctx.Context, branchNames)
 		cleaner.LogResult(cleanupResult)
+	} else {
+		out.Debug("multistack: enabling auto-merge for fire-and-forget")
+		if err := prCreator.EnableAutoMerge(ctx.Context, pr, trailers); err != nil {
+			out.Warn("Could not enable automerge: %v", err)
+			out.Tip("Enable automerge manually on the PR: %s", pr.HTMLURL)
+		} else {
+			out.Success("Automerge enabled on PR #%d", pr.Number)
+		}
 	}
 
 	out.Debug("multistack: completed successfully")
