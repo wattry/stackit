@@ -99,6 +99,7 @@ api/openapi/       API contract source of truth
 ## Documentation
 
 - `docs/config.md` - Configuration system, keys, layered config
+- `docs/recipes.md` - Step-by-step file lists for cross-cutting changes
 - `docs/shipping.md` - Merge strategies, consolidation, multi-stack shipping
 - `docs/tui.md` - TUI patterns, BaseModel, styling, components
 - `docs/web.md` - Web app architecture, components, data flow, styling
@@ -110,7 +111,9 @@ api/openapi/       API contract source of truth
 |------|-------|
 | Add a new config option | See "Adding New Configuration" in `docs/config.md` |
 | Add submit command config | See "Submit Command Config Flow" in `docs/config.md` |
-| Add a new CLI command | Follow patterns in `internal/cli/` |
+| Add a new GitHub client method | See `docs/recipes.md` (5 files to update) |
+| Add a new API response field | See `docs/recipes.md` (7 files backend-to-frontend) |
+| Add a new CLI command | See `docs/recipes.md` |
 | Add TUI component | See `docs/tui.md` |
 | Add worktree functionality | See `docs/worktree.md` |
 | Modify merge/shipping logic | See `docs/shipping.md` |
