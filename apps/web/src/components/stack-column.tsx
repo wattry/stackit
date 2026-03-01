@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { BranchResponse, StackDetail } from "@/lib/api";
+import type { BranchResponse, CIResponse, StackDetail } from "@/lib/api";
 import { PRBadge, DiffStats } from "@/components/status/status-badge";
 import { AnimatedCheckmark, AnimatedX, PulsingDot } from "@/components/ui/animated-ci-icons";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FolderGit2, ChevronDown } from "lucide-react";
 import Markdown from "react-markdown";
 
@@ -61,15 +62,12 @@ export function StackColumn({
               className={`text-left px-3 py-2.5 border-x border-t transition-all duration-200 animate-fade-in-up bg-card
                 ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
                 ${isFirst ? "rounded-t-lg" : ""}
-                ${isSelected ? "!bg-accent ring-2 ring-ring z-10 relative shadow-[0_0_15px_var(--glow-color)]" : "hover:!bg-muted hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
-                ${branch.isCurrent && !isSelected ? "animate-breathe-glow" : ""}
+                ${isSelected ? "!bg-accent z-10 relative" : "hover:!bg-muted hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
+                ${branch.isCurrent ? "border-l-[3px] border-l-[var(--glow-color-current)]" : ""}
               `}
               style={{ animationDelay: `${i * 50}ms` }}
             >
               <div className="flex items-center gap-2 min-w-0">
-                {branch.isCurrent && (
-                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                )}
                 <span
                   className="text-sm font-medium truncate"
                   title={branch.name}
@@ -88,7 +86,7 @@ export function StackColumn({
                 ) : (
                   <span className="text-xs text-muted-foreground">no PR</span>
                 )}
-                <CIStatusIcon status={branch.ci?.status} />
+                <CIStatusWithTooltip ci={branch.ci} />
                 <DiffStats added={branch.linesAdded} deleted={branch.linesDeleted} />
               </div>
             </button>
@@ -163,6 +161,66 @@ function CIStatusIcon({ status }: { status?: string }) {
     default:
       return null;
   }
+}
+
+function CheckIcon({ conclusion, status }: { conclusion: string; status: string }) {
+  if (status !== "COMPLETED") {
+    return <PulsingDot />;
+  }
+  switch (conclusion) {
+    case "SUCCESS":
+      return <AnimatedCheckmark />;
+    case "FAILURE":
+      return <AnimatedX />;
+    case "NEUTRAL":
+      return <span className="inline-block w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />;
+    default:
+      return <PulsingDot />;
+  }
+}
+
+function CIStatusWithTooltip({ ci }: { ci?: CIResponse }) {
+  if (!ci || ci.status === "none") return null;
+
+  const checks = ci.checks ?? [];
+  const passingCount = checks.filter(
+    (c) => c.status === "COMPLETED" && c.conclusion === "SUCCESS"
+  ).length;
+  const total = checks.length;
+
+  const statusColorClass =
+    ci.status === "passing"
+      ? "text-green-600"
+      : ci.status === "failing"
+        ? "text-red-600"
+        : "text-amber-500";
+
+  if (total === 0) {
+    return <CIStatusIcon status={ci.status} />;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`inline-flex items-center gap-1 shrink-0 ${statusColorClass}`}>
+          <CIStatusIcon status={ci.status} />
+          <span className="text-[10px] font-medium leading-none">
+            {passingCount}/{total}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64">
+        <div className="space-y-1 py-0.5">
+          {checks.map((check) => (
+            <div key={check.name} className="flex items-center gap-2 text-xs">
+              <CheckIcon conclusion={check.conclusion} status={check.status} />
+              <span className="truncate">{check.name}</span>
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** Walk the branch tree root→leaf in depth-first order. */
