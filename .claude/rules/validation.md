@@ -11,6 +11,8 @@ Use the lightest validation that covers your change. Running full test suites fo
 | Package tests | `mise run test:pkg ./internal/foo` | ~10s | Single package logic changes |
 | Fast tests | `mise run check` | ~30s | Multi-package logic changes |
 | Full suite | `mise run test` | ~2min | Engine/integration changes |
+| Web tests | `mise run web:test` | ~10s | Web component changes |
+| Web full | `mise run check:web` | ~30s | Web + API contract changes |
 
 ## Decision Guide
 
@@ -68,7 +70,25 @@ mise run check
 
 # Modified branch relationship logic
 mise run test
+
+# Changed a React component in apps/web
+mise run web:test
+
+# Changed API response types used by frontend
+mise run check:web
 ```
+
+### Use Web Tests (`mise run web:test`)
+
+- Changed a React component
+- Modified hooks or lib utilities
+- Updated styles that affect component behavior
+
+### Use Web Full (`mise run check:web`)
+
+- Changed API client or response types
+- Modified data flow (providers, SSE)
+- Changes spanning web + Go API contracts
 
 ## Escalation
 

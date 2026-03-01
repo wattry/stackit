@@ -18,6 +18,12 @@ internal/engine       → CAN import: git
                       → CANNOT import: tui, actions/*, cli/*
 
 internal/git          → Lowest layer, minimal dependencies
+
+apps/web/             → Consumes: internal/contracts/http (type contracts via API)
+                      → CANNOT import: any Go packages directly
+
+internal/contracts/http → Source of truth for API response shapes
+internal/api/          → Serves web static assets + API endpoints
 ```
 
 ## Common Pitfalls

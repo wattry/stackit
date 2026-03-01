@@ -2,7 +2,7 @@
 
 Go CLI for managing stacked changes in Git repositories.
 
-**Tech stack:** Go 1.26, Cobra, bubbletea, mise
+**Tech stack:** Go 1.26, Cobra, bubbletea, mise | Next.js 16, React 19, TypeScript, Tailwind CSS 4, pnpm
 
 ## Stacking Workflow (CRITICAL)
 
@@ -79,7 +79,11 @@ apps/
 ├── cli/        CLI entry point
 ├── api/        HTTP API + embedded static web assets
 ├── st-tui/     TUI storyboard binary
-└── web/        Next.js frontend workspace
+└── web/        Next.js frontend (see docs/web.md)
+    ├── src/app/         Pages and layouts
+    ├── src/components/  UI components, providers
+    ├── src/hooks/       Custom React hooks
+    └── src/lib/         API client, SSE, utilities
 internal/
 ├── actions/       Business logic for commands (create, submit, sync, etc.)
 ├── cli/           Command definitions, handlers
@@ -97,6 +101,7 @@ api/openapi/       API contract source of truth
 - `docs/config.md` - Configuration system, keys, layered config
 - `docs/shipping.md` - Merge strategies, consolidation, multi-stack shipping
 - `docs/tui.md` - TUI patterns, BaseModel, styling, components
+- `docs/web.md` - Web app architecture, components, data flow, styling
 - `docs/worktree.md` - Worktree management, create vs attach, workflows
 
 ## Common Development Tasks
@@ -109,6 +114,9 @@ api/openapi/       API contract source of truth
 | Add TUI component | See `docs/tui.md` |
 | Add worktree functionality | See `docs/worktree.md` |
 | Modify merge/shipping logic | See `docs/shipping.md` |
+| Add web component | See `docs/web.md` |
+| Add API consumer in web app | See `docs/web.md` |
+| Modify web styling | See `docs/web.md` |
 
 ## CLI Tools
 
@@ -143,6 +151,8 @@ mise run test:integration  # Run integration tests (~90s)
 mise run test          # Run all tests
 mise run test:pkg ./pkg    # Run tests for a specific package (e.g. ./internal/git)
 mise run lint          # Run linter
+mise run web:test      # Run web app tests
+mise run check:web     # Run web tests + typecheck + build
 ```
 
 **Workflow:** Run `mise run check` during development for quick feedback. Run `mise run test` before submitting PRs to ensure all tests pass.
@@ -158,6 +168,8 @@ mise run lint          # Run linter
 | Single package logic | `mise run test:pkg ./internal/foo` | ~10s |
 | Multi-package logic | `mise run check` | ~30s |
 | Engine/integration | `mise run test` | ~2min |
+| Web component change | `mise run web:test` | ~10s |
+| Web + API change | `mise run check:web` | ~30s |
 
 **Decision guide:**
 - `compile` - Quick "does it build?" check for trivial changes
@@ -171,8 +183,10 @@ See `.claude/rules/validation.md` for detailed guidance on when to use each leve
 ## Build
 
 ```bash
-mise run build   # Builds ./stackit binary
-mise run deps    # Install dependencies
+mise run build           # Builds ./stackit binary
+mise run deps            # Install dependencies
+mise run web:build       # Build web app static export
+mise run web:sync-static # Copy web build into apps/api/static/ for embedding
 ```
 
 ## Commit Messages

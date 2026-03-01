@@ -8,6 +8,9 @@
 - TUI changes → Update `docs/tui.md`
 - Merge/shipping changes → Update `docs/shipping.md`
 - Worktree changes → Update `docs/worktree.md`
+- Web component changes → Update `docs/web.md`
+- API endpoint changes → Update `api/openapi/stackit.yaml` and `docs/web.md`
+- Web build/config changes → Update `docs/web.md`
 
 ## Command Help Text
 
@@ -26,6 +29,7 @@ Examples:
 - `docs/config.md` - Configuration keys, layered config, adding new keys
 - `docs/tui.md` - TUI patterns, styling, components
 - `docs/shipping.md` - Merge strategies, commands, flags, flow diagrams
+- `docs/web.md` - Web app architecture, components, data flow, styling
 - `docs/worktree.md` - Worktree management, create vs attach, workflows
 
 Keep these up-to-date when modifying related systems.
