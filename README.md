@@ -589,7 +589,7 @@ This repository includes multiple first-class applications:
 - `apps/cli` - main `stackit` CLI
 - `apps/api` - HTTP API server (serves `/api/v1` and compatibility `/api`) plus embedded web assets
 - `apps/st-tui` - TUI storyboard binary
-- `apps/web` - Next.js frontend
+- `apps/web` - Next.js dashboard for visualizing stacked branches in a swimlane layout with real-time updates (see [docs/web.md](docs/web.md) for architecture)
 
 ### Full-Stack Local Development
 
