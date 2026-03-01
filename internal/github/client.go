@@ -70,6 +70,12 @@ type MergeMethodSettings struct {
 	AllowRebaseMerge bool
 }
 
+// MergePROptions configures how a pull request should be merged.
+type MergePROptions struct {
+	Method     MergeMethod
+	CommitBody string // Optional commit body for merge/squash commit message.
+}
+
 // Client is an interface for GitHub API interactions
 type Client interface {
 	// CreatePullRequest creates a new pull request
@@ -86,7 +92,7 @@ type Client interface {
 	GetPullRequest(ctx context.Context, owner, repo string, prNumber int) (*PullRequestInfo, error)
 
 	// MergePullRequest merges a pull request using the specified merge method
-	MergePullRequest(ctx context.Context, branchName string, method MergeMethod) error
+	MergePullRequest(ctx context.Context, branchName string, opts MergePROptions) error
 
 	// GetAllowedMergeMethods returns the allowed merge methods for the repository
 	GetAllowedMergeMethods(ctx context.Context) (*MergeMethodSettings, error)

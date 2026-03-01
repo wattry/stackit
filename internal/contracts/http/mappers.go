@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 )
 
@@ -254,4 +255,33 @@ func computeStackStatus(graph *engine.StackGraph, branchNames []string) string {
 	default:
 		return "shippable"
 	}
+}
+
+// MapTrunkCommits converts git RecentCommit values to API TrunkCommitResponse values.
+// Parsing/normalization is done in the git layer; this function maps fields.
+func MapTrunkCommits(commits []git.RecentCommit) []TrunkCommitResponse {
+	result := make([]TrunkCommitResponse, 0, len(commits))
+	for _, c := range commits {
+		resp := TrunkCommitResponse{
+			SHA:        shortSHA(c.SHA),
+			Message:    c.Subject,
+			Author:     c.Author,
+			Date:       c.Date.Format(time.RFC3339),
+			PRNumber:   c.PRNumber,
+			Kind:       string(c.Kind),
+			StackSize:  c.StackSize,
+			StackPRs:   append([]int(nil), c.StackPRNumbers...),
+			StackScope: c.StackScope,
+		}
+
+		if resp.Kind == "" {
+			resp.Kind = TrunkCommitKindRegular
+			if c.StackSize > 0 {
+				resp.Kind = TrunkCommitKindStackMerge
+			}
+		}
+
+		result = append(result, resp)
+	}
+	return result
 }

@@ -156,7 +156,7 @@ func (w *CIWaiter) WaitForChecks(ctx context.Context, branchName string, prNumbe
 
 // WaitAndMerge waits for CI checks to pass and then merges the PR.
 // This is used for consolidation PRs that should be auto-merged.
-func (w *CIWaiter) WaitAndMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo, expectChecks bool, mergeMethod github.MergeMethod) error {
+func (w *CIWaiter) WaitAndMerge(ctx context.Context, branchName string, pr *github.PullRequestInfo, expectChecks bool, mergeOpts github.MergePROptions) error {
 	if w.output != nil {
 		w.output.Info("Consolidation PR:")
 		w.output.Info("  ◉ %s PR #%d ⏳", branchName, pr.Number)
@@ -175,7 +175,7 @@ func (w *CIWaiter) WaitAndMerge(ctx context.Context, branchName string, pr *gith
 		w.output.Info("     Auto-merging...")
 	}
 
-	if err := w.client.MergePullRequest(ctx, branchName, mergeMethod); err != nil {
+	if err := w.client.MergePullRequest(ctx, branchName, mergeOpts); err != nil {
 		return fmt.Errorf("failed to auto-merge consolidation PR #%d: %w", pr.Number, err)
 	}
 

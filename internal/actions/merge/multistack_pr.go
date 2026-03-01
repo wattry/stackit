@@ -116,5 +116,5 @@ func (p *MultiStackPRCreator) WaitAndMerge(ctx context.Context, branchName strin
 		Output: p.ctx.Output,
 	})
 
-	return waiter.WaitAndMerge(ctx, branchName, pr, true, mergeMethod)
+	return waiter.WaitAndMerge(ctx, branchName, pr, true, github.MergePROptions{Method: mergeMethod})
 }

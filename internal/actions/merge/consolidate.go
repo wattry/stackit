@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
+	"stackit.dev/stackit/internal/pr"
 )
 
 // ConsolidationResult contains information about a completed consolidation
@@ -108,7 +109,11 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 		if err != nil {
 			return nil, fmt.Errorf("failed to get merge method: %w", err)
 		}
-		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, mergeMethod); err != nil {
+		metadata := c.buildStackMetadata()
+		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, github.EnableAutoMergeOptions{
+			MergeMethod: mergeMethod,
+			CommitBody:  metadata.ToTrailers(),
+		}); err != nil {
 			splog.Warn("Could not enable automerge: %v", err)
 			splog.Tip("Enable automerge manually on the PR: %s", pr.HTMLURL)
 		} else {
@@ -160,7 +165,7 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 	splog := c.ctx.Output
 	// Generate unique branch name
 	timestamp := time.Now().Unix()
-	scope := c.getStackScope()
+	scope := c.getStackScopeOrDefault()
 	branchName := fmt.Sprintf("stack-merge-%s-%d", scope, timestamp)
 
 	splog.Info("📋 Creating merge branch: %s", branchName)
@@ -194,6 +199,10 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 	} else {
 		commitMsg += fmt.Sprintf(" (%d branches)", len(branches))
 	}
+
+	// Append stack trailers for history tracking
+	metadata := c.buildStackMetadata()
+	commitMsg += "\n\n" + metadata.ToTrailers()
 
 	splog.Info("  Merging %d branches via octopus merge...", len(branches))
 	splog.Debug("Consolidation merge: merging branches %v", branches)
@@ -251,7 +260,12 @@ func (c *ConsolidateMergeExecutor) waitForConsolidationMerge(ctx context.Context
 	})
 	waiter.SetProgressHandler(c.handler, c.stepIndex)
 
-	return waiter.WaitAndMerge(ctx, branchName, pr, expectChecks, mergeMethod)
+	metadata := c.buildStackMetadata()
+	mergeOpts := github.MergePROptions{
+		Method:     mergeMethod,
+		CommitBody: metadata.ToTrailers(),
+	}
+	return waiter.WaitAndMerge(ctx, branchName, pr, expectChecks, mergeOpts)
 }
 
 func (c *ConsolidateMergeExecutor) postMergeCleanup(_ context.Context) {
@@ -322,7 +336,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 
 // Helper methods
 
-func (c *ConsolidateMergeExecutor) getStackScope() string {
+func (c *ConsolidateMergeExecutor) getStackScopeOrDefault() string {
 	// Get scope from the first branch in the stack
 	if len(c.plan.BranchesToMerge) > 0 {
 		branch := c.engine.GetBranch(c.plan.BranchesToMerge[0].BranchName)
@@ -336,6 +350,32 @@ func (c *ConsolidateMergeExecutor) getStackScope() string {
 
 func (c *ConsolidateMergeExecutor) getOwnerRepo() (owner, repo string) {
 	return c.ctx.GitHub().GetOwnerRepo()
+}
+
+// buildStackMetadata builds stack metadata for consolidation merge commits.
+func (c *ConsolidateMergeExecutor) buildStackMetadata() pr.StackMetadata {
+	scope := c.getTrailerScope()
+	prNumbers := make([]int, 0, len(c.plan.BranchesToMerge))
+	for _, b := range c.plan.BranchesToMerge {
+		if b.PRNumber > 0 {
+			prNumbers = append(prNumbers, b.PRNumber)
+		}
+	}
+	return pr.NewStackMetadata(len(c.plan.BranchesToMerge), prNumbers, scope)
+}
+
+// getTrailerScope returns a scope only when all non-empty branch scopes match.
+func (c *ConsolidateMergeExecutor) getTrailerScope() string {
+	scopes := make([]string, 0, len(c.plan.BranchesToMerge))
+	for _, b := range c.plan.BranchesToMerge {
+		branch := c.engine.GetBranch(b.BranchName)
+		scope := c.engine.GetScope(branch)
+		if scope.IsEmpty() {
+			continue
+		}
+		scopes = append(scopes, scope.String())
+	}
+	return pr.ResolveUnifiedScope(scopes)
 }
 
 // resolveMergeMethod returns the merge method to use, preferring the override if set.

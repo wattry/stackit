@@ -280,7 +280,7 @@ func executeStep(ctx *app.Context, step PlanStep, stepIndex int, eng mergeExecut
 			}
 		}
 
-		if err := githubClient.MergePullRequest(ctx.Context, step.BranchName, mergeMethod); err != nil {
+		if err := githubClient.MergePullRequest(ctx.Context, step.BranchName, github.MergePROptions{Method: mergeMethod}); err != nil {
 			out.Debug("StepMergePR for branch %s failed: %v", step.BranchName, err)
 			return fmt.Errorf("failed to merge PR: %w", err)
 		}

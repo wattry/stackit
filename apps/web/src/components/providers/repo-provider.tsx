@@ -12,12 +12,14 @@ import {
   fetchView,
   type RepoResponse,
   type StackDetail,
+  type TrunkCommitResponse,
 } from "@/lib/api";
 import { useSSE } from "@/lib/use-sse";
 
 interface RepoState {
   repo: RepoResponse | null;
   stackDetails: StackDetail[];
+  recentlyMerged: TrunkCommitResponse[];
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -35,6 +37,9 @@ export function useRepo() {
 export function RepoProvider({ children }: { children: ReactNode }) {
   const [repo, setRepo] = useState<RepoResponse | null>(null);
   const [stackDetails, setStackDetails] = useState<StackDetail[]>([]);
+  const [recentlyMerged, setRecentlyMerged] = useState<TrunkCommitResponse[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -138,6 +143,7 @@ export function RepoProvider({ children }: { children: ReactNode }) {
       ];
 
       setStackDetails([...view.stacks, ...sampleStacks]);
+      setRecentlyMerged(view.recentlyMerged ?? []);
 
       setError(null);
       setLastUpdated(new Date());
@@ -161,6 +167,7 @@ export function RepoProvider({ children }: { children: ReactNode }) {
       value={{
         repo,
         stackDetails,
+        recentlyMerged,
         loading,
         error,
         lastUpdated,

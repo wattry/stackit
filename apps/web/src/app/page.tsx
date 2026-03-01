@@ -2,15 +2,23 @@
 
 import { useMemo, useState } from "react";
 import { useRepo } from "@/components/providers/repo-provider";
-import { StackColumn } from "@/components/stack-column";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
+import { RecentlyMerged } from "@/components/recently-merged";
 import { Separator } from "@/components/ui/separator";
 import type { BranchResponse, StackDetail } from "@/lib/api";
+import { formatTimeAgo } from "@/lib/time";
 
 export default function Home() {
-  const { repo, stackDetails, loading, error, lastUpdated, refresh } =
-    useRepo();
+  const {
+    repo,
+    stackDetails,
+    recentlyMerged,
+    loading,
+    error,
+    lastUpdated,
+    refresh,
+  } = useRepo();
   const [selectedBranch, setSelectedBranch] = useState<BranchResponse | null>(
     null
   );
@@ -123,11 +131,18 @@ export default function Home() {
               </div>
 
               {/* Trunk line */}
-              <div className="flex items-center gap-2 px-6 pb-6">
+              <div className="flex items-center gap-2 px-6 pb-2">
                 <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
                 <span className="text-xs font-mono text-muted-foreground">{repo?.trunk}</span>
                 <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
               </div>
+
+              {/* Recently merged history */}
+              <RecentlyMerged
+                commits={recentlyMerged}
+                owner={repo?.owner}
+                repo={repo?.repo}
+              />
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -148,16 +163,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
