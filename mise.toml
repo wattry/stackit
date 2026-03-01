@@ -38,10 +38,6 @@ golangci-lint = "latest"
 description = "Check compilation only (~2s)"
 run = "go build ./..."
 
-[tasks.lint-only]
-description = "Run linter without fmt or tests (~5s)"
-run = "golangci-lint run --allow-parallel-runners"
-
 [tasks.deps]
 description = "Download dependencies for all modules"
 run = """
@@ -74,7 +70,7 @@ run = "goimports -w ."
 description = "Run linter"
 run = "golangci-lint run --allow-parallel-runners"
 
-[tasks."lint-fix"]
+[tasks."lint:fix"]
 description = "Run linter and fix issues"
 run = "golangci-lint run --allow-parallel-runners --fix"
 
@@ -82,40 +78,40 @@ run = "golangci-lint run --allow-parallel-runners --fix"
 description = "Run all tests (with caching for faster repeated runs)"
 run = "gotestsum --format pkgname-and-test-fails -- ./..."
 
-[tasks."test-fresh"]
+[tasks."test:fresh"]
 description = "Run all tests without caching"
 run = "gotestsum --format pkgname-and-test-fails -- ./... -count=1"
 
-[tasks."test-verbose"]
+[tasks."test:verbose"]
 description = "Run tests with verbose output"
 run = "gotestsum --format standard-verbose -- ./..."
 
-[tasks."test-coverage"]
+[tasks."test:coverage"]
 description = "Run tests with coverage"
 run = """
   gotestsum --format pkgname-and-test-fails -- -coverprofile=coverage.out ./...
   go tool cover -html=coverage.out -o coverage.html
 """
 
-[tasks."test-race"]
+[tasks."test:race"]
 description = "Run tests with race detection"
 run = "gotestsum --format pkgname-and-test-fails -- -race ./..."
 
-[tasks."test-pkg"]
+[tasks."test:pkg"]
 description = "Run tests for a specific package"
 usage = '''
 arg "package" help="Package to test (e.g. ./testhelpers)"
 '''
 run = "gotestsum --format standard-verbose -- {{arg(name='package')}}"
 
-[tasks."test-fast"]
+[tasks."test:fast"]
 description = "Run fast unit tests (excludes integration tests)"
 run = """
   PACKAGES=$(go list ./... | grep -v /integration)
   gotestsum --format pkgname-and-test-fails -- $PACKAGES
 """
 
-[tasks."test-integration"]
+[tasks."test:integration"]
 description = "Run integration tests only"
 run = "gotestsum --format pkgname-and-test-fails -- ./internal/integration/... ./internal/cli/integrations/... ./internal/actions/integrations/..."
 
@@ -130,22 +126,22 @@ run = """
 """
 
 [tasks.check]
-description = "Run all checks (format, lint, fast tests)"
-depends = ["fmt", "lint", "test-fast"]
+description = "Run all checks (Go format, lint, fast tests + web tests, typecheck, build)"
+depends = ["fmt", "lint", "test:fast", "check:web"]
 
-[tasks."check-go"]
+[tasks."check:go"]
 description = "Run all Go checks (format, lint, fast tests)"
-depends = ["fmt", "lint", "test-fast"]
+depends = ["fmt", "lint", "test:fast"]
 
-[tasks."web-install"]
+[tasks."web:install"]
 description = "Install frontend workspace dependencies"
 run = "pnpm install"
 
-[tasks."web-dev"]
+[tasks."web:dev"]
 description = "Run the web app in development mode"
 run = "pnpm --filter @stackit/web dev"
 
-[tasks."api-dev"]
+[tasks."dev:api"]
 description = "Run the API server in development mode (auto-reloads on file changes)"
 run = "watchexec -r -e go -w apps/api -w internal -w api -- go run ./apps/api --port 8080"
 
@@ -153,28 +149,28 @@ run = "watchexec -r -e go -w apps/api -w internal -w api -- go run ./apps/api --
 description = "Run API + web dev servers using overmind and Procfile.dev"
 run = "overmind start -f Procfile.dev"
 
-[tasks."dev-stop"]
+[tasks."dev:stop"]
 description = "Stop the running overmind dev process group"
 run = "overmind quit -s .overmind.sock"
 
-[tasks."web-build"]
+[tasks."web:build"]
 description = "Build the web app"
 run = "pnpm --filter @stackit/web build"
 
-[tasks."sync-web-static"]
+[tasks."web:sync-static"]
 description = "Copy built web assets into the API static directory"
-depends = ["web-build"]
+depends = ["web:build"]
 run = """
   mkdir -p apps/api/static
   rm -rf apps/api/static/assets
   cp -R apps/web/out/. apps/api/static/
 """
 
-[tasks."web-test"]
+[tasks."web:test"]
 description = "Run frontend tests"
 run = "pnpm --filter @stackit/web test"
 
-[tasks."check-web"]
+[tasks."check:web"]
 description = "Run frontend tests, type checks, and build"
 run = """
   pnpm --filter @stackit/web test
@@ -182,11 +178,7 @@ run = """
   pnpm --filter @stackit/web build
 """
 
-[tasks."check-all"]
-description = "Run Go and web checks"
-depends = ["check-go", "check-web"]
-
-[tasks."install-shims"]
+[tasks.shims]
 description = "Install shims to repo root for local development"
 depends = ["build"]
 run = """
@@ -200,108 +192,3 @@ run = """
 description = "Initialize stackit in this repository"
 depends = ["build"]
 run = "./bin/stackit init"
-
-[tasks."test-merge"]
-description = "Create a stack in jonnii/stackit-test and run merge against it"
-depends = ["build"]
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Prevent any unexpected editors or pagers
-export GIT_EDITOR=true
-export EDITOR=true
-export GIT_PAGER=cat
-export PAGER=cat
-
-STACKIT="$PROJECT_ROOT/bin/stackit"
-REPO_OWNER="jonnii"
-REPO_NAME="stackit-test"
-WORK_DIR="$PROJECT_ROOT/tmp/test-merge"
-REPO_DIR="$WORK_DIR/repo"
-
-# Reuse existing repo if it exists (e.g. after a cancelled merge)
-if [ -d "$REPO_DIR/.git" ]; then
-  cd "$REPO_DIR"
-  echo "==> Reusing existing repo in $REPO_DIR"
-  "$STACKIT" log --no-interactive || true
-  echo "==> Running: stackit merge $@"
-  "$STACKIT" merge "$@"
-  echo "==> Syncing to clean up merged branches"
-  "$STACKIT" sync --no-interactive
-  exit 0
-fi
-
-echo "==> Setting up fresh stack in $WORK_DIR"
-
-# Clean up any previous state
-rm -rf "$WORK_DIR"
-mkdir -p "$WORK_DIR"
-
-# Phase 1: Clean remote state
-echo "==> Cleaning remote state"
-for pr in $(gh api "repos/$REPO_OWNER/$REPO_NAME/pulls" --jq '.[].number' 2>/dev/null || true); do
-  gh pr close "$pr" --repo "$REPO_OWNER/$REPO_NAME" --delete-branch 2>/dev/null || true
-done
-for branch in $(gh api "repos/$REPO_OWNER/$REPO_NAME/git/refs/heads" --jq '.[].ref | select(. != "refs/heads/main") | ltrimstr("refs/heads/")' 2>/dev/null || true); do
-  gh api --method DELETE "repos/$REPO_OWNER/$REPO_NAME/git/refs/heads/$branch" 2>/dev/null || true
-done
-for ref in $(gh api "repos/$REPO_OWNER/$REPO_NAME/git/refs/stackit" --jq '.[].ref | ltrimstr("refs/")' 2>/dev/null || true); do
-  gh api --method DELETE "repos/$REPO_OWNER/$REPO_NAME/git/refs/$ref" 2>/dev/null || true
-done
-
-# Phase 2: Clone and init
-echo "==> Cloning and initializing"
-git clone "git@github.com:$REPO_OWNER/$REPO_NAME.git" "$REPO_DIR"
-cd "$REPO_DIR"
-"$STACKIT" init --trunk main --no-interactive
-
-# Phase 3: Create 3-branch stack
-echo "==> Creating stack"
-mkdir -p src
-cat > src/feature.go << 'EOF'
-package src
-
-func Feature() string {
-    return "hello from feature"
-}
-EOF
-git add -A
-"$STACKIT" create -m "feat: add feature module" --no-interactive
-
-cat > src/feature_test.go << 'EOF'
-package src
-
-import "testing"
-
-func TestFeature(t *testing.T) {
-    if got := Feature(); got != "hello from feature" {
-        t.Errorf("got %q, want %q", got, "hello from feature")
-    }
-}
-EOF
-git add -A
-"$STACKIT" create -m "test: add feature tests" --no-interactive
-
-cat > README.md << 'EOF'
-# stackit-test
-Test repository for stackit merge testing.
-EOF
-git add -A
-"$STACKIT" create -m "docs: add documentation" --no-interactive
-
-"$STACKIT" log --no-interactive
-
-# Phase 4: Submit PRs
-echo "==> Submitting stack"
-"$STACKIT" submit --no-edit --no-interactive
-sleep 2
-
-# Phase 5: Run merge
-echo "==> Running: stackit merge $@"
-"$STACKIT" merge "$@"
-
-# Phase 6: Sync to clean up merged branches (auto-confirms deletions)
-echo "==> Syncing to clean up merged branches"
-"$STACKIT" sync --no-interactive
-"""

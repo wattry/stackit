@@ -1,4 +1,4 @@
 hooks:
   post-worktree-create:
     - "mise trust"
-    - "mise install-shims"
+    - "mise run shims"

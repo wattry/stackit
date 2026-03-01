@@ -27,7 +27,7 @@ mise tasks
 mise run check         # Format, lint, and test
 mise run build         # Build the binary
 mise run test          # Run all tests
-mise run test-fast     # Run fast unit tests
+mise run test:fast     # Run fast unit tests
 mise run lint          # Run linter
 mise run fmt           # Format code
 

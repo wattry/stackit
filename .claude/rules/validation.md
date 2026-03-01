@@ -7,8 +7,8 @@ Use the lightest validation that covers your change. Running full test suites fo
 | Level | Command | Time | Use When |
 |-------|---------|------|----------|
 | Compile | `mise run compile` | ~2s | Docs, comments, type changes |
-| Lint | `mise run lint-only` | ~5s | Refactoring, style changes |
-| Package tests | `mise run test-pkg ./internal/foo` | ~10s | Single package logic changes |
+| Lint | `mise run lint` | ~5s | Refactoring, style changes |
+| Package tests | `mise run test:pkg ./internal/foo` | ~10s | Single package logic changes |
 | Fast tests | `mise run check` | ~30s | Multi-package logic changes |
 | Full suite | `mise run test` | ~2min | Engine/integration changes |
 
@@ -22,7 +22,7 @@ Use the lightest validation that covers your change. Running full test suites fo
 - Changed type definitions without behavior changes
 - Quick "does it build?" verification
 
-### Use Lint Only (`mise run lint-only`)
+### Use Lint Only (`mise run lint`)
 
 - Renamed variables or functions
 - Extracted helper functions
@@ -30,7 +30,7 @@ Use the lightest validation that covers your change. Running full test suites fo
 - Style/formatting changes
 - Changes that don't affect behavior
 
-### Use Package Tests (`mise run test-pkg ./internal/foo`)
+### Use Package Tests (`mise run test:pkg ./internal/foo`)
 
 - Changed logic in a single package
 - Fixed a bug in one module
@@ -58,10 +58,10 @@ Use the lightest validation that covers your change. Running full test suites fo
 mise run compile
 
 # Renamed a variable in git package
-mise run lint-only
+mise run lint
 
 # Added new helper function to engine
-mise run test-pkg ./internal/engine
+mise run test:pkg ./internal/engine
 
 # Changed how submit processes branches
 mise run check

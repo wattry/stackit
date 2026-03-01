@@ -60,10 +60,10 @@ func TestSomething(t *testing.T) {
 
 ```bash
 mise run check           # fmt, lint, and fast tests (use during development)
-mise run test-fast       # Fast unit tests (~30s)
-mise run test-integration  # Integration tests (~90s)
+mise run test:fast       # Fast unit tests (~30s)
+mise run test:integration  # Integration tests (~90s)
 mise run test            # All tests
-mise run test-pkg ./internal/git  # Tests for a specific package
+mise run test:pkg ./internal/git  # Tests for a specific package
 ```
 
 ### Choosing Validation Level
@@ -73,8 +73,8 @@ mise run test-pkg ./internal/git  # Tests for a specific package
 | Change | Validation | Why |
 |--------|------------|-----|
 | Comment/doc fix | `mise run compile` | Just verify it builds |
-| Variable rename | `mise run lint-only` | Catches style issues, no behavior change |
-| Bug fix in one pkg | `mise run test-pkg ./pkg` | Test only what changed |
+| Variable rename | `mise run lint` | Catches style issues, no behavior change |
+| Bug fix in one pkg | `mise run test:pkg ./pkg` | Test only what changed |
 | Multi-pkg change | `mise run check` | Full fast validation |
 | Engine changes | `mise run test` | Need integration coverage |
 

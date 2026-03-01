@@ -598,7 +598,7 @@ Recommended: run both API and web UI with one command via overmind + Procfile:
 ```bash
 # one-time setup
 mise install
-mise run web-install
+mise run web:install
 
 # tmux is still required by overmind (install via system package manager)
 mise run dev
@@ -613,7 +613,7 @@ Open the web UI at `http://localhost:3000`.
 Stop all dev processes:
 
 ```bash
-mise run dev-stop
+mise run dev:stop
 ```
 
 Manual two-terminal flow is also supported:
@@ -630,7 +630,7 @@ pnpm web:dev
 For production-style serving via Go, build and sync web assets into `apps/api/static`:
 
 ```bash
-mise run sync-web-static
+mise run web:sync-static
 go run ./apps/api
 ```
 
