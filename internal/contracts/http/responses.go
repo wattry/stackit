@@ -24,15 +24,16 @@ const (
 // TrunkCommitResponse represents a commit on the trunk branch,
 // optionally enriched with stack metadata from git trailers.
 type TrunkCommitResponse struct {
-	SHA        string `json:"sha"`
-	Message    string `json:"message"`
-	Author     string `json:"author"`
-	Date       string `json:"date"`
-	Kind       string `json:"kind"`
-	PRNumber   int    `json:"prNumber,omitempty"`
-	StackSize  int    `json:"stackSize,omitempty"`
-	StackPRs   []int  `json:"stackPRs,omitempty"`
-	StackScope string `json:"stackScope,omitempty"`
+	SHA           string         `json:"sha"`
+	Message       string         `json:"message"`
+	Author        string         `json:"author"`
+	Date          string         `json:"date"`
+	Kind          string         `json:"kind"`
+	PRNumber      int            `json:"prNumber,omitempty"`
+	StackSize     int            `json:"stackSize,omitempty"`
+	StackPRs      []int          `json:"stackPRs,omitempty"`
+	StackPRTitles map[int]string `json:"stackPRTitles,omitempty"`
+	StackScope    string         `json:"stackScope,omitempty"`
 }
 
 // RepoResponse contains repository metadata.

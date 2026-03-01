@@ -177,6 +177,28 @@ func (c *GitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNames [
 	return results, nil
 }
 
+// BatchGetPRTitles returns plausible fake titles for demo mode
+func (c *GitHubClient) BatchGetPRTitles(_ context.Context, _, _ string, prNumbers []int) (map[int]string, error) {
+	simulateDelay(delayShort)
+
+	titles := []string{
+		"feat: add user authentication",
+		"feat: add database migrations",
+		"fix: resolve race condition in worker",
+		"refactor: extract service layer",
+		"feat: add rate limiting middleware",
+		"feat: implement webhook handlers",
+		"fix: correct timezone handling",
+		"feat: add CSV export support",
+	}
+
+	results := make(map[int]string, len(prNumbers))
+	for i, num := range prNumbers {
+		results[num] = titles[i%len(titles)]
+	}
+	return results, nil
+}
+
 // ClosePullRequest simulates closing a pull request
 func (c *GitHubClient) ClosePullRequest(_ context.Context, _, _ string, prNumber int) error {
 	simulateDelay(delayShort)

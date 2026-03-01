@@ -95,6 +95,7 @@ export interface TrunkCommitResponse {
   prNumber?: number;
   stackSize?: number;
   stackPRs?: number[];
+  stackPRTitles?: Record<number, string>;
   stackScope?: string;
 }
 

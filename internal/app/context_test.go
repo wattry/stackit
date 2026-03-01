@@ -91,6 +91,10 @@ func (f *fakeGitHubClient) BatchGetPRChecksStatus(_ context.Context, _ []string)
 	return nil, nil
 }
 
+func (f *fakeGitHubClient) BatchGetPRTitles(_ context.Context, _, _ string, _ []int) (map[int]string, error) {
+	return nil, nil
+}
+
 func (f *fakeGitHubClient) GetOwnerRepo() (string, string) {
 	return "", ""
 }

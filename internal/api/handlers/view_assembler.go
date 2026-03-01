@@ -7,6 +7,7 @@ import (
 	"stackit.dev/stackit/internal/actions/merge"
 	httpcontract "stackit.dev/stackit/internal/contracts/http"
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/github"
 )
 
@@ -35,7 +36,7 @@ func (a *ViewAssembler) Build(ctx context.Context) (httpcontract.ViewResponse, e
 	checksMap := a.fetchChecks(ctx, stacks)
 	details := a.mapStackDetails(graph, stacks, checksMap)
 
-	recentlyMerged := a.fetchRecentlyMerged()
+	recentlyMerged := a.fetchRecentlyMerged(ctx)
 
 	return httpcontract.ViewResponse{
 		Repo:           a.buildRepo(ctx),
@@ -92,10 +93,44 @@ func (a *ViewAssembler) mapStackDetails(
 	return details
 }
 
-func (a *ViewAssembler) fetchRecentlyMerged() []httpcontract.TrunkCommitResponse {
+func (a *ViewAssembler) fetchRecentlyMerged(ctx context.Context) []httpcontract.TrunkCommitResponse {
 	recentCommits, err := a.eng.GetRecentTrunkCommits(10)
 	if err != nil || len(recentCommits) == 0 {
 		return nil
 	}
-	return httpcontract.MapTrunkCommits(recentCommits)
+
+	prTitles := a.fetchPRTitles(ctx, recentCommits)
+	return httpcontract.MapTrunkCommits(recentCommits, prTitles)
+}
+
+// fetchPRTitles collects all unique PR numbers from stack-merge commits and
+// batch-fetches their titles from GitHub. Returns nil on error or if no GitHub client.
+func (a *ViewAssembler) fetchPRTitles(ctx context.Context, commits []git.RecentCommit) map[int]string {
+	if a.gh == nil {
+		return nil
+	}
+
+	seen := make(map[int]struct{})
+	var prNumbers []int
+	for _, c := range commits {
+		if c.StackSize == 0 {
+			continue
+		}
+		for _, pr := range c.StackPRNumbers {
+			if _, ok := seen[pr]; !ok {
+				seen[pr] = struct{}{}
+				prNumbers = append(prNumbers, pr)
+			}
+		}
+	}
+	if len(prNumbers) == 0 {
+		return nil
+	}
+
+	owner, repo := a.gh.GetOwnerRepo()
+	titles, err := a.gh.BatchGetPRTitles(ctx, owner, repo, prNumbers)
+	if err != nil {
+		return nil
+	}
+	return titles
 }
