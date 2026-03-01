@@ -10,22 +10,23 @@ import (
 
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/config"
+	"stackit.dev/stackit/internal/output"
 	"stackit.dev/stackit/internal/tui"
 )
 
 // HookTimeout is the maximum duration a hook can run before being killed
 const HookTimeout = 60 * time.Second
 
-// RunPostCreateHooks runs any configured post-worktree-create hooks.
-// It loads the project config, checks for approvals, prompts for unapproved hooks,
-// and executes approved hooks in the worktree directory.
-func RunPostCreateHooks(ctx *app.Context, worktreePath string) error {
+// ResolveApprovedHooks loads the project config, checks for approvals, and prompts
+// the user for any unapproved hooks. Returns the list of approved hook commands.
+// This must be called from the main thread (it may prompt interactively).
+func ResolveApprovedHooks(ctx *app.Context) ([]string, error) {
 	out := ctx.Output
 
 	// Load project config from repo root
 	projectCfg, err := config.LoadProjectConfig(ctx.RepoRoot)
 	if err != nil {
-		return fmt.Errorf("failed to load project config: %w", err)
+		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
 
 	// Get hooks to run, filtering out empty/whitespace-only entries
@@ -36,13 +37,13 @@ func RunPostCreateHooks(ctx *app.Context, worktreePath string) error {
 		}
 	}
 	if len(hooks) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Load repo config for approvals
 	repoCfg, err := config.LoadConfig(ctx.RepoRoot)
 	if err != nil {
-		return fmt.Errorf("failed to load repo config: %w", err)
+		return nil, fmt.Errorf("failed to load repo config: %w", err)
 	}
 
 	// For each hook, check approval or prompt
@@ -73,14 +74,30 @@ func RunPostCreateHooks(ctx *app.Context, worktreePath string) error {
 		approved = append(approved, hook)
 	}
 
-	// Execute approved hooks in worktree directory
-	for _, hook := range approved {
-		out.Info("Running: %s", hook)
+	return approved, nil
+}
+
+// RunResolvedHooks executes a pre-resolved list of hooks in the given directory.
+// No prompting is performed — safe for parallel use.
+func RunResolvedHooks(hooks []string, worktreePath string, out output.Output) {
+	for _, hook := range hooks {
+		out.Info("Running hook: %s", hook)
 		if err := runHookWithTimeout(hook, worktreePath, HookTimeout); err != nil {
 			out.Warn("Hook failed: %s: %v", hook, err)
 		}
 	}
+}
 
+// RunPostCreateHooks runs any configured post-worktree-create hooks.
+// It loads the project config, checks for approvals, prompts for unapproved hooks,
+// and executes approved hooks in the worktree directory.
+func RunPostCreateHooks(ctx *app.Context, worktreePath string) error {
+	approved, err := ResolveApprovedHooks(ctx)
+	if err != nil {
+		return err
+	}
+
+	RunResolvedHooks(approved, worktreePath, ctx.Output)
 	return nil
 }
 
