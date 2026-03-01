@@ -1,77 +1,195 @@
 "use client";
 
+import { useMemo } from "react";
+import { GitMerge } from "lucide-react";
+import { useRepo } from "@/components/providers/repo-provider";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import type { TrunkCommitResponse } from "@/lib/api";
-import { formatTimeAgo } from "@/lib/time";
 
-interface RecentlyMergedProps {
-  commits: TrunkCommitResponse[];
-  owner?: string;
-  repo?: string;
+function formatTimeAgo(dateStr: string): string {
+  const seconds = Math.floor(
+    (Date.now() - new Date(dateStr).getTime()) / 1000
+  );
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
-export function RecentlyMerged({ commits, owner, repo }: RecentlyMergedProps) {
-  if (commits.length === 0) return null;
+function stripPRSuffix(message: string): string {
+  return message.replace(/\s*\(#\d+\)\s*$/, "");
+}
+
+function prUrl(owner: string, repo: string, pr: number): string {
+  return `https://github.com/${owner}/${repo}/pull/${pr}`;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+type TimeGroup = "Today" | "Yesterday" | "This week" | "Earlier";
+
+function timeGroup(dateStr: string): TimeGroup {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
+  const startOfWeek = new Date(startOfToday.getTime() - startOfToday.getDay() * 86_400_000);
+
+  if (date >= startOfToday) return "Today";
+  if (date >= startOfYesterday) return "Yesterday";
+  if (date >= startOfWeek) return "This week";
+  return "Earlier";
+}
+
+function groupCommits(
+  commits: TrunkCommitResponse[]
+): { label: TimeGroup; commits: TrunkCommitResponse[] }[] {
+  const order: TimeGroup[] = ["Today", "Yesterday", "This week", "Earlier"];
+  const map = new Map<TimeGroup, TrunkCommitResponse[]>();
+  for (const c of commits) {
+    const g = timeGroup(c.date);
+    const list = map.get(g);
+    if (list) {
+      list.push(c);
+    } else {
+      map.set(g, [c]);
+    }
+  }
+  return order.filter((l) => map.has(l)).map((l) => ({ label: l, commits: map.get(l)! }));
+}
+
+function AuthorAvatar({ name, sha }: { name: string; sha: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-muted text-[9px] font-semibold text-muted-foreground shrink-0 select-none">
+          {initials(name)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="left">
+        <span>{name}</span>
+        <span className="ml-2 font-mono text-muted-foreground">{sha}</span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function PRLink({
+  pr,
+  owner,
+  repoName,
+}: {
+  pr: number;
+  owner: string;
+  repoName: string;
+}) {
+  return (
+    <a
+      href={prUrl(owner, repoName, pr)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center text-[11px] font-mono font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-accent rounded px-1.5 py-0.5 transition-colors"
+    >
+      #{pr}
+    </a>
+  );
+}
+
+function RegularCommitItem({
+  commit,
+  owner,
+  repoName,
+}: {
+  commit: TrunkCommitResponse;
+  owner?: string;
+  repoName?: string;
+}) {
+  const displayMessage = stripPRSuffix(commit.message);
 
   return (
-    <div className="px-6 pb-6 space-y-1">
-      {commits.map((commit) =>
-        commit.kind === "stack-merge" ? (
-          <StackMergeEntry
-            key={commit.sha}
-            commit={commit}
-            owner={owner}
-            repo={repo}
-          />
-        ) : (
-          <RegularCommitEntry
-            key={commit.sha}
-            commit={commit}
-            owner={owner}
-            repo={repo}
-          />
-        )
-      )}
+    <div className="flex items-center gap-2 py-1.5 group">
+      <AuthorAvatar name={commit.author} sha={commit.sha} />
+      <span
+        className="flex-1 min-w-0 text-xs text-foreground/80 truncate"
+        title={commit.message}
+      >
+        {displayMessage}
+      </span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {commit.prNumber && owner && repoName ? (
+          <PRLink pr={commit.prNumber} owner={owner} repoName={repoName} />
+        ) : null}
+        <span className="text-[10px] text-muted-foreground/40 tabular-nums w-12 text-right">
+          {formatTimeAgo(commit.date)}
+        </span>
+      </div>
     </div>
   );
 }
 
-function StackMergeEntry({
+function StackMergeItem({
   commit,
   owner,
-  repo,
+  repoName,
 }: {
   commit: TrunkCommitResponse;
   owner?: string;
-  repo?: string;
+  repoName?: string;
 }) {
-  const prCount = commit.stackPRs?.length ?? commit.stackSize ?? 0;
+  const displayMessage = stripPRSuffix(commit.message);
+  const stackPRs = commit.stackPRs ?? [];
 
   return (
-    <div className="rounded-lg border border-muted p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {commit.stackScope && (
-            <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
-              {commit.stackScope}
-            </span>
-          )}
-          <span className="text-sm text-foreground">
-            {prCount} PR{prCount !== 1 ? "s" : ""} merged
+    <div className="border-l-2 border-purple-400/50 dark:border-purple-500/40 pl-3 py-1.5 my-0.5 rounded-r">
+      {/* Main commit line */}
+      <div className="flex items-center gap-2">
+        <AuthorAvatar name={commit.author} sha={commit.sha} />
+        <GitMerge className="h-3 w-3 shrink-0 text-purple-500 dark:text-purple-400" />
+        {commit.stackScope && (
+          <span className="text-[10px] font-mono text-purple-500/70 dark:text-purple-400/70 shrink-0">
+            {commit.stackScope}
+          </span>
+        )}
+        <span
+          className="flex-1 min-w-0 text-xs text-foreground/80 truncate"
+          title={commit.message}
+        >
+          {displayMessage}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] font-medium text-purple-600/70 dark:text-purple-400/60">
+            {commit.stackSize} PRs
+          </span>
+          <span className="text-[10px] text-muted-foreground/40 tabular-nums w-12 text-right">
+            {formatTimeAgo(commit.date)}
           </span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {formatTimeAgo(commit.date)}
-        </span>
       </div>
-      {commit.stackPRs && commit.stackPRs.length > 0 && (
-        <div className="flex items-center gap-1.5 mt-1.5">
-          {commit.stackPRs.map((prNum) => (
-            <PRLink
-              key={prNum}
-              prNumber={prNum}
-              owner={owner}
-              repo={repo}
-            />
+
+      {/* Constituent PR links */}
+      {stackPRs.length > 0 && owner && repoName && (
+        <div className="flex items-center gap-1 mt-1.5 ml-7">
+          {stackPRs.map((pr) => (
+            <a
+              key={pr}
+              href={prUrl(owner, repoName, pr)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-mono text-purple-500/60 dark:text-purple-400/50 hover:text-purple-600 dark:hover:text-purple-300 bg-purple-500/5 hover:bg-purple-500/10 rounded px-1.5 py-0.5 transition-colors"
+            >
+              #{pr}
+            </a>
           ))}
         </div>
       )}
@@ -79,57 +197,56 @@ function StackMergeEntry({
   );
 }
 
-function RegularCommitEntry({
+function CommitItem({
   commit,
   owner,
-  repo,
+  repoName,
 }: {
   commit: TrunkCommitResponse;
   owner?: string;
-  repo?: string;
+  repoName?: string;
 }) {
+  if (commit.kind === "stack-merge") {
+    return (
+      <StackMergeItem commit={commit} owner={owner} repoName={repoName} />
+    );
+  }
   return (
-    <div className="flex items-center gap-2 py-1 px-1 text-sm text-muted-foreground">
-      <span className="font-mono text-xs">{commit.sha}</span>
-      <span className="truncate flex-1">
-        {commit.prNumber ? (
-          <>
-            {stripPRSuffix(commit.message)}{" "}
-            <PRLink prNumber={commit.prNumber} owner={owner} repo={repo} />
-          </>
-        ) : (
-          commit.message
-        )}
-      </span>
-      <span className="text-xs shrink-0">{formatTimeAgo(commit.date)}</span>
-    </div>
+    <RegularCommitItem commit={commit} owner={owner} repoName={repoName} />
   );
 }
 
-function PRLink({
-  prNumber,
-  owner,
-  repo,
-}: {
-  prNumber: number;
-  owner?: string;
-  repo?: string;
-}) {
-  if (owner && repo) {
-    return (
-      <a
-        href={`https://github.com/${owner}/${repo}/pull/${prNumber}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-xs font-mono text-blue-500 hover:underline"
-      >
-        #{prNumber}
-      </a>
-    );
-  }
-  return <span className="text-xs font-mono text-blue-500">#{prNumber}</span>;
-}
+export function RecentlyMerged() {
+  const { recentlyMerged, repo } = useRepo();
 
-function stripPRSuffix(message: string): string {
-  return message.replace(/\s*\(#\d+\)\s*$/, "");
+  const groups = useMemo(
+    () => groupCommits(recentlyMerged ?? []),
+    [recentlyMerged]
+  );
+
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="px-6 pb-4 space-y-2">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <div className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider mb-0.5">
+            {group.label}
+          </div>
+          <div>
+            {group.commits.map((commit) => (
+              <CommitItem
+                key={commit.sha}
+                commit={commit}
+                owner={repo?.owner}
+                repoName={repo?.repo}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }

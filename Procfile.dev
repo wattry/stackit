@@ -1,2 +1,2 @@
-api: go run ./apps/api --port 8080
+api: watchexec -r -e go -w apps/api -w internal -w api -- go run ./apps/api --port 8080
 web: pnpm --filter @stackit/web dev

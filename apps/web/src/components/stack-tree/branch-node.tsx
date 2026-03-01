@@ -23,16 +23,15 @@ export function BranchNode({
 }: BranchNodeProps) {
   const ciIcon = getCIIcon(branch);
   const borderClass = isSelected
-    ? "stroke-blue-500 stroke-2"
-    : branch.isCurrent
-      ? "stroke-amber-500 stroke-2"
-      : "stroke-border stroke-1";
+    ? "stroke-blue-500/50 stroke-1"
+    : "stroke-border stroke-1";
 
   return (
     <g
       transform={`translate(${x - NODE_WIDTH / 2}, ${y - NODE_HEIGHT / 2})`}
       onClick={() => onClick(branch)}
       className="cursor-pointer"
+      style={{ transition: "transform 0.15s ease" }}
     >
       <rect
         width={NODE_WIDTH}
@@ -40,6 +39,17 @@ export function BranchNode({
         rx={8}
         className={`fill-card ${borderClass}`}
       />
+      {/* Left accent bar for current (checked out) branch */}
+      {branch.isCurrent && (
+        <rect
+          width={3}
+          height={NODE_HEIGHT - 16}
+          x={1}
+          y={8}
+          rx={1.5}
+          className="fill-amber-500"
+        />
+      )}
 
       {/* Branch name */}
       <text
@@ -65,10 +75,6 @@ export function BranchNode({
         {branch.needsRestack && " \u21BB"}
       </text>
 
-      {/* Current branch indicator */}
-      {branch.isCurrent && (
-        <circle cx={NODE_WIDTH - 8} cy={8} r={4} className="fill-amber-500" />
-      )}
     </g>
   );
 }

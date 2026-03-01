@@ -1,18 +1,27 @@
 "use client";
 
-import type { BranchResponse, StackDetail } from "@/lib/api";
-import { PRBadge, DiffStats, StackStatusBadge } from "@/components/status/status-badge";
+import { useState } from "react";
+import type { BranchResponse, CIResponse, StackDetail } from "@/lib/api";
+import { PRBadge, DiffStats } from "@/components/status/status-badge";
+import { AnimatedCheckmark, AnimatedX, PulsingDot } from "@/components/ui/animated-ci-icons";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { FolderGit2, ChevronDown } from "lucide-react";
+import Markdown from "react-markdown";
 
 interface StackColumnProps {
   stack: StackDetail;
   selectedBranch: string | null;
+  selectedStack: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
+  onSelectStack: (stack: StackDetail) => void;
 }
 
 export function StackColumn({
   stack,
   selectedBranch,
+  selectedStack,
   onSelectBranch,
+  onSelectStack,
 }: StackColumnProps) {
   // Order branches root→leaf, then reverse so leaf is at top (stacking metaphor)
   const orderedBranches = orderBranches(stack.branches);
@@ -22,28 +31,25 @@ export function StackColumn({
     <div className="flex flex-col w-64 shrink-0">
       {/* Stack header */}
       <div className="px-1 pb-2">
-        <div className="flex items-center gap-2">
-          <StackStatusBadge status={stack.status} />
-          {stack.prCount > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {stack.prCount} PR{stack.prCount !== 1 ? "s" : ""}
+        {stack.hasWorktree && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
+              <FolderGit2 className="w-3 h-3" />
             </span>
-          )}
-        </div>
+          </div>
+        )}
         {stack.title && (
-          <p className="text-xs text-muted-foreground mt-1 truncate" title={stack.title}>
+          <p className="text-xs font-medium text-muted-foreground mt-1 truncate" title={stack.title}>
             {stack.title}
           </p>
         )}
         {stack.description && (
-          <p className="text-xs text-muted-foreground/60 mt-1 line-clamp-2" title={stack.description}>
-            {stack.description}
-          </p>
+          <StackDescription text={stack.description} />
         )}
       </div>
 
       {/* Stacked branch cards */}
-      <div className="flex flex-col bg-white rounded-lg">
+      <div className="flex flex-col bg-card rounded-t-lg">
         {displayBranches.map((branch, i) => {
           const isFirst = i === 0;
           const isLast = i === displayBranches.length - 1;
@@ -53,17 +59,15 @@ export function StackColumn({
             <button
               key={branch.name}
               onClick={() => onSelectBranch(branch)}
-              className={`text-left px-3 py-2.5 border-x border-t transition-colors
-                ${isLast ? "border-b" : ""}
+              className={`text-left px-3 py-2.5 border-x border-t transition-all duration-200 animate-fade-in-up bg-card
+                ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
                 ${isFirst ? "rounded-t-lg" : ""}
-                ${isLast ? "rounded-b-lg" : ""}
-                ${isSelected ? "bg-accent ring-2 ring-ring z-10 relative" : "hover:bg-muted/50"}
+                ${isSelected ? "!bg-accent z-10 relative" : "hover:!bg-muted hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
+                ${branch.isCurrent ? "border-l-[3px] border-l-[var(--glow-color-current)]" : ""}
               `}
+              style={{ animationDelay: `${i * 50}ms` }}
             >
               <div className="flex items-center gap-2 min-w-0">
-                {branch.isCurrent && (
-                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                )}
                 <span
                   className="text-sm font-medium truncate"
                   title={branch.name}
@@ -82,14 +86,65 @@ export function StackColumn({
                 ) : (
                   <span className="text-xs text-muted-foreground">no PR</span>
                 )}
-                <CIStatusIcon status={branch.ci?.status} />
+                <CIStatusWithTooltip ci={branch.ci} />
                 <DiffStats added={branch.linesAdded} deleted={branch.linesDeleted} />
               </div>
             </button>
           );
         })}
       </div>
+
+      {/* Status footer */}
+      <StackStatusFooter
+        status={stack.status}
+        selected={selectedStack === stack.rootBranch}
+        onClick={() => onSelectStack(stack)}
+      />
     </div>
+  );
+}
+
+const statusConfig: Record<string, { label: string; bg: string; selectedBg: string; text: string; shadow: string }> = {
+  shippable: {
+    label: "Ready to ship",
+    bg: "bg-green-100 dark:bg-green-950",
+    selectedBg: "bg-green-200 dark:bg-green-900",
+    text: "text-green-700 dark:text-green-400",
+    shadow: "shadow-[0_2px_8px_rgba(34,197,94,0.2)] dark:shadow-[0_2px_8px_rgba(34,197,94,0.15)]",
+  },
+  pending: {
+    label: "Needs restack",
+    bg: "bg-amber-100 dark:bg-amber-950",
+    selectedBg: "bg-amber-200 dark:bg-amber-900",
+    text: "text-amber-700 dark:text-amber-400",
+    shadow: "shadow-[0_2px_8px_rgba(245,158,11,0.2)] dark:shadow-[0_2px_8px_rgba(245,158,11,0.15)]",
+  },
+  blocked: {
+    label: "Blocked",
+    bg: "bg-red-100 dark:bg-red-950",
+    selectedBg: "bg-red-200 dark:bg-red-900",
+    text: "text-red-700 dark:text-red-400",
+    shadow: "shadow-[0_2px_8px_rgba(239,68,68,0.2)] dark:shadow-[0_2px_8px_rgba(239,68,68,0.15)]",
+  },
+  incomplete: {
+    label: "Incomplete",
+    bg: "bg-muted",
+    selectedBg: "bg-muted",
+    text: "text-muted-foreground",
+    shadow: "shadow-[0_2px_8px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.15)]",
+  },
+};
+
+function StackStatusFooter({ status, selected, onClick }: { status: string; selected: boolean; onClick: () => void }) {
+  const c = statusConfig[status] || statusConfig.incomplete;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.text} ${selected ? `${c.selectedBg} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
+    >
+      {c.label}
+    </button>
   );
 }
 
@@ -98,26 +153,74 @@ function CIStatusIcon({ status }: { status?: string }) {
 
   switch (status) {
     case "passing":
-      return (
-        <span className="text-green-600 text-xs" title="CI passing">
-          &#x2713;
-        </span>
-      );
+      return <AnimatedCheckmark />;
     case "failing":
-      return (
-        <span className="text-red-600 text-xs" title="CI failing">
-          &#x2717;
-        </span>
-      );
+      return <AnimatedX />;
     case "pending":
-      return (
-        <span className="text-amber-500 text-xs" title="CI pending">
-          &#x23F3;
-        </span>
-      );
+      return <PulsingDot />;
     default:
       return null;
   }
+}
+
+function CheckIcon({ conclusion, status }: { conclusion: string; status: string }) {
+  if (status !== "COMPLETED") {
+    return <PulsingDot />;
+  }
+  switch (conclusion) {
+    case "SUCCESS":
+      return <AnimatedCheckmark />;
+    case "FAILURE":
+      return <AnimatedX />;
+    case "NEUTRAL":
+      return <span className="inline-block w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />;
+    default:
+      return <PulsingDot />;
+  }
+}
+
+function CIStatusWithTooltip({ ci }: { ci?: CIResponse }) {
+  if (!ci || ci.status === "none") return null;
+
+  const checks = ci.checks ?? [];
+  const passingCount = checks.filter(
+    (c) => c.status === "COMPLETED" && c.conclusion === "SUCCESS"
+  ).length;
+  const total = checks.length;
+
+  const statusColorClass =
+    ci.status === "passing"
+      ? "text-green-600"
+      : ci.status === "failing"
+        ? "text-red-600"
+        : "text-amber-500";
+
+  if (total === 0) {
+    return <CIStatusIcon status={ci.status} />;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`inline-flex items-center gap-1 shrink-0 ${statusColorClass}`}>
+          <CIStatusIcon status={ci.status} />
+          <span className="text-[10px] font-medium leading-none">
+            {passingCount}/{total}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64">
+        <div className="space-y-1 py-0.5">
+          {checks.map((check) => (
+            <div key={check.name} className="flex items-center gap-2 text-xs">
+              <CheckIcon conclusion={check.conclusion} status={check.status} />
+              <span className="truncate">{check.name}</span>
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** Walk the branch tree root→leaf in depth-first order. */
@@ -141,6 +244,29 @@ function orderBranches(branches: BranchResponse[]): BranchResponse[] {
   }
 
   return ordered;
+}
+
+const DESCRIPTION_COLLAPSE_LENGTH = 80;
+
+function StackDescription({ text }: { text: string }) {
+  const canCollapse = text.length > DESCRIPTION_COLLAPSE_LENGTH;
+  const [collapsed, setCollapsed] = useState(canCollapse);
+
+  return (
+    <div
+      onClick={canCollapse ? () => setCollapsed(!collapsed) : undefined}
+      className={`text-xs text-muted-foreground mt-1 flex items-start gap-1 ${canCollapse ? "cursor-pointer hover:text-foreground/70" : ""}`}
+    >
+      <div className={`prose prose-xs dark:prose-invert max-w-none [&>*]:text-xs [&>*]:text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_li]:my-0 [&_p]:my-0.5 ${collapsed ? "line-clamp-2" : ""}`}>
+        <Markdown>{text}</Markdown>
+      </div>
+      {canCollapse && (
+        <ChevronDown
+          className={`w-3 h-3 shrink-0 mt-0.5 transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`}
+        />
+      )}
+    </div>
+  );
 }
 
 /** Strip common prefixes like "user/timestamp/" to show a shorter name. */

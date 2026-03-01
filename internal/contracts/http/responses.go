@@ -54,6 +54,7 @@ type StackSummary struct {
 	BranchCount int    `json:"branchCount"`
 	PRCount     int    `json:"prCount"`
 	IsCurrent   bool   `json:"isCurrent"`
+	HasWorktree bool   `json:"hasWorktree,omitempty"`
 	Description string `json:"description,omitempty"`
 	Owner       string `json:"owner,omitempty"`
 }
