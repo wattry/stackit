@@ -176,40 +176,42 @@ export default function Home() {
 
       {/* Main content: stacks area + detail panel */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {stackDetails.length > 0 ? (
             <div className="flex flex-col justify-end min-h-full">
-              {/* All swimlanes in one horizontal row */}
-              <div className="flex items-end gap-8 p-6 pb-4 min-w-max">
-                {/* Your stacks */}
-                {yourStacks.length > 0 && (
-                  <OwnerSwimlane
-                    label="You"
-                    stacks={yourStacks}
-                    selectedBranch={selection?.type === "branch" ? selection.name : null}
-                    selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
-                    onSelectBranch={handleSelectBranch}
-                    onSelectStack={handleSelectStack}
-                  />
-                )}
+              {/* Swimlanes: only this area scrolls horizontally */}
+              <div className="overflow-x-auto">
+                <div className="flex items-end gap-8 p-6 pb-4 min-w-max">
+                  {/* Your stacks */}
+                  {yourStacks.length > 0 && (
+                    <OwnerSwimlane
+                      label="You"
+                      stacks={yourStacks}
+                      selectedBranch={selection?.type === "branch" ? selection.name : null}
+                      selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
+                      onSelectBranch={handleSelectBranch}
+                      onSelectStack={handleSelectStack}
+                    />
+                  )}
 
-                {/* Teammate swimlanes */}
-                {otherOwners.map(([owner, stacks]) => (
-                  <OwnerSwimlane
-                    key={owner}
-                    label={`@${owner}`}
-                    lastActive={getLastActiveDate(stacks)}
-                    stacks={stacks}
-                    selectedBranch={selection?.type === "branch" ? selection.name : null}
-                    selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
-                    onSelectBranch={handleSelectBranch}
-                    onSelectStack={handleSelectStack}
-                  />
-                ))}
+                  {/* Teammate swimlanes */}
+                  {otherOwners.map(([owner, stacks]) => (
+                    <OwnerSwimlane
+                      key={owner}
+                      label={`@${owner}`}
+                      lastActive={getLastActiveDate(stacks)}
+                      stacks={stacks}
+                      selectedBranch={selection?.type === "branch" ? selection.name : null}
+                      selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
+                      onSelectBranch={handleSelectBranch}
+                      onSelectStack={handleSelectStack}
+                    />
+                  ))}
+                </div>
               </div>
 
               {/* Trunk line */}
-              <div className="flex items-center gap-2 px-6 pb-2">
+              <div className="flex items-center gap-2 px-6 pb-2 shrink-0">
                 <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
                 <span className="text-xs font-mono text-muted-foreground">{repo?.trunk}</span>
                 <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />

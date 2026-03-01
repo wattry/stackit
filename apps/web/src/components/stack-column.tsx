@@ -61,7 +61,7 @@ export function StackColumn({
               className={`text-left px-3 py-2.5 border-x border-t transition-all duration-200 animate-fade-in-up bg-card
                 ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
                 ${isFirst ? "rounded-t-lg" : ""}
-                ${isSelected ? "!bg-accent ring-2 ring-ring z-10 relative shadow-[0_0_15px_var(--glow-color)]" : "hover:!bg-muted/50 hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
+                ${isSelected ? "!bg-accent ring-2 ring-ring z-10 relative shadow-[0_0_15px_var(--glow-color)]" : "hover:!bg-muted hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
                 ${branch.isCurrent && !isSelected ? "animate-breathe-glow" : ""}
               `}
               style={{ animationDelay: `${i * 50}ms` }}
@@ -106,38 +106,34 @@ export function StackColumn({
   );
 }
 
-const statusConfig: Record<string, { label: string; bg: string; selectedBg: string; text: string; shadow: string; selectedShadow: string }> = {
+const statusConfig: Record<string, { label: string; bg: string; selectedBg: string; text: string; shadow: string }> = {
   shippable: {
     label: "Ready to ship",
-    bg: "bg-green-100 dark:bg-green-950/60",
-    selectedBg: "bg-green-200 dark:bg-green-900/80",
+    bg: "bg-green-100 dark:bg-green-950",
+    selectedBg: "bg-green-200 dark:bg-green-900",
     text: "text-green-700 dark:text-green-400",
     shadow: "shadow-[0_2px_8px_rgba(34,197,94,0.2)] dark:shadow-[0_2px_8px_rgba(34,197,94,0.15)]",
-    selectedShadow: "shadow-[0_4px_16px_rgba(34,197,94,0.4)] dark:shadow-[0_4px_16px_rgba(34,197,94,0.3)]",
   },
   pending: {
     label: "Needs restack",
-    bg: "bg-amber-100 dark:bg-amber-950/60",
-    selectedBg: "bg-amber-200 dark:bg-amber-900/80",
+    bg: "bg-amber-100 dark:bg-amber-950",
+    selectedBg: "bg-amber-200 dark:bg-amber-900",
     text: "text-amber-700 dark:text-amber-400",
     shadow: "shadow-[0_2px_8px_rgba(245,158,11,0.2)] dark:shadow-[0_2px_8px_rgba(245,158,11,0.15)]",
-    selectedShadow: "shadow-[0_4px_16px_rgba(245,158,11,0.4)] dark:shadow-[0_4px_16px_rgba(245,158,11,0.3)]",
   },
   blocked: {
     label: "Blocked",
-    bg: "bg-red-100 dark:bg-red-950/60",
-    selectedBg: "bg-red-200 dark:bg-red-900/80",
+    bg: "bg-red-100 dark:bg-red-950",
+    selectedBg: "bg-red-200 dark:bg-red-900",
     text: "text-red-700 dark:text-red-400",
     shadow: "shadow-[0_2px_8px_rgba(239,68,68,0.2)] dark:shadow-[0_2px_8px_rgba(239,68,68,0.15)]",
-    selectedShadow: "shadow-[0_4px_16px_rgba(239,68,68,0.4)] dark:shadow-[0_4px_16px_rgba(239,68,68,0.3)]",
   },
   incomplete: {
     label: "Incomplete",
     bg: "bg-muted",
-    selectedBg: "bg-muted/80",
+    selectedBg: "bg-muted",
     text: "text-muted-foreground",
     shadow: "shadow-[0_2px_8px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.15)]",
-    selectedShadow: "shadow-[0_4px_16px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)]",
   },
 };
 
@@ -147,7 +143,7 @@ function StackStatusFooter({ status, selected, onClick }: { status: string; sele
   return (
     <button
       onClick={onClick}
-      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.text} ${selected ? `${c.selectedBg} ${c.selectedShadow} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
+      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.text} ${selected ? `${c.selectedBg} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
     >
       {c.label}
     </button>
