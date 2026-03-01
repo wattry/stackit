@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"stackit.dev/stackit/internal/actions/worktree"
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/errors"
@@ -224,6 +225,13 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	// from previous operations, without interfering with parallel worktree creation.
 	_ = ctx.Engine.PruneWorktrees(ctx.Context)
 
+	// Resolve post-worktree-create hooks once on the main thread (may prompt user).
+	// The resolved list is then executed in each worktree without prompting.
+	approvedHooks, err := worktree.ResolveApprovedHooks(ctx)
+	if err != nil {
+		ctx.Output.Warn("Failed to resolve worktree hooks: %v", err)
+	}
+
 	fullCommand := strings.Join(append([]string{opts.Command}, opts.Args...), " ")
 
 	type result struct {
@@ -256,7 +264,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 			Status:     StatusRunning,
 		})
 
-		res := executeCommandOnBranch(runCtx, ctx, branch, fullCommand)
+		res := executeCommandOnBranch(runCtx, ctx, branch, fullCommand, approvedHooks)
 
 		if res.err != nil {
 			mu.Lock()
@@ -345,7 +353,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	return nil
 }
 
-func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch engine.Branch, fullCommand string) struct {
+func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch engine.Branch, fullCommand string, hooks []string) struct {
 	branchName string
 	output     string
 	err        error
@@ -364,6 +372,9 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 		return res
 	}
 	defer cleanup()
+
+	// Run post-worktree-create hooks (pre-resolved, no prompting)
+	worktree.RunResolvedHooks(hooks, worktreePath, appCtx.Output)
 
 	var output strings.Builder
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", fullCommand)
