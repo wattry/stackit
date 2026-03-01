@@ -161,4 +161,43 @@ func TestPRContentGenerator_GenerateMultiStackPR(t *testing.T) {
 		assert.Contains(t, content.Body, "feature-b")
 		assert.Contains(t, content.Body, "conflict")
 	})
+
+	t.Run("mixed_scopes_omits_scope_trailer", func(t *testing.T) {
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+		s.WithStack(map[string]string{
+			"feature-a": "main",
+			"feature-b": "main",
+		})
+
+		err := s.Engine.SetScope(context.Background(), s.Engine.GetBranch("feature-a"), engine.NewScope("PROJ-1"))
+		assert.NoError(t, err)
+		err = s.Engine.SetScope(context.Background(), s.Engine.GetBranch("feature-b"), engine.NewScope("PROJ-2"))
+		assert.NoError(t, err)
+
+		gen := NewPRContentGenerator(s.Engine)
+		content := gen.GenerateMultiStackPR(
+			[]MultiStackInfo{
+				{RootBranch: "feature-a", AllBranches: []string{"feature-a"}},
+				{RootBranch: "feature-b", AllBranches: []string{"feature-b"}},
+			},
+			nil,
+		)
+
+		assert.Equal(t, "Merging PROJ-1, PROJ-2", content.Title)
+		assert.NotContains(t, content.Body, "Stackit-Scope:")
+	})
+}
+
+func TestTrailerScope(t *testing.T) {
+	t.Run("returns empty when all scopes are empty", func(t *testing.T) {
+		assert.Equal(t, "", trailerScope([]string{"", ""}))
+	})
+
+	t.Run("returns the shared scope", func(t *testing.T) {
+		assert.Equal(t, "PROJ-1", trailerScope([]string{"", "PROJ-1", "PROJ-1"}))
+	})
+
+	t.Run("returns empty when scopes differ", func(t *testing.T) {
+		assert.Equal(t, "", trailerScope([]string{"PROJ-1", "PROJ-2"}))
+	})
 }

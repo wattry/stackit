@@ -32,7 +32,7 @@ func (g *PRContentGenerator) GenerateMultiStackPR(included []MultiStackInfo, exc
 	scopes := g.collectScopes(branches)
 
 	title := pr.FormatMergeTitle(scopes, len(branches))
-	body := g.generateBodyWithOptions(branches, g.convertExcluded(excluded), nil, firstNonEmpty(scopes))
+	body := g.generateBodyWithOptions(branches, g.convertExcluded(excluded), nil, trailerScope(scopes))
 
 	return pr.Content{Title: title, Body: body}
 }
@@ -50,7 +50,7 @@ func (g *PRContentGenerator) GenerateConsolidationPR(branches []BranchMergeInfo)
 	}
 
 	title := pr.FormatMergeTitleWithDescription(stackDesc, scopes, len(mergeBranches))
-	body := g.generateBodyWithOptions(mergeBranches, nil, stackDesc, firstNonEmpty(scopes))
+	body := g.generateBodyWithOptions(mergeBranches, nil, stackDesc, trailerScope(scopes))
 
 	return pr.Content{Title: title, Body: body}
 }
@@ -151,14 +151,23 @@ func (g *PRContentGenerator) collectScopes(branches []pr.MergeBranch) []string {
 	return scopes
 }
 
-// firstNonEmpty returns the first non-empty string from the slice, or "" if none.
-func firstNonEmpty(ss []string) string {
-	for _, s := range ss {
-		if s != "" {
-			return s
+// trailerScope returns a scope only when all non-empty scopes match.
+// This avoids mislabeling mixed-scope merges.
+func trailerScope(scopes []string) string {
+	var selected string
+	for _, scope := range scopes {
+		if scope == "" {
+			continue
+		}
+		if selected == "" {
+			selected = scope
+			continue
+		}
+		if scope != selected {
+			return ""
 		}
 	}
-	return ""
+	return selected
 }
 
 // calculateDepth computes how deep a branch is in the stack.

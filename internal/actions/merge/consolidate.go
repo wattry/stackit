@@ -164,7 +164,7 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 	splog := c.ctx.Output
 	// Generate unique branch name
 	timestamp := time.Now().Unix()
-	scope := c.getStackScope()
+	scope := c.getStackScopeOrDefault()
 	branchName := fmt.Sprintf("stack-merge-%s-%d", scope, timestamp)
 
 	splog.Info("📋 Creating merge branch: %s", branchName)
@@ -201,7 +201,7 @@ func (c *ConsolidateMergeExecutor) createMergeBranch(ctx context.Context) (strin
 
 	// Append stack trailers for history tracking
 	prNumbers := c.collectPRNumbers()
-	trailers := pr.FormatStackTrailers(len(branches), prNumbers, scope)
+	trailers := pr.FormatStackTrailers(len(branches), prNumbers, c.getTrailerScope())
 	commitMsg += "\n\n" + trailers
 
 	splog.Info("  Merging %d branches via octopus merge...", len(branches))
@@ -335,7 +335,7 @@ func (c *ConsolidateMergeExecutor) lockAndNotifyIndividualPRs(_ context.Context,
 
 // Helper methods
 
-func (c *ConsolidateMergeExecutor) getStackScope() string {
+func (c *ConsolidateMergeExecutor) getStackScopeOrDefault() string {
 	// Get scope from the first branch in the stack
 	if len(c.plan.BranchesToMerge) > 0 {
 		branch := c.engine.GetBranch(c.plan.BranchesToMerge[0].BranchName)
@@ -364,13 +364,27 @@ func (c *ConsolidateMergeExecutor) collectPRNumbers() []int {
 
 // buildTrailerMessage returns the trailer block for the consolidation merge commit.
 func (c *ConsolidateMergeExecutor) buildTrailerMessage() string {
-	scope := c.getStackScope()
+	scope := c.getTrailerScope()
 	prNumbers := c.collectPRNumbers()
 	branches := make([]string, len(c.plan.BranchesToMerge))
 	for i, b := range c.plan.BranchesToMerge {
 		branches[i] = b.BranchName
 	}
 	return pr.FormatStackTrailers(len(branches), prNumbers, scope)
+}
+
+// getTrailerScope returns a scope only when all non-empty branch scopes match.
+func (c *ConsolidateMergeExecutor) getTrailerScope() string {
+	scopes := make([]string, 0, len(c.plan.BranchesToMerge))
+	for _, b := range c.plan.BranchesToMerge {
+		branch := c.engine.GetBranch(b.BranchName)
+		scope := c.engine.GetScope(branch)
+		if scope.IsEmpty() {
+			continue
+		}
+		scopes = append(scopes, scope.String())
+	}
+	return trailerScope(scopes)
 }
 
 // resolveMergeMethod returns the merge method to use, preferring the override if set.
