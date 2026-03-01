@@ -23,10 +23,8 @@ export function BranchNode({
 }: BranchNodeProps) {
   const ciIcon = getCIIcon(branch);
   const borderClass = isSelected
-    ? "stroke-blue-500 stroke-2"
-    : branch.isCurrent
-      ? "stroke-amber-500 stroke-2"
-      : "stroke-border stroke-1";
+    ? "stroke-blue-500/50 stroke-1"
+    : "stroke-border stroke-1";
 
   return (
     <g
@@ -35,25 +33,23 @@ export function BranchNode({
       className="cursor-pointer"
       style={{ transition: "transform 0.15s ease" }}
     >
-      {/* Glow behind selected node */}
-      {isSelected && (
-        <rect
-          width={NODE_WIDTH + 8}
-          height={NODE_HEIGHT + 8}
-          x={-4}
-          y={-4}
-          rx={12}
-          filter="url(#glow)"
-          className="fill-transparent stroke-transparent"
-          style={{ opacity: 0.6 }}
-        />
-      )}
       <rect
         width={NODE_WIDTH}
         height={NODE_HEIGHT}
         rx={8}
         className={`fill-card ${borderClass}`}
       />
+      {/* Left accent bar for current (checked out) branch */}
+      {branch.isCurrent && (
+        <rect
+          width={3}
+          height={NODE_HEIGHT - 16}
+          x={1}
+          y={8}
+          rx={1.5}
+          className="fill-amber-500"
+        />
+      )}
 
       {/* Branch name */}
       <text
@@ -79,10 +75,6 @@ export function BranchNode({
         {branch.needsRestack && " \u21BB"}
       </text>
 
-      {/* Current branch indicator */}
-      {branch.isCurrent && (
-        <circle cx={NODE_WIDTH - 8} cy={8} r={4} className="fill-amber-500" />
-      )}
     </g>
   );
 }

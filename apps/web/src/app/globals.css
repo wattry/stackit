@@ -147,11 +147,6 @@
   50% { opacity: 0.4; transform: scale(0.85); }
 }
 
-@keyframes breathe-glow {
-  0%, 100% { box-shadow: 0 0 8px var(--glow-color-current); }
-  50% { box-shadow: 0 0 20px var(--glow-color-current); }
-}
-
 @keyframes checkmark-draw {
   0% { stroke-dashoffset: 24; }
   100% { stroke-dashoffset: 0; }
@@ -197,10 +192,6 @@
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
-.animate-breathe-glow {
-  animation: breathe-glow 3s ease-in-out infinite;
-}
-
 .animate-shake {
   animation: shake 0.4s ease-in-out;
 }
@@ -227,7 +218,6 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-shimmer,
   .animate-pulse-dot,
-  .animate-breathe-glow,
   .animate-shake,
   .animate-gradient-shift,
   .animate-fade-in-up,
