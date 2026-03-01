@@ -59,7 +59,7 @@ func (d *defaultPRMergeAPI) getMergeableState(ctx context.Context, runner git.Ru
 }
 
 func (d *defaultPRMergeAPI) enableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, method github.MergeMethod) error {
-	return github.EnableAutoMerge(ctx, runner, prNodeID, method)
+	return github.EnableAutoMerge(ctx, runner, prNodeID, github.EnableAutoMergeOptions{MergeMethod: method})
 }
 
 func (d *defaultPRMergeAPI) waitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, timeout, interval time.Duration) error {
@@ -71,7 +71,7 @@ func (d *defaultPRMergeAPI) waitForMergeable(ctx context.Context, runner git.Run
 }
 
 func (d *defaultPRMergeAPI) mergePR(ctx context.Context, branchName string, method github.MergeMethod) error {
-	return d.client.MergePullRequest(ctx, branchName, method)
+	return d.client.MergePullRequest(ctx, branchName, github.MergePROptions{Method: method})
 }
 
 // orchestrateMerge implements a 3-tier merge strategy:

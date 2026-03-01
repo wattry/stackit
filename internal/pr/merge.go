@@ -66,6 +66,10 @@ type MergeBodyParams struct {
 	// StackDescription is the description of the stack being merged.
 	// Optional - if present, it appears at the top of the body.
 	StackDescription *git.StackDescription
+
+	// Metadata is stack metadata for trailers.
+	// Optional - if StackSize is zero, metadata is derived from Branches.
+	Metadata StackMetadata
 }
 
 // MergeBranch represents a branch being merged.
@@ -121,6 +125,17 @@ func FormatMergeBody(params MergeBodyParams) string {
 		body.WriteString("```\n")
 		body.WriteString(params.StackTree)
 		body.WriteString("```\n")
+	}
+
+	// Append stack trailers as a fallback for repos whose squash merge commit
+	// message setting uses "PR body". Trailers survive automatically in that case.
+	if len(params.Branches) > 0 {
+		metadata := params.Metadata
+		if metadata.StackSize == 0 {
+			metadata = BuildStackMetadata(params.Branches, metadata.Scope)
+		}
+		body.WriteString("\n")
+		body.WriteString(metadata.ToTrailers())
 	}
 
 	return body.String()

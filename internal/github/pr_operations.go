@@ -275,8 +275,10 @@ func ParseReviewers(reviewersStr string) ([]string, []string) {
 	return reviewers, teamReviewers
 }
 
-// MergePullRequest merges a pull request using the GitHub API
-func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, branchName string, method MergeMethod) error {
+// MergePullRequest merges a pull request using the GitHub API.
+// If opts.CommitBody is set, it is used as an additional commit message body
+// for merge/squash strategies.
+func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, branchName string, opts MergePROptions) error {
 	// First, get the PR for this branch
 	pr, err := GetPullRequestByBranch(ctx, client, owner, repo, branchName)
 	if err != nil {
@@ -288,11 +290,11 @@ func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, b
 
 	// Merge the PR using the specified method
 	mergeRequest := &github.PullRequestOptions{
-		MergeMethod: string(method),
+		MergeMethod: string(opts.Method),
 	}
-	_, _, err = client.PullRequests.Merge(ctx, owner, repo, *pr.Number, "", mergeRequest)
+	_, _, err = client.PullRequests.Merge(ctx, owner, repo, *pr.Number, opts.CommitBody, mergeRequest)
 	if err != nil {
-		return fmt.Errorf("failed to merge PR #%d for branch %s using %s: %w", *pr.Number, branchName, method, err)
+		return fmt.Errorf("failed to merge PR #%d for branch %s using %s: %w", *pr.Number, branchName, opts.Method, err)
 	}
 	return nil
 }
@@ -388,25 +390,52 @@ type AutoMergeStatus struct {
 	MergeMethod string
 }
 
+// EnableAutoMergeOptions contains options for enabling auto-merge on a PR.
+type EnableAutoMergeOptions struct {
+	MergeMethod MergeMethod
+	CommitBody  string // optional — omit for default GitHub behavior
+}
+
 // EnableAutoMerge enables GitHub's auto-merge feature on a PR.
 // This requires the repository to have auto-merge enabled in settings.
-func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, mergeMethod MergeMethod) error {
-	mutation := `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-		enablePullRequestAutoMerge(input: {
-			pullRequestId: $pullRequestId
-			mergeMethod: $mergeMethod
-		}) {
-			pullRequest {
-				autoMergeRequest {
-					enabledAt
+func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, opts EnableAutoMergeOptions) error {
+	// We use two separate mutations because GitHub's GraphQL API treats
+	// `commitBody: null` differently from omitting commitBody entirely.
+	// When omitted, GitHub uses its default commit message (e.g., PR body).
+	// When explicitly set to null, it may override that default to empty.
+	var mutation string
+	if opts.CommitBody != "" {
+		mutation = `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!, $commitBody: String) {
+			enablePullRequestAutoMerge(input: {
+				pullRequestId: $pullRequestId
+				mergeMethod: $mergeMethod
+				commitBody: $commitBody
+			}) {
+				pullRequest {
+					autoMergeRequest {
+						enabledAt
+					}
 				}
 			}
-		}
-	}`
+		}`
+	} else {
+		mutation = `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+			enablePullRequestAutoMerge(input: {
+				pullRequestId: $pullRequestId
+				mergeMethod: $mergeMethod
+			}) {
+				pullRequest {
+					autoMergeRequest {
+						enabledAt
+					}
+				}
+			}
+		}`
+	}
 
 	// Convert our MergeMethod to GitHub's GraphQL enum format
 	var graphqlMethod string
-	switch mergeMethod {
+	switch opts.MergeMethod {
 	case MergeMethodMerge:
 		graphqlMethod = "MERGE"
 	case MergeMethodSquash:
@@ -420,6 +449,9 @@ func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, me
 	variables := map[string]any{
 		"pullRequestId": prNodeID,
 		"mergeMethod":   graphqlMethod,
+	}
+	if opts.CommitBody != "" {
+		variables["commitBody"] = opts.CommitBody
 	}
 
 	_, err := executeGraphQLQuery(ctx, runner, mutation, variables)

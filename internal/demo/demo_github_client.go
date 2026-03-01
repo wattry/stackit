@@ -114,7 +114,7 @@ func (c *GitHubClient) GetPullRequest(_ context.Context, _, _ string, prNumber i
 }
 
 // MergePullRequest simulates merging a pull request using the specified merge method
-func (c *GitHubClient) MergePullRequest(_ context.Context, branchName string, _ github.MergeMethod) error {
+func (c *GitHubClient) MergePullRequest(_ context.Context, branchName string, _ github.MergePROptions) error {
 	simulateDelay(delayMedium)
 
 	if pr, ok := c.prs[branchName]; ok {

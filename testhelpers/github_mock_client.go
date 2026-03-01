@@ -106,7 +106,7 @@ func (c *MockGitHubClient) GetPullRequest(ctx context.Context, owner, repo strin
 }
 
 // MergePullRequest merges a pull request using the specified merge method
-func (c *MockGitHubClient) MergePullRequest(_ context.Context, _ string, _ githubpkg.MergeMethod) error {
+func (c *MockGitHubClient) MergePullRequest(_ context.Context, _ string, _ githubpkg.MergePROptions) error {
 	// In tests, just return nil
 	return nil
 }

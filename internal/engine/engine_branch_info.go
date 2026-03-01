@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"stackit.dev/stackit/internal/git"
 )
 
 // GetCommitDate returns the commit date for a branch
@@ -163,6 +165,12 @@ func (e *engineImpl) PreloadBranchData() {
 	if len(branches) > 0 {
 		e.batchReadMetadata(branches)
 	}
+}
+
+// GetRecentTrunkCommits returns the most recent commits on the trunk branch,
+// including any stack trailer metadata embedded in consolidation merge commits.
+func (e *engineImpl) GetRecentTrunkCommits(count int) ([]git.RecentCommit, error) {
+	return e.git.GetRecentCommits(e.trunk, count)
 }
 
 // GetAllCommits returns commits for a branch in various formats

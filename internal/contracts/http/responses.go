@@ -9,8 +9,30 @@ package httpcontract
 // It bundles repo metadata and all stack details into a single payload
 // to avoid N+1 API calls.
 type ViewResponse struct {
-	Repo   RepoResponse  `json:"repo"`
-	Stacks []StackDetail `json:"stacks"`
+	Repo           RepoResponse          `json:"repo"`
+	Stacks         []StackDetail         `json:"stacks"`
+	RecentlyMerged []TrunkCommitResponse `json:"recentlyMerged,omitempty"`
+}
+
+const (
+	// TrunkCommitKindRegular is a normal non-stack merge trunk commit.
+	TrunkCommitKindRegular = "regular"
+	// TrunkCommitKindStackMerge is a stack consolidation merge commit.
+	TrunkCommitKindStackMerge = "stack-merge"
+)
+
+// TrunkCommitResponse represents a commit on the trunk branch,
+// optionally enriched with stack metadata from git trailers.
+type TrunkCommitResponse struct {
+	SHA        string `json:"sha"`
+	Message    string `json:"message"`
+	Author     string `json:"author"`
+	Date       string `json:"date"`
+	Kind       string `json:"kind"`
+	PRNumber   int    `json:"prNumber,omitempty"`
+	StackSize  int    `json:"stackSize,omitempty"`
+	StackPRs   []int  `json:"stackPRs,omitempty"`
+	StackScope string `json:"stackScope,omitempty"`
 }
 
 // RepoResponse contains repository metadata.

@@ -85,6 +85,7 @@ type CommitReader interface {
 	GetCommitHistorySHAs(branchName string) ([]string, error)
 	GetCommitSHA(branchName string, offset int) (string, error)
 	GetCommitLog(sha, format string) (string, error)
+	GetRecentCommits(branchName string, count int) ([]RecentCommit, error)
 	GetCommitTemplate(ctx context.Context) (string, error)
 	GetParentCommitSHA(commitSHA string) (string, error)
 }

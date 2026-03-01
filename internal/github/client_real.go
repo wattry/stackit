@@ -137,8 +137,8 @@ func (c *StackitGitHubClient) GetPullRequest(ctx context.Context, owner, repo st
 }
 
 // MergePullRequest merges a pull request using the specified merge method
-func (c *StackitGitHubClient) MergePullRequest(ctx context.Context, branchName string, method MergeMethod) error {
-	return MergePullRequest(ctx, c.client, c.owner, c.repo, branchName, method)
+func (c *StackitGitHubClient) MergePullRequest(ctx context.Context, branchName string, opts MergePROptions) error {
+	return MergePullRequest(ctx, c.client, c.owner, c.repo, branchName, opts)
 }
 
 // GetAllowedMergeMethods returns the allowed merge methods for the repository
