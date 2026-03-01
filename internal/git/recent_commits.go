@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,15 +11,27 @@ import (
 
 const trailerValueSeparator = "\x1e"
 
+var prNumberSuffixRe = regexp.MustCompile(`\(#(\d+)\)\s*$`)
+
+// RecentCommitKind describes the presentation type of a trunk commit.
+type RecentCommitKind string
+
+const (
+	RecentCommitKindRegular    RecentCommitKind = "regular"
+	RecentCommitKindStackMerge RecentCommitKind = "stack-merge"
+)
+
 // RecentCommit represents a commit from the git log with optional stack trailer metadata.
 type RecentCommit struct {
-	SHA        string
-	Subject    string
-	Author     string
-	Date       time.Time
-	StackSize  int    // from Stackit-Stack-Size trailer (0 if absent)
-	StackPRs   string // from Stackit-PRs trailer (comma-separated, empty if absent)
-	StackScope string // from Stackit-Scope trailer (empty if absent)
+	SHA            string
+	Subject        string
+	Author         string
+	Date           time.Time
+	PRNumber       int              // parsed from subject suffix "(#123)" if present
+	Kind           RecentCommitKind // derived from trailer metadata
+	StackSize      int              // from Stackit-Stack-Size trailer (0 if absent)
+	StackPRNumbers []int            // from Stackit-PRs trailer
+	StackScope     string           // from Stackit-Scope trailer (empty if absent)
 }
 
 // GetRecentCommits returns the most recent commits from a branch, including stack trailer metadata.
@@ -64,12 +77,15 @@ func (r *runner) GetRecentCommits(branchName string, count int) ([]RecentCommit,
 		}
 
 		if len(fields) > 5 {
-			commit.StackPRs = parseStackPRsTrailer(fields[5])
+			commit.StackPRNumbers = parseStackPRsTrailer(fields[5])
 		}
 
 		if len(fields) > 6 {
 			commit.StackScope = parseStackScopeTrailer(fields[6])
 		}
+
+		commit.PRNumber = parsePRNumberFromSubject(commit.Subject)
+		commit.Kind = deriveRecentCommitKind(commit)
 
 		commits = append(commits, commit)
 	}
@@ -90,7 +106,7 @@ func parseStackSizeTrailer(raw string) int {
 	return 0
 }
 
-func parseStackPRsTrailer(raw string) string {
+func parseStackPRsTrailer(raw string) []int {
 	var prNumbers []int
 	for value := range strings.SplitSeq(raw, trailerValueSeparator) {
 		for part := range strings.SplitSeq(value, ",") {
@@ -105,16 +121,7 @@ func parseStackPRsTrailer(raw string) string {
 			prNumbers = append(prNumbers, n)
 		}
 	}
-
-	if len(prNumbers) == 0 {
-		return ""
-	}
-
-	values := make([]string, len(prNumbers))
-	for i, n := range prNumbers {
-		values[i] = strconv.Itoa(n)
-	}
-	return strings.Join(values, ",")
+	return prNumbers
 }
 
 func parseStackScopeTrailer(raw string) string {
@@ -125,4 +132,23 @@ func parseStackScopeTrailer(raw string) string {
 		}
 	}
 	return ""
+}
+
+func parsePRNumberFromSubject(subject string) int {
+	matches := prNumberSuffixRe.FindStringSubmatch(subject)
+	if len(matches) < 2 {
+		return 0
+	}
+	n, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func deriveRecentCommitKind(commit RecentCommit) RecentCommitKind {
+	if commit.StackSize > 0 {
+		return RecentCommitKindStackMerge
+	}
+	return RecentCommitKindRegular
 }

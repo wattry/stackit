@@ -72,8 +72,8 @@ type MergeMethodSettings struct {
 
 // MergePROptions configures how a pull request should be merged.
 type MergePROptions struct {
-	Method        MergeMethod
-	CommitMessage string // Optional: appended to/replaces auto-generated commit body
+	Method     MergeMethod
+	CommitBody string // Optional commit body for merge/squash commit message.
 }
 
 // Client is an interface for GitHub API interactions

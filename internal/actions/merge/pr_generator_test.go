@@ -8,6 +8,7 @@ import (
 
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/git"
+	"stackit.dev/stackit/internal/pr"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -188,21 +189,21 @@ func TestPRContentGenerator_GenerateMultiStackPR(t *testing.T) {
 	})
 }
 
-func TestTrailerScope(t *testing.T) {
+func TestResolveUnifiedScope(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns empty when all scopes are empty", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "", trailerScope([]string{"", ""}))
+		assert.Equal(t, "", pr.ResolveUnifiedScope([]string{"", ""}))
 	})
 
 	t.Run("returns the shared scope", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "PROJ-1", trailerScope([]string{"", "PROJ-1", "PROJ-1"}))
+		assert.Equal(t, "PROJ-1", pr.ResolveUnifiedScope([]string{"", "PROJ-1", "PROJ-1"}))
 	})
 
 	t.Run("returns empty when scopes differ", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "", trailerScope([]string{"PROJ-1", "PROJ-2"}))
+		assert.Equal(t, "", pr.ResolveUnifiedScope([]string{"PROJ-1", "PROJ-2"}))
 	})
 }

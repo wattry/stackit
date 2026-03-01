@@ -276,7 +276,8 @@ func ParseReviewers(reviewersStr string) ([]string, []string) {
 }
 
 // MergePullRequest merges a pull request using the GitHub API.
-// If opts.CommitMessage is set, it is used as the commit message body for squash/merge commits.
+// If opts.CommitBody is set, it is used as an additional commit message body
+// for merge/squash strategies.
 func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, branchName string, opts MergePROptions) error {
 	// First, get the PR for this branch
 	pr, err := GetPullRequestByBranch(ctx, client, owner, repo, branchName)
@@ -291,7 +292,7 @@ func MergePullRequest(ctx context.Context, client *github.Client, owner, repo, b
 	mergeRequest := &github.PullRequestOptions{
 		MergeMethod: string(opts.Method),
 	}
-	_, _, err = client.PullRequests.Merge(ctx, owner, repo, *pr.Number, opts.CommitMessage, mergeRequest)
+	_, _, err = client.PullRequests.Merge(ctx, owner, repo, *pr.Number, opts.CommitBody, mergeRequest)
 	if err != nil {
 		return fmt.Errorf("failed to merge PR #%d for branch %s using %s: %w", *pr.Number, branchName, opts.Method, err)
 	}

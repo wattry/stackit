@@ -90,6 +90,7 @@ export interface TrunkCommitResponse {
   message: string;
   author: string;
   date: string;
+  kind: "regular" | "stack-merge";
   prNumber?: number;
   stackSize?: number;
   stackPRs?: number[];

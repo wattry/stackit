@@ -13,40 +13,69 @@ const (
 	TrailerScope     = "Stackit-Scope"
 )
 
-// StackTrailerInfo contains parsed stack metadata from git trailers.
-type StackTrailerInfo struct {
+// StackMetadata contains stack metadata embedded in git trailers.
+type StackMetadata struct {
 	StackSize int
 	PRNumbers []int
 	Scope     string
 }
 
-// FormatStackTrailers builds a git trailer block for a consolidation merge commit.
+// StackTrailerInfo is an alias kept for backwards compatibility.
+type StackTrailerInfo = StackMetadata
+
+// NewStackMetadata constructs stack metadata from explicit fields.
+func NewStackMetadata(stackSize int, prNumbers []int, scope string) StackMetadata {
+	return StackMetadata{
+		StackSize: stackSize,
+		PRNumbers: slicesClone(prNumbers),
+		Scope:     scope,
+	}
+}
+
+// BuildStackMetadata derives stack metadata from merge branches.
+func BuildStackMetadata(branches []MergeBranch, scope string) StackMetadata {
+	prNumbers := make([]int, 0, len(branches))
+	for _, branch := range branches {
+		if branch.PRNumber > 0 {
+			prNumbers = append(prNumbers, branch.PRNumber)
+		}
+	}
+
+	return NewStackMetadata(len(branches), prNumbers, scope)
+}
+
+// ToTrailers builds a git trailer block for this metadata.
 // The trailers follow the standard git trailer format (key: value) and can be
 // parsed by git log's %(trailers) format specifier.
-func FormatStackTrailers(stackSize int, prNumbers []int, scope string) string {
+func (m StackMetadata) ToTrailers() string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "%s: %d\n", TrailerStackSize, stackSize)
+	fmt.Fprintf(&b, "%s: %d\n", TrailerStackSize, m.StackSize)
 
-	if len(prNumbers) > 0 {
-		prStrs := make([]string, len(prNumbers))
-		for i, n := range prNumbers {
+	if len(m.PRNumbers) > 0 {
+		prStrs := make([]string, len(m.PRNumbers))
+		for i, n := range m.PRNumbers {
 			prStrs[i] = strconv.Itoa(n)
 		}
 		fmt.Fprintf(&b, "%s: %s\n", TrailerPRs, strings.Join(prStrs, ","))
 	}
 
-	if scope != "" {
-		fmt.Fprintf(&b, "%s: %s\n", TrailerScope, scope)
+	if m.Scope != "" {
+		fmt.Fprintf(&b, "%s: %s\n", TrailerScope, m.Scope)
 	}
 
 	return b.String()
 }
 
-// ParseStackTrailers extracts stack trailer values from a commit message body.
+// FormatStackTrailers is a compatibility wrapper around StackMetadata.ToTrailers.
+func FormatStackTrailers(stackSize int, prNumbers []int, scope string) string {
+	return NewStackMetadata(stackSize, prNumbers, scope).ToTrailers()
+}
+
+// ParseStackMetadataTrailers extracts stack trailer values from a commit message body.
 // Returns nil if no stack trailers are found.
-func ParseStackTrailers(body string) *StackTrailerInfo {
-	info := &StackTrailerInfo{}
+func ParseStackMetadataTrailers(body string) *StackMetadata {
+	info := &StackMetadata{}
 	found := false
 
 	for line := range strings.SplitSeq(body, "\n") {
@@ -78,6 +107,11 @@ func ParseStackTrailers(body string) *StackTrailerInfo {
 	return info
 }
 
+// ParseStackTrailers is a compatibility wrapper around ParseStackMetadataTrailers.
+func ParseStackTrailers(body string) *StackTrailerInfo {
+	return ParseStackMetadataTrailers(body)
+}
+
 // parseTrailer checks if a line matches "Key: value" and returns the value.
 func parseTrailer(line, key string) (string, bool) {
 	prefix := key + ":"
@@ -97,4 +131,13 @@ func parsePRNumbers(s string) []int {
 		}
 	}
 	return nums
+}
+
+func slicesClone(in []int) []int {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]int, len(in))
+	copy(out, in)
+	return out
 }

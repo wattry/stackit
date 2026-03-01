@@ -236,7 +236,7 @@ Stackit-PRs: 1
 				Title:       "Add user authentication",
 				Description: "This stack implements JWT-based auth.",
 			},
-			Scope: "PROJ-123",
+			Metadata: StackMetadata{Scope: "PROJ-123"},
 		})
 
 		expected := `**Add user authentication**
@@ -270,7 +270,7 @@ Stackit-Scope: PROJ-123
 			StackDescription: &git.StackDescription{
 				Title: "Add user authentication",
 			},
-			Scope: "PROJ-456",
+			Metadata: StackMetadata{Scope: "PROJ-456"},
 		})
 
 		expected := `**Add user authentication**

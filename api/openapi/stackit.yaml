@@ -261,7 +261,7 @@ components:
           type: string
     TrunkCommitResponse:
       type: object
-      required: [sha, message, author, date]
+      required: [sha, message, author, date, kind]
       properties:
         sha:
           type: string
@@ -271,6 +271,9 @@ components:
           type: string
         date:
           type: string
+        kind:
+          type: string
+          enum: [regular, stack-merge]
         prNumber:
           type: integer
         stackSize:

@@ -1,6 +1,7 @@
 "use client";
 
 import type { TrunkCommitResponse } from "@/lib/api";
+import { formatTimeAgo } from "@/lib/time";
 
 interface RecentlyMergedProps {
   commits: TrunkCommitResponse[];
@@ -14,7 +15,7 @@ export function RecentlyMerged({ commits, owner, repo }: RecentlyMergedProps) {
   return (
     <div className="px-6 pb-6 space-y-1">
       {commits.map((commit) =>
-        commit.stackSize && commit.stackSize > 0 ? (
+        commit.kind === "stack-merge" ? (
           <StackMergeEntry
             key={commit.sha}
             commit={commit}
@@ -131,17 +132,4 @@ function PRLink({
 
 function stripPRSuffix(message: string): string {
   return message.replace(/\s*\(#\d+\)\s*$/, "");
-}
-
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }

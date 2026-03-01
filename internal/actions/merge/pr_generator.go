@@ -32,7 +32,7 @@ func (g *PRContentGenerator) GenerateMultiStackPR(included []MultiStackInfo, exc
 	scopes := g.collectScopes(branches)
 
 	title := pr.FormatMergeTitle(scopes, len(branches))
-	body := g.generateBodyWithOptions(branches, g.convertExcluded(excluded), nil, trailerScope(scopes))
+	body := g.generateBodyWithOptions(branches, g.convertExcluded(excluded), nil, pr.ResolveUnifiedScope(scopes))
 
 	return pr.Content{Title: title, Body: body}
 }
@@ -50,7 +50,7 @@ func (g *PRContentGenerator) GenerateConsolidationPR(branches []BranchMergeInfo)
 	}
 
 	title := pr.FormatMergeTitleWithDescription(stackDesc, scopes, len(mergeBranches))
-	body := g.generateBodyWithOptions(mergeBranches, nil, stackDesc, trailerScope(scopes))
+	body := g.generateBodyWithOptions(mergeBranches, nil, stackDesc, pr.ResolveUnifiedScope(scopes))
 
 	return pr.Content{Title: title, Body: body}
 }
@@ -79,7 +79,7 @@ func (g *PRContentGenerator) generateBodyWithOptions(branches []pr.MergeBranch, 
 		Excluded:         excluded,
 		StackTree:        stackTree,
 		StackDescription: stackDesc,
-		Scope:            scope,
+		Metadata:         pr.BuildStackMetadata(branches, scope),
 	})
 }
 
@@ -149,25 +149,6 @@ func (g *PRContentGenerator) collectScopes(branches []pr.MergeBranch) []string {
 		scopes[i] = scope.String()
 	}
 	return scopes
-}
-
-// trailerScope returns a scope only when all non-empty scopes match.
-// This avoids mislabeling mixed-scope merges.
-func trailerScope(scopes []string) string {
-	var selected string
-	for _, scope := range scopes {
-		if scope == "" {
-			continue
-		}
-		if selected == "" {
-			selected = scope
-			continue
-		}
-		if scope != selected {
-			return ""
-		}
-	}
-	return selected
 }
 
 // calculateDepth computes how deep a branch is in the stack.

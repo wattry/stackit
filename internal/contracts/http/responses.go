@@ -14,6 +14,13 @@ type ViewResponse struct {
 	RecentlyMerged []TrunkCommitResponse `json:"recentlyMerged,omitempty"`
 }
 
+const (
+	// TrunkCommitKindRegular is a normal non-stack merge trunk commit.
+	TrunkCommitKindRegular = "regular"
+	// TrunkCommitKindStackMerge is a stack consolidation merge commit.
+	TrunkCommitKindStackMerge = "stack-merge"
+)
+
 // TrunkCommitResponse represents a commit on the trunk branch,
 // optionally enriched with stack metadata from git trailers.
 type TrunkCommitResponse struct {
@@ -21,6 +28,7 @@ type TrunkCommitResponse struct {
 	Message    string `json:"message"`
 	Author     string `json:"author"`
 	Date       string `json:"date"`
+	Kind       string `json:"kind"`
 	PRNumber   int    `json:"prNumber,omitempty"`
 	StackSize  int    `json:"stackSize,omitempty"`
 	StackPRs   []int  `json:"stackPRs,omitempty"`

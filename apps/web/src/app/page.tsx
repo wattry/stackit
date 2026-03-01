@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRepo } from "@/components/providers/repo-provider";
-import { StackColumn } from "@/components/stack-column";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { RecentlyMerged } from "@/components/recently-merged";
 import { Separator } from "@/components/ui/separator";
 import type { BranchResponse, StackDetail } from "@/lib/api";
+import { formatTimeAgo } from "@/lib/time";
 
 export default function Home() {
   const {
@@ -163,16 +163,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }

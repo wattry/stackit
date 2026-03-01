@@ -1,10 +1,7 @@
 package httpcontract
 
 import (
-	"regexp"
 	"slices"
-	"strconv"
-	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
@@ -260,12 +257,8 @@ func computeStackStatus(graph *engine.StackGraph, branchNames []string) string {
 	}
 }
 
-// prNumberRe matches PR number suffixes like "(#123)" in commit subjects.
-var prNumberRe = regexp.MustCompile(`\(#(\d+)\)\s*$`)
-
 // MapTrunkCommits converts git RecentCommit values to API TrunkCommitResponse values.
-// It parses PR numbers from the "(#N)" suffix in commit subjects and passes through
-// stack trailer fields.
+// Parsing/normalization is done in the git layer; this function maps fields.
 func MapTrunkCommits(commits []git.RecentCommit) []TrunkCommitResponse {
 	result := make([]TrunkCommitResponse, 0, len(commits))
 	for _, c := range commits {
@@ -274,24 +267,17 @@ func MapTrunkCommits(commits []git.RecentCommit) []TrunkCommitResponse {
 			Message:    c.Subject,
 			Author:     c.Author,
 			Date:       c.Date.Format(time.RFC3339),
+			PRNumber:   c.PRNumber,
+			Kind:       string(c.Kind),
 			StackSize:  c.StackSize,
+			StackPRs:   append([]int(nil), c.StackPRNumbers...),
 			StackScope: c.StackScope,
 		}
 
-		// Parse PR number from commit subject "(#123)"
-		if matches := prNumberRe.FindStringSubmatch(c.Subject); len(matches) > 1 {
-			if n, err := strconv.Atoi(matches[1]); err == nil {
-				resp.PRNumber = n
-			}
-		}
-
-		// Parse stack PR numbers from trailer value
-		if c.StackPRs != "" {
-			for part := range strings.SplitSeq(c.StackPRs, ",") {
-				part = strings.TrimSpace(part)
-				if n, err := strconv.Atoi(part); err == nil {
-					resp.StackPRs = append(resp.StackPRs, n)
-				}
+		if resp.Kind == "" {
+			resp.Kind = TrunkCommitKindRegular
+			if c.StackSize > 0 {
+				resp.Kind = TrunkCommitKindStackMerge
 			}
 		}
 

@@ -67,9 +67,9 @@ type MergeBodyParams struct {
 	// Optional - if present, it appears at the top of the body.
 	StackDescription *git.StackDescription
 
-	// Scope is the stack scope for trailers (e.g. "PROJ-123").
-	// Optional - if empty, no scope trailer is emitted.
-	Scope string
+	// Metadata is stack metadata for trailers.
+	// Optional - if StackSize is zero, metadata is derived from Branches.
+	Metadata StackMetadata
 }
 
 // MergeBranch represents a branch being merged.
@@ -103,11 +103,9 @@ func FormatMergeBody(params MergeBodyParams) string {
 	body.WriteString("This PR merges the following changes:\n\n")
 
 	// Branch list with PR info
-	prNumbers := make([]int, 0, len(params.Branches))
 	for i, branch := range params.Branches {
 		if branch.PRNumber > 0 {
 			fmt.Fprintf(&body, "%d. **#%d** %s\n", i+1, branch.PRNumber, branch.PRTitle)
-			prNumbers = append(prNumbers, branch.PRNumber)
 		} else {
 			fmt.Fprintf(&body, "%d. %s\n", i+1, branch.Name)
 		}
@@ -132,8 +130,12 @@ func FormatMergeBody(params MergeBodyParams) string {
 	// Append stack trailers as a fallback for repos whose squash merge commit
 	// message setting uses "PR body". Trailers survive automatically in that case.
 	if len(params.Branches) > 0 {
+		metadata := params.Metadata
+		if metadata.StackSize == 0 {
+			metadata = BuildStackMetadata(params.Branches, metadata.Scope)
+		}
 		body.WriteString("\n")
-		body.WriteString(FormatStackTrailers(len(params.Branches), prNumbers, params.Scope))
+		body.WriteString(metadata.ToTrailers())
 	}
 
 	return body.String()
