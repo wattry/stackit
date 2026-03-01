@@ -189,15 +189,20 @@ func TestPRContentGenerator_GenerateMultiStackPR(t *testing.T) {
 }
 
 func TestTrailerScope(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns empty when all scopes are empty", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "", trailerScope([]string{"", ""}))
 	})
 
 	t.Run("returns the shared scope", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "PROJ-1", trailerScope([]string{"", "PROJ-1", "PROJ-1"}))
 	})
 
 	t.Run("returns empty when scopes differ", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "", trailerScope([]string{"PROJ-1", "PROJ-2"}))
 	})
 }

@@ -10,7 +10,8 @@ import (
 )
 
 func TestGetRecentCommits_DuplicateTrailers(t *testing.T) {
-	scene := testhelpers.NewScene(t, func(s *testhelpers.Scene) error {
+	t.Parallel()
+	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
 		return s.Repo.CreateChangeAndCommit("initial", "init")
 	})
 
@@ -33,4 +34,74 @@ func TestGetRecentCommits_DuplicateTrailers(t *testing.T) {
 	require.Equal(t, 2, commits[0].StackSize)
 	require.Equal(t, "1,2", commits[0].StackPRs)
 	require.Equal(t, "PROJ-123", commits[0].StackScope)
+}
+
+func TestGetRecentCommits_WithoutTrailers(t *testing.T) {
+	t.Parallel()
+	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial", "init")
+	})
+
+	err := scene.Repo.CreateChange("file1", "content1", false)
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("add", ".")
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("commit", "-m", "Regular commit without trailers")
+	require.NoError(t, err)
+
+	runner := git.NewRunnerWithPath(scene.Dir, nil)
+	commits, err := runner.GetRecentCommits("main", 1)
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+
+	require.Equal(t, "Regular commit without trailers", commits[0].Subject)
+	require.Equal(t, 0, commits[0].StackSize)
+	require.Equal(t, "", commits[0].StackPRs)
+	require.Equal(t, "", commits[0].StackScope)
+}
+
+func TestGetRecentCommits_MultipleCommits(t *testing.T) {
+	t.Parallel()
+	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial", "init")
+	})
+
+	// Create a regular commit
+	err := scene.Repo.CreateChange("file1", "content1", false)
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("add", ".")
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("commit", "-m", "First commit")
+	require.NoError(t, err)
+
+	// Create a commit with trailers
+	err = scene.Repo.CreateChange("file2", "content2", false)
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("add", ".")
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand(
+		"commit",
+		"-m", "Consolidate stack",
+		"-m", "Stackit-Stack-Size: 3\nStackit-PRs: 10,20,30\nStackit-Scope: FEAT-1",
+	)
+	require.NoError(t, err)
+
+	runner := git.NewRunnerWithPath(scene.Dir, nil)
+	commits, err := runner.GetRecentCommits("main", 3)
+	require.NoError(t, err)
+	require.Len(t, commits, 3)
+
+	// Most recent first (commit with trailers)
+	require.Equal(t, "Consolidate stack", commits[0].Subject)
+	require.Equal(t, 3, commits[0].StackSize)
+	require.Equal(t, "10,20,30", commits[0].StackPRs)
+	require.Equal(t, "FEAT-1", commits[0].StackScope)
+
+	// Second commit (no trailers)
+	require.Equal(t, "First commit", commits[1].Subject)
+	require.Equal(t, 0, commits[1].StackSize)
+	require.Equal(t, "", commits[1].StackPRs)
+
+	// Initial commit
+	require.Equal(t, "initial", commits[2].Subject)
 }

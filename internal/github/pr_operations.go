@@ -398,7 +398,10 @@ type EnableAutoMergeOptions struct {
 // EnableAutoMerge enables GitHub's auto-merge feature on a PR.
 // This requires the repository to have auto-merge enabled in settings.
 func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, opts EnableAutoMergeOptions) error {
-	// Use a mutation that includes commitBody when provided
+	// We use two separate mutations because GitHub's GraphQL API treats
+	// `commitBody: null` differently from omitting commitBody entirely.
+	// When omitted, GitHub uses its default commit message (e.g., PR body).
+	// When explicitly set to null, it may override that default to empty.
 	var mutation string
 	if opts.CommitBody != "" {
 		mutation = `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!, $commitBody: String) {

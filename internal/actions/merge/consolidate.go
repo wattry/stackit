@@ -366,11 +366,7 @@ func (c *ConsolidateMergeExecutor) collectPRNumbers() []int {
 func (c *ConsolidateMergeExecutor) buildTrailerMessage() string {
 	scope := c.getTrailerScope()
 	prNumbers := c.collectPRNumbers()
-	branches := make([]string, len(c.plan.BranchesToMerge))
-	for i, b := range c.plan.BranchesToMerge {
-		branches[i] = b.BranchName
-	}
-	return pr.FormatStackTrailers(len(branches), prNumbers, scope)
+	return pr.FormatStackTrailers(len(c.plan.BranchesToMerge), prNumbers, scope)
 }
 
 // getTrailerScope returns a scope only when all non-empty branch scopes match.
