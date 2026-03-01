@@ -1,0 +1,240 @@
+# Web App Architecture
+
+> **Experimental:** The web dashboard is under active development and may change significantly.
+
+The stackit web app is a dashboard for visualizing stacked branches. It displays branch stacks in a swimlane layout organized by owner, with real-time updates via server-sent events.
+
+## Tech Stack
+
+- **Next.js 16** (React 19) with static export
+- **TypeScript** (strict mode)
+- **Tailwind CSS 4** with OKLch color space
+- **shadcn/ui** (New York style, Lucide icons)
+- **Motion** (Framer Motion replacement) for animations
+- **Vitest** + Testing Library for tests
+- **pnpm** for package management
+
+## Architecture
+
+The web app is built as a **static export** (no server-side rendering). The built output (`apps/web/out/`) is copied into `apps/api/static/` and embedded in the Go binary via `//go:embed static`. The API server serves these static files alongside the `/api/` endpoints, creating a single self-contained binary.
+
+```
+Browser → Go API server → /api/* (JSON endpoints)
+                        → /*    (embedded static files)
+```
+
+## Directory Structure
+
+```
+apps/web/
+├── src/
+│   ├── app/                    Pages and layouts
+│   │   ├── layout.tsx          Root layout (providers, fonts, metadata)
+│   │   ├── page.tsx            Main dashboard page
+│   │   └── globals.css         Global styles, CSS variables, animations
+│   ├── components/
+│   │   ├── providers/
+│   │   │   ├── repo-provider.tsx   Main data context (repo, stacks, events)
+│   │   │   └── theme-provider.tsx  Light/dark/system theme context
+│   │   ├── ui/                 Reusable UI primitives (shadcn)
+│   │   ├── status/             Status badge components
+│   │   ├── stack-tree/         SVG tree visualization
+│   │   ├── branch-detail/      Branch info panel components
+│   │   ├── stack-column.tsx    Vertical stack of branch cards
+│   │   ├── stack-list.tsx      Stack list container
+│   │   ├── owner-swimlane.tsx  Horizontal owner grouping
+│   │   ├── swimlane-label.tsx  Owner header with avatar
+│   │   ├── recently-merged.tsx Trunk commit history
+│   │   └── event-feed.tsx      Activity feed
+│   ├── hooks/
+│   │   ├── use-confetti.ts     Confetti animation on PR merge
+│   │   └── use-previous.ts     Track previous state value
+│   ├── lib/
+│   │   ├── api.ts              API client, fetch functions, type definitions
+│   │   ├── use-sse.ts          SSE hook for real-time updates
+│   │   ├── diff-views.ts       View snapshot diffing for event detection
+│   │   ├── utils.ts            cn() helper for class merging
+│   │   └── time.ts             Time formatting utilities
+│   └── test/
+│       └── setup.ts            Vitest setup (jest-dom)
+├── next.config.ts              Static export configuration
+├── vitest.config.ts            Test configuration (jsdom)
+├── components.json             shadcn/ui configuration
+├── tsconfig.json               TypeScript config (@/ path alias)
+└── package.json                Dependencies and scripts
+```
+
+## Component Hierarchy
+
+```
+layout.tsx
+└── ThemeProvider → RepoProvider → TooltipProvider
+    └── page.tsx
+        ├── Header (repo info, refresh, theme toggle)
+        ├── LeftPanel (scrollable)
+        │   ├── OwnerSwimlane ("You")
+        │   │   └── StackColumn (per stack)
+        │   │       ├── BranchCard (stacked with overlap)
+        │   │       └── StackStatusFooter
+        │   ├── OwnerSwimlane (teammates)
+        │   │   └── ...
+        │   ├── TrunkLine (divider)
+        │   └── RecentlyMerged (trunk commit history)
+        └── RightPanel (400px fixed)
+            ├── BranchDetail / StackDetailPanel
+            └── EventFeed
+```
+
+## Data Flow
+
+1. **RepoProvider** calls `fetchView()` on mount → GET `/api/view`
+2. Response contains: repo metadata, all stack details, recently merged commits
+3. **SSE hook** (`useSSE`) connects to `/api/events` for real-time updates
+4. On SSE event (`stacks_updated`, `branch_changed`, `refresh`, `branch_switched`), RepoProvider refetches
+5. **View diffing** (`diff-views.ts`) compares old and new snapshots to generate `FeedEvent` objects
+6. Events are displayed in the **EventFeed** component (capped at 100 events)
+
+## API Integration
+
+### Client
+
+All fetch functions live in `src/lib/api.ts`:
+
+| Function | Method | Endpoint | Purpose |
+|----------|--------|----------|---------|
+| `fetchView()` | GET | `/api/view` | Combined dashboard payload |
+| `fetchRepo()` | GET | `/api/repo` | Repository metadata |
+| `fetchStacks()` | GET | `/api/stacks` | All stack summaries |
+| `fetchStack(root)` | GET | `/api/stacks/{root}` | Single stack detail |
+| `fetchBranch(name)` | GET | `/api/branches/{name}` | Single branch detail |
+| `submitStack(root)` | POST | `/api/submit/{root}` | Trigger stack submission |
+
+The API base URL is configured via `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8080`).
+
+### Type Contracts
+
+API response types in the frontend (`src/lib/api.ts`) mirror Go structs in `internal/contracts/http/responses.go`. When modifying API shapes, update both.
+
+### SSE Events
+
+The SSE hook in `src/lib/use-sse.ts` subscribes to `/api/events`:
+
+| Event Type | Trigger |
+|------------|---------|
+| `stacks_updated` | Stack structure changed |
+| `branch_changed` | Branch metadata updated |
+| `refresh` | General refresh signal |
+| `branch_switched` | User changed branches in CLI |
+
+## Styling
+
+### Tailwind CSS 4
+
+Styles use Tailwind CSS 4 with the new `@import` syntax. All custom CSS variables are in `src/app/globals.css`.
+
+### Color System
+
+Colors use the **OKLch** color space via CSS custom properties:
+
+```css
+--background: oklch(1 0 0);           /* Light mode */
+--background: oklch(0.145 0.015 286); /* Dark mode */
+```
+
+Status colors: green (shippable), amber (pending), red (blocked), gray (incomplete).
+
+### Theme
+
+Light/dark/system themes managed by `ThemeProvider`. Toggle via `ThemeToggle` component. Theme preference persisted to `localStorage`.
+
+### Animations
+
+Defined in `globals.css`: `shimmer`, `pulse-dot`, `checkmark-draw`, `shake`, `edge-flow`, `gradient-shift`, `mesh-float`, `fade-in-up`. All animations respect `prefers-reduced-motion`.
+
+### shadcn/ui
+
+Components generated with `shadcn` CLI using New York style. Config in `components.json`. Use the `cn()` helper from `src/lib/utils.ts` for conditional class merging.
+
+## Development
+
+### Running Locally
+
+```bash
+# Both API + web (recommended)
+mise run dev
+
+# Web only (needs API running separately)
+mise run web:dev
+
+# API only
+go run ./apps/api --port 8080
+```
+
+The web dev server runs at `http://localhost:3000` and proxies API requests to `http://localhost:8080`.
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | API server URL |
+
+### Build & Deploy
+
+```bash
+# Build static export
+mise run web:build
+
+# Copy built files into apps/api/static/ for embedding
+mise run web:sync-static
+
+# Build Go binary (includes embedded web assets)
+mise run build
+```
+
+### Testing
+
+```bash
+# Run all web tests
+mise run web:test
+
+# Run with watch mode
+cd apps/web && pnpm test:watch
+```
+
+Tests use **Vitest** with **jsdom** environment and **Testing Library**. Test files are co-located in `__tests__/` directories alongside their source:
+
+```
+src/lib/__tests__/api.test.ts
+src/lib/__tests__/utils.test.ts
+src/hooks/__tests__/use-previous.test.ts
+src/components/stack-tree/__tests__/tree-layout.test.ts
+src/components/status/__tests__/status-badge.test.tsx
+```
+
+## Common Tasks
+
+### Add a New Component
+
+1. For shadcn primitives: `cd apps/web && pnpm dlx shadcn@latest add <component>`
+2. For project components: create in `src/components/`, co-locate tests in `__tests__/`
+3. Import with `@/components/...` path alias
+
+### Add an API Endpoint Consumer
+
+1. Add the fetch function to `src/lib/api.ts`
+2. Add TypeScript types matching the Go contract in `internal/contracts/http/responses.go`
+3. Use the function from a component or hook
+
+### Modify Styling
+
+1. For theme colors: edit CSS variables in `src/app/globals.css`
+2. For component styles: use Tailwind utility classes
+3. For new animations: add `@keyframes` in `globals.css`, use via Tailwind `animate-*` class
+
+### Add a New Page
+
+Next.js App Router: create `src/app/<route>/page.tsx`. The static export will generate `<route>/index.html`.
+
+### Branch Selection & URL State
+
+Selection state is tracked via URL params (`?branch=name` or `?stack=rootBranch`). Update selection by changing URL params (client-side).

@@ -65,6 +65,7 @@ Stacks naturally form a tree structure—a single branch can have multiple child
 - 🐙 **GitHub Integration** — Install CI checks to prevent merging locked PRs
 - ⚓ **Git Hooks** — Automatically validate branch state before committing with `precommit`
 - 📂 **Worktrees** — Work on multiple stacks in parallel with dedicated directories and post-creation hooks
+- 🧪 **Web dashboard** *(experimental)* — Visualize your stacks in a swimlane dashboard with real-time updates ([docs](docs/web.md))
 
 ---
 
@@ -589,7 +590,7 @@ This repository includes multiple first-class applications:
 - `apps/cli` - main `stackit` CLI
 - `apps/api` - HTTP API server (serves `/api/v1` and compatibility `/api`) plus embedded web assets
 - `apps/st-tui` - TUI storyboard binary
-- `apps/web` - Next.js frontend
+- `apps/web` - Next.js dashboard for visualizing stacked branches in a swimlane layout with real-time updates (see [docs/web.md](docs/web.md) for architecture)
 
 ### Full-Stack Local Development
 
