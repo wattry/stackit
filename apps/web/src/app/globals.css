@@ -49,6 +49,11 @@
 
 :root {
   --radius: 0.625rem;
+  --glow-color: oklch(0.6 0.15 250);
+  --glow-color-current: oklch(0.7 0.18 80);
+  --gradient-start: oklch(0.7 0.15 250);
+  --gradient-mid: oklch(0.7 0.15 300);
+  --gradient-end: oklch(0.7 0.15 200);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -83,6 +88,11 @@
 }
 
 .dark {
+  --glow-color: oklch(0.5 0.2 250);
+  --glow-color-current: oklch(0.6 0.22 80);
+  --gradient-start: oklch(0.5 0.2 250);
+  --gradient-mid: oklch(0.5 0.2 300);
+  --gradient-end: oklch(0.5 0.2 200);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -122,5 +132,101 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* === Keyframe Animations === */
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@keyframes checkmark-draw {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+}
+
+@keyframes edge-flow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -20; }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes mesh-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Utility Classes === */
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.animate-gradient-shift {
+  background-size: 200% 200%;
+  animation: gradient-shift 6s ease infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
+.animate-edge-flow {
+  animation: edge-flow 1s linear infinite;
+}
+
+.animate-edge-flow-fast {
+  animation: edge-flow 0.5s linear infinite reverse;
+}
+
+/* === Reduced Motion === */
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer,
+  .animate-pulse-dot,
+  .animate-shake,
+  .animate-gradient-shift,
+  .animate-fade-in-up,
+  .animate-edge-flow,
+  .animate-edge-flow-fast {
+    animation: none !important;
+  }
+
+  * {
+    transition-duration: 0.01ms !important;
   }
 }

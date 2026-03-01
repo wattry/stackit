@@ -35,6 +35,7 @@ export function StackTree({
         className="mx-auto"
         style={{ minWidth: layout.width, minHeight: layout.height }}
       >
+        <defs />
         {/* Edges first (below nodes) */}
         {layout.edges.map((edge) => (
           <BranchEdge

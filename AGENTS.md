@@ -138,10 +138,10 @@ jq '.dependencies' package.json       # Parse JSON
 
 ```bash
 mise run check         # Runs fmt, lint, and fast tests
-mise run test-fast     # Run fast unit tests (~30s)
-mise run test-integration  # Run integration tests (~90s)
+mise run test:fast     # Run fast unit tests (~30s)
+mise run test:integration  # Run integration tests (~90s)
 mise run test          # Run all tests
-mise run test-pkg ./pkg    # Run tests for a specific package (e.g. ./internal/git)
+mise run test:pkg ./pkg    # Run tests for a specific package (e.g. ./internal/git)
 mise run lint          # Run linter
 ```
 
@@ -154,15 +154,15 @@ mise run lint          # Run linter
 | Change Type | Command | Time |
 |-------------|---------|------|
 | Docs/comments only | `mise run compile` | ~2s |
-| Refactoring/style | `mise run lint-only` | ~5s |
-| Single package logic | `mise run test-pkg ./internal/foo` | ~10s |
+| Refactoring/style | `mise run lint` | ~5s |
+| Single package logic | `mise run test:pkg ./internal/foo` | ~10s |
 | Multi-package logic | `mise run check` | ~30s |
 | Engine/integration | `mise run test` | ~2min |
 
 **Decision guide:**
 - `compile` - Quick "does it build?" check for trivial changes
-- `lint-only` - Catches style issues without running tests
-- `test-pkg` - Targeted testing for isolated changes
+- `lint` - Catches style issues without running tests
+- `test:pkg` - Targeted testing for isolated changes
 - `check` - Standard development workflow
 - `test` - Full suite before PRs or for engine changes
 

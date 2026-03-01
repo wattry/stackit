@@ -153,6 +153,8 @@ components:
           type: integer
         isCurrent:
           type: boolean
+        hasWorktree:
+          type: boolean
         description:
           type: string
         owner:

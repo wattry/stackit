@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { StackColumn } from "@/components/stack-column";
 import { SwimlaneLabel, swimlaneColor } from "@/components/swimlane-label";
@@ -12,7 +13,9 @@ interface OwnerSwimlaneProps {
   lastActive?: Date;
   stacks: StackDetail[];
   selectedBranch: string | null;
+  selectedStack: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
+  onSelectStack: (stack: StackDetail) => void;
 }
 
 export function OwnerSwimlane({
@@ -20,7 +23,9 @@ export function OwnerSwimlane({
   lastActive,
   stacks,
   selectedBranch,
+  selectedStack,
   onSelectBranch,
+  onSelectStack,
 }: OwnerSwimlaneProps) {
   const [expanded, setExpanded] = useState(false);
   const color = swimlaneColor(label);
@@ -37,23 +42,36 @@ export function OwnerSwimlane({
         className="flex gap-4 items-end px-3 pt-3"
         style={{ backgroundColor: color }}
       >
-        {visibleStacks.map((stack) => (
-          <StackColumn
-            key={stack.rootBranch}
-            stack={stack}
-            selectedBranch={selectedBranch}
-            onSelectBranch={onSelectBranch}
-          />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {visibleStacks.map((stack) => (
+            <motion.div
+              key={stack.rootBranch}
+              layout
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+            >
+              <StackColumn
+                stack={stack}
+                selectedBranch={selectedBranch}
+                selectedStack={selectedStack}
+                onSelectBranch={onSelectBranch}
+                onSelectStack={onSelectStack}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
         {canCollapse && (
-          <button
+          <motion.button
+            layout
             onClick={() => setExpanded(!expanded)}
             className="flex items-center justify-center w-8 shrink-0 self-stretch rounded border border-dashed border-muted-foreground/30 text-xs text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground transition-colors"
           >
             <span className="-rotate-90 whitespace-nowrap">
               {expanded ? "Show less" : `+${hiddenCount} more`}
             </span>
-          </button>
+          </motion.button>
         )}
       </div>
       <SwimlaneLabel label={label} lastActive={lastActive} color={color} />

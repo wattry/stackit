@@ -1,6 +1,7 @@
 "use client";
 
 import type { CIResponse } from "@/lib/api";
+import { AnimatedCheckmark, AnimatedX, PulsingDot } from "@/components/ui/animated-ci-icons";
 
 export function CIChecks({ ci }: { ci?: CIResponse }) {
   if (!ci || !ci.checks || ci.checks.length === 0) return null;
@@ -11,9 +12,13 @@ export function CIChecks({ ci }: { ci?: CIResponse }) {
         CI Checks
       </h4>
       <div className="space-y-0.5">
-        {ci.checks.map((check) => (
-          <div key={check.name} className="flex items-center gap-2 text-sm">
-            <span>{getCheckIcon(check.conclusion)}</span>
+        {ci.checks.map((check, i) => (
+          <div
+            key={check.name}
+            className="flex items-center gap-2 text-sm animate-fade-in-up"
+            style={{ animationDelay: `${i * 50}ms` }}
+          >
+            <CheckIcon conclusion={check.conclusion} status={check.status} />
             <span className="truncate">{check.name}</span>
             <span className="text-xs text-muted-foreground ml-auto">
               {check.status === "COMPLETED" ? check.conclusion : check.status}
@@ -25,15 +30,18 @@ export function CIChecks({ ci }: { ci?: CIResponse }) {
   );
 }
 
-function getCheckIcon(conclusion: string): string {
+function CheckIcon({ conclusion, status }: { conclusion: string; status: string }) {
+  if (status !== "COMPLETED") {
+    return <PulsingDot />;
+  }
   switch (conclusion) {
     case "SUCCESS":
-      return "\u2705";
+      return <AnimatedCheckmark />;
     case "FAILURE":
-      return "\u274C";
+      return <AnimatedX />;
     case "NEUTRAL":
-      return "\u26AA";
+      return <span className="inline-block w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />;
     default:
-      return "\u23F3";
+      return <PulsingDot />;
   }
 }

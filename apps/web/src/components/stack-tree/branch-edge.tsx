@@ -21,9 +21,9 @@ export function BranchEdge({ x1, y1, x2, y2, needsRestack }: BranchEdgeProps) {
     <path
       d={path}
       fill="none"
-      className={needsRestack ? "stroke-amber-400" : "stroke-muted-foreground/40"}
+      className={`${needsRestack ? "stroke-amber-400 animate-edge-flow-fast" : "stroke-muted-foreground/40 animate-edge-flow"}`}
       strokeWidth={needsRestack ? 2 : 1.5}
-      strokeDasharray={needsRestack ? "4 3" : undefined}
+      strokeDasharray="10 10"
     />
   );
 }
