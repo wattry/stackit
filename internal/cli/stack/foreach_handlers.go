@@ -1,9 +1,6 @@
 package stack
 
 import (
-	"fmt"
-	"io"
-	"os"
 	"strings"
 
 	"stackit.dev/stackit/internal/actions/foreach"
@@ -20,6 +17,12 @@ import (
 // The runner manages terminal state; the handler processes events.
 // Caller must defer runner.Cleanup() to restore terminal on exit.
 func NewForeachUI(out output.Output, logger output.Logger, parallel bool) (*tui.Runner, foreach.Handler) {
+	// Parallel execution runs arbitrary commands concurrently and has proven
+	// fragile with a raw-mode TUI. Use plain output for stable terminal behavior.
+	if parallel {
+		return nil, NewSimpleForeachHandler(out, true)
+	}
+
 	if tui.IsTTY() {
 		model := foreachComponent.NewModel(nil)
 		runner := tui.NewRunner(model, out, logger)
@@ -32,7 +35,6 @@ func NewForeachUI(out output.Output, logger output.Logger, parallel bool) (*tui.
 // SimpleForeachHandler implements foreach.Handler with line-by-line output
 type SimpleForeachHandler struct {
 	common.BaseHandler
-	out           io.Writer
 	items         map[string]*foreachBranchItem
 	started       bool
 	currentBranch string
@@ -47,7 +49,6 @@ type foreachBranchItem struct {
 func NewSimpleForeachHandler(out output.Output, parallel bool) *SimpleForeachHandler {
 	return &SimpleForeachHandler{
 		BaseHandler: common.NewBaseHandler(out),
-		out:         os.Stdout,
 		items:       make(map[string]*foreachBranchItem),
 		parallel:    parallel,
 	}
@@ -72,7 +73,7 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 			}
 		}
 		if h.parallel {
-			_, _ = fmt.Fprint(h.out, "Executing in parallel: ")
+			h.Output.Print("Executing in parallel: ")
 		}
 
 	case foreach.BranchProgressEvent:
@@ -80,7 +81,7 @@ func (h *SimpleForeachHandler) OnEvent(e foreach.Event) {
 		// while keeping the output deterministic for the final summary.
 		if h.parallel {
 			if ev.Status == foreach.StatusDone || ev.Status == foreach.StatusError {
-				_, _ = fmt.Fprint(h.out, ".")
+				h.Output.Print(".")
 			}
 			return
 		}
@@ -264,6 +265,9 @@ func (h *InteractiveForeachHandler) OnEvent(e foreach.Event) {
 			h.runner.Send(foreachComponent.GlobalMessageMsg(""))
 		}
 		h.runner.Send(foreachComponent.ProgressCompleteMsg{})
+		// Ensure terminal is restored (raw mode disabled, output unmuted)
+		// before printing final summary lines.
+		h.runner.Cleanup()
 		h.printSummary(ev.Results)
 	}
 }
