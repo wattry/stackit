@@ -236,6 +236,7 @@ Stackit-PRs: 1
 				Title:       "Add user authentication",
 				Description: "This stack implements JWT-based auth.",
 			},
+			Scope: "PROJ-123",
 		})
 
 		expected := `**Add user authentication**
@@ -255,7 +256,7 @@ main
 
 Stackit-Stack-Size: 1
 Stackit-PRs: 1
-Stackit-Scope: Add user authentication
+Stackit-Scope: PROJ-123
 `
 		assert.Equal(t, expected, result)
 	})
@@ -269,6 +270,7 @@ Stackit-Scope: Add user authentication
 			StackDescription: &git.StackDescription{
 				Title: "Add user authentication",
 			},
+			Scope: "PROJ-456",
 		})
 
 		expected := `**Add user authentication**
@@ -286,7 +288,7 @@ main
 
 Stackit-Stack-Size: 1
 Stackit-PRs: 1
-Stackit-Scope: Add user authentication
+Stackit-Scope: PROJ-456
 `
 		assert.Equal(t, expected, result)
 	})

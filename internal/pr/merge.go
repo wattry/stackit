@@ -66,6 +66,10 @@ type MergeBodyParams struct {
 	// StackDescription is the description of the stack being merged.
 	// Optional - if present, it appears at the top of the body.
 	StackDescription *git.StackDescription
+
+	// Scope is the stack scope for trailers (e.g. "PROJ-123").
+	// Optional - if empty, no scope trailer is emitted.
+	Scope string
 }
 
 // MergeBranch represents a branch being merged.
@@ -128,12 +132,8 @@ func FormatMergeBody(params MergeBodyParams) string {
 	// Append stack trailers as a fallback for repos whose squash merge commit
 	// message setting uses "PR body". Trailers survive automatically in that case.
 	if len(params.Branches) > 0 {
-		scope := ""
-		if params.StackDescription != nil {
-			scope = params.StackDescription.Title
-		}
 		body.WriteString("\n")
-		body.WriteString(FormatStackTrailers(len(params.Branches), prNumbers, scope))
+		body.WriteString(FormatStackTrailers(len(params.Branches), prNumbers, params.Scope))
 	}
 
 	return body.String()

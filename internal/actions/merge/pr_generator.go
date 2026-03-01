@@ -32,7 +32,7 @@ func (g *PRContentGenerator) GenerateMultiStackPR(included []MultiStackInfo, exc
 	scopes := g.collectScopes(branches)
 
 	title := pr.FormatMergeTitle(scopes, len(branches))
-	body := g.generateBody(branches, g.convertExcluded(excluded))
+	body := g.generateBodyWithOptions(branches, g.convertExcluded(excluded), nil, firstNonEmpty(scopes))
 
 	return pr.Content{Title: title, Body: body}
 }
@@ -50,18 +50,13 @@ func (g *PRContentGenerator) GenerateConsolidationPR(branches []BranchMergeInfo)
 	}
 
 	title := pr.FormatMergeTitleWithDescription(stackDesc, scopes, len(mergeBranches))
-	body := g.generateBodyWithDescription(mergeBranches, nil, stackDesc)
+	body := g.generateBodyWithOptions(mergeBranches, nil, stackDesc, firstNonEmpty(scopes))
 
 	return pr.Content{Title: title, Body: body}
 }
 
-// generateBody creates the PR body with branches, exclusions, and stack tree.
-func (g *PRContentGenerator) generateBody(branches []pr.MergeBranch, excluded []pr.ExcludedBranch) string {
-	return g.generateBodyWithDescription(branches, excluded, nil)
-}
-
-// generateBodyWithDescription creates the PR body with branches, exclusions, stack tree, and optional description.
-func (g *PRContentGenerator) generateBodyWithDescription(branches []pr.MergeBranch, excluded []pr.ExcludedBranch, stackDesc *git.StackDescription) string {
+// generateBodyWithOptions creates the PR body with branches, exclusions, stack tree, optional description, and scope.
+func (g *PRContentGenerator) generateBodyWithOptions(branches []pr.MergeBranch, excluded []pr.ExcludedBranch, stackDesc *git.StackDescription, scope string) string {
 	// Build stack tree
 	treeBranches := make([]pr.StackTreeBranch, len(branches))
 	for i, branch := range branches {
@@ -84,6 +79,7 @@ func (g *PRContentGenerator) generateBodyWithDescription(branches []pr.MergeBran
 		Excluded:         excluded,
 		StackTree:        stackTree,
 		StackDescription: stackDesc,
+		Scope:            scope,
 	})
 }
 
@@ -153,6 +149,16 @@ func (g *PRContentGenerator) collectScopes(branches []pr.MergeBranch) []string {
 		scopes[i] = scope.String()
 	}
 	return scopes
+}
+
+// firstNonEmpty returns the first non-empty string from the slice, or "" if none.
+func firstNonEmpty(ss []string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // calculateDepth computes how deep a branch is in the stack.

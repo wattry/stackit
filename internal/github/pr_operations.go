@@ -389,13 +389,18 @@ type AutoMergeStatus struct {
 	MergeMethod string
 }
 
+// EnableAutoMergeOptions contains options for enabling auto-merge on a PR.
+type EnableAutoMergeOptions struct {
+	MergeMethod MergeMethod
+	CommitBody  string // optional — omit for default GitHub behavior
+}
+
 // EnableAutoMerge enables GitHub's auto-merge feature on a PR.
 // This requires the repository to have auto-merge enabled in settings.
-// If commitBody is non-empty, it is passed as the commitBody for squash/merge commits.
-func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, mergeMethod MergeMethod, commitBody string) error {
+func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, opts EnableAutoMergeOptions) error {
 	// Use a mutation that includes commitBody when provided
 	var mutation string
-	if commitBody != "" {
+	if opts.CommitBody != "" {
 		mutation = `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!, $commitBody: String) {
 			enablePullRequestAutoMerge(input: {
 				pullRequestId: $pullRequestId
@@ -426,7 +431,7 @@ func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, me
 
 	// Convert our MergeMethod to GitHub's GraphQL enum format
 	var graphqlMethod string
-	switch mergeMethod {
+	switch opts.MergeMethod {
 	case MergeMethodMerge:
 		graphqlMethod = "MERGE"
 	case MergeMethodSquash:
@@ -441,8 +446,8 @@ func EnableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, me
 		"pullRequestId": prNodeID,
 		"mergeMethod":   graphqlMethod,
 	}
-	if commitBody != "" {
-		variables["commitBody"] = commitBody
+	if opts.CommitBody != "" {
+		variables["commitBody"] = opts.CommitBody
 	}
 
 	_, err := executeGraphQLQuery(ctx, runner, mutation, variables)

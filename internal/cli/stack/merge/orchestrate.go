@@ -59,7 +59,7 @@ func (d *defaultPRMergeAPI) getMergeableState(ctx context.Context, runner git.Ru
 }
 
 func (d *defaultPRMergeAPI) enableAutoMerge(ctx context.Context, runner git.Runner, prNodeID string, method github.MergeMethod) error {
-	return github.EnableAutoMerge(ctx, runner, prNodeID, method, "")
+	return github.EnableAutoMerge(ctx, runner, prNodeID, github.EnableAutoMergeOptions{MergeMethod: method})
 }
 
 func (d *defaultPRMergeAPI) waitForPRMerge(ctx context.Context, runner git.Runner, prNodeID string, timeout, interval time.Duration) error {

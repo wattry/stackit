@@ -109,7 +109,10 @@ func (c *ConsolidateMergeExecutor) Execute(ctx context.Context, opts ExecuteOpti
 		if err != nil {
 			return nil, fmt.Errorf("failed to get merge method: %w", err)
 		}
-		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, mergeMethod, c.buildTrailerMessage()); err != nil {
+		if err := github.EnableAutoMerge(ctx, c.engine.Git(), pr.NodeID, github.EnableAutoMergeOptions{
+			MergeMethod: mergeMethod,
+			CommitBody:  c.buildTrailerMessage(),
+		}); err != nil {
 			splog.Warn("Could not enable automerge: %v", err)
 			splog.Tip("Enable automerge manually on the PR: %s", pr.HTMLURL)
 		} else {

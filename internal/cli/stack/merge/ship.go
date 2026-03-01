@@ -318,7 +318,7 @@ func runMultiStackShip(ctx *app.Context, opts shipMultiStackOptions) error {
 				out.Warn("Could not determine merge method: %v", methodErr)
 				out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
 			} else {
-				if err := github.EnableAutoMerge(ctx.Context, ctx.Engine.Git(), prNodeID, mergeMethod, ""); err != nil {
+				if err := github.EnableAutoMerge(ctx.Context, ctx.Engine.Git(), prNodeID, github.EnableAutoMergeOptions{MergeMethod: mergeMethod}); err != nil {
 					out.Warn("Could not enable automerge: %v", err)
 					out.Tip("Enable automerge manually on the PR: %s", result.PRURL)
 				} else {
