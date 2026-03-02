@@ -2,6 +2,7 @@ package testhelpers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/google/go-github/v62/github"
@@ -154,6 +155,15 @@ func (c *MockGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branchNam
 		mu.Unlock()
 	})
 
+	return results, nil
+}
+
+// BatchGetPRTitles returns synthetic titles for testing
+func (c *MockGitHubClient) BatchGetPRTitles(_ context.Context, _, _ string, prNumbers []int) (map[int]string, error) {
+	results := make(map[int]string, len(prNumbers))
+	for _, num := range prNumbers {
+		results[num] = fmt.Sprintf("PR #%d title", num)
+	}
 	return results, nil
 }
 

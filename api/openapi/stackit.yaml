@@ -284,5 +284,9 @@ components:
           type: array
           items:
             type: integer
+        stackPRTitles:
+          type: object
+          additionalProperties:
+            type: string
         stackScope:
           type: string

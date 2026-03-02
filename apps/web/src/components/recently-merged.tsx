@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { GitMerge } from "lucide-react";
 import { useRepo } from "@/components/providers/repo-provider";
 import {
@@ -138,6 +138,8 @@ function RegularCommitItem({
   );
 }
 
+const STACK_PR_COLLAPSE_THRESHOLD = 3;
+
 function StackMergeItem({
   commit,
   owner,
@@ -149,6 +151,14 @@ function StackMergeItem({
 }) {
   const displayMessage = stripPRSuffix(commit.message);
   const stackPRs = commit.stackPRs ?? [];
+  const titles = commit.stackPRTitles;
+  const hasTitles = titles && Object.keys(titles).length > 0;
+  const [expanded, setExpanded] = useState(false);
+
+  const visiblePRs = expanded || stackPRs.length <= STACK_PR_COLLAPSE_THRESHOLD
+    ? stackPRs
+    : stackPRs.slice(0, STACK_PR_COLLAPSE_THRESHOLD);
+  const hiddenCount = stackPRs.length - visiblePRs.length;
 
   return (
     <div className="border-l-2 border-purple-400/50 dark:border-purple-500/40 pl-3 py-1.5 my-0.5 rounded-r">
@@ -168,30 +178,71 @@ function StackMergeItem({
           {displayMessage}
         </span>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-medium text-purple-600/70 dark:text-purple-400/60">
-            {commit.stackSize} PRs
-          </span>
+          {commit.prNumber && owner && repoName ? (
+            <a
+              href={prUrl(owner, repoName, commit.prNumber)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-mono font-medium text-purple-500/60 dark:text-purple-400/50 hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
+            >
+              #{commit.prNumber}
+            </a>
+          ) : (
+            <span className="text-[10px] font-medium text-purple-600/70 dark:text-purple-400/60">
+              {commit.stackSize} PRs
+            </span>
+          )}
           <span className="text-[10px] text-muted-foreground/40 tabular-nums w-12 text-right">
             {formatTimeAgo(commit.date)}
           </span>
         </div>
       </div>
 
-      {/* Constituent PR links */}
+      {/* Constituent PRs with titles */}
       {stackPRs.length > 0 && owner && repoName && (
-        <div className="flex items-center gap-1 mt-1.5 ml-7">
-          {stackPRs.map((pr) => (
-            <a
-              key={pr}
-              href={prUrl(owner, repoName, pr)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] font-mono text-purple-500/60 dark:text-purple-400/50 hover:text-purple-600 dark:hover:text-purple-300 bg-purple-500/5 hover:bg-purple-500/10 rounded px-1.5 py-0.5 transition-colors"
-            >
-              #{pr}
-            </a>
-          ))}
-        </div>
+        hasTitles ? (
+          <div className="mt-1.5 ml-7 space-y-0.5">
+            {visiblePRs.map((pr) => (
+              <div key={pr} className="flex items-center gap-1.5 min-w-0">
+                <a
+                  href={prUrl(owner, repoName, pr)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-mono text-purple-500/60 dark:text-purple-400/50 hover:text-purple-600 dark:hover:text-purple-300 shrink-0 transition-colors"
+                >
+                  #{pr}
+                </a>
+                {titles[pr] && (
+                  <span className="text-[10px] text-muted-foreground/70 truncate">
+                    {titles[pr]}
+                  </span>
+                )}
+              </div>
+            ))}
+            {hiddenCount > 0 && (
+              <button
+                onClick={() => setExpanded(true)}
+                className="text-[10px] text-purple-500/50 hover:text-purple-500 dark:text-purple-400/40 dark:hover:text-purple-400 transition-colors"
+              >
+                +{hiddenCount} more
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 mt-1.5 ml-7">
+            {stackPRs.map((pr) => (
+              <a
+                key={pr}
+                href={prUrl(owner, repoName, pr)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-mono text-purple-500/60 dark:text-purple-400/50 hover:text-purple-600 dark:hover:text-purple-300 bg-purple-500/5 hover:bg-purple-500/10 rounded px-1.5 py-0.5 transition-colors"
+              >
+                #{pr}
+              </a>
+            ))}
+          </div>
+        )
       )}
     </div>
   );

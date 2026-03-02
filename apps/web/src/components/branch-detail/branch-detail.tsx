@@ -27,9 +27,9 @@ export function BranchDetail({ branch }: BranchDetailProps) {
     >
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-mono">{branch.name}</CardTitle>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base font-mono truncate min-w-0">{branch.name}</CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
             <PRBadge pr={branch.pr} />
             <CIStatusBadge ci={branch.ci} />
             <ReviewBadge ci={branch.ci} />
