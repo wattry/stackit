@@ -116,6 +116,13 @@ func (a *ViewAssembler) fetchPRTitles(ctx context.Context, commits []git.RecentC
 		if c.StackSize == 0 {
 			continue
 		}
+		// Include the consolidation PR itself so we can use its title as the display message
+		if c.PRNumber != 0 {
+			if _, ok := seen[c.PRNumber]; !ok {
+				seen[c.PRNumber] = struct{}{}
+				prNumbers = append(prNumbers, c.PRNumber)
+			}
+		}
 		for _, pr := range c.StackPRNumbers {
 			if _, ok := seen[pr]; !ok {
 				seen[pr] = struct{}{}

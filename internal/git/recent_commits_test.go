@@ -130,3 +130,62 @@ func TestGetRecentCommits_ParsesPRNumberSuffix(t *testing.T) {
 	require.Equal(t, 123, commits[0].PRNumber)
 	require.Equal(t, git.RecentCommitKindRegular, commits[0].Kind)
 }
+
+func TestGetRecentCommits_MergeCommitSkipsTrailerSubject(t *testing.T) {
+	t.Parallel()
+	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial", "init")
+	})
+
+	// Simulate what GitHub creates when merging a consolidation PR:
+	// Subject: "Merge pull request #786 from org/stack-merge-..."
+	// Body starts with trailers, no descriptive first line
+	err := scene.Repo.CreateChange("file1", "content1", false)
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("add", ".")
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand(
+		"commit",
+		"-m", "Merge pull request #786 from org/stack-merge-stack-123",
+		"-m", "Stackit-Stack-Size: 11\nStackit-PRs: 1,2,3\nStackit-Scope: PROJ-1",
+	)
+	require.NoError(t, err)
+
+	runner := git.NewRunnerWithPath(scene.Dir, nil)
+	commits, err := runner.GetRecentCommits("main", 1)
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+
+	// Should fall back to original merge subject, not "Stackit-Stack-Size: 11"
+	require.Equal(t, "Merge pull request #786 from org/stack-merge-stack-123", commits[0].Subject)
+	require.Equal(t, 786, commits[0].PRNumber)
+	require.Equal(t, 11, commits[0].StackSize)
+}
+
+func TestGetRecentCommits_MergeCommitWithTitleBeforeTrailers(t *testing.T) {
+	t.Parallel()
+	scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+		return s.Repo.CreateChangeAndCommit("initial", "init")
+	})
+
+	// When the body has a descriptive line before trailers
+	err := scene.Repo.CreateChange("file1", "content1", false)
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand("add", ".")
+	require.NoError(t, err)
+	err = scene.Repo.RunGitCommand(
+		"commit",
+		"-m", "Merge pull request #786 from org/stack-merge-stack-123",
+		"-m", "Consolidate auth stack\n\nStackit-Stack-Size: 3\nStackit-PRs: 1,2,3",
+	)
+	require.NoError(t, err)
+
+	runner := git.NewRunnerWithPath(scene.Dir, nil)
+	commits, err := runner.GetRecentCommits("main", 1)
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+
+	// Should use the descriptive line, not the trailer
+	require.Equal(t, "Consolidate auth stack", commits[0].Subject)
+	require.Equal(t, 786, commits[0].PRNumber)
+}

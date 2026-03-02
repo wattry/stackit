@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { GitMerge } from "lucide-react";
 import { useRepo } from "@/components/providers/repo-provider";
 import {
@@ -138,8 +138,6 @@ function RegularCommitItem({
   );
 }
 
-const STACK_PR_COLLAPSE_THRESHOLD = 3;
-
 function StackMergeItem({
   commit,
   owner,
@@ -153,15 +151,9 @@ function StackMergeItem({
   const stackPRs = commit.stackPRs ?? [];
   const titles = commit.stackPRTitles;
   const hasTitles = titles && Object.keys(titles).length > 0;
-  const [expanded, setExpanded] = useState(false);
-
-  const visiblePRs = expanded || stackPRs.length <= STACK_PR_COLLAPSE_THRESHOLD
-    ? stackPRs
-    : stackPRs.slice(0, STACK_PR_COLLAPSE_THRESHOLD);
-  const hiddenCount = stackPRs.length - visiblePRs.length;
 
   return (
-    <div className="border-l-2 border-purple-400/50 dark:border-purple-500/40 pl-3 py-1.5 my-0.5 rounded-r">
+    <div className="py-1.5">
       {/* Main commit line */}
       <div className="flex items-center gap-2">
         <AuthorAvatar name={commit.author} sha={commit.sha} />
@@ -202,7 +194,7 @@ function StackMergeItem({
       {stackPRs.length > 0 && owner && repoName && (
         hasTitles ? (
           <div className="mt-1.5 ml-7 space-y-0.5">
-            {visiblePRs.map((pr) => (
+            {stackPRs.map((pr) => (
               <div key={pr} className="flex items-center gap-1.5 min-w-0">
                 <a
                   href={prUrl(owner, repoName, pr)}
@@ -219,14 +211,6 @@ function StackMergeItem({
                 )}
               </div>
             ))}
-            {hiddenCount > 0 && (
-              <button
-                onClick={() => setExpanded(true)}
-                className="text-[10px] text-purple-500/50 hover:text-purple-500 dark:text-purple-400/40 dark:hover:text-purple-400 transition-colors"
-              >
-                +{hiddenCount} more
-              </button>
-            )}
           </div>
         ) : (
           <div className="flex items-center gap-1 mt-1.5 ml-7">
