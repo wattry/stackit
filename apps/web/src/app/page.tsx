@@ -5,6 +5,7 @@ import { useRepo } from "@/components/providers/repo-provider";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { StackDetailPanel } from "@/components/branch-detail/stack-detail";
+import { DetailEmptyState } from "@/components/branch-detail/detail-empty-state";
 import { EventFeed } from "@/components/event-feed";
 import { Separator } from "@/components/ui/separator";
 import { RecentlyMerged } from "@/components/recently-merged";
@@ -84,6 +85,26 @@ export default function Home() {
       return next;
     });
   }, []);
+
+  const handleNavigateToBranch = useCallback(
+    (name: string) => {
+      for (const stack of stackDetails) {
+        const found = stack.branches.find((b) => b.name === name);
+        if (found) {
+          handleSelectBranch(found);
+          return;
+        }
+      }
+    },
+    [stackDetails, handleSelectBranch]
+  );
+
+  const handleStackBranchSelect = useCallback(
+    (branch: BranchResponse) => {
+      handleSelectBranch(branch);
+    },
+    [handleSelectBranch]
+  );
 
   const currentUser = repo?.currentUser;
 
@@ -230,14 +251,28 @@ export default function Home() {
         {/* Right: detail + event feed panel (always visible) */}
         <div className="flex shrink-0">
           <Separator orientation="vertical" />
-          <div className="w-[400px] shrink-0 flex flex-col overflow-hidden">
-            {hasSelection && (
+          <div className="w-[480px] shrink-0 flex flex-col overflow-hidden">
+            {hasSelection ? (
               <div className="flex-1 overflow-auto p-4">
-                {selectedBranch && <BranchDetail branch={selectedBranch} />}
-                {selectedStack && <StackDetailPanel stack={selectedStack} />}
+                {selectedBranch && (
+                  <BranchDetail
+                    branch={selectedBranch}
+                    onNavigateToBranch={handleNavigateToBranch}
+                  />
+                )}
+                {selectedStack && (
+                  <StackDetailPanel
+                    stack={selectedStack}
+                    onSelectBranch={handleStackBranchSelect}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="flex-1">
+                <DetailEmptyState />
               </div>
             )}
-            {hasSelection && <Separator />}
+            <Separator />
             <div className="p-3 overflow-auto">
               <EventFeed />
             </div>

@@ -264,7 +264,7 @@ export function RecentlyMerged() {
   }
 
   return (
-    <div className="px-6 pb-4 space-y-2">
+    <div className="px-6 pb-4 max-h-64 overflow-y-auto space-y-2">
       {groups.map((group) => (
         <div key={group.label}>
           <div className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider mb-0.5">
