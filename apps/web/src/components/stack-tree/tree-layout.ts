@@ -1,8 +1,11 @@
 import type { BranchResponse } from "@/lib/api";
 
-const H_GAP = 40; // horizontal gap between siblings
-const V_GAP = 80; // vertical gap between levels
-const NODE_W = 160;
+export const H_GAP = 24; // horizontal gap between siblings
+export const V_GAP = 88; // vertical gap between levels
+export const NODE_W = 256;
+export const NODE_H = 64;
+export const TREE_PADDING = 20;
+export const COLUMN_GAP = 12; // gap between fork columns
 
 export interface LayoutNode {
   branch: BranchResponse;
@@ -28,8 +31,8 @@ export interface TreeLayout {
 }
 
 /**
- * Computes a top-down tree layout from a flat list of branches.
- * Returns positioned nodes and edges for SVG rendering.
+ * Computes a bottom-up tree layout from a flat list of branches.
+ * Root is at the bottom, leaves branch upward (matching the stacking metaphor).
  */
 export function computeTreeLayout(branches: BranchResponse[]): TreeLayout {
   if (branches.length === 0) {
@@ -88,6 +91,12 @@ export function computeTreeLayout(branches: BranchResponse[]): TreeLayout {
     layout(root.name, 0);
   }
 
+  // Flip Y so root is at the bottom and leaves branch upward
+  const maxY = Math.max(...Array.from(positions.values()).map((p) => p.y));
+  for (const [name, pos] of positions) {
+    positions.set(name, { x: pos.x, y: maxY - pos.y });
+  }
+
   // Build layout nodes
   const nodes: LayoutNode[] = [];
   const edges: LayoutEdge[] = [];
@@ -98,8 +107,7 @@ export function computeTreeLayout(branches: BranchResponse[]): TreeLayout {
     nodes.push({ branch: b, x: pos.x, y: pos.y });
   }
 
-  // Build edges
-  const nodeHeight = 56;
+  // Build edges (parent is below child after flip)
   for (const b of branches) {
     if (!b.parent || !byName.has(b.parent)) continue;
     const parentPos = positions.get(b.parent);
@@ -110,22 +118,22 @@ export function computeTreeLayout(branches: BranchResponse[]): TreeLayout {
       parentName: b.parent,
       childName: b.name,
       x1: parentPos.x,
-      y1: parentPos.y + nodeHeight / 2,
+      y1: parentPos.y - NODE_H / 2,
       x2: childPos.x,
-      y2: childPos.y - nodeHeight / 2,
+      y2: childPos.y + NODE_H / 2,
       needsRestack: b.needsRestack,
     });
   }
 
   // Compute bounds and normalize positions.
-  // Node coordinates are center-based (BranchNode translates by -NODE_W/2, -nodeHeight/2),
-  // so offsets must account for half the node dimensions to keep nodes within the SVG viewport.
-  const PADDING = 20;
+  // Node coordinates are center-based, so offsets must account for
+  // half the node dimensions to keep nodes within the viewport.
+  const PADDING = TREE_PADDING;
   const allX = nodes.map((n) => n.x);
   const allY = nodes.map((n) => n.y);
   const minX = Math.min(...allX);
   const offsetX = -minX + NODE_W / 2 + PADDING;
-  const offsetY = nodeHeight / 2 + PADDING;
+  const offsetY = NODE_H / 2 + PADDING;
 
   for (const node of nodes) {
     node.x += offsetX;
@@ -139,7 +147,96 @@ export function computeTreeLayout(branches: BranchResponse[]): TreeLayout {
   }
 
   const width = (Math.max(...allX) - minX) + NODE_W + PADDING * 2;
-  const height = Math.max(...allY) + nodeHeight + PADDING * 2;
+  const height = Math.max(...allY) + NODE_H + PADDING * 2;
 
   return { nodes, edges, width, height };
+}
+
+/**
+ * A segment of a stack tree: a linear chain of branches that may fork
+ * at the top into multiple child segments.
+ */
+export interface TreeSegment {
+  /** Branches forming a linear chain, ordered root-to-leaf (bottom to top in display). */
+  branches: BranchResponse[];
+  /** Child segments if the topmost branch has multiple children. */
+  forks?: TreeSegment[];
+  /** Computed width in pixels for layout. */
+  width: number;
+}
+
+/**
+ * Decomposes a flat branch list into a tree of linear segments.
+ * Each segment is a chain of single-child branches. When a branch has
+ * multiple children, the segment records them as `forks`.
+ */
+export function decomposeTree(branches: BranchResponse[]): TreeSegment {
+  if (branches.length === 0) {
+    return { branches: [], width: NODE_W };
+  }
+
+  const byName = new Map<string, BranchResponse>();
+  const childrenOf = new Map<string, string[]>();
+
+  for (const b of branches) {
+    byName.set(b.name, b);
+  }
+
+  // Build children map preserving DFS order from the branch list
+  for (const b of branches) {
+    if (b.parent && byName.has(b.parent)) {
+      const existing = childrenOf.get(b.parent) || [];
+      existing.push(b.name);
+      childrenOf.set(b.parent, existing);
+    }
+  }
+
+  const roots = branches.filter(
+    (b) => !b.parent || !byName.has(b.parent)
+  );
+
+  function buildSegment(startName: string): TreeSegment {
+    const chain: BranchResponse[] = [];
+    let current = startName;
+
+    for (;;) {
+      const branch = byName.get(current);
+      if (!branch) break;
+      chain.push(branch);
+
+      const children = childrenOf.get(current) || [];
+      if (children.length === 1) {
+        current = children[0];
+      } else if (children.length > 1) {
+        const forks = children.map((child) => buildSegment(child));
+        const forksWidth =
+          forks.reduce((sum, f) => sum + f.width, 0) +
+          COLUMN_GAP * (forks.length - 1);
+        return {
+          branches: chain,
+          forks,
+          width: Math.max(NODE_W, forksWidth),
+        };
+      } else {
+        break;
+      }
+    }
+
+    return { branches: chain, width: NODE_W };
+  }
+
+  if (roots.length === 1) {
+    return buildSegment(roots[0].name);
+  }
+
+  // Multiple roots: treat as parallel forks
+  const forks = roots.map((r) => buildSegment(r.name));
+  const forksWidth =
+    forks.reduce((sum, f) => sum + f.width, 0) +
+    COLUMN_GAP * (forks.length - 1);
+  return {
+    branches: [],
+    forks,
+    width: Math.max(NODE_W, forksWidth),
+  };
 }

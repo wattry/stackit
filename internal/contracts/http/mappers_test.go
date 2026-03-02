@@ -34,7 +34,7 @@ func TestMapTrunkCommits(t *testing.T) {
 		},
 	}
 
-	got := MapTrunkCommits(commits)
+	got := MapTrunkCommits(commits, nil)
 	require.Len(t, got, 2)
 
 	require.Equal(t, "1234567", got[0].SHA)
@@ -94,7 +94,7 @@ func TestMapTrunkCommits_FiltersCoveredPRs(t *testing.T) {
 		},
 	}
 
-	got := MapTrunkCommits(commits)
+	got := MapTrunkCommits(commits, nil)
 	require.Len(t, got, 2, "commits covered by stack-merge should be filtered out")
 
 	require.Equal(t, "aaaa000", got[0].SHA)
@@ -117,7 +117,58 @@ func TestMapTrunkCommits_DefaultKindFallback(t *testing.T) {
 		},
 	}
 
-	got := MapTrunkCommits(commits)
+	got := MapTrunkCommits(commits, nil)
 	require.Len(t, got, 1)
 	require.Equal(t, TrunkCommitKindStackMerge, got[0].Kind)
+}
+
+func TestMapTrunkCommits_WithPRTitles(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	commits := []git.RecentCommit{
+		{
+			SHA:            "1234567890abcdef",
+			Subject:        "Consolidate auth stack",
+			Author:         "alice",
+			Date:           now,
+			Kind:           git.RecentCommitKindStackMerge,
+			StackSize:      3,
+			StackPRNumbers: []int{45, 46, 47},
+		},
+	}
+
+	titles := map[int]string{
+		45: "feat: add auth",
+		46: "feat: add middleware",
+		// 47 intentionally missing to test partial titles
+	}
+
+	got := MapTrunkCommits(commits, titles)
+	require.Len(t, got, 1)
+	require.Equal(t, map[int]string{
+		45: "feat: add auth",
+		46: "feat: add middleware",
+	}, got[0].StackPRTitles)
+}
+
+func TestMapTrunkCommits_NilTitlesNoStackPRTitles(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	commits := []git.RecentCommit{
+		{
+			SHA:            "1234567890abcdef",
+			Subject:        "Consolidate auth stack",
+			Author:         "alice",
+			Date:           now,
+			Kind:           git.RecentCommitKindStackMerge,
+			StackSize:      2,
+			StackPRNumbers: []int{45, 46},
+		},
+	}
+
+	got := MapTrunkCommits(commits, nil)
+	require.Len(t, got, 1)
+	require.Nil(t, got[0].StackPRTitles)
 }

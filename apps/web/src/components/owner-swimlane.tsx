@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
-import { StackColumn } from "@/components/stack-column";
+import { StackColumn, hasBranching } from "@/components/stack-column";
+import { StackTreeColumn } from "@/components/stack-tree-column";
 import { SwimlaneLabel, swimlaneColor } from "@/components/swimlane-label";
 
 const COLLAPSED_LIMIT = 3;
@@ -52,13 +53,23 @@ export function OwnerSwimlane({
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
             >
-              <StackColumn
-                stack={stack}
-                selectedBranch={selectedBranch}
-                selectedStack={selectedStack}
-                onSelectBranch={onSelectBranch}
-                onSelectStack={onSelectStack}
-              />
+              {hasBranching(stack.branches) ? (
+                <StackTreeColumn
+                  stack={stack}
+                  selectedBranch={selectedBranch}
+                  selectedStack={selectedStack}
+                  onSelectBranch={onSelectBranch}
+                  onSelectStack={onSelectStack}
+                />
+              ) : (
+                <StackColumn
+                  stack={stack}
+                  selectedBranch={selectedBranch}
+                  selectedStack={selectedStack}
+                  onSelectBranch={onSelectBranch}
+                  onSelectStack={onSelectStack}
+                />
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

@@ -299,7 +299,8 @@ func computeStackStatus(graph *engine.StackGraph, branchNames []string) string {
 // MapTrunkCommits converts git RecentCommit values to API TrunkCommitResponse values.
 // Commits whose PR number is already represented by a stack-merge's StackPRs are
 // filtered out so that consolidated stacks don't show duplicate entries.
-func MapTrunkCommits(commits []git.RecentCommit) []TrunkCommitResponse {
+// prTitles is an optional map of PR number to title; pass nil if unavailable.
+func MapTrunkCommits(commits []git.RecentCommit, prTitles map[int]string) []TrunkCommitResponse {
 	// Collect all PR numbers that are covered by stack-merge consolidation commits.
 	coveredPRs := make(map[int]struct{})
 	for _, c := range commits {
@@ -329,6 +330,19 @@ func MapTrunkCommits(commits []git.RecentCommit) []TrunkCommitResponse {
 			StackSize:  c.StackSize,
 			StackPRs:   append([]int(nil), c.StackPRNumbers...),
 			StackScope: c.StackScope,
+		}
+
+		// Populate PR titles for stack-merge commits when available
+		if c.StackSize > 0 && len(prTitles) > 0 {
+			titles := make(map[int]string)
+			for _, pr := range c.StackPRNumbers {
+				if title, ok := prTitles[pr]; ok {
+					titles[pr] = title
+				}
+			}
+			if len(titles) > 0 {
+				resp.StackPRTitles = titles
+			}
 		}
 
 		if resp.Kind == "" {

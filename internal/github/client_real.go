@@ -170,6 +170,11 @@ func (c *StackitGitHubClient) BatchGetPRChecksStatus(ctx context.Context, branch
 	return BatchGetPRChecksStatusGraphQL(ctx, c.runner, c.owner, c.repo, branchNames)
 }
 
+// BatchGetPRTitles returns titles for multiple PRs by number
+func (c *StackitGitHubClient) BatchGetPRTitles(ctx context.Context, owner, repo string, prNumbers []int) (map[int]string, error) {
+	return BatchGetPRTitlesGraphQL(ctx, c.runner, owner, repo, prNumbers)
+}
+
 // ClosePullRequest closes a pull request
 func (c *StackitGitHubClient) ClosePullRequest(ctx context.Context, owner, repo string, prNumber int) error {
 	state := "closed"
