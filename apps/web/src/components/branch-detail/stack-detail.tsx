@@ -159,8 +159,8 @@ export function StackDetailPanel({ stack }: StackDetailPanelProps) {
 function BranchRow({ branch }: { branch: BranchResponse }) {
   return (
     <div className="flex flex-col gap-1 rounded-md border px-3 py-2">
-      <div className="flex items-center justify-between gap-2 min-w-0">
-        <span className="text-sm font-mono truncate">{branch.name}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-mono truncate min-w-0">{branch.name}</span>
         <div className="flex items-center gap-1.5 shrink-0">
           {branch.pr ? (
             <PRBadge pr={branch.pr} />

@@ -41,20 +41,18 @@ export function StackTreeColumn({
         )}
       </div>
 
-      {/* Tree visualization */}
-      <div className="bg-card rounded-t-lg border border-b-0 p-2">
-        <StackTree
-          branches={stack.branches}
-          selectedBranch={selectedBranch}
-          onSelectBranch={onSelectBranch}
-        />
-      </div>
-
-      {/* Status footer */}
-      <StackStatusFooter
-        status={stack.status}
-        selected={selectedStack === stack.rootBranch}
-        onClick={() => onSelectStack(stack)}
+      {/* Tree visualization with status footer attached to root node */}
+      <StackTree
+        branches={stack.branches}
+        selectedBranch={selectedBranch}
+        onSelectBranch={onSelectBranch}
+        footer={
+          <StackStatusFooter
+            status={stack.status}
+            selected={selectedStack === stack.rootBranch}
+            onClick={() => onSelectStack(stack)}
+          />
+        }
       />
     </div>
   );

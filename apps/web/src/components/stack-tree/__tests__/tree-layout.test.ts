@@ -50,7 +50,7 @@ describe("computeTreeLayout", () => {
     expect(layout.edges[0].childName).toBe("feature");
   });
 
-  it("positions child below parent", () => {
+  it("positions child above parent (branches upward)", () => {
     const branches = [
       makeBranch({ name: "main" }),
       makeBranch({ name: "feature", parent: "main", depth: 1 }),
@@ -59,7 +59,7 @@ describe("computeTreeLayout", () => {
     const layout = computeTreeLayout(branches);
     const mainNode = layout.nodes.find((n) => n.branch.name === "main")!;
     const featureNode = layout.nodes.find((n) => n.branch.name === "feature")!;
-    expect(featureNode.y).toBeGreaterThan(mainNode.y);
+    expect(featureNode.y).toBeLessThan(mainNode.y);
   });
 
   it("positions siblings side by side", () => {
