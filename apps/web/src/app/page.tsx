@@ -251,7 +251,7 @@ export default function Home() {
         {/* Right: detail + event feed panel (always visible) */}
         <div className="flex shrink-0">
           <Separator orientation="vertical" />
-          <div className="w-[400px] shrink-0 flex flex-col overflow-hidden">
+          <div className="w-[480px] shrink-0 flex flex-col overflow-hidden">
             {hasSelection ? (
               <div className="flex-1 overflow-auto p-4">
                 {selectedBranch && (

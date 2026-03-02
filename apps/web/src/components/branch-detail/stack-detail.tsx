@@ -96,8 +96,8 @@ export function StackDetailPanel({ stack, onSelectBranch }: StackDetailPanelProp
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3 min-w-0">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Stack overview</CardTitle>
             <span className={`text-xs font-medium ${status.color}`}>
@@ -228,8 +228,8 @@ function BranchRow({ branch, onClick }: { branch: BranchResponse; onClick?: () =
         branch.isCurrent && "border-l-2 border-l-green-500"
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-sm font-mono truncate min-w-0">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="flex items-center gap-1.5 text-sm font-mono truncate min-w-0" title={branch.name}>
           {branch.isCurrent && (
             <span className="inline-block w-2 h-2 rounded-full bg-green-500 shrink-0" />
           )}

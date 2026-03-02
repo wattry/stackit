@@ -42,19 +42,21 @@ export function BranchDetail({ branch, onNavigateToBranch }: BranchDetailProps) 
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base font-mono truncate min-w-0">{branch.name}</CardTitle>
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <CardTitle className="text-base truncate min-w-0" title={branch.pr ? branch.pr.title : branch.name}>
+            {branch.pr ? branch.pr.title : branch.name}
+          </CardTitle>
           <div className="flex items-center gap-2 shrink-0">
             <PRBadge pr={branch.pr} />
             <CIStatusBadge ci={branch.ci} />
             <ReviewBadge ci={branch.ci} />
           </div>
         </div>
-        {branch.pr && (
-          <p className="text-sm text-muted-foreground">{branch.pr.title}</p>
-        )}
+        <p className="text-xs font-mono text-muted-foreground truncate min-w-0" title={branch.name}>
+          {branch.name}
+        </p>
       </CardHeader>
 
       <CardContent className="space-y-4">
