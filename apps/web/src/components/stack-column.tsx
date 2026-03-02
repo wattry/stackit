@@ -135,7 +135,7 @@ const statusConfig: Record<string, { label: string; bg: string; selectedBg: stri
   },
 };
 
-function StackStatusFooter({ status, selected, onClick }: { status: string; selected: boolean; onClick: () => void }) {
+export function StackStatusFooter({ status, selected, onClick }: { status: string; selected: boolean; onClick: () => void }) {
   const c = statusConfig[status] || statusConfig.incomplete;
 
   return (
@@ -248,7 +248,7 @@ function orderBranches(branches: BranchResponse[]): BranchResponse[] {
 
 const DESCRIPTION_COLLAPSE_LENGTH = 80;
 
-function StackDescription({ text }: { text: string }) {
+export function StackDescription({ text }: { text: string }) {
   const canCollapse = text.length > DESCRIPTION_COLLAPSE_LENGTH;
   const [collapsed, setCollapsed] = useState(canCollapse);
 
@@ -269,8 +269,13 @@ function StackDescription({ text }: { text: string }) {
   );
 }
 
+/** Returns true if any branch in the list has more than one child (i.e. the stack forks). */
+export function hasBranching(branches: BranchResponse[]): boolean {
+  return branches.some((b) => (b.children?.length ?? 0) > 1);
+}
+
 /** Strip common prefixes like "user/timestamp/" to show a shorter name. */
-function shortenBranchName(name: string): string {
+export function shortenBranchName(name: string): string {
   // Match patterns like "user/timestamp/description" and return the description part
   const match = name.match(/^[^/]+\/\d{14}\/(.+)$/);
   return match ? match[1] : name;
