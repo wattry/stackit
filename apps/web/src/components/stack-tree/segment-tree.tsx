@@ -82,8 +82,8 @@ function SegmentNode({
 
       {/* Linear trunk segment */}
       {displayBranches.length > 0 && (
-        <div style={{ width: NODE_W }}>
-          <div className="flex flex-col bg-card rounded-t-lg">
+        <div className="flex flex-col" style={{ width: NODE_W }}>
+          <div className="flex flex-col bg-card rounded-lg">
             {displayBranches.map((branch, i) => {
               const isFirst = i === 0;
               const isLast = i === displayBranches.length - 1;
