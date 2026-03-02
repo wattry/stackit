@@ -5,6 +5,7 @@ export const V_GAP = 88; // vertical gap between levels
 export const NODE_W = 256;
 export const NODE_H = 64;
 export const TREE_PADDING = 20;
+export const COLUMN_GAP = 12; // gap between fork columns
 
 export interface LayoutNode {
   branch: BranchResponse;
@@ -149,4 +150,93 @@ export function computeTreeLayout(branches: BranchResponse[]): TreeLayout {
   const height = Math.max(...allY) + NODE_H + PADDING * 2;
 
   return { nodes, edges, width, height };
+}
+
+/**
+ * A segment of a stack tree: a linear chain of branches that may fork
+ * at the top into multiple child segments.
+ */
+export interface TreeSegment {
+  /** Branches forming a linear chain, ordered root-to-leaf (bottom to top in display). */
+  branches: BranchResponse[];
+  /** Child segments if the topmost branch has multiple children. */
+  forks?: TreeSegment[];
+  /** Computed width in pixels for layout. */
+  width: number;
+}
+
+/**
+ * Decomposes a flat branch list into a tree of linear segments.
+ * Each segment is a chain of single-child branches. When a branch has
+ * multiple children, the segment records them as `forks`.
+ */
+export function decomposeTree(branches: BranchResponse[]): TreeSegment {
+  if (branches.length === 0) {
+    return { branches: [], width: NODE_W };
+  }
+
+  const byName = new Map<string, BranchResponse>();
+  const childrenOf = new Map<string, string[]>();
+
+  for (const b of branches) {
+    byName.set(b.name, b);
+  }
+
+  // Build children map preserving DFS order from the branch list
+  for (const b of branches) {
+    if (b.parent && byName.has(b.parent)) {
+      const existing = childrenOf.get(b.parent) || [];
+      existing.push(b.name);
+      childrenOf.set(b.parent, existing);
+    }
+  }
+
+  const roots = branches.filter(
+    (b) => !b.parent || !byName.has(b.parent)
+  );
+
+  function buildSegment(startName: string): TreeSegment {
+    const chain: BranchResponse[] = [];
+    let current = startName;
+
+    for (;;) {
+      const branch = byName.get(current);
+      if (!branch) break;
+      chain.push(branch);
+
+      const children = childrenOf.get(current) || [];
+      if (children.length === 1) {
+        current = children[0];
+      } else if (children.length > 1) {
+        const forks = children.map((child) => buildSegment(child));
+        const forksWidth =
+          forks.reduce((sum, f) => sum + f.width, 0) +
+          COLUMN_GAP * (forks.length - 1);
+        return {
+          branches: chain,
+          forks,
+          width: Math.max(NODE_W, forksWidth),
+        };
+      } else {
+        break;
+      }
+    }
+
+    return { branches: chain, width: NODE_W };
+  }
+
+  if (roots.length === 1) {
+    return buildSegment(roots[0].name);
+  }
+
+  // Multiple roots: treat as parallel forks
+  const forks = roots.map((r) => buildSegment(r.name));
+  const forksWidth =
+    forks.reduce((sum, f) => sum + f.width, 0) +
+    COLUMN_GAP * (forks.length - 1);
+  return {
+    branches: [],
+    forks,
+    width: Math.max(NODE_W, forksWidth),
+  };
 }

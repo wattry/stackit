@@ -1,7 +1,7 @@
 "use client";
 
 import type { BranchResponse, StackDetail } from "@/lib/api";
-import { StackTree } from "@/components/stack-tree/stack-tree";
+import { SegmentTree } from "@/components/stack-tree/segment-tree";
 import { StackStatusFooter, StackDescription } from "@/components/stack-column";
 import { FolderGit2 } from "lucide-react";
 
@@ -41,8 +41,8 @@ export function StackTreeColumn({
         )}
       </div>
 
-      {/* Tree visualization with status footer attached to root node */}
-      <StackTree
+      {/* Tree visualization: linear card stacks with connectors at branch points */}
+      <SegmentTree
         branches={stack.branches}
         selectedBranch={selectedBranch}
         onSelectBranch={onSelectBranch}

@@ -68,7 +68,7 @@ describe("OwnerSwimlane", () => {
     expect(screen.getAllByRole("button").length).toBeGreaterThan(0);
   });
 
-  it("renders branching stack with tree edges SVG", () => {
+  it("renders branching stack with fork connector", () => {
     const stack = makeStack({
       rootBranch: "main",
       branches: [
@@ -89,8 +89,8 @@ describe("OwnerSwimlane", () => {
       />
     );
 
-    // Branching stacks render StackTree which uses an SVG for edges
-    expect(container.querySelector('[data-testid="stack-tree-edges"]')).not.toBeNull();
+    // Branching stacks render SegmentTree which uses fork connectors at branch points
+    expect(container.querySelector('[data-testid="fork-connector"]')).not.toBeNull();
   });
 
   it("renders mixed stacks with correct visualization for each", () => {
@@ -122,9 +122,9 @@ describe("OwnerSwimlane", () => {
       />
     );
 
-    // Exactly one tree edges SVG (from the branching stack)
-    const treeSvgs = container.querySelectorAll('[data-testid="stack-tree-edges"]');
-    expect(treeSvgs.length).toBe(1);
+    // Exactly one fork connector SVG (from the branching stack)
+    const forkConnectors = container.querySelectorAll('[data-testid="fork-connector"]');
+    expect(forkConnectors.length).toBe(1);
   });
 
   it("renders branch cards with same content in both views", () => {
