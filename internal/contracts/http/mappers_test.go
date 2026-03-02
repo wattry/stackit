@@ -129,9 +129,10 @@ func TestMapTrunkCommits_WithPRTitles(t *testing.T) {
 	commits := []git.RecentCommit{
 		{
 			SHA:            "1234567890abcdef",
-			Subject:        "Consolidate auth stack",
+			Subject:        "Merge pull request #99 from org/stack-merge-123",
 			Author:         "alice",
 			Date:           now,
+			PRNumber:       99,
 			Kind:           git.RecentCommitKindStackMerge,
 			StackSize:      3,
 			StackPRNumbers: []int{45, 46, 47},
@@ -139,6 +140,7 @@ func TestMapTrunkCommits_WithPRTitles(t *testing.T) {
 	}
 
 	titles := map[int]string{
+		99: "Consolidate auth stack",
 		45: "feat: add auth",
 		46: "feat: add middleware",
 		// 47 intentionally missing to test partial titles
@@ -146,6 +148,8 @@ func TestMapTrunkCommits_WithPRTitles(t *testing.T) {
 
 	got := MapTrunkCommits(commits, titles)
 	require.Len(t, got, 1)
+	// Consolidation PR title replaces the raw merge subject
+	require.Equal(t, "Consolidate auth stack", got[0].Message)
 	require.Equal(t, map[int]string{
 		45: "feat: add auth",
 		46: "feat: add middleware",

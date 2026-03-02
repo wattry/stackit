@@ -13,6 +13,7 @@ const trailerValueSeparator = "\x1e"
 
 var prNumberSuffixRe = regexp.MustCompile(`\(#(\d+)\)\s*$`)
 var mergeSubjectRe = regexp.MustCompile(`^Merge pull request #(\d+) from `)
+var stackitTrailerRe = regexp.MustCompile(`^Stackit-[\w-]+:\s`)
 
 // RecentCommitKind describes the presentation type of a trunk commit.
 type RecentCommitKind string
@@ -140,9 +141,14 @@ func parseMergePRNumber(subject string) int {
 func firstNonEmptyLine(s string) string {
 	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimSpace(line)
-		if line != "" {
-			return line
+		if line == "" {
+			continue
 		}
+		// Skip Stackit trailer lines (e.g. "Stackit-Stack-Size: 11")
+		if stackitTrailerRe.MatchString(line) {
+			continue
+		}
+		return line
 	}
 	return ""
 }

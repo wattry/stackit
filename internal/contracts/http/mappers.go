@@ -320,9 +320,18 @@ func MapTrunkCommits(commits []git.RecentCommit, prTitles map[int]string) []Trun
 			}
 		}
 
+		message := c.Subject
+		// For stack-merge commits, use the consolidation PR's title from GitHub
+		// instead of the raw "Merge pull request #N from ..." subject
+		if c.StackSize > 0 && c.PRNumber != 0 && len(prTitles) > 0 {
+			if title, ok := prTitles[c.PRNumber]; ok {
+				message = title
+			}
+		}
+
 		resp := TrunkCommitResponse{
 			SHA:        shortSHA(c.SHA),
-			Message:    c.Subject,
+			Message:    message,
 			Author:     c.Author,
 			Date:       c.Date.Format(time.RFC3339),
 			PRNumber:   c.PRNumber,
