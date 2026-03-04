@@ -3,6 +3,11 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - pnpm install --frozen-lockfile
+    - pnpm --filter @stackit/web build
+    - mkdir -p apps/server/static
+    - rm -rf apps/server/static/assets
+    - cp -R apps/web/out/. apps/server/static/
 
 builds:
   - id: cli
@@ -22,6 +27,20 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
+  - id: server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./apps/server
+    binary: stackit-server
+    ldflags:
+      - -s -w
 
 upx:
   - enabled: true
@@ -32,9 +51,26 @@ upx:
     compress: best
 
 archives:
-  - format: tar.gz
+  - id: cli
+    ids: [cli]
+    format: tar.gz
     name_template: >-
-      {{ .ProjectName }}_
+      stackit_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+  - id: server
+    ids: [server]
+    format: tar.gz
+    name_template: >-
+      stackit-server_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
@@ -63,7 +99,9 @@ changelog:
       - Merge branch
 
 brews:
-  - repository:
+  - name: stackit
+    ids: [cli]
+    repository:
       owner: getstackit
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
@@ -76,3 +114,17 @@ brews:
     install: |
       bin.install "stackit"
       bin.install_symlink "stackit" => "st"
+  - name: stackit-server
+    ids: [server]
+    repository:
+      owner: getstackit
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/getstackit/stackit"
+    description: "Server for stackit web UI and API"
+    license: "MIT"
+    test: |
+      system "#{bin}/stackit-server", "--help"
+    install: |
+      bin.install "stackit-server"

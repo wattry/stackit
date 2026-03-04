@@ -25,6 +25,7 @@ golangci-lint = "latest"
 
 # Development tools
 "aqua:watchexec/watchexec" = "latest" # File watcher for dev auto-reload
+"aqua:goreleaser/goreleaser" = "latest" # Release automation
 
 # CLI utilities (recommended in AGENTS.md)
 "aqua:BurntSushi/ripgrep" = "latest"  # Fast text search (rg)

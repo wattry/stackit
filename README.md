@@ -79,6 +79,15 @@ brew install getstackit/tap/stackit
 
 After installation, you can use either `stackit` or `st`, and `worktree` or `wt`.
 
+### Homebrew Server (Web UI + API)
+
+```bash
+brew install getstackit/tap/stackit-server
+stackit-server --port 8080
+```
+
+Open `http://localhost:8080` to use the web UI.
+
 ### Shell Integration (Recommended)
 
 Enable shell integration to automatically change directories when creating worktrees with `stackit create -w`. Add one of the following to your shell configuration:

@@ -187,8 +187,11 @@ mise run web:build
 # Copy built files into apps/server/static/ for embedding
 mise run web:sync-static
 
-# Build Go binary (includes embedded web assets)
-mise run build
+# Build server binary (includes embedded web assets)
+go build -o bin/stackit-server ./apps/server
+
+# Run server
+./bin/stackit-server --port 8080
 ```
 
 ### Testing
