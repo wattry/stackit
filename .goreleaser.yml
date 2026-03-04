@@ -53,7 +53,7 @@ upx:
 archives:
   - id: cli
     ids: [cli]
-    format: tar.gz
+    formats: [tar.gz]
     name_template: >-
       stackit_
       {{- title .Os }}_
@@ -63,12 +63,12 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - README.md
   - id: server
     ids: [server]
-    format: tar.gz
+    formats: [tar.gz]
     name_template: >-
       stackit-server_
       {{- title .Os }}_
@@ -78,14 +78,14 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - README.md
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
