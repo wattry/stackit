@@ -79,6 +79,15 @@ brew install getstackit/tap/stackit
 
 After installation, you can use either `stackit` or `st`, and `worktree` or `wt`.
 
+### Homebrew Server (Web UI + API)
+
+```bash
+brew install getstackit/tap/stackit-server
+stackit-server --port 8080
+```
+
+Open `http://localhost:8080` to use the web UI.
+
 ### Shell Integration (Recommended)
 
 Enable shell integration to automatically change directories when creating worktrees with `stackit create -w`. Add one of the following to your shell configuration:
@@ -588,13 +597,13 @@ stackit doctor
 This repository includes multiple first-class applications:
 
 - `apps/cli` - main `stackit` CLI
-- `apps/api` - HTTP API server (serves `/api/v1` and compatibility `/api`) plus embedded web assets
+- `apps/server` - HTTP API server (serves `/api/v1` and compatibility `/api`) plus embedded web assets
 - `apps/st-tui` - TUI storyboard binary
 - `apps/web` - Next.js dashboard for visualizing stacked branches in a swimlane layout with real-time updates (see [docs/web.md](docs/web.md) for architecture)
 
 ### Full-Stack Local Development
 
-Recommended: run both API and web UI with one command via overmind + Procfile:
+Recommended: run both server and web UI with one command via overmind + Procfile:
 
 ```bash
 # one-time setup
@@ -606,7 +615,7 @@ mise run dev
 ```
 
 This starts:
-- `api`: `go run ./apps/api --port 8080`
+- `server`: `go run ./apps/server --port 8080`
 - `web`: `pnpm --filter @stackit/web dev`
 
 Open the web UI at `http://localhost:3000`.
@@ -620,19 +629,19 @@ mise run dev:stop
 Manual two-terminal flow is also supported:
 
 ```bash
-# Terminal 1: API
-go run ./apps/api --port 8080
+# Terminal 1: Server
+go run ./apps/server --port 8080
 
 # Terminal 2: Web (requires pnpm)
 pnpm install
 pnpm web:dev
 ```
 
-For production-style serving via Go, build and sync web assets into `apps/api/static`:
+For production-style serving via Go, build and sync web assets into `apps/server/static`:
 
 ```bash
 mise run web:sync-static
-go run ./apps/api
+go run ./apps/server
 ```
 
 ## Contributing

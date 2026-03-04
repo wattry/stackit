@@ -186,10 +186,10 @@ See `.claude/rules/validation.md` for detailed guidance on when to use each leve
 ## Build
 
 ```bash
-mise run build           # Builds ./stackit binary
+mise run build           # Builds ./bin/stackit and ./bin/stackit-server
 mise run deps            # Install dependencies
 mise run web:build       # Build web app static export
-mise run web:sync-static # Copy web build into apps/api/static/ for embedding
+mise run web:sync-static # Copy web build into apps/server/static/ for embedding
 ```
 
 ## Commit Messages

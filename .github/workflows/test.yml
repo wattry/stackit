@@ -89,7 +89,7 @@ jobs:
         run: |
           mkdir -p bin
           go build -v -o bin/stackit ./apps/cli
-          go build -v -o bin/stackit-api ./apps/api
+          go build -v -o bin/stackit-server ./apps/server
           if [ -d ./apps/st-tui ]; then
             go build -v -o bin/st-tui ./apps/st-tui
           elif [ -d ./cmd/st-tui ]; then
