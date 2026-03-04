@@ -16,7 +16,7 @@ The stackit web app is a dashboard for visualizing stacked branches. It displays
 
 ## Architecture
 
-The web app is built as a **static export** (no server-side rendering). The built output (`apps/web/out/`) is copied into `apps/api/static/` and embedded in the Go binary via `//go:embed static`. The API server serves these static files alongside the `/api/` endpoints, creating a single self-contained binary.
+The web app is built as a **static export** (no server-side rendering). The built output (`apps/web/out/`) is copied into `apps/server/static/` and embedded in the Go binary via `//go:embed static`. The API server serves these static files alongside the `/api/` endpoints, creating a single self-contained binary.
 
 ```
 Browser → Go API server → /api/* (JSON endpoints)
@@ -160,14 +160,14 @@ Components generated with `shadcn` CLI using New York style. Config in `componen
 ### Running Locally
 
 ```bash
-# Both API + web (recommended)
+# Both server + web (recommended)
 mise run dev
 
 # Web only (needs API running separately)
 mise run web:dev
 
-# API only
-go run ./apps/api --port 8080
+# Server only
+go run ./apps/server --port 8080
 ```
 
 The web dev server runs at `http://localhost:3000` and proxies API requests to `http://localhost:8080`.
@@ -184,7 +184,7 @@ The web dev server runs at `http://localhost:3000` and proxies API requests to `
 # Build static export
 mise run web:build
 
-# Copy built files into apps/api/static/ for embedding
+# Copy built files into apps/server/static/ for embedding
 mise run web:sync-static
 
 # Build Go binary (includes embedded web assets)
