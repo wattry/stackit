@@ -25,6 +25,7 @@ golangci-lint = "latest"
 
 # Development tools
 "aqua:watchexec/watchexec" = "latest" # File watcher for dev auto-reload
+"aqua:goreleaser/goreleaser" = "latest" # Release automation
 
 # CLI utilities (recommended in AGENTS.md)
 "aqua:BurntSushi/ripgrep" = "latest"  # Fast text search (rg)
@@ -46,13 +47,13 @@ run = """
 """
 
 [tasks.build]
-description = "Build CLI and API binaries with local version info"
+description = "Build CLI and server binaries with local version info"
 run = """
   mkdir -p bin
   COMMIT=$(git rev-parse --short HEAD)
   DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   go build -ldflags "-X main.version=dev-local -X main.commit=$COMMIT -X main.date=$DATE" -o bin/stackit ./apps/cli
-  go build -o bin/stackit-api ./apps/api
+  go build -o bin/stackit-server ./apps/server
   if [ -d ./apps/st-tui ]; then
     go build -o bin/st-tui ./apps/st-tui
   fi
@@ -141,12 +142,12 @@ run = "pnpm install"
 description = "Run the web app in development mode"
 run = "pnpm --filter @stackit/web dev"
 
-[tasks."dev:api"]
-description = "Run the API server in development mode (auto-reloads on file changes)"
-run = "watchexec -r -e go -w apps/api -w internal -w api -- go run ./apps/api --port 8080"
+[tasks."dev:server"]
+description = "Run the server in development mode (auto-reloads on file changes)"
+run = "watchexec -r -e go -w apps/server -w internal -w api -- go run ./apps/server --port 8080"
 
 [tasks.dev]
-description = "Run API + web dev servers using overmind and Procfile.dev"
+description = "Run server + web dev servers using overmind and Procfile.dev"
 run = "overmind start -f Procfile.dev"
 
 [tasks."dev:stop"]
@@ -158,12 +159,12 @@ description = "Build the web app"
 run = "pnpm --filter @stackit/web build"
 
 [tasks."web:sync-static"]
-description = "Copy built web assets into the API static directory"
+description = "Copy built web assets into the server static directory"
 depends = ["web:build"]
 run = """
-  mkdir -p apps/api/static
-  rm -rf apps/api/static/assets
-  cp -R apps/web/out/. apps/api/static/
+  mkdir -p apps/server/static
+  rm -rf apps/server/static/assets
+  cp -R apps/web/out/. apps/server/static/
 """
 
 [tasks."web:test"]
