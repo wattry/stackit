@@ -20,6 +20,23 @@ func (h *noopHandler) OnEvent(_ submit.Event)                          {}
 func (h *noopHandler) Confirm(_ string, defaultYes bool) (bool, error) { return defaultYes, nil }
 func (h *noopHandler) IsInteractive() bool                             { return false }
 
+type captureStackHandler struct {
+	stackEvent *submit.StackDisplayEvent
+}
+
+func (h *captureStackHandler) OnEvent(e submit.Event) {
+	if ev, ok := e.(submit.StackDisplayEvent); ok {
+		copied := ev
+		h.stackEvent = &copied
+	}
+}
+
+func (h *captureStackHandler) Confirm(_ string, defaultYes bool) (bool, error) {
+	return defaultYes, nil
+}
+
+func (h *captureStackHandler) IsInteractive() bool { return false }
+
 func TestActionWithMockedGitHub(t *testing.T) {
 	t.Run("creates PR for branch", func(t *testing.T) {
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
@@ -303,4 +320,36 @@ func TestSubmitDryRunWithWorktreeAnchorParent(t *testing.T) {
 
 	err = submit.Action(s.Context, opts, &noopHandler{})
 	require.NoError(t, err, "submit dry-run should treat worktree-anchor parent as trunk for validation/base resolution")
+}
+
+func TestSubmitDisplayTreeSkipsWorktreeAnchorParent(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+		WithStack(map[string]string{
+			"wt-anchor": "main",
+			"feature":   "wt-anchor",
+		})
+
+	err := s.Engine.SetBranchType(s.Engine.GetBranch("wt-anchor"), git.BranchTypeWorktreeAnchor)
+	require.NoError(t, err)
+
+	s.Checkout("feature")
+
+	handler := &captureStackHandler{}
+	opts := submit.Options{
+		DryRun: true,
+		NoEdit: true,
+	}
+
+	err = submit.Action(s.Context, opts, handler)
+	require.NoError(t, err)
+	require.NotNil(t, handler.stackEvent)
+
+	stack := handler.stackEvent.Stack
+	require.Equal(t, []string{"feature"}, stack.Branches, "worktree anchors are not submittable")
+	require.Equal(t, "main", stack.ParentMap["feature"], "display parent should skip worktree anchor")
+	require.Equal(t, []string{"feature"}, stack.ChildrenMap["main"], "feature should appear as trunk child in display tree")
+	require.Empty(t, stack.ChildrenMap["wt-anchor"], "worktree anchor should not appear in display tree relationships")
+
+	_, hasAnchorFixedState := handler.stackEvent.FixedMap["wt-anchor"]
+	require.False(t, hasAnchorFixedState, "fixed map should not include non-submittable worktree anchors")
 }

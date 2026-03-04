@@ -168,6 +168,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	stackTree := tree.NewStackTree(branchObjs, currentBranchName, nav.Trunk().GetName())
+	normalizeDisplayTreeParents(nav, stackTree)
 
 	// Display the stack
 	handler.OnEvent(StackDisplayEvent{
@@ -316,6 +317,25 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	handler.OnEvent(CompletionEvent{Success: true, Message: "Submit complete"})
 	return nil
+}
+
+// normalizeDisplayTreeParents rewrites stack display parent links to skip
+// worktree anchors so submit tree rendering matches log rendering behavior.
+func normalizeDisplayTreeParents(nav engine.StackNavigator, stackTree *tree.StackTree) {
+	if stackTree == nil {
+		return
+	}
+
+	childrenMap := make(map[string][]string, len(stackTree.Branches))
+	for _, branchName := range stackTree.Branches {
+		branch := nav.GetBranch(branchName)
+		parentName := resolveSubmitParentName(nav, branch)
+		stackTree.ParentMap[branchName] = parentName
+		if parentName != "" {
+			childrenMap[parentName] = append(childrenMap[parentName], branchName)
+		}
+	}
+	stackTree.ChildrenMap = childrenMap
 }
 
 // submitBranch submits a single branch
