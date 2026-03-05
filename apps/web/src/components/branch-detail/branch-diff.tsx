@@ -25,6 +25,9 @@ export function BranchDiff({ branchName, revision }: BranchDiffProps) {
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
+    setDiff(null);
 
     fetchBranchDiff(branchName)
       .then((result) => {

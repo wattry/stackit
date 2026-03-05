@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRepo } from "@/components/providers/repo-provider";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { StackDetailPanel } from "@/components/branch-detail/stack-detail";
-import { BranchDiffWorkspace } from "@/components/branch-detail/branch-diff-workspace";
 import { DetailEmptyState } from "@/components/branch-detail/detail-empty-state";
 import { EventFeed } from "@/components/event-feed";
 import { Separator } from "@/components/ui/separator";
@@ -15,6 +15,21 @@ import { SkeletonSwimlane } from "@/components/ui/skeleton-shimmer";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { formatTimeAgo } from "@/lib/time";
+
+const BranchDiffWorkspace = dynamic(
+  () =>
+    import("@/components/branch-detail/branch-diff-workspace").then(
+      (m) => m.BranchDiffWorkspace
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Loading diff workspace...
+      </div>
+    ),
+  }
+);
 
 type Selection =
   | { type: "branch"; name: string }

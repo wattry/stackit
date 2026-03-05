@@ -46,7 +46,7 @@ func TestParseResourcePath(t *testing.T) {
 			wantOK:    true,
 		},
 		{
-			name:      "versioned branch diff path with encoded branch name",
+			name:      "versioned branches path with encoded branch ending in diff",
 			path:      "/api/v1/branches/jonnii%2F20260228%2Ffeature/diff",
 			resource:  "branches",
 			wantValue: "jonnii/20260228/feature/diff",

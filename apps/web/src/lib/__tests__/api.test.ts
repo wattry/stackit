@@ -88,7 +88,7 @@ describe("fetchBranchDiff", () => {
 
     await fetchBranchDiff("feat/bar");
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:8080/api/branches/diff?branch=feat%2Fbar"
+      "http://localhost:8080/api/branch-diff?branch=feat%2Fbar"
     );
   });
 });

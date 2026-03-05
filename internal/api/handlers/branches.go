@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 
 	httpcontract "stackit.dev/stackit/internal/contracts/http"
 	"stackit.dev/stackit/internal/engine"
@@ -33,19 +32,9 @@ func (h *BranchesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch {
-	case branchName == "diff":
-		queryBranch := r.URL.Query().Get("branch")
-		if queryBranch == "" {
-			http.Error(w, "missing branch query parameter", http.StatusBadRequest)
-			return
-		}
-		h.getBranchDiff(w, r, queryBranch)
-	case branchName == "":
+	if branchName == "" {
 		h.listBranches(w, r)
-	case strings.HasSuffix(branchName, "/diff"):
-		h.getBranchDiff(w, r, strings.TrimSuffix(branchName, "/diff"))
-	default:
+	} else {
 		h.getBranch(w, r, branchName)
 	}
 }
@@ -112,42 +101,4 @@ func (h *BranchesHandler) getBranch(w http.ResponseWriter, r *http.Request, bran
 
 	resp := httpcontract.MapBranch(h.eng, branch, node, checks)
 	writeJSON(w, resp)
-}
-
-func (h *BranchesHandler) getBranchDiff(w http.ResponseWriter, r *http.Request, branchName string) {
-	if branchName == "" {
-		http.Error(w, "branch not found or not tracked", http.StatusNotFound)
-		return
-	}
-
-	branch := h.eng.GetBranch(branchName)
-	if !branch.IsTracked() {
-		http.Error(w, "branch not found or not tracked", http.StatusNotFound)
-		return
-	}
-
-	baseRevision, err := h.eng.GetDivergencePoint(branchName)
-	if err != nil {
-		http.Error(w, "failed to resolve branch base: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	headRevision, err := branch.GetRevision()
-	if err != nil {
-		http.Error(w, "failed to resolve branch revision: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	patch, err := h.eng.GetDiffBetween(r.Context(), baseRevision, headRevision)
-	if err != nil {
-		http.Error(w, "failed to compute branch diff: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	writeJSON(w, httpcontract.BranchDiffResponse{
-		Branch:       branchName,
-		BaseRevision: baseRevision,
-		HeadRevision: headRevision,
-		Patch:        patch,
-	})
 }

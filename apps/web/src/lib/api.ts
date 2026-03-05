@@ -152,7 +152,7 @@ export function fetchBranch(name: string): Promise<BranchResponse> {
 
 export function fetchBranchDiff(name: string): Promise<BranchDiffResponse> {
   return fetchAPI<BranchDiffResponse>(
-    `/api/branches/diff?branch=${encodeURIComponent(name)}`
+    `/api/branch-diff?branch=${encodeURIComponent(name)}`
   );
 }
 

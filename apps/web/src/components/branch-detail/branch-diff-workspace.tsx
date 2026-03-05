@@ -1,7 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { BranchResponse } from "@/lib/api";
-import { BranchDiff } from "./branch-diff";
+
+const BranchDiff = dynamic(
+  () => import("./branch-diff").then((m) => m.BranchDiff),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="text-sm text-muted-foreground">Loading diff viewer...</p>
+    ),
+  }
+);
 
 interface BranchDiffWorkspaceProps {
   branch: BranchResponse;

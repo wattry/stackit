@@ -92,29 +92,10 @@ paths:
                 $ref: "#/components/schemas/BranchResponse"
         "404":
           description: Branch not found.
-  /api/v1/branches/{branchName}/diff:
+  /api/v1/branch-diff:
     get:
       summary: Get raw patch diff for a tracked branch.
       operationId: getBranchDiff
-      parameters:
-        - in: path
-          name: branchName
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Branch diff details.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BranchDiffResponse"
-        "404":
-          description: Branch not found.
-  /api/v1/branches/diff:
-    get:
-      summary: Get raw patch diff for a tracked branch by query parameter.
-      operationId: getBranchDiffByQuery
       parameters:
         - in: query
           name: branch
