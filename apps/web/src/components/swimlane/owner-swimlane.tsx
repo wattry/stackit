@@ -94,13 +94,3 @@ export function OwnerSwimlane({
   );
 }
 
-export function getLastActiveDate(stacks: StackDetail[]): Date | undefined {
-  let latest = 0;
-  for (const stack of stacks) {
-    for (const branch of stack.branches) {
-      const t = new Date(branch.commitDate).getTime();
-      if (t > latest) latest = t;
-    }
-  }
-  return latest ? new Date(latest) : undefined;
-}

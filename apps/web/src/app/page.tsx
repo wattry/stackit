@@ -3,17 +3,17 @@
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRepo } from "@/components/providers/repo-provider";
-import { OwnerSwimlane, getLastActiveDate } from "@/components/swimlane/owner-swimlane";
+import { OwnerSwimlane } from "@/components/swimlane/owner-swimlane";
+import { getLastActiveDate } from "@/lib/swimlane-grouping";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { StackDetailPanel } from "@/components/branch-detail/stack-detail";
 import { DetailEmptyState } from "@/components/branch-detail/detail-empty-state";
-import { EventFeed } from "@/components/event-feed";
+import { EventFeed } from "@/components/layout/event-feed";
+import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { RecentlyMerged } from "@/components/recently-merged/recently-merged";
 import { BackgroundMesh } from "@/components/ui/background-mesh";
 import { SkeletonSwimlane } from "@/components/ui/skeleton-shimmer";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { formatTimeAgo } from "@/lib/time";
 import { useUrlSelection } from "@/hooks/use-url-selection";
 import { groupStacksByOwner } from "@/lib/swimlane-grouping";
 
@@ -143,39 +143,7 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen">
       <BackgroundMesh />
-      {/* Header */}
-      <header className="relative flex items-center justify-between px-4 py-2 border-b shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm">stackit</span>
-          {repo && (
-            <span className="text-sm text-muted-foreground font-mono">
-              {repo.owner}/{repo.repo}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdated && (
-            <span className="text-xs text-muted-foreground">
-              {formatTimeAgo(lastUpdated)}
-            </span>
-          )}
-          <ThemeToggle />
-          <button
-            onClick={refresh}
-            className="text-xs text-muted-foreground hover:text-foreground"
-            title="Refresh"
-          >
-            &#x21BB;
-          </button>
-        </div>
-        {/* Animated gradient accent bar */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-0.5 animate-gradient-shift"
-          style={{
-            background: "linear-gradient(90deg, var(--gradient-start), var(--gradient-mid), var(--gradient-end), var(--gradient-start))",
-          }}
-        />
-      </header>
+      <Header repo={repo ?? null} lastUpdated={lastUpdated ?? null} refresh={refresh} />
 
       {/* Main content: stacks area + detail panel */}
       <div className="flex flex-1 overflow-hidden">

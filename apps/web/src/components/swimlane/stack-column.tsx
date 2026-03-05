@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
-import { BranchCard } from "@/components/branch-card";
+import { BranchCard } from "./branch-card";
 import { FolderGit2, ChevronDown } from "lucide-react";
 import Markdown from "react-markdown";
 import { stackStatusStyles } from "@/lib/status-config";
 
-export { shortenBranchName } from "@/components/branch-card";
+export { shortenBranchName } from "@/lib/branch-utils";
 
 interface StackColumnProps {
   stack: StackDetail;

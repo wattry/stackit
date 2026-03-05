@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { BranchResponse } from "@/lib/api";
-import { BranchCard } from "@/components/branch-card";
+import { BranchCard } from "@/components/swimlane/branch-card";
 import { decomposeTree, type TreeSegment, NODE_W, COLUMN_GAP } from "./tree-layout";
 
 interface SegmentTreeProps {
