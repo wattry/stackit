@@ -15,6 +15,9 @@ interface StackColumnProps {
   onSelectBranch: (branch: BranchResponse) => void;
   onSelectStack: (stack: StackDetail) => void;
   compact?: boolean;
+  showHeader?: boolean;
+  showFooter?: boolean;
+  fillWidth?: boolean;
 }
 
 export function StackColumn({
@@ -24,31 +27,36 @@ export function StackColumn({
   onSelectBranch,
   onSelectStack,
   compact = false,
+  showHeader = true,
+  showFooter = true,
+  fillWidth = false,
 }: StackColumnProps) {
   // Order branches root→leaf, then reverse so leaf is at top (stacking metaphor)
   const orderedBranches = orderBranches(stack.branches);
   const displayBranches = [...orderedBranches].reverse();
 
   return (
-    <div className="flex flex-col w-64 shrink-0">
+    <div className={`flex flex-col ${fillWidth ? "w-full" : "w-64 shrink-0"}`}>
       {/* Stack header */}
-      <div className={`px-1 ${compact ? "pb-1" : "pb-2"}`}>
-        {stack.hasWorktree && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
-              <FolderGit2 className="w-3 h-3" />
-            </span>
-          </div>
-        )}
-        {stack.title && (
-          <p className={`font-medium text-muted-foreground truncate ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`} title={stack.title}>
-            {stack.title}
-          </p>
-        )}
-        {stack.description && (
-          <StackDescription text={stack.description} compact={compact} />
-        )}
-      </div>
+      {showHeader && (
+        <div className={`px-1 ${compact ? "pb-1" : "pb-2"}`}>
+          {stack.hasWorktree && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
+                <FolderGit2 className="w-3 h-3" />
+              </span>
+            </div>
+          )}
+          {stack.title && (
+            <p className={`font-medium text-muted-foreground truncate ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`} title={stack.title}>
+              {stack.title}
+            </p>
+          )}
+          {stack.description && (
+            <StackDescription text={stack.description} compact={compact} />
+          )}
+        </div>
+      )}
 
       {/* Stacked branch cards */}
       <div className="flex flex-col bg-card rounded-t-lg">
@@ -74,12 +82,14 @@ export function StackColumn({
       </div>
 
       {/* Status footer */}
-      <StackStatusFooter
-        status={stack.status}
-        selected={selectedStack === stack.rootBranch}
-        compact={compact}
-        onClick={() => onSelectStack(stack)}
-      />
+      {showFooter && (
+        <StackStatusFooter
+          status={stack.status}
+          selected={selectedStack === stack.rootBranch}
+          compact={compact}
+          onClick={() => onSelectStack(stack)}
+        />
+      )}
     </div>
   );
 }

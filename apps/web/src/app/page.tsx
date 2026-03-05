@@ -295,6 +295,7 @@ export default function Home() {
                 <StackDetailPanel
                   stack={selectedBranchStack}
                   onSelectBranch={handleStackBranchSelect}
+                  selectedBranchName={selectedBranch?.name ?? null}
                 />
               </div>
             ) : hasSelection ? (
@@ -309,6 +310,7 @@ export default function Home() {
                   <StackDetailPanel
                     stack={selectedStack}
                     onSelectBranch={handleStackBranchSelect}
+                    selectedBranchName={null}
                   />
                 )}
               </div>

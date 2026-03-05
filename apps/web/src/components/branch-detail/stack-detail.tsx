@@ -7,17 +7,16 @@ import { submitStack } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  PRBadge,
-  CIStatusBadge,
   DiffStats,
 } from "@/components/status/status-badge";
-import { StackDescription } from "@/components/stack-column";
+import { StackDescription, StackColumn } from "@/components/stack-column";
 import { useRepo } from "@/components/providers/repo-provider";
 import { cn } from "@/lib/utils";
 
 interface StackDetailPanelProps {
   stack: StackDetailType;
   onSelectBranch?: (branch: BranchResponse) => void;
+  selectedBranchName?: string | null;
 }
 
 const statusConfig: Record<string, { label: string; description: string; color: string }> = {
@@ -61,7 +60,11 @@ function computeStackStats(branches: BranchResponse[]) {
   return { prCount, approvedCount, ciPassingCount, totalAdded, totalDeleted, total: branches.length };
 }
 
-export function StackDetailPanel({ stack, onSelectBranch }: StackDetailPanelProps) {
+export function StackDetailPanel({
+  stack,
+  onSelectBranch,
+  selectedBranchName = null,
+}: StackDetailPanelProps) {
   const status = statusConfig[stack.status] || statusConfig.incomplete;
   const issues = collectIssues(stack.branches);
   const stats = computeStackStats(stack.branches);
@@ -155,15 +158,16 @@ export function StackDetailPanel({ stack, onSelectBranch }: StackDetailPanelProp
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Branches ({stack.branches.length})
             </h4>
-            <div className="flex flex-col gap-2">
-              {[...stack.branches].reverse().map((branch) => (
-                <BranchRow
-                  key={branch.name}
-                  branch={branch}
-                  onClick={onSelectBranch ? () => onSelectBranch(branch) : undefined}
-                />
-              ))}
-            </div>
+            <StackColumn
+              stack={stack}
+              selectedBranch={selectedBranchName}
+              selectedStack={null}
+              onSelectBranch={(branch) => onSelectBranch?.(branch)}
+              onSelectStack={() => {}}
+              showHeader={false}
+              showFooter={false}
+              fillWidth
+            />
           </div>
 
           <Separator />
@@ -214,48 +218,6 @@ export function StackDetailPanel({ stack, onSelectBranch }: StackDetailPanelProp
         </CardContent>
       </Card>
     </motion.div>
-  );
-}
-
-function BranchRow({ branch, onClick }: { branch: BranchResponse; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex flex-col gap-1 rounded-md border px-3 py-2 text-left transition-colors w-full",
-        onClick && "cursor-pointer hover:bg-muted/50",
-        branch.isCurrent && "border-l-2 border-l-green-500"
-      )}
-    >
-      <div className="flex items-center justify-between gap-2 min-w-0">
-        <span className="flex items-center gap-1.5 text-sm font-mono truncate min-w-0" title={branch.name}>
-          {branch.isCurrent && (
-            <span className="inline-block w-2 h-2 rounded-full bg-green-500 shrink-0" />
-          )}
-          {branch.name}
-        </span>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {branch.pr ? (
-            <PRBadge pr={branch.pr} />
-          ) : (
-            <span className="text-xs text-muted-foreground">no PR</span>
-          )}
-          <CIStatusBadge ci={branch.ci} />
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-        <DiffStats added={branch.linesAdded} deleted={branch.linesDeleted} />
-        {branch.needsRestack && (
-          <span className="text-amber-600 dark:text-amber-400">needs restack</span>
-        )}
-        {branch.isLocked && (
-          <span className="text-red-600 dark:text-red-400">
-            locked{branch.lockReason ? ` (${branch.lockReason})` : ""}
-          </span>
-        )}
-      </div>
-    </button>
   );
 }
 
