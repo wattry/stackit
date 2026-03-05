@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { hasBranching, shortenBranchName } from "../stack-column";
+import { hasBranching } from "../stack-column";
+import { shortenBranchName } from "@/lib/branch-utils";
 import type { BranchResponse } from "@/lib/api";
 
 function makeBranch(overrides: Partial<BranchResponse> & { name: string }): BranchResponse {

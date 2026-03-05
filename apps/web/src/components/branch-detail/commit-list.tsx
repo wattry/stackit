@@ -2,14 +2,12 @@
 
 import type { CommitResponse } from "@/lib/api";
 import { useRepo } from "@/components/providers/repo-provider";
+import { commitUrl } from "@/lib/github";
 
 export function CommitList({ commits }: { commits?: CommitResponse[] }) {
   const { repo } = useRepo();
 
   if (!commits || commits.length === 0) return null;
-
-  const githubBase =
-    repo ? `https://github.com/${repo.owner}/${repo.repo}/commit/` : null;
 
   return (
     <div className="space-y-1">
@@ -23,9 +21,9 @@ export function CommitList({ commits }: { commits?: CommitResponse[] }) {
             className="flex items-baseline gap-2 text-sm animate-fade-in-up"
             style={{ animationDelay: `${i * 40}ms` }}
           >
-            {githubBase ? (
+            {repo ? (
               <a
-                href={`${githubBase}${commit.sha}`}
+                href={commitUrl(repo.owner, repo.repo, commit.sha)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground font-mono shrink-0 hover:text-foreground hover:underline"

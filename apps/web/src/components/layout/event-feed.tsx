@@ -20,6 +20,7 @@ import {
 import { useRepo } from "@/components/providers/repo-provider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { EventKind } from "@/lib/api";
+import { formatTimeAgo } from "@/lib/time";
 
 const EVENT_CONFIG: Record<
   EventKind,
@@ -86,20 +87,6 @@ const EVENT_CONFIG: Record<
     color: "text-blue-500",
   },
 };
-
-function formatRelativeTime(timestamp: string): string {
-  const seconds = Math.floor(
-    (Date.now() - new Date(timestamp).getTime()) / 1000
-  );
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 export function EventFeed() {
   const { events, clearEvents } = useRepo();
@@ -177,7 +164,7 @@ export function EventFeed() {
                       )}
                     </div>
                     <span className="text-[10px] text-muted-foreground/50 shrink-0 tabular-nums">
-                      {formatRelativeTime(event.timestamp)}
+                      {formatTimeAgo(event.timestamp)}
                     </span>
                   </div>
                 );

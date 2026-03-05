@@ -53,6 +53,13 @@ export interface BranchResponse {
   remoteStatus?: RemoteStatus;
 }
 
+export interface BranchDiffResponse {
+  branch: string;
+  baseRevision: string;
+  headRevision: string;
+  patch: string;
+}
+
 export interface PRResponse {
   number: number;
   title: string;
@@ -140,6 +147,12 @@ export function fetchBranches(): Promise<BranchResponse[]> {
 export function fetchBranch(name: string): Promise<BranchResponse> {
   return fetchAPI<BranchResponse>(
     `/api/branches/${encodeURIComponent(name)}`
+  );
+}
+
+export function fetchBranchDiff(name: string): Promise<BranchDiffResponse> {
+  return fetchAPI<BranchDiffResponse>(
+    `/api/branch-diff?branch=${encodeURIComponent(name)}`
   );
 }
 
