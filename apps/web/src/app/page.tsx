@@ -147,7 +147,56 @@ export default function Home() {
   }, [stackDetails, currentUser]);
 
   const hasSelection = selectedBranch || selectedStack;
-  const singleStackMode = Boolean(selectedBranch && selectedBranchStack);
+  const branchOverlayMode = Boolean(selectedBranch && selectedBranchStack);
+  const stacksAndHistoryContent =
+    stackDetails.length > 0 ? (
+      <div className="flex flex-col justify-end min-h-full">
+        {/* Swimlanes: only this area scrolls horizontally */}
+        <div className="overflow-x-auto">
+          <div className="flex items-end gap-8 p-6 pb-4 min-w-max">
+            {/* Your stacks */}
+            {yourStacks.length > 0 && (
+              <OwnerSwimlane
+                label="You"
+                stacks={yourStacks}
+                selectedBranch={selection?.type === "branch" ? selection.name : null}
+                selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
+                onSelectBranch={handleSelectBranch}
+                onSelectStack={handleSelectStack}
+              />
+            )}
+
+            {/* Teammate swimlanes */}
+            {otherOwners.map(([owner, stacks]) => (
+              <OwnerSwimlane
+                key={owner}
+                label={`@${owner}`}
+                lastActive={getLastActiveDate(stacks)}
+                stacks={stacks}
+                selectedBranch={selection?.type === "branch" ? selection.name : null}
+                selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
+                onSelectBranch={handleSelectBranch}
+                onSelectStack={handleSelectStack}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Trunk line */}
+        <div className="flex items-center gap-2 px-6 pb-2 shrink-0">
+          <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
+          <span className="text-xs font-mono text-muted-foreground">{repo?.trunk}</span>
+          <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
+        </div>
+
+        {/* Recent trunk commits */}
+        <RecentlyMerged />
+      </div>
+    ) : (
+      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+        No stacks found
+      </div>
+    );
 
   if (loading) {
     return (
@@ -215,59 +264,23 @@ export default function Home() {
 
       {/* Main content: stacks area + detail panel */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {singleStackMode && selectedBranch && selectedBranchStack ? (
-            <BranchDiffWorkspace
-              branch={selectedBranch}
-              stack={selectedBranchStack}
-              onExit={handleClearSelection}
-            />
-          ) : stackDetails.length > 0 ? (
-            <div className="flex flex-col justify-end min-h-full">
-              {/* Swimlanes: only this area scrolls horizontally */}
-              <div className="overflow-x-auto">
-                <div className="flex items-end gap-8 p-6 pb-4 min-w-max">
-                  {/* Your stacks */}
-                  {yourStacks.length > 0 && (
-                    <OwnerSwimlane
-                      label="You"
-                      stacks={yourStacks}
-                      selectedBranch={selection?.type === "branch" ? selection.name : null}
-                      selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
-                      onSelectBranch={handleSelectBranch}
-                      onSelectStack={handleSelectStack}
-                    />
-                  )}
-
-                  {/* Teammate swimlanes */}
-                  {otherOwners.map(([owner, stacks]) => (
-                    <OwnerSwimlane
-                      key={owner}
-                      label={`@${owner}`}
-                      lastActive={getLastActiveDate(stacks)}
-                      stacks={stacks}
-                      selectedBranch={selection?.type === "branch" ? selection.name : null}
-                      selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
-                      onSelectBranch={handleSelectBranch}
-                      onSelectStack={handleSelectStack}
-                    />
-                  ))}
-                </div>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {branchOverlayMode && selectedBranch && selectedBranchStack ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-hidden border-b">
+                <BranchDiffWorkspace
+                  branch={selectedBranch}
+                  stack={selectedBranchStack}
+                  onExit={handleClearSelection}
+                />
               </div>
-
-              {/* Trunk line */}
-              <div className="flex items-center gap-2 px-6 pb-2 shrink-0">
-                <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
-                <span className="text-xs font-mono text-muted-foreground">{repo?.trunk}</span>
-                <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
+              <div className="h-[36vh] min-h-[240px] max-h-[460px] overflow-y-auto overflow-x-hidden bg-background/70">
+                {stacksAndHistoryContent}
               </div>
-
-              {/* Recent trunk commits */}
-              <RecentlyMerged />
-            </div>
+            </>
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              No stacks found
+            <div className="flex-1 overflow-y-auto overflow-x-hidden">
+              {stacksAndHistoryContent}
             </div>
           )}
         </div>
@@ -276,7 +289,7 @@ export default function Home() {
         <div className="flex shrink-0">
           <Separator orientation="vertical" />
           <div className="w-[480px] shrink-0 flex flex-col overflow-hidden">
-            {singleStackMode && selectedBranchStack ? (
+            {branchOverlayMode && selectedBranchStack ? (
               <div className="flex-1 overflow-auto p-4">
                 <StackDetailPanel
                   stack={selectedBranchStack}
@@ -303,7 +316,7 @@ export default function Home() {
                 <DetailEmptyState />
               </div>
             )}
-            {!singleStackMode && (
+            {!branchOverlayMode && (
               <>
                 <Separator />
                 <div className="p-3 overflow-auto">

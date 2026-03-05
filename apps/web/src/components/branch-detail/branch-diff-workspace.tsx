@@ -23,7 +23,7 @@ export function BranchDiffWorkspace({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              Single Stack View
+              Branch Layer
             </p>
             <h2 className="text-lg font-semibold truncate" title={title}>
               {title}
