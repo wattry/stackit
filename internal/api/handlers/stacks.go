@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"stackit.dev/stackit/internal/actions/merge"
@@ -99,5 +100,10 @@ func parseResourcePath(requestPath, resource string) (string, bool) {
 	}
 
 	suffix := strings.TrimPrefix(after, "/")
-	return suffix, true
+	decoded, err := url.PathUnescape(suffix)
+	if err != nil {
+		// Keep previous behavior for malformed escape sequences.
+		return suffix, true
+	}
+	return decoded, true
 }

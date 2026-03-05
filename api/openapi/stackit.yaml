@@ -92,6 +92,46 @@ paths:
                 $ref: "#/components/schemas/BranchResponse"
         "404":
           description: Branch not found.
+  /api/v1/branches/{branchName}/diff:
+    get:
+      summary: Get raw patch diff for a tracked branch.
+      operationId: getBranchDiff
+      parameters:
+        - in: path
+          name: branchName
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Branch diff details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchDiffResponse"
+        "404":
+          description: Branch not found.
+  /api/v1/branches/diff:
+    get:
+      summary: Get raw patch diff for a tracked branch by query parameter.
+      operationId: getBranchDiffByQuery
+      parameters:
+        - in: query
+          name: branch
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Branch diff details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchDiffResponse"
+        "400":
+          description: Missing branch query parameter.
+        "404":
+          description: Branch not found.
   /api/v1/events:
     get:
       summary: Server-sent event stream for repository refresh events.
@@ -215,6 +255,18 @@ components:
           $ref: "#/components/schemas/PRResponse"
         ci:
           $ref: "#/components/schemas/CIResponse"
+    BranchDiffResponse:
+      type: object
+      required: [branch, baseRevision, headRevision, patch]
+      properties:
+        branch:
+          type: string
+        baseRevision:
+          type: string
+        headRevision:
+          type: string
+        patch:
+          type: string
     CommitResponse:
       type: object
       required: [sha, message]

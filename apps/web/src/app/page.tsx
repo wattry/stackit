@@ -5,6 +5,7 @@ import { useRepo } from "@/components/providers/repo-provider";
 import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { StackDetailPanel } from "@/components/branch-detail/stack-detail";
+import { BranchDiffWorkspace } from "@/components/branch-detail/branch-diff-workspace";
 import { DetailEmptyState } from "@/components/branch-detail/detail-empty-state";
 import { EventFeed } from "@/components/event-feed";
 import { Separator } from "@/components/ui/separator";
@@ -23,7 +24,6 @@ export default function Home() {
   const {
     repo,
     stackDetails,
-    recentlyMerged,
     loading,
     error,
     lastUpdated,
@@ -53,6 +53,15 @@ export default function Home() {
     return stackDetails.find((s) => s.rootBranch === selection.rootBranch) ?? null;
   }, [selection, stackDetails]);
 
+  const selectedBranchStack = useMemo(() => {
+    if (!selectedBranch) return null;
+    return (
+      stackDetails.find((s) =>
+        s.branches.some((b) => b.name === selectedBranch.name)
+      ) ?? null
+    );
+  }, [selectedBranch, stackDetails]);
+
   const handleSelectBranch = useCallback((branch: BranchResponse | null) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("stack");
@@ -63,6 +72,14 @@ export default function Home() {
       setSelection(null);
       url.searchParams.delete("branch");
     }
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelection(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("branch");
+    url.searchParams.delete("stack");
     window.history.replaceState({}, "", url.toString());
   }, []);
 
@@ -130,6 +147,7 @@ export default function Home() {
   }, [stackDetails, currentUser]);
 
   const hasSelection = selectedBranch || selectedStack;
+  const singleStackMode = Boolean(selectedBranch && selectedBranchStack);
 
   if (loading) {
     return (
@@ -198,7 +216,13 @@ export default function Home() {
       {/* Main content: stacks area + detail panel */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {stackDetails.length > 0 ? (
+          {singleStackMode && selectedBranch && selectedBranchStack ? (
+            <BranchDiffWorkspace
+              branch={selectedBranch}
+              stack={selectedBranchStack}
+              onExit={handleClearSelection}
+            />
+          ) : stackDetails.length > 0 ? (
             <div className="flex flex-col justify-end min-h-full">
               {/* Swimlanes: only this area scrolls horizontally */}
               <div className="overflow-x-auto">
@@ -252,7 +276,14 @@ export default function Home() {
         <div className="flex shrink-0">
           <Separator orientation="vertical" />
           <div className="w-[480px] shrink-0 flex flex-col overflow-hidden">
-            {hasSelection ? (
+            {singleStackMode && selectedBranchStack ? (
+              <div className="flex-1 overflow-auto p-4">
+                <StackDetailPanel
+                  stack={selectedBranchStack}
+                  onSelectBranch={handleStackBranchSelect}
+                />
+              </div>
+            ) : hasSelection ? (
               <div className="flex-1 overflow-auto p-4">
                 {selectedBranch && (
                   <BranchDetail
@@ -272,10 +303,14 @@ export default function Home() {
                 <DetailEmptyState />
               </div>
             )}
-            <Separator />
-            <div className="p-3 overflow-auto">
-              <EventFeed />
-            </div>
+            {!singleStackMode && (
+              <>
+                <Separator />
+                <div className="p-3 overflow-auto">
+                  <EventFeed />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

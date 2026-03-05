@@ -90,6 +90,14 @@ type BranchResponse struct {
 	RemoteStatus *RemoteStatus    `json:"remoteStatus,omitempty"`
 }
 
+// BranchDiffResponse contains raw patch data for a branch relative to its divergence point.
+type BranchDiffResponse struct {
+	Branch       string `json:"branch"`
+	BaseRevision string `json:"baseRevision"`
+	HeadRevision string `json:"headRevision"`
+	Patch        string `json:"patch"`
+}
+
 // PRResponse contains pull request metadata.
 type PRResponse struct {
 	Number  int    `json:"number"`

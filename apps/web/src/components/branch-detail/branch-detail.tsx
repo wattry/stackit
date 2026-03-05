@@ -28,6 +28,7 @@ import {
 } from "@/components/status/status-badge";
 import { CommitList } from "./commit-list";
 import { CIChecks } from "./ci-checks";
+import { BranchDiff } from "./branch-diff";
 
 interface BranchDetailProps {
   branch: BranchResponse;
@@ -107,6 +108,9 @@ export function BranchDetail({ branch, onNavigateToBranch }: BranchDetailProps) 
 
         {/* Commits */}
         <CommitList commits={branch.commits} />
+
+        {/* Branch diff */}
+        <BranchDiff branchName={branch.name} revision={branch.revision} />
 
         {/* CI Checks */}
         <CIChecks ci={branch.ci} />
