@@ -163,6 +163,7 @@ export default function Home() {
                 selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
                 onSelectBranch={handleSelectBranch}
                 onSelectStack={handleSelectStack}
+                compact={branchOverlayMode}
               />
             )}
 
@@ -177,6 +178,7 @@ export default function Home() {
                 selectedStack={selection?.type === "stack" ? selection.rootBranch : null}
                 onSelectBranch={handleSelectBranch}
                 onSelectStack={handleSelectStack}
+                compact={branchOverlayMode}
               />
             ))}
           </div>
@@ -190,7 +192,7 @@ export default function Home() {
         </div>
 
         {/* Recent trunk commits */}
-        <RecentlyMerged />
+        <RecentlyMerged compact={branchOverlayMode} />
       </div>
     ) : (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -273,7 +275,7 @@ export default function Home() {
                   onExit={handleClearSelection}
                 />
               </div>
-              <div className="h-[36vh] min-h-[240px] max-h-[460px] overflow-y-auto overflow-x-hidden bg-background/70">
+              <div className="h-[30vh] min-h-[180px] max-h-[340px] overflow-y-auto overflow-x-hidden bg-background/70">
                 {stacksAndHistoryContent}
               </div>
             </>

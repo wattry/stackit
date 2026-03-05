@@ -4,20 +4,26 @@ interface SwimlaneLabelProps {
   label: string;
   lastActive?: Date;
   color: string;
+  compact?: boolean;
 }
 
-export function SwimlaneLabel({ label, lastActive, color }: SwimlaneLabelProps) {
+export function SwimlaneLabel({
+  label,
+  lastActive,
+  color,
+  compact = false,
+}: SwimlaneLabelProps) {
   return (
     <div
-      className="flex items-center justify-center gap-2 px-3 py-1 w-full rounded-b-md"
+      className={`flex items-center justify-center w-full rounded-b-md ${compact ? "gap-1.5 px-2 py-0.5" : "gap-2 px-3 py-1"}`}
       style={{ backgroundColor: color }}
     >
-      <span className="text-xs font-semibold text-foreground/80">
+      <span className={`${compact ? "text-[11px]" : "text-xs"} font-semibold text-foreground/80`}>
         {label}
       </span>
       {lastActive && (
-        <span className="text-[10px] text-foreground/40">
-          active <TimeAgo date={lastActive} />
+        <span className={`${compact ? "text-[9px]" : "text-[10px]"} text-foreground/40`}>
+          active {formatLastActive(lastActive)}
         </span>
       )}
     </div>
@@ -38,14 +44,9 @@ export function swimlaneColor(name: string): string {
   return `light-dark(hsl(${hue} 30% 95%), hsl(${hue} 20% 18%))`;
 }
 
-function TimeAgo({ date }: { date: Date }) {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 5) return <>just now</>;
-  if (seconds < 60) return <>{seconds}s ago</>;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return <>{minutes}m ago</>;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return <>{hours}h ago</>;
-  const days = Math.floor(hours / 24);
-  return <>{days}d ago</>;
+function formatLastActive(date: Date): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }

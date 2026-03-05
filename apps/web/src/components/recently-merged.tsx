@@ -251,7 +251,7 @@ function CommitItem({
   );
 }
 
-export function RecentlyMerged() {
+export function RecentlyMerged({ compact = false }: { compact?: boolean }) {
   const { recentlyMerged, repo } = useRepo();
 
   const groups = useMemo(
@@ -264,10 +264,12 @@ export function RecentlyMerged() {
   }
 
   return (
-    <div className="px-6 pb-4 max-h-64 overflow-y-auto space-y-2">
+    <div
+      className={`${compact ? "px-4 pb-2 max-h-36 space-y-1.5" : "px-6 pb-4 max-h-64 space-y-2"} overflow-y-auto`}
+    >
       {groups.map((group) => (
         <div key={group.label}>
-          <div className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider mb-0.5">
+          <div className={`${compact ? "text-[9px]" : "text-[10px]"} font-medium text-muted-foreground/50 uppercase tracking-wider mb-0.5`}>
             {group.label}
           </div>
           <div>

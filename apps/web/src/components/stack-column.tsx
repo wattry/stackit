@@ -14,6 +14,7 @@ interface StackColumnProps {
   selectedStack: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
   onSelectStack: (stack: StackDetail) => void;
+  compact?: boolean;
 }
 
 export function StackColumn({
@@ -22,6 +23,7 @@ export function StackColumn({
   selectedStack,
   onSelectBranch,
   onSelectStack,
+  compact = false,
 }: StackColumnProps) {
   // Order branches root→leaf, then reverse so leaf is at top (stacking metaphor)
   const orderedBranches = orderBranches(stack.branches);
@@ -30,7 +32,7 @@ export function StackColumn({
   return (
     <div className="flex flex-col w-64 shrink-0">
       {/* Stack header */}
-      <div className="px-1 pb-2">
+      <div className={`px-1 ${compact ? "pb-1" : "pb-2"}`}>
         {stack.hasWorktree && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
@@ -39,12 +41,12 @@ export function StackColumn({
           </div>
         )}
         {stack.title && (
-          <p className="text-xs font-medium text-muted-foreground mt-1 truncate" title={stack.title}>
+          <p className={`font-medium text-muted-foreground truncate ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`} title={stack.title}>
             {stack.title}
           </p>
         )}
         {stack.description && (
-          <StackDescription text={stack.description} />
+          <StackDescription text={stack.description} compact={compact} />
         )}
       </div>
 
@@ -60,6 +62,7 @@ export function StackColumn({
               branch={branch}
               isSelected={selectedBranch === branch.name}
               onClick={onSelectBranch}
+              compact={compact}
               className={`animate-fade-in-up border-x border-t
                 ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
                 ${isFirst ? "rounded-t-lg" : ""}
@@ -74,6 +77,7 @@ export function StackColumn({
       <StackStatusFooter
         status={stack.status}
         selected={selectedStack === stack.rootBranch}
+        compact={compact}
         onClick={() => onSelectStack(stack)}
       />
     </div>
@@ -111,13 +115,23 @@ const statusConfig: Record<string, { label: string; bg: string; selectedBg: stri
   },
 };
 
-export function StackStatusFooter({ status, selected, onClick }: { status: string; selected: boolean; onClick: () => void }) {
+export function StackStatusFooter({
+  status,
+  selected,
+  onClick,
+  compact = false,
+}: {
+  status: string;
+  selected: boolean;
+  onClick: () => void;
+  compact?: boolean;
+}) {
   const c = statusConfig[status] || statusConfig.incomplete;
 
   return (
     <button
       onClick={onClick}
-      className={`flex items-center justify-center px-3 py-1.5 -mt-2 pt-3.5 rounded-b-lg border-x border-b text-xs font-medium cursor-pointer transition-all duration-200 ${c.text} ${selected ? `${c.selectedBg} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
+      className={`flex items-center justify-center px-3 rounded-b-lg border-x border-b font-medium cursor-pointer transition-all duration-200 ${compact ? "-mt-1.5 pt-2.5 py-1 text-[11px]" : "-mt-2 pt-3.5 py-1.5 text-xs"} ${c.text} ${selected ? `${c.selectedBg} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
     >
       {c.label}
     </button>
@@ -149,16 +163,22 @@ function orderBranches(branches: BranchResponse[]): BranchResponse[] {
 
 const DESCRIPTION_COLLAPSE_LENGTH = 80;
 
-export function StackDescription({ text }: { text: string }) {
+export function StackDescription({
+  text,
+  compact = false,
+}: {
+  text: string;
+  compact?: boolean;
+}) {
   const canCollapse = text.length > DESCRIPTION_COLLAPSE_LENGTH;
   const [collapsed, setCollapsed] = useState(canCollapse);
 
   return (
     <div
       onClick={canCollapse ? () => setCollapsed(!collapsed) : undefined}
-      className={`text-xs text-muted-foreground mt-1 flex items-start gap-1 ${canCollapse ? "cursor-pointer hover:text-foreground/70" : ""}`}
+      className={`${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"} text-muted-foreground flex items-start gap-1 ${canCollapse ? "cursor-pointer hover:text-foreground/70" : ""}`}
     >
-      <div className={`prose prose-xs dark:prose-invert max-w-none [&>*]:text-xs [&>*]:text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_li]:my-0 [&_p]:my-0.5 ${collapsed ? "line-clamp-2" : ""}`}>
+      <div className={`prose prose-xs dark:prose-invert max-w-none [&>*]:text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_li]:my-0 [&_p]:my-0.5 ${compact ? "[&>*]:text-[11px]" : "[&>*]:text-xs"} ${collapsed ? "line-clamp-2" : ""}`}>
         <Markdown>{text}</Markdown>
       </div>
       {canCollapse && (
