@@ -1,73 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
 import { GitMerge } from "lucide-react";
-import { useRepo } from "@/components/providers/repo-provider";
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { prUrl } from "@/lib/github";
+import { formatTimeAgo } from "@/lib/time";
 import type { TrunkCommitResponse } from "@/lib/api";
-
-function formatTimeAgo(dateStr: string): string {
-  const seconds = Math.floor(
-    (Date.now() - new Date(dateStr).getTime()) / 1000
-  );
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function stripPRSuffix(message: string): string {
-  return message.replace(/\s*\(#\d+\)\s*$/, "");
-}
-
-function prUrl(owner: string, repo: string, pr: number): string {
-  return `https://github.com/${owner}/${repo}/pull/${pr}`;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
-type TimeGroup = "Today" | "Yesterday" | "This week" | "Earlier";
-
-function timeGroup(dateStr: string): TimeGroup {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
-  const startOfWeek = new Date(startOfToday.getTime() - startOfToday.getDay() * 86_400_000);
-
-  if (date >= startOfToday) return "Today";
-  if (date >= startOfYesterday) return "Yesterday";
-  if (date >= startOfWeek) return "This week";
-  return "Earlier";
-}
-
-function groupCommits(
-  commits: TrunkCommitResponse[]
-): { label: TimeGroup; commits: TrunkCommitResponse[] }[] {
-  const order: TimeGroup[] = ["Today", "Yesterday", "This week", "Earlier"];
-  const map = new Map<TimeGroup, TrunkCommitResponse[]>();
-  for (const c of commits) {
-    const g = timeGroup(c.date);
-    const list = map.get(g);
-    if (list) {
-      list.push(c);
-    } else {
-      map.set(g, [c]);
-    }
-  }
-  return order.filter((l) => map.has(l)).map((l) => ({ label: l, commits: map.get(l)! }));
-}
+import { stripPRSuffix, initials } from "./utils";
 
 function AuthorAvatar({ name, sha }: { name: string; sha: string }) {
   return (
@@ -106,7 +48,7 @@ function PRLink({
   );
 }
 
-function RegularCommitItem({
+export function RegularCommitItem({
   commit,
   owner,
   repoName,
@@ -138,7 +80,7 @@ function RegularCommitItem({
   );
 }
 
-function StackMergeItem({
+export function StackMergeItem({
   commit,
   owner,
   repoName,
@@ -232,7 +174,7 @@ function StackMergeItem({
   );
 }
 
-function CommitItem({
+export function CommitItem({
   commit,
   owner,
   repoName,
@@ -248,42 +190,5 @@ function CommitItem({
   }
   return (
     <RegularCommitItem commit={commit} owner={owner} repoName={repoName} />
-  );
-}
-
-export function RecentlyMerged({ compact = false }: { compact?: boolean }) {
-  const { recentlyMerged, repo } = useRepo();
-
-  const groups = useMemo(
-    () => groupCommits(recentlyMerged ?? []),
-    [recentlyMerged]
-  );
-
-  if (groups.length === 0) {
-    return null;
-  }
-
-  return (
-    <div
-      className={`${compact ? "px-4 pb-2 max-h-36 space-y-1.5" : "px-6 pb-4 max-h-64 space-y-2"} overflow-y-auto`}
-    >
-      {groups.map((group) => (
-        <div key={group.label}>
-          <div className={`${compact ? "text-[9px]" : "text-[10px]"} font-medium text-muted-foreground/50 uppercase tracking-wider mb-0.5`}>
-            {group.label}
-          </div>
-          <div>
-            {group.commits.map((commit) => (
-              <CommitItem
-                key={commit.sha}
-                commit={commit}
-                owner={repo?.owner}
-                repoName={repo?.repo}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }

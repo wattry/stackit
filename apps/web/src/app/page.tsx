@@ -1,20 +1,21 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRepo } from "@/components/providers/repo-provider";
-import { OwnerSwimlane, getLastActiveDate } from "@/components/owner-swimlane";
+import { OwnerSwimlane, getLastActiveDate } from "@/components/swimlane/owner-swimlane";
 import { BranchDetail } from "@/components/branch-detail/branch-detail";
 import { StackDetailPanel } from "@/components/branch-detail/stack-detail";
 import { DetailEmptyState } from "@/components/branch-detail/detail-empty-state";
 import { EventFeed } from "@/components/event-feed";
 import { Separator } from "@/components/ui/separator";
-import { RecentlyMerged } from "@/components/recently-merged";
+import { RecentlyMerged } from "@/components/recently-merged/recently-merged";
 import { BackgroundMesh } from "@/components/ui/background-mesh";
 import { SkeletonSwimlane } from "@/components/ui/skeleton-shimmer";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import type { BranchResponse, StackDetail } from "@/lib/api";
 import { formatTimeAgo } from "@/lib/time";
+import { useUrlSelection } from "@/hooks/use-url-selection";
+import { groupStacksByOwner } from "@/lib/swimlane-grouping";
 
 const BranchDiffWorkspace = dynamic(
   () =>
@@ -31,10 +32,6 @@ const BranchDiffWorkspace = dynamic(
   }
 );
 
-type Selection =
-  | { type: "branch"; name: string }
-  | { type: "stack"; rootBranch: string };
-
 export default function Home() {
   const {
     repo,
@@ -44,122 +41,23 @@ export default function Home() {
     lastUpdated,
     refresh,
   } = useRepo();
-  const [selection, setSelection] = useState<Selection | null>(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    const branch = params.get("branch");
-    if (branch) return { type: "branch", name: branch };
-    const stack = params.get("stack");
-    if (stack) return { type: "stack", rootBranch: stack };
-    return null;
-  });
 
-  const selectedBranch = useMemo(() => {
-    if (!selection || selection.type !== "branch") return null;
-    for (const stack of stackDetails) {
-      const found = stack.branches.find((b) => b.name === selection.name);
-      if (found) return found;
-    }
-    return null;
-  }, [selection, stackDetails]);
+  const {
+    selection,
+    selectedBranch,
+    selectedStack,
+    selectedBranchStack,
+    handleSelectBranch,
+    handleClearSelection,
+    handleSelectStack,
+    handleNavigateToBranch,
+    handleStackBranchSelect,
+  } = useUrlSelection(stackDetails);
 
-  const selectedStack = useMemo(() => {
-    if (!selection || selection.type !== "stack") return null;
-    return stackDetails.find((s) => s.rootBranch === selection.rootBranch) ?? null;
-  }, [selection, stackDetails]);
-
-  const selectedBranchStack = useMemo(() => {
-    if (!selectedBranch) return null;
-    return (
-      stackDetails.find((s) =>
-        s.branches.some((b) => b.name === selectedBranch.name)
-      ) ?? null
-    );
-  }, [selectedBranch, stackDetails]);
-
-  const handleSelectBranch = useCallback((branch: BranchResponse | null) => {
-    const url = new URL(window.location.href);
-    url.searchParams.delete("stack");
-    if (branch) {
-      setSelection({ type: "branch", name: branch.name });
-      url.searchParams.set("branch", branch.name);
-    } else {
-      setSelection(null);
-      url.searchParams.delete("branch");
-    }
-    window.history.replaceState({}, "", url.toString());
-  }, []);
-
-  const handleClearSelection = useCallback(() => {
-    setSelection(null);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("branch");
-    url.searchParams.delete("stack");
-    window.history.replaceState({}, "", url.toString());
-  }, []);
-
-  const handleSelectStack = useCallback((stack: StackDetail) => {
-    setSelection((prev) => {
-      const deselecting = prev?.type === "stack" && prev.rootBranch === stack.rootBranch;
-      const next = deselecting ? null : { type: "stack" as const, rootBranch: stack.rootBranch };
-
-      queueMicrotask(() => {
-        const url = new URL(window.location.href);
-        url.searchParams.delete("branch");
-        if (next) {
-          url.searchParams.set("stack", stack.rootBranch);
-        } else {
-          url.searchParams.delete("stack");
-        }
-        window.history.replaceState({}, "", url.toString());
-      });
-
-      return next;
-    });
-  }, []);
-
-  const handleNavigateToBranch = useCallback(
-    (name: string) => {
-      for (const stack of stackDetails) {
-        const found = stack.branches.find((b) => b.name === name);
-        if (found) {
-          handleSelectBranch(found);
-          return;
-        }
-      }
-    },
-    [stackDetails, handleSelectBranch]
+  const { yourStacks, otherOwners } = useMemo(
+    () => groupStacksByOwner(stackDetails, repo?.currentUser),
+    [stackDetails, repo?.currentUser]
   );
-
-  const handleStackBranchSelect = useCallback(
-    (branch: BranchResponse) => {
-      handleSelectBranch(branch);
-    },
-    [handleSelectBranch]
-  );
-
-  const currentUser = repo?.currentUser;
-
-  const { yourStacks, otherOwners } = useMemo(() => {
-    const yours: StackDetail[] = [];
-    const others = new Map<string, StackDetail[]>();
-    for (const stack of stackDetails) {
-      if (!stack.owner || stack.owner === currentUser) {
-        yours.push(stack);
-      } else {
-        const existing = others.get(stack.owner);
-        if (existing) {
-          existing.push(stack);
-        } else {
-          others.set(stack.owner, [stack]);
-        }
-      }
-    }
-    const sortedOthers = [...others.entries()].sort(([a], [b]) =>
-      a.localeCompare(b)
-    );
-    return { yourStacks: yours, otherOwners: sortedOthers };
-  }, [stackDetails, currentUser]);
 
   const hasSelection = selectedBranch || selectedStack;
   const branchOverlayMode = Boolean(selectedBranch && selectedBranchStack);

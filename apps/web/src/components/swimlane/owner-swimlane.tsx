@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
-import { StackColumn, hasBranching } from "@/components/stack-column";
-import { StackTreeColumn } from "@/components/stack-tree-column";
-import { SwimlaneLabel, swimlaneColor } from "@/components/swimlane-label";
+import { StackColumn, hasBranching } from "@/components/swimlane/stack-column";
+import { StackTreeColumn } from "@/components/swimlane/stack-tree-column";
+import { SwimlaneLabel, swimlaneColor } from "@/components/swimlane/swimlane-label";
 
 const COLLAPSED_LIMIT = 3;
 

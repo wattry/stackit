@@ -9,9 +9,11 @@ import { Separator } from "@/components/ui/separator";
 import {
   DiffStats,
 } from "@/components/status/status-badge";
-import { StackDescription, StackColumn } from "@/components/stack-column";
+import { StackDescription, StackColumn } from "@/components/swimlane/stack-column";
 import { useRepo } from "@/components/providers/repo-provider";
 import { cn } from "@/lib/utils";
+import { stackStatusInfo } from "@/lib/status-config";
+import { computeStackStats } from "@/lib/stats";
 
 interface StackDetailPanelProps {
   stack: StackDetailType;
@@ -19,53 +21,12 @@ interface StackDetailPanelProps {
   selectedBranchName?: string | null;
 }
 
-const statusConfig: Record<string, { label: string; description: string; color: string }> = {
-  shippable: {
-    label: "Ready to ship",
-    description: "All branches have PRs, none need restack, and none are locked.",
-    color: "text-green-700 dark:text-green-400",
-  },
-  pending: {
-    label: "Needs restack",
-    description: "One or more branches need to be restacked because a parent branch has changed.",
-    color: "text-amber-700 dark:text-amber-400",
-  },
-  blocked: {
-    label: "Blocked",
-    description: "One or more branches are locked.",
-    color: "text-red-700 dark:text-red-400",
-  },
-  incomplete: {
-    label: "Incomplete",
-    description: "One or more branches are missing a pull request.",
-    color: "text-muted-foreground",
-  },
-};
-
-function computeStackStats(branches: BranchResponse[]) {
-  let prCount = 0;
-  let approvedCount = 0;
-  let ciPassingCount = 0;
-  let totalAdded = 0;
-  let totalDeleted = 0;
-
-  for (const b of branches) {
-    if (b.pr) prCount++;
-    if (b.ci?.reviewDecision === "APPROVED") approvedCount++;
-    if (b.ci?.status === "passing") ciPassingCount++;
-    totalAdded += b.linesAdded;
-    totalDeleted += b.linesDeleted;
-  }
-
-  return { prCount, approvedCount, ciPassingCount, totalAdded, totalDeleted, total: branches.length };
-}
-
 export function StackDetailPanel({
   stack,
   onSelectBranch,
   selectedBranchName = null,
 }: StackDetailPanelProps) {
-  const status = statusConfig[stack.status] || statusConfig.incomplete;
+  const status = stackStatusInfo[stack.status] || stackStatusInfo.incomplete;
   const issues = collectIssues(stack.branches);
   const stats = computeStackStats(stack.branches);
   const { refresh } = useRepo();

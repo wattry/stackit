@@ -2,7 +2,7 @@
 
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { SegmentTree } from "@/components/stack-tree/segment-tree";
-import { StackStatusFooter, StackDescription } from "@/components/stack-column";
+import { StackStatusFooter, StackDescription } from "@/components/swimlane/stack-column";
 import { FolderGit2 } from "lucide-react";
 
 interface StackTreeColumnProps {
