@@ -270,7 +270,6 @@ export default function Home() {
               <div className="min-h-0 flex-1 overflow-hidden border-b">
                 <BranchDiffWorkspace
                   branch={selectedBranch}
-                  stack={selectedBranchStack}
                   onExit={handleClearSelection}
                 />
               </div>
