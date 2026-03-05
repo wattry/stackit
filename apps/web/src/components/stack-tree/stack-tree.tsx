@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { BranchResponse } from "@/lib/api";
-import { BranchCard } from "@/components/branch-card";
+import { BranchCard } from "@/components/swimlane/branch-card";
 import { BranchEdge } from "./branch-edge";
 import { computeTreeLayout, NODE_W, NODE_H, TREE_PADDING } from "./tree-layout";
 

@@ -39,6 +39,27 @@ func TestParseResourcePath(t *testing.T) {
 			wantOK:    true,
 		},
 		{
+			name:      "versioned branches with encoded branch path",
+			path:      "/api/v1/branches/jonnii%2F20260228%2Ffeature",
+			resource:  "branches",
+			wantValue: "jonnii/20260228/feature",
+			wantOK:    true,
+		},
+		{
+			name:      "versioned branches path with encoded branch ending in diff",
+			path:      "/api/v1/branches/jonnii%2F20260228%2Ffeature/diff",
+			resource:  "branches",
+			wantValue: "jonnii/20260228/feature/diff",
+			wantOK:    true,
+		},
+		{
+			name:      "versioned stack with encoded root branch",
+			path:      "/api/v1/stacks/jonnii%2F20260228%2Ffeature",
+			resource:  "stacks",
+			wantValue: "jonnii/20260228/feature",
+			wantOK:    true,
+		},
+		{
 			name:      "resource not found",
 			path:      "/api/v1/view",
 			resource:  "stacks",

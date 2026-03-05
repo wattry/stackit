@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import dynamic from "next/dynamic";
 import {
   ArrowUp,
   ArrowDown,
@@ -28,6 +29,16 @@ import {
 } from "@/components/status/status-badge";
 import { CommitList } from "./commit-list";
 import { CIChecks } from "./ci-checks";
+
+const BranchDiff = dynamic(
+  () => import("./branch-diff").then((m) => m.BranchDiff),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="text-sm text-muted-foreground">Loading diff viewer...</p>
+    ),
+  }
+);
 
 interface BranchDetailProps {
   branch: BranchResponse;
@@ -107,6 +118,9 @@ export function BranchDetail({ branch, onNavigateToBranch }: BranchDetailProps) 
 
         {/* Commits */}
         <CommitList commits={branch.commits} />
+
+        {/* Branch diff */}
+        <BranchDiff branchName={branch.name} revision={branch.revision} />
 
         {/* CI Checks */}
         <CIChecks ci={branch.ci} />

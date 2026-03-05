@@ -63,6 +63,7 @@ func (s *Server) Start() error {
 	repoHandler := handlers.NewRepoHandler(s.eng, s.gh, s.config.Remote)
 	stacksHandler := handlers.NewStacksHandler(s.eng, s.gh)
 	branchesHandler := handlers.NewBranchesHandler(s.eng, s.gh)
+	branchDiffHandler := handlers.NewBranchDiffHandler(s.eng)
 	eventsHandler := handlers.NewEventsHandler(s.broadcaster)
 
 	for _, prefix := range prefixes {
@@ -72,6 +73,7 @@ func (s *Server) Start() error {
 		apiMux.Handle(path.Join(prefix, "stacks")+"/", stacksHandler)
 		apiMux.Handle(path.Join(prefix, "branches"), branchesHandler)
 		apiMux.Handle(path.Join(prefix, "branches")+"/", branchesHandler)
+		apiMux.Handle(path.Join(prefix, "branch-diff"), branchDiffHandler)
 		apiMux.Handle(path.Join(prefix, "events"), eventsHandler)
 	}
 

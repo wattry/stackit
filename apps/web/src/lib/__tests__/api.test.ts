@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchView, fetchRepo, fetchStacks, fetchStack, fetchBranch } from "../api";
+import {
+  fetchView,
+  fetchRepo,
+  fetchStacks,
+  fetchStack,
+  fetchBranch,
+  fetchBranchDiff,
+} from "../api";
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -71,6 +78,17 @@ describe("fetchBranch", () => {
     await fetchBranch("feat/bar");
     expect(mockFetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/branches/feat%2Fbar"
+    );
+  });
+});
+
+describe("fetchBranchDiff", () => {
+  it("sends encoded branch name in query string", async () => {
+    mockOk({ branch: "feat/bar", baseRevision: "abc", headRevision: "def", patch: "" });
+
+    await fetchBranchDiff("feat/bar");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/branch-diff?branch=feat%2Fbar"
     );
   });
 });

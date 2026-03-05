@@ -2,13 +2,14 @@
 
 import { useMemo } from "react";
 import type { BranchResponse } from "@/lib/api";
-import { BranchCard } from "@/components/branch-card";
+import { BranchCard } from "@/components/swimlane/branch-card";
 import { decomposeTree, type TreeSegment, NODE_W, COLUMN_GAP } from "./tree-layout";
 
 interface SegmentTreeProps {
   branches: BranchResponse[];
   selectedBranch: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
+  compact?: boolean;
   footer?: React.ReactNode;
 }
 
@@ -16,6 +17,7 @@ export function SegmentTree({
   branches,
   selectedBranch,
   onSelectBranch,
+  compact = false,
   footer,
 }: SegmentTreeProps) {
   const segment = useMemo(() => decomposeTree(branches), [branches]);
@@ -33,6 +35,7 @@ export function SegmentTree({
       segment={segment}
       selectedBranch={selectedBranch}
       onSelectBranch={onSelectBranch}
+      compact={compact}
       footer={footer}
     />
   );
@@ -42,6 +45,7 @@ interface SegmentNodeProps {
   segment: TreeSegment;
   selectedBranch: string | null;
   onSelectBranch: (branch: BranchResponse) => void;
+  compact: boolean;
   footer?: React.ReactNode;
 }
 
@@ -49,6 +53,7 @@ function SegmentNode({
   segment,
   selectedBranch,
   onSelectBranch,
+  compact,
   footer,
 }: SegmentNodeProps) {
   const hasForks = segment.forks && segment.forks.length > 0;
@@ -73,10 +78,11 @@ function SegmentNode({
                 segment={fork}
                 selectedBranch={selectedBranch}
                 onSelectBranch={onSelectBranch}
+                compact={compact}
               />
             ))}
           </div>
-          <ForkConnector segment={segment} />
+          <ForkConnector segment={segment} compact={compact} />
         </>
       )}
 
@@ -94,6 +100,7 @@ function SegmentNode({
                   branch={branch}
                   isSelected={selectedBranch === branch.name}
                   onClick={onSelectBranch}
+                  compact={compact}
                   className={`border-x border-t
                     ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
                     ${isFirst ? "rounded-t-lg" : ""}
@@ -110,11 +117,18 @@ function SegmentNode({
 }
 
 const CONNECTOR_H = 28;
-const CURVE_R = 6;
+const CONNECTOR_H_COMPACT = 18;
 
-function ForkConnector({ segment }: { segment: TreeSegment }) {
+function ForkConnector({
+  segment,
+  compact,
+}: {
+  segment: TreeSegment;
+  compact: boolean;
+}) {
   if (!segment.forks || segment.forks.length < 2) return null;
 
+  const connectorHeight = compact ? CONNECTOR_H_COMPACT : CONNECTOR_H;
   const totalWidth = segment.width;
   const forks = segment.forks;
 
@@ -135,14 +149,14 @@ function ForkConnector({ segment }: { segment: TreeSegment }) {
 
   // Trunk center (where all forks converge)
   const trunkX = totalWidth / 2;
-  const midY = CONNECTOR_H / 2;
+  const midY = connectorHeight / 2;
   const leftX = Math.min(...centers);
   const rightX = Math.max(...centers);
 
   return (
     <svg
       width={totalWidth}
-      height={CONNECTOR_H}
+      height={connectorHeight}
       className="shrink-0"
       data-testid="fork-connector"
     >
@@ -176,7 +190,7 @@ function ForkConnector({ segment }: { segment: TreeSegment }) {
         x1={trunkX}
         y1={midY}
         x2={trunkX}
-        y2={CONNECTOR_H}
+        y2={connectorHeight}
         className="stroke-muted-foreground/40"
         strokeWidth={1.5}
       />
