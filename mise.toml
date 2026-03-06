@@ -53,6 +53,7 @@ run = """
   COMMIT=$(git rev-parse --short HEAD)
   DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   go build -ldflags "-X main.version=dev-local -X main.commit=$COMMIT -X main.date=$DATE" -o bin/stackit ./apps/cli
+  ./scripts/sync-web-static.sh
   go build -o bin/stackit-server ./apps/server
   if [ -d ./apps/st-tui ]; then
     go build -o bin/st-tui ./apps/st-tui
@@ -201,11 +202,7 @@ run = "pnpm --filter @stackit/web build"
 [tasks."web:sync-static"]
 description = "Copy built web assets into the server static directory"
 depends = ["web:build"]
-run = """
-  mkdir -p apps/server/static
-  rm -rf apps/server/static/assets
-  cp -R apps/web/out/. apps/server/static/
-"""
+run = "./scripts/sync-web-static.sh"
 
 [tasks."web:test"]
 description = "Run frontend tests"

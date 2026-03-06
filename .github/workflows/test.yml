@@ -85,10 +85,23 @@ jobs:
           cache: true
           check-latest: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Build
         run: |
           mkdir -p bin
           go build -v -o bin/stackit ./apps/cli
+          pnpm --filter @stackit/web build
+          ./scripts/sync-web-static.sh
           go build -v -o bin/stackit-server ./apps/server
           if [ -d ./apps/st-tui ]; then
             go build -v -o bin/st-tui ./apps/st-tui
