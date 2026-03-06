@@ -9,6 +9,7 @@ import { ChevronDown, ChevronRight, FileText, Folder, GitCommitHorizontal, X } f
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBranchDiff, type BranchDiffResponse, type CommitResponse } from "@/lib/api";
 import { useRepo } from "@/components/providers/repo-provider";
+import { useTheme } from "@/components/providers/theme-provider";
 import { commitUrl } from "@/lib/github";
 import { cn } from "@/lib/utils";
 
@@ -19,12 +20,11 @@ interface BranchDiffProps {
   onExit?: () => void;
 }
 
-const DIFF_OPTIONS = {
+const BASE_DIFF_OPTIONS = {
   diffStyle: "split",
   lineDiffType: "word",
   hunkSeparators: "metadata",
   overflow: "scroll",
-  themeType: "system",
 } as const;
 
 function getFileKey(file: FileDiffMetadata, index: number): string {
@@ -371,6 +371,12 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
   }, [parsed.files]);
 
   const { repo } = useRepo();
+  const { resolvedTheme } = useTheme();
+
+  const diffOptions = useMemo(
+    () => ({ ...BASE_DIFF_OPTIONS, themeType: resolvedTheme } as const),
+    [resolvedTheme]
+  );
 
   const fileCountLabel = `${parsed.files.length} file${parsed.files.length !== 1 ? "s" : ""}`;
   const showFileCount = !loading && !error && !parsed.parseError;
@@ -656,7 +662,7 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
                             Collapse
                           </button>
                         )}
-                        <FileDiff fileDiff={file} options={DIFF_OPTIONS} className="block" />
+                        <FileDiff fileDiff={file} options={diffOptions} className="block" />
                       </>
                     )}
                   </div>
