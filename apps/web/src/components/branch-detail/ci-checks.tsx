@@ -15,8 +15,7 @@ export function CIChecks({ ci }: { ci?: CIResponse }) {
         {ci.checks.map((check, i) => (
           <div
             key={check.name}
-            className="flex items-center gap-2 text-sm animate-fade-in-up"
-            style={{ animationDelay: `${i * 50}ms` }}
+            className="flex items-center gap-2 text-sm"
           >
             <CheckIcon conclusion={check.conclusion} status={check.status} />
             <span className="truncate">{check.name}</span>

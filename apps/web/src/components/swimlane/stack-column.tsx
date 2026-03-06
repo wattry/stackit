@@ -59,10 +59,8 @@ export function StackColumn({
               isSelected={selectedBranch === branch.name}
               onClick={onSelectBranch}
               compact={compact}
-              className={`animate-fade-in-up
-                ${!isLast ? "border-b border-border/50" : ""}
-              `}
-              style={{ animationDelay: `${i * 50}ms`, opacity }}
+              className={!isLast ? "border-b border-border/50" : ""}
+              style={{ opacity }}
             />
           );
         })}

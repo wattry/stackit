@@ -18,8 +18,7 @@ export function CommitList({ commits }: { commits?: CommitResponse[] }) {
         {commits.map((commit, i) => (
           <div
             key={commit.sha}
-            className="flex items-baseline gap-2 text-sm animate-fade-in-up"
-            style={{ animationDelay: `${i * 40}ms` }}
+            className="flex items-baseline gap-2 text-sm"
           >
             {repo ? (
               <a
