@@ -626,6 +626,8 @@ Stop all dev processes:
 mise run dev:stop
 ```
 
+`dev:stop` first asks overmind to exit cleanly, then force-cleans any Stackit backend process from this repo still listening on `:8080`.
+
 Manual two-terminal flow is also supported:
 
 ```bash

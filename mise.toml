@@ -151,8 +151,48 @@ description = "Run server + web dev servers using overmind and Procfile.dev"
 run = "overmind start -f Procfile.dev"
 
 [tasks."dev:stop"]
-description = "Stop the running overmind dev process group"
-run = "overmind quit -s .overmind.sock"
+description = "Stop the overmind dev process group and clean up orphaned backend listeners"
+run = """
+  overmind quit -s .overmind.sock 2>/dev/null || true
+
+  PIDS=$(lsof -nP -tiTCP:8080 -sTCP:LISTEN 2>/dev/null || true)
+  if [ -z "$PIDS" ]; then
+    exit 0
+  fi
+
+  for PID in $PIDS; do
+    CWD=$(lsof -a -p "$PID" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)
+    if [ "$CWD" != "$PROJECT_ROOT" ]; then
+      continue
+    fi
+
+    PGID=$(ps -p "$PID" -o pgid= 2>/dev/null | tr -d ' ')
+    if [ -z "$PGID" ]; then
+      kill -TERM "$PID" 2>/dev/null || true
+      continue
+    fi
+
+    kill -TERM -- "-$PGID" 2>/dev/null || true
+  done
+
+  sleep 2
+
+  PIDS=$(lsof -nP -tiTCP:8080 -sTCP:LISTEN 2>/dev/null || true)
+  for PID in $PIDS; do
+    CWD=$(lsof -a -p "$PID" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)
+    if [ "$CWD" != "$PROJECT_ROOT" ]; then
+      continue
+    fi
+
+    PGID=$(ps -p "$PID" -o pgid= 2>/dev/null | tr -d ' ')
+    if [ -z "$PGID" ]; then
+      kill -KILL "$PID" 2>/dev/null || true
+      continue
+    fi
+
+    kill -KILL -- "-$PGID" 2>/dev/null || true
+  done
+"""
 
 [tasks."web:build"]
 description = "Build the web app"
