@@ -38,7 +38,7 @@ export function BranchCard({
     >
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm font-medium truncate" title={branch.name}>
-          {branch.commits?.[0]?.message || shortenBranchName(branch.name)}
+          {branch.commits?.at(-1)?.message || shortenBranchName(branch.name)}
         </span>
         {branch.isLocked && (
           <Tooltip>
