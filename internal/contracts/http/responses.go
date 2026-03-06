@@ -126,6 +126,7 @@ type CheckDetailResponse struct {
 type CommitResponse struct {
 	SHA     string `json:"sha"`
 	Message string `json:"message"`
+	Date    string `json:"date,omitempty"`
 }
 
 // RemoteStatus describes how a branch relates to its remote tracking branch.

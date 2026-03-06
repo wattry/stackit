@@ -50,6 +50,8 @@ const (
 	CommitFormatSHA CommitFormat = "SHA" // Full SHA
 	// CommitFormatReadable is a readable one-line format
 	CommitFormatReadable CommitFormat = "READABLE" // Oneline format: "abc123 Commit message"
+	// CommitFormatReadableWithDate includes an ISO date: "abc123\t2024-01-15T10:30:00Z\tCommit message"
+	CommitFormatReadableWithDate CommitFormat = "READABLE_WITH_DATE"
 	// CommitFormatMessage is the full commit message
 	CommitFormatMessage CommitFormat = "MESSAGE" // Full commit message
 	// CommitFormatSubject is the first line of the commit message

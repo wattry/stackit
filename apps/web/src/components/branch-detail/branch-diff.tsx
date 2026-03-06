@@ -196,6 +196,58 @@ function buildExplorerRows(entries: ExplorerFileEntry[]): ExplorerRow[] {
   return rows;
 }
 
+function relativeTime(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  return `${Math.floor(months / 12)}y`;
+}
+
+const CONVENTIONAL_COMMIT_RE = /^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/;
+
+const COMMIT_TYPE_COLORS: Record<string, string> = {
+  feat:     "text-green-600 dark:text-green-400",
+  fix:      "text-red-600 dark:text-red-400",
+  docs:     "text-blue-600 dark:text-blue-400",
+  style:    "text-purple-600 dark:text-purple-400",
+  refactor: "text-amber-600 dark:text-amber-400",
+  perf:     "text-orange-600 dark:text-orange-400",
+  test:     "text-cyan-600 dark:text-cyan-400",
+  chore:    "text-gray-500 dark:text-gray-400",
+  ci:       "text-gray-500 dark:text-gray-400",
+  build:    "text-gray-500 dark:text-gray-400",
+};
+
+interface ConventionalCommit {
+  type: string;
+  scope: string | null;
+  description: string;
+  color: string;
+}
+
+function parseConventionalCommit(message: string): ConventionalCommit | null {
+  const match = message.match(CONVENTIONAL_COMMIT_RE);
+  if (!match) return null;
+
+  const type = match[1];
+  const color = COMMIT_TYPE_COLORS[type];
+  if (!color) return null;
+
+  return {
+    type,
+    scope: match[2] ?? null,
+    description: match[4],
+    color,
+  };
+}
+
 export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiffProps) {
   const [diff, setDiff] = useState<BranchDiffResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -403,32 +455,60 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
                   Commits
                 </div>
                 <div className="px-2 pb-2 space-y-0.5">
-                  {commits.map((commit) => (
-                    <div
-                      key={commit.sha}
-                      className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs group"
-                    >
-                      <GitCommitHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      {repo ? (
-                        <a
-                          href={commitUrl(repo.owner, repo.repo, commit.sha)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="truncate text-muted-foreground hover:text-foreground transition-colors"
-                          title={`${commit.sha} — ${commit.message}`}
-                        >
-                          {commit.message}
-                        </a>
-                      ) : (
-                        <span
-                          className="truncate text-muted-foreground"
-                          title={`${commit.sha} — ${commit.message}`}
-                        >
-                          {commit.message}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                  {commits.map((commit) => {
+                    const cc = parseConventionalCommit(commit.message);
+                    const tooltip = `${commit.sha} — ${commit.message}`;
+
+                    return (
+                      <div
+                        key={commit.sha}
+                        className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs"
+                      >
+                        <GitCommitHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        {cc ? (
+                          <span className="flex items-baseline gap-1 min-w-0">
+                            <span className={cn("shrink-0 font-medium", cc.color)}>
+                              {cc.type}{cc.scope ? `(${cc.scope})` : ""}:
+                            </span>
+                            {repo ? (
+                              <a
+                                href={commitUrl(repo.owner, repo.repo, commit.sha)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="truncate text-muted-foreground hover:text-foreground transition-colors"
+                                title={tooltip}
+                              >
+                                {cc.description}
+                              </a>
+                            ) : (
+                              <span className="truncate text-muted-foreground" title={tooltip}>
+                                {cc.description}
+                              </span>
+                            )}
+                          </span>
+                        ) : repo ? (
+                          <a
+                            href={commitUrl(repo.owner, repo.repo, commit.sha)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-muted-foreground hover:text-foreground transition-colors"
+                            title={tooltip}
+                          >
+                            {commit.message}
+                          </a>
+                        ) : (
+                          <span className="truncate text-muted-foreground" title={tooltip}>
+                            {commit.message}
+                          </span>
+                        )}
+                        {commit.date && (
+                          <span className="ml-auto shrink-0 text-muted-foreground/60 tabular-nums">
+                            {relativeTime(commit.date)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
