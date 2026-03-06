@@ -228,6 +228,7 @@ const COMMIT_TYPE_COLORS: Record<string, string> = {
 interface ConventionalCommit {
   type: string;
   scope: string | null;
+  isBreaking: boolean;
   description: string;
   color: string;
 }
@@ -243,6 +244,7 @@ function parseConventionalCommit(message: string): ConventionalCommit | null {
   return {
     type,
     scope: match[2] ?? null,
+    isBreaking: match[3] === "!",
     description: match[4],
     color,
   };
@@ -468,7 +470,9 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
                         {cc ? (
                           <span className="flex items-baseline gap-1 min-w-0">
                             <span className={cn("shrink-0 font-medium", cc.color)}>
-                              {cc.type}{cc.scope ? `(${cc.scope})` : ""}:
+                              {cc.type}
+                              {cc.scope ? `(${cc.scope})` : ""}
+                              {cc.isBreaking ? "!" : ""}:
                             </span>
                             {repo ? (
                               <a
