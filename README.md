@@ -642,8 +642,14 @@ pnpm web:dev
 For production-style serving via Go, build and sync web assets into `apps/server/static`:
 
 ```bash
-mise run web:sync-static
-go run ./apps/server
+mise run server:run:embedded
+```
+
+Optional environment variables:
+
+```bash
+STACKIT_SERVER_PORT=9090 mise run server:run:embedded
+STACKIT_SERVER_CWD=/path/to/repo mise run server:run:embedded
 ```
 
 ## Contributing

@@ -85,10 +85,22 @@ func TestStaticHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("nil fs returns nil handler", func(t *testing.T) {
+	t.Run("nil fs serves fallback placeholder", func(t *testing.T) {
 		var nilFS fs.FS
-		if got := newStaticHandler(nilFS); got != nil {
-			t.Fatalf("expected nil handler, got %T", got)
+		handler := newStaticHandler(nilFS)
+		if handler == nil {
+			t.Fatal("expected fallback handler")
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d", rr.Code)
+		}
+		if !strings.Contains(rr.Body.String(), "Stackit Web Assets Not Built") {
+			t.Fatalf("unexpected body: %q", rr.Body.String())
 		}
 	})
 }

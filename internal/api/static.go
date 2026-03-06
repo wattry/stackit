@@ -7,17 +7,32 @@ import (
 	"strings"
 )
 
+var fallbackIndexHTML = []byte(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stackit</title>
+  </head>
+  <body>
+    <main>
+      <h1>Stackit Web Assets Not Built</h1>
+      <p>Build the frontend in <code>apps/web</code> and copy dist assets into <code>apps/server/static</code>.</p>
+    </main>
+  </body>
+</html>
+`)
+
 func newStaticHandler(staticFS fs.FS) http.Handler {
-	if staticFS == nil {
-		return nil
+	indexHTML := fallbackIndexHTML
+	var fileServer http.Handler
+	if staticFS != nil {
+		if embeddedIndexHTML, err := fs.ReadFile(staticFS, "index.html"); err == nil {
+			indexHTML = embeddedIndexHTML
+		}
+		fileServer = http.FileServer(http.FS(staticFS))
 	}
 
-	indexHTML, err := fs.ReadFile(staticFS, "index.html")
-	if err != nil {
-		return nil
-	}
-
-	fileServer := http.FileServer(http.FS(staticFS))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cleanPath := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		if cleanPath == "" || cleanPath == "." {
@@ -25,9 +40,11 @@ func newStaticHandler(staticFS fs.FS) http.Handler {
 			return
 		}
 
-		if _, err := fs.Stat(staticFS, cleanPath); err == nil {
-			fileServer.ServeHTTP(w, r)
-			return
+		if staticFS != nil {
+			if _, err := fs.Stat(staticFS, cleanPath); err == nil {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
 		}
 
 		// Return 404 for unknown files with extensions, but fallback to SPA index
