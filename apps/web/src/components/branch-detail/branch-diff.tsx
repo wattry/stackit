@@ -5,12 +5,13 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { ChevronDown, ChevronRight, FileText, Folder, GitCommitHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, GitCommitHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBranchDiff, type BranchDiffResponse, type CommitResponse } from "@/lib/api";
 import { useRepo } from "@/components/providers/repo-provider";
 import { useTheme } from "@/components/providers/theme-provider";
 import { commitUrl } from "@/lib/github";
+import { getFileIcon } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
 
 interface BranchDiffProps {
@@ -573,7 +574,7 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
                         className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-muted-foreground"
                         style={{ paddingLeft: `${row.depth * 14 + 8}px` }}
                       >
-                        <Folder className="h-3.5 w-3.5 shrink-0" />
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
                         <span className="truncate">{row.name}</span>
                       </div>
                     ) : (
@@ -594,7 +595,7 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
                         style={{ paddingLeft: `${row.depth * 14 + 8}px` }}
                         title={row.title}
                       >
-                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        {getFileIcon(row.name)}
                         <span className="truncate">{row.name}</span>
                       </button>
                     )}
