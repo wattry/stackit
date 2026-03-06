@@ -29,6 +29,7 @@ export function BranchDiffWorkspace({
           key={`${branch.name}:${branch.revision}`}
           branchName={branch.name}
           revision={branch.revision}
+          commits={branch.commits}
           onExit={onExit}
         />
       </div>

@@ -4,7 +4,7 @@ import type { BranchResponse } from "@/lib/api";
 import { PRBadge, DiffStats } from "@/components/status/status-badge";
 import { CIStatusWithTooltip } from "@/components/status/ci-status";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Lock } from "lucide-react";
+import { GitCommitVertical, GitPullRequestDraft, Lock } from "lucide-react";
 import { shortenBranchName } from "@/lib/branch-utils";
 
 interface BranchCardProps {
@@ -61,10 +61,21 @@ export function BranchCard({
           {branch.pr ? (
             <PRBadge pr={branch.pr} />
           ) : (
-            <span className="text-xs text-muted-foreground">no PR</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <GitPullRequestDraft className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              </TooltipTrigger>
+              <TooltipContent side="top">No PR</TooltipContent>
+            </Tooltip>
           )}
           <CIStatusWithTooltip ci={branch.ci} />
           <DiffStats added={branch.linesAdded} deleted={branch.linesDeleted} />
+          {branch.commitCount > 0 && (
+            <span className="flex items-center gap-0.5 text-xs text-muted-foreground" title={`${branch.commitCount} commit${branch.commitCount !== 1 ? "s" : ""}`}>
+              <GitCommitVertical className="w-3 h-3" />
+              {branch.commitCount}
+            </span>
+          )}
         </div>
       )}
     </button>

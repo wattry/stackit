@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { OwnerSwimlane } from "../owner-swimlane";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 
 // Mock motion/react to avoid animation issues in tests
@@ -53,14 +54,16 @@ describe("OwnerSwimlane", () => {
     });
 
     const { container } = render(
-      <OwnerSwimlane
-        label="me"
-        stacks={[stack]}
-        selectedBranch={null}
-        selectedStack={null}
-        onSelectBranch={noop}
-        onSelectStack={noop}
-      />
+      <TooltipProvider>
+        <OwnerSwimlane
+          label="me"
+          stacks={[stack]}
+          selectedBranch={null}
+          selectedStack={null}
+          onSelectBranch={noop}
+          onSelectStack={noop}
+        />
+      </TooltipProvider>
     );
 
     // Linear stacks render StackColumn, not StackTree
@@ -79,14 +82,16 @@ describe("OwnerSwimlane", () => {
     });
 
     const { container } = render(
-      <OwnerSwimlane
-        label="me"
-        stacks={[stack]}
-        selectedBranch={null}
-        selectedStack={null}
-        onSelectBranch={noop}
-        onSelectStack={noop}
-      />
+      <TooltipProvider>
+        <OwnerSwimlane
+          label="me"
+          stacks={[stack]}
+          selectedBranch={null}
+          selectedStack={null}
+          onSelectBranch={noop}
+          onSelectStack={noop}
+        />
+      </TooltipProvider>
     );
 
     // Branching stacks render SegmentTree which uses fork connectors at branch points
@@ -112,14 +117,16 @@ describe("OwnerSwimlane", () => {
     });
 
     const { container } = render(
-      <OwnerSwimlane
-        label="me"
-        stacks={[linearStack, branchingStack]}
-        selectedBranch={null}
-        selectedStack={null}
-        onSelectBranch={noop}
-        onSelectStack={noop}
-      />
+      <TooltipProvider>
+        <OwnerSwimlane
+          label="me"
+          stacks={[linearStack, branchingStack]}
+          selectedBranch={null}
+          selectedStack={null}
+          onSelectBranch={noop}
+          onSelectStack={noop}
+        />
+      </TooltipProvider>
     );
 
     // Exactly one fork connector SVG (from the branching stack)
@@ -145,20 +152,22 @@ describe("OwnerSwimlane", () => {
       ],
     });
 
-    render(
-      <OwnerSwimlane
-        label="me"
-        stacks={[linearStack, branchingStack]}
-        selectedBranch={null}
-        selectedStack={null}
-        onSelectBranch={noop}
-        onSelectStack={noop}
-      />
+    const { container } = render(
+      <TooltipProvider>
+        <OwnerSwimlane
+          label="me"
+          stacks={[linearStack, branchingStack]}
+          selectedBranch={null}
+          selectedStack={null}
+          onSelectBranch={noop}
+          onSelectStack={noop}
+        />
+      </TooltipProvider>
     );
 
-    // Both views show "no PR" text for branches without PRs (shared BranchCard)
-    const noPrLabels = screen.getAllByText("no PR");
-    // 5 branches total across both stacks
-    expect(noPrLabels.length).toBe(5);
+    // Both views show "No PR" tooltip icon for branches without PRs (shared BranchCard)
+    // 5 branches total across both stacks, each renders a GitPullRequestDraft icon
+    const noPrIcons = container.querySelectorAll("svg.lucide-git-pull-request-draft");
+    expect(noPrIcons.length).toBe(5);
   });
 });

@@ -5,14 +5,17 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { ChevronDown, ChevronRight, FileText, Folder, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Folder, GitCommitHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchBranchDiff, type BranchDiffResponse } from "@/lib/api";
+import { fetchBranchDiff, type BranchDiffResponse, type CommitResponse } from "@/lib/api";
+import { useRepo } from "@/components/providers/repo-provider";
+import { commitUrl } from "@/lib/github";
 import { cn } from "@/lib/utils";
 
 interface BranchDiffProps {
   branchName: string;
   revision: string;
+  commits?: CommitResponse[];
   onExit?: () => void;
 }
 
@@ -193,7 +196,7 @@ function buildExplorerRows(entries: ExplorerFileEntry[]): ExplorerRow[] {
   return rows;
 }
 
-export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
+export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiffProps) {
   const [diff, setDiff] = useState<BranchDiffResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -313,6 +316,8 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
     };
   }, [parsed.files]);
 
+  const { repo } = useRepo();
+
   const fileCountLabel = `${parsed.files.length} file${parsed.files.length !== 1 ? "s" : ""}`;
   const showFileCount = !loading && !error && !parsed.parseError;
   const workspaceMode = Boolean(onExit);
@@ -392,6 +397,41 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
       {!loading && !error && !parsed.parseError && parsed.files.length > 0 && (
         <div className={contentLayoutClass}>
           <aside className={explorerClass}>
+            {commits && commits.length > 0 && (
+              <div className="border-b">
+                <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Commits
+                </div>
+                <div className="px-2 pb-2 space-y-0.5">
+                  {commits.map((commit) => (
+                    <div
+                      key={commit.sha}
+                      className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs group"
+                    >
+                      <GitCommitHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      {repo ? (
+                        <a
+                          href={commitUrl(repo.owner, repo.repo, commit.sha)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate text-muted-foreground hover:text-foreground transition-colors"
+                          title={`${commit.sha} — ${commit.message}`}
+                        >
+                          {commit.message}
+                        </a>
+                      ) : (
+                        <span
+                          className="truncate text-muted-foreground"
+                          title={`${commit.sha} — ${commit.message}`}
+                        >
+                          {commit.message}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
               Files
             </div>
