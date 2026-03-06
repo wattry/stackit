@@ -34,7 +34,12 @@ export function BranchCard({
         ${branch.isLocked ? "opacity-60" : ""}
         ${className}
       `}
-      style={style}
+      style={{
+        ...style,
+        ...(branch.remoteStatus?.missingRemote ? {
+          backgroundImage: "repeating-linear-gradient(-45deg, transparent, transparent 8px, oklch(0.65 0.05 250 / 0.12) 8px, oklch(0.65 0.05 250 / 0.12) 12px)",
+        } : undefined),
+      }}
     >
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm font-medium truncate" title={branch.name}>
