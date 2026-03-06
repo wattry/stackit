@@ -5,9 +5,7 @@ before:
     - go mod tidy
     - pnpm install --frozen-lockfile
     - pnpm --filter @stackit/web build
-    - mkdir -p apps/server/static
-    - rm -rf apps/server/static/assets
-    - cp -R apps/web/out/. apps/server/static/
+    - ./scripts/sync-web-static.sh
 
 builds:
   - id: cli
