@@ -781,6 +781,11 @@ func formatCommits(commits []*object.Commit, format string) ([]string, error) {
 			shortHash := commit.Hash.String()[:7]
 			subject := strings.Split(strings.TrimSpace(commit.Message), "\n")[0]
 			formatted = fmt.Sprintf("%s %s", shortHash, subject)
+		case "READABLE_WITH_DATE":
+			// Tab-separated: short SHA, ISO date, subject
+			shortHash := commit.Hash.String()[:7]
+			subject := strings.Split(strings.TrimSpace(commit.Message), "\n")[0]
+			formatted = fmt.Sprintf("%s\t%s\t%s", shortHash, commit.Author.When.UTC().Format(time.RFC3339), subject)
 		case "MESSAGE":
 			formatted = strings.TrimSpace(commit.Message)
 		case "SUBJECT":
@@ -817,6 +822,9 @@ func (r *runner) getCommitRangeWithFallback(base, head, format string) ([]string
 		case "READABLE":
 			// Oneline format: short SHA + subject
 			formatted, err = r.GetCommitLog(sha, "%h %s")
+		case "READABLE_WITH_DATE":
+			// Tab-separated: short SHA, ISO date, subject
+			formatted, err = r.GetCommitLog(sha, "%h\t%aI\t%s")
 		case "MESSAGE":
 			formatted, err = r.GetCommitLog(sha, "%B")
 		case "SUBJECT":

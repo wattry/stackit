@@ -2,6 +2,7 @@ package httpcontract
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	"stackit.dev/stackit/internal/engine"
@@ -55,8 +56,8 @@ func MapBranch(eng engine.BranchReader, branch engine.Branch, node *engine.Stack
 	}
 
 	// Map commits
-	if commits, err := eng.GetAllCommits(branch, engine.CommitFormatReadable); err == nil {
-		resp.Commits = mapCommits(commits)
+	if commits, err := eng.GetAllCommits(branch, engine.CommitFormatReadableWithDate); err == nil {
+		resp.Commits = mapCommitsWithDate(commits)
 	}
 
 	// Map PR info
@@ -101,29 +102,15 @@ func MapStackSummary(eng engine.BranchReader, graph *engine.StackGraph, rootBran
 		}
 	}
 
-	// Get title from root branch's PR, or first child's PR for worktree anchors
-	title := rootBranch
-	if rootNode != nil {
-		if hasWorktree {
-			// Anchor has no PR — derive title from first child
-			if len(rootNode.Children) > 0 {
-				if childNode := graph.GetNode(rootNode.Children[0]); childNode != nil {
-					if prInfo, err := childNode.Branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Title() != "" {
-						title = prInfo.Title()
-					}
-				}
-			}
-		} else if prInfo, err := rootNode.Branch.GetPrInfo(); err == nil && prInfo != nil && prInfo.Title() != "" {
-			title = prInfo.Title()
-		}
-	}
-
 	// Compute stack status using display branches (anchor excluded)
 	status := computeStackStatus(graph, displayBranches)
 
-	var description string
+	// Title and description come exclusively from explicit stack descriptions
+	// set via `stackit describe`. No fallback to PR titles or branch names.
+	var title, description string
 	if rootNode != nil {
 		if stackDesc := eng.GetStackDescription(rootNode.Branch); stackDesc != nil && !stackDesc.IsEmpty() {
+			title = stackDesc.Title
 			description = stackDesc.Description
 		}
 	}
@@ -231,21 +218,18 @@ func mapCI(checks *github.CheckStatus) *CIResponse {
 	return ci
 }
 
-func mapCommits(readable []string) []CommitResponse {
-	commits := make([]CommitResponse, 0, len(readable))
-	for _, line := range readable {
-		if len(line) < 8 {
+func mapCommitsWithDate(lines []string) []CommitResponse {
+	commits := make([]CommitResponse, 0, len(lines))
+	for _, line := range lines {
+		// Tab-separated format: "abc1234\t2024-01-15T10:30:00Z\tCommit message"
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
 			continue
 		}
-		// Readable format is "abc1234 Commit message"
-		sha := line[:7]
-		msg := ""
-		if len(line) > 8 {
-			msg = line[8:]
-		}
 		commits = append(commits, CommitResponse{
-			SHA:     sha,
-			Message: msg,
+			SHA:     parts[0],
+			Message: parts[2],
+			Date:    parts[1],
 		})
 	}
 	return commits

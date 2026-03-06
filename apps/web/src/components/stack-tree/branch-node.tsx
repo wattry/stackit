@@ -22,6 +22,7 @@ export function BranchNode({
   onClick,
 }: BranchNodeProps) {
   const ciIcon = getCIIcon(branch);
+  const notPushed = branch.remoteStatus?.missingRemote;
   const borderClass = isSelected
     ? "stroke-blue-500/50 stroke-1"
     : "stroke-border stroke-1";
@@ -33,12 +34,33 @@ export function BranchNode({
       className="cursor-pointer"
       style={{ transition: "transform 0.15s ease" }}
     >
+      {notPushed && (
+        <defs>
+          <pattern
+            id={`stripes-${branch.name}`}
+            width={12}
+            height={12}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(-45)"
+          >
+            <rect width={4} height={12} fill="oklch(0.65 0.05 250 / 0.12)" />
+          </pattern>
+        </defs>
+      )}
       <rect
         width={NODE_WIDTH}
         height={NODE_HEIGHT}
         rx={8}
         className={`fill-card ${borderClass}`}
       />
+      {notPushed && (
+        <rect
+          width={NODE_WIDTH}
+          height={NODE_HEIGHT}
+          rx={8}
+          fill={`url(#stripes-${branch.name})`}
+        />
+      )}
       {/* Left accent bar for current (checked out) branch */}
       {branch.isCurrent && (
         <rect

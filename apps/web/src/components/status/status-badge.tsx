@@ -81,9 +81,9 @@ export function PRBadge({ pr }: { pr?: PRResponse }) {
       href={pr.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center gap-1 text-xs font-mono hover:underline ${stateColors[pr.state] || ""}`}
+      className={`inline-flex items-center gap-1 text-xs font-mono font-semibold hover:underline ${stateColors[pr.state] || ""}`}
     >
-      <Github className="w-3 h-3" />
+      <Github className="w-3.5 h-3.5" />
       #{pr.number}
       {pr.isDraft && " (draft)"}
     </a>

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { StackColumn, hasBranching } from "@/components/swimlane/stack-column";
 import { StackTreeColumn } from "@/components/swimlane/stack-tree-column";
-import { SwimlaneLabel, swimlaneColor } from "@/components/swimlane/swimlane-label";
+import { SwimlaneLabel, swimlaneColor, swimlaneAccent } from "@/components/swimlane/swimlane-label";
 
 const COLLAPSED_LIMIT = 3;
 
@@ -39,18 +39,19 @@ export function OwnerSwimlane({
     : stacks;
   const hiddenCount = stacks.length - COLLAPSED_LIMIT;
 
+  const accentColor = swimlaneAccent(label);
+
   return (
     <div className="flex flex-col shrink-0">
       <div
-        className={`flex items-end ${compact ? "gap-3 px-2 py-2" : "gap-4 px-3 pt-3"}`}
-        style={{ backgroundColor: color }}
+        className={`flex items-end ${compact ? "gap-3 px-2 py-2" : "gap-4 px-3 pt-3"} rounded-t-xl border-t-2`}
+        style={{ backgroundColor: color, borderColor: accentColor }}
       >
         <AnimatePresence mode="popLayout">
           {visibleStacks.map((stack) => (
             <motion.div
               key={stack.rootBranch}
               layout
-              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}

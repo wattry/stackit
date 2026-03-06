@@ -5,23 +5,27 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { ChevronDown, ChevronRight, FileText, Folder, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, GitCommitHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchBranchDiff, type BranchDiffResponse } from "@/lib/api";
+import { fetchBranchDiff, type BranchDiffResponse, type CommitResponse } from "@/lib/api";
+import { useRepo } from "@/components/providers/repo-provider";
+import { useTheme } from "@/components/providers/theme-provider";
+import { commitUrl } from "@/lib/github";
+import { getFileIcon } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
 
 interface BranchDiffProps {
   branchName: string;
   revision: string;
+  commits?: CommitResponse[];
   onExit?: () => void;
 }
 
-const DIFF_OPTIONS = {
+const BASE_DIFF_OPTIONS = {
   diffStyle: "split",
   lineDiffType: "word",
   hunkSeparators: "metadata",
   overflow: "scroll",
-  themeType: "system",
 } as const;
 
 function getFileKey(file: FileDiffMetadata, index: number): string {
@@ -193,7 +197,61 @@ function buildExplorerRows(entries: ExplorerFileEntry[]): ExplorerRow[] {
   return rows;
 }
 
-export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
+function relativeTime(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  return `${Math.floor(months / 12)}y`;
+}
+
+const CONVENTIONAL_COMMIT_RE = /^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/;
+
+const COMMIT_TYPE_COLORS: Record<string, string> = {
+  feat:     "text-green-600 dark:text-green-400",
+  fix:      "text-red-600 dark:text-red-400",
+  docs:     "text-blue-600 dark:text-blue-400",
+  style:    "text-purple-600 dark:text-purple-400",
+  refactor: "text-amber-600 dark:text-amber-400",
+  perf:     "text-orange-600 dark:text-orange-400",
+  test:     "text-cyan-600 dark:text-cyan-400",
+  chore:    "text-gray-500 dark:text-gray-400",
+  ci:       "text-gray-500 dark:text-gray-400",
+  build:    "text-gray-500 dark:text-gray-400",
+};
+
+interface ConventionalCommit {
+  type: string;
+  scope: string | null;
+  isBreaking: boolean;
+  description: string;
+  color: string;
+}
+
+function parseConventionalCommit(message: string): ConventionalCommit | null {
+  const match = message.match(CONVENTIONAL_COMMIT_RE);
+  if (!match) return null;
+
+  const type = match[1];
+  const color = COMMIT_TYPE_COLORS[type];
+  if (!color) return null;
+
+  return {
+    type,
+    scope: match[2] ?? null,
+    isBreaking: match[3] === "!",
+    description: match[4],
+    color,
+  };
+}
+
+export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiffProps) {
   const [diff, setDiff] = useState<BranchDiffResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -313,6 +371,14 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
     };
   }, [parsed.files]);
 
+  const { repo } = useRepo();
+  const { resolvedTheme } = useTheme();
+
+  const diffOptions = useMemo(
+    () => ({ ...BASE_DIFF_OPTIONS, themeType: resolvedTheme } as const),
+    [resolvedTheme]
+  );
+
   const fileCountLabel = `${parsed.files.length} file${parsed.files.length !== 1 ? "s" : ""}`;
   const showFileCount = !loading && !error && !parsed.parseError;
   const workspaceMode = Boolean(onExit);
@@ -365,7 +431,46 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
       </div>
 
       {loading && (
-        <p className="text-sm text-muted-foreground">Loading diff…</p>
+        <div className={contentLayoutClass}>
+          <aside className={explorerClass}>
+            <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
+              Files
+            </div>
+            <div className="p-2 space-y-1.5">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-2 px-1.5 py-1">
+                  <div className="h-3 w-3 shrink-0 rounded bg-muted animate-pulse" />
+                  <div
+                    className="h-3 rounded bg-muted animate-pulse"
+                    style={{ width: `${60 + (i * 17) % 30}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+          </aside>
+          <div className={cn(diffPaneClass, "flex-1 space-y-3")}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="rounded-md border bg-card/60 overflow-hidden">
+                <div className="flex items-center gap-2 border-b px-3 py-2">
+                  <div className="h-3 w-3 rounded bg-muted animate-pulse" />
+                  <div
+                    className="h-3 rounded bg-muted animate-pulse"
+                    style={{ width: `${100 + (i * 37) % 80}px` }}
+                  />
+                </div>
+                <div className="p-3 space-y-2">
+                  {[0, 1, 2, 3].map((j) => (
+                    <div
+                      key={j}
+                      className="h-3 rounded bg-muted/60 animate-pulse"
+                      style={{ width: `${40 + ((i + j) * 23) % 55}%` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {!loading && error && (
@@ -392,6 +497,71 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
       {!loading && !error && !parsed.parseError && parsed.files.length > 0 && (
         <div className={contentLayoutClass}>
           <aside className={explorerClass}>
+            {commits && commits.length > 0 && (
+              <div className="border-b">
+                <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Commits
+                </div>
+                <div className="px-2 pb-2 space-y-0.5">
+                  {commits.map((commit) => {
+                    const cc = parseConventionalCommit(commit.message);
+                    const tooltip = `${commit.sha} — ${commit.message}`;
+
+                    return (
+                      <div
+                        key={commit.sha}
+                        className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs"
+                      >
+                        <GitCommitHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        {cc ? (
+                          <span className="flex items-baseline gap-1 min-w-0">
+                            <span className={cn("shrink-0 font-medium", cc.color)}>
+                              {cc.type}
+                              {cc.scope ? `(${cc.scope})` : ""}
+                              {cc.isBreaking ? "!" : ""}:
+                            </span>
+                            {repo ? (
+                              <a
+                                href={commitUrl(repo.owner, repo.repo, commit.sha)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="truncate text-muted-foreground hover:text-foreground transition-colors"
+                                title={tooltip}
+                              >
+                                {cc.description}
+                              </a>
+                            ) : (
+                              <span className="truncate text-muted-foreground" title={tooltip}>
+                                {cc.description}
+                              </span>
+                            )}
+                          </span>
+                        ) : repo ? (
+                          <a
+                            href={commitUrl(repo.owner, repo.repo, commit.sha)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-muted-foreground hover:text-foreground transition-colors"
+                            title={tooltip}
+                          >
+                            {commit.message}
+                          </a>
+                        ) : (
+                          <span className="truncate text-muted-foreground" title={tooltip}>
+                            {commit.message}
+                          </span>
+                        )}
+                        {commit.date && (
+                          <span className="ml-auto shrink-0 text-muted-foreground/60 tabular-nums">
+                            {relativeTime(commit.date)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
               Files
             </div>
@@ -404,7 +574,7 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
                         className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-muted-foreground"
                         style={{ paddingLeft: `${row.depth * 14 + 8}px` }}
                       >
-                        <Folder className="h-3.5 w-3.5 shrink-0" />
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
                         <span className="truncate">{row.name}</span>
                       </div>
                     ) : (
@@ -425,7 +595,7 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
                         style={{ paddingLeft: `${row.depth * 14 + 8}px` }}
                         title={row.title}
                       >
-                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        {getFileIcon(row.name)}
                         <span className="truncate">{row.name}</span>
                       </button>
                     )}
@@ -493,7 +663,7 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
                             Collapse
                           </button>
                         )}
-                        <FileDiff fileDiff={file} options={DIFF_OPTIONS} className="block" />
+                        <FileDiff fileDiff={file} options={diffOptions} className="block" />
                       </>
                     )}
                   </div>

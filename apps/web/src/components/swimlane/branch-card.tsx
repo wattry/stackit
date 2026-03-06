@@ -4,7 +4,7 @@ import type { BranchResponse } from "@/lib/api";
 import { PRBadge, DiffStats } from "@/components/status/status-badge";
 import { CIStatusWithTooltip } from "@/components/status/ci-status";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Lock } from "lucide-react";
+import { GitCommitVertical, GitPullRequestDraft, Lock } from "lucide-react";
 import { shortenBranchName } from "@/lib/branch-utils";
 
 interface BranchCardProps {
@@ -29,16 +29,21 @@ export function BranchCard({
       onClick={() => onClick(branch)}
       className={`text-left bg-card transition-all duration-200
         ${compact ? "px-2.5 py-1.5" : "px-3 py-2.5"}
-        ${isSelected ? "!bg-accent z-10 relative" : "hover:!bg-muted hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
-        ${branch.isCurrent ? "border-l-[3px] border-l-[var(--glow-color-current)]" : ""}
+        ${isSelected ? "!bg-accent z-10 relative" : "hover:!bg-muted/80 hover:shadow-sm"}
+        ${branch.isCurrent ? "border-l-[3px] border-l-[var(--glow-color-current)] bg-accent/30" : ""}
         ${branch.isLocked ? "opacity-60" : ""}
         ${className}
       `}
-      style={style}
+      style={{
+        ...style,
+        ...(branch.remoteStatus?.missingRemote ? {
+          backgroundImage: "repeating-linear-gradient(-45deg, transparent, transparent 8px, oklch(0.65 0.05 250 / 0.12) 8px, oklch(0.65 0.05 250 / 0.12) 12px)",
+        } : undefined),
+      }}
     >
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm font-medium truncate" title={branch.name}>
-          {branch.commits?.[0]?.message || shortenBranchName(branch.name)}
+          {branch.commits?.at(-1)?.message || shortenBranchName(branch.name)}
         </span>
         {branch.isLocked && (
           <Tooltip>
@@ -61,10 +66,21 @@ export function BranchCard({
           {branch.pr ? (
             <PRBadge pr={branch.pr} />
           ) : (
-            <span className="text-xs text-muted-foreground">no PR</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <GitPullRequestDraft className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              </TooltipTrigger>
+              <TooltipContent side="top">No PR</TooltipContent>
+            </Tooltip>
           )}
           <CIStatusWithTooltip ci={branch.ci} />
           <DiffStats added={branch.linesAdded} deleted={branch.linesDeleted} />
+          {branch.commitCount > 0 && (
+            <span className="flex items-center gap-0.5 text-xs text-muted-foreground" title={`${branch.commitCount} commit${branch.commitCount !== 1 ? "s" : ""}`}>
+              <GitCommitVertical className="w-3 h-3" />
+              {branch.commitCount}
+            </span>
+          )}
         </div>
       )}
     </button>

@@ -29,14 +29,13 @@ import {
 } from "@/components/status/status-badge";
 import { CommitList } from "./commit-list";
 import { CIChecks } from "./ci-checks";
+import { DiffSkeleton } from "./diff-skeleton";
 
 const BranchDiff = dynamic(
   () => import("./branch-diff").then((m) => m.BranchDiff),
   {
     ssr: false,
-    loading: () => (
-      <p className="text-sm text-muted-foreground">Loading diff viewer...</p>
-    ),
+    loading: () => <DiffSkeleton />,
   }
 );
 
