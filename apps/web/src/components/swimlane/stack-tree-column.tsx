@@ -2,8 +2,7 @@
 
 import type { BranchResponse, StackDetail } from "@/lib/api";
 import { SegmentTree } from "@/components/stack-tree/segment-tree";
-import { StackStatusFooter, StackDescription } from "@/components/swimlane/stack-column";
-import { FolderGit2 } from "lucide-react";
+import { StackStatusFooter, StackHeader } from "@/components/swimlane/stack-column";
 
 interface StackTreeColumnProps {
   stack: StackDetail;
@@ -28,25 +27,8 @@ export function StackTreeColumn({
 }: StackTreeColumnProps) {
   return (
     <div className="flex flex-col min-w-64 shrink-0">
-      {/* Stack header */}
       {showHeader && (
-        <div className={`px-1 ${compact ? "pb-1" : "pb-2"}`}>
-          {stack.hasWorktree && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
-                <FolderGit2 className="w-3 h-3" />
-              </span>
-            </div>
-          )}
-          {stack.title && (
-            <p className={`font-medium text-muted-foreground truncate ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`} title={stack.title}>
-              {stack.title}
-            </p>
-          )}
-          {stack.description && (
-            <StackDescription text={stack.description} compact={compact} />
-          )}
-        </div>
+        <StackHeader stack={stack} compact={compact} />
       )}
 
       {/* Tree visualization: linear card stacks with connectors at branch points */}

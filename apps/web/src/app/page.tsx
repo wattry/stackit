@@ -66,7 +66,7 @@ export default function Home() {
       <div className="flex flex-col justify-end min-h-full">
         {/* Swimlanes: only this area scrolls horizontally */}
         <div className="overflow-x-auto">
-          <div className="flex items-end gap-8 p-6 pb-4 min-w-max">
+          <div className="flex items-end gap-6 p-6 pb-4 min-w-max">
             {/* Your stacks */}
             {yourStacks.length > 0 && (
               <OwnerSwimlane
@@ -99,9 +99,9 @@ export default function Home() {
 
         {/* Trunk line */}
         <div className="flex items-center gap-2 px-6 pb-2 shrink-0">
-          <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
-          <span className="text-xs font-mono text-muted-foreground">{repo?.trunk}</span>
-          <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
+          <div className="flex-1 h-[2px] bg-gradient-to-r from-transparent via-muted-foreground/30 to-muted-foreground/30" />
+          <span className="text-xs font-mono text-muted-foreground/70 px-2">{repo?.trunk}</span>
+          <div className="flex-1 h-[2px] bg-gradient-to-l from-transparent via-muted-foreground/30 to-muted-foreground/30" />
         </div>
 
         {/* Recent trunk commits */}

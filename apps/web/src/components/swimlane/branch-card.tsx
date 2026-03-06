@@ -29,8 +29,8 @@ export function BranchCard({
       onClick={() => onClick(branch)}
       className={`text-left bg-card transition-all duration-200
         ${compact ? "px-2.5 py-1.5" : "px-3 py-2.5"}
-        ${isSelected ? "!bg-accent z-10 relative" : "hover:!bg-muted hover:scale-[1.02] hover:shadow-md hover:-translate-y-0.5"}
-        ${branch.isCurrent ? "border-l-[3px] border-l-[var(--glow-color-current)]" : ""}
+        ${isSelected ? "!bg-accent z-10 relative" : "hover:!bg-muted/80 hover:shadow-sm"}
+        ${branch.isCurrent ? "border-l-[3px] border-l-[var(--glow-color-current)] bg-accent/30" : ""}
         ${branch.isLocked ? "opacity-60" : ""}
         ${className}
       `}

@@ -38,32 +38,19 @@ export function StackColumn({
 
   return (
     <div className={`flex flex-col ${fillWidth ? "w-full" : "w-64 shrink-0"}`}>
-      {/* Stack header */}
       {showHeader && (
-        <div className={`px-1 ${compact ? "pb-1" : "pb-2"}`}>
-          {stack.hasWorktree && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
-                <FolderGit2 className="w-3 h-3" />
-              </span>
-            </div>
-          )}
-          {stack.title && (
-            <p className={`font-medium text-muted-foreground truncate ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`} title={stack.title}>
-              {stack.title}
-            </p>
-          )}
-          {stack.description && (
-            <StackDescription text={stack.description} compact={compact} />
-          )}
-        </div>
+        <StackHeader stack={stack} compact={compact} />
       )}
 
       {/* Stacked branch cards */}
-      <div className="flex flex-col bg-card rounded-t-lg">
+      <div className="flex flex-col rounded-t-lg overflow-hidden border-x border-t shadow-sm">
         {displayBranches.map((branch, i) => {
-          const isFirst = i === 0;
           const isLast = i === displayBranches.length - 1;
+          // Subtle depth gradient: top card (leaf) is brightest, bottom card (root) is slightly dimmer
+          const depth = displayBranches.length > 1
+            ? i / (displayBranches.length - 1)
+            : 0;
+          const opacity = 1 - depth * 0.06;
 
           return (
             <BranchCard
@@ -72,11 +59,10 @@ export function StackColumn({
               isSelected={selectedBranch === branch.name}
               onClick={onSelectBranch}
               compact={compact}
-              className={`animate-fade-in-up border-x border-t
-                ${isLast ? "border-b rounded-b-lg relative z-[1] shadow-[0_4px_6px_-2px_rgba(0,0,0,0.15)]" : ""}
-                ${isFirst ? "rounded-t-lg" : ""}
+              className={`animate-fade-in-up
+                ${!isLast ? "border-b border-border/50" : ""}
               `}
-              style={{ animationDelay: `${i * 50}ms` }}
+              style={{ animationDelay: `${i * 50}ms`, opacity }}
             />
           );
         })}
@@ -111,7 +97,7 @@ export function StackStatusFooter({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center justify-center px-3 rounded-b-lg border-x border-b font-medium cursor-pointer transition-all duration-200 ${compact ? "-mt-1.5 pt-2.5 py-1 text-[11px]" : "-mt-2 pt-3.5 py-1.5 text-xs"} ${c.text} ${selected ? `${c.selectedBg} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
+      className={`flex items-center justify-center px-3 rounded-b-lg border-x border-b font-medium cursor-pointer transition-all duration-200 ${compact ? "py-1 text-[11px]" : "py-1.5 text-xs"} ${c.text} ${selected ? `${c.selectedBg} font-semibold` : `${c.bg} ${c.shadow} hover:brightness-95 dark:hover:brightness-110`}`}
     >
       {c.label}
     </button>
@@ -139,6 +125,34 @@ function orderBranches(branches: BranchResponse[]): BranchResponse[] {
   }
 
   return ordered;
+}
+
+export function StackHeader({
+  stack,
+  compact = false,
+}: {
+  stack: StackDetail;
+  compact?: boolean;
+}) {
+  const hasContent = stack.hasWorktree || stack.title;
+  if (!hasContent) return null;
+
+  return (
+    <div className={`px-1 ${compact ? "pb-1" : "pb-2"}`}>
+      {stack.hasWorktree && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground flex items-center gap-1" title="Worktree">
+            <FolderGit2 className="w-3 h-3" />
+          </span>
+        </div>
+      )}
+      {stack.title && (
+        <p className={`font-medium text-muted-foreground truncate ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`} title={stack.title}>
+          {stack.title}
+        </p>
+      )}
+    </div>
+  );
 }
 
 const DESCRIPTION_COLLAPSE_LENGTH = 80;
