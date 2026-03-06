@@ -84,6 +84,7 @@ export interface CheckDetailResponse {
 export interface CommitResponse {
   sha: string;
   message: string;
+  date?: string;
 }
 
 export interface RemoteStatus {

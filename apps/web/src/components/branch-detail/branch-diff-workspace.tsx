@@ -2,14 +2,13 @@
 
 import dynamic from "next/dynamic";
 import type { BranchResponse } from "@/lib/api";
+import { DiffSkeleton } from "./diff-skeleton";
 
 const BranchDiff = dynamic(
   () => import("./branch-diff").then((m) => m.BranchDiff),
   {
     ssr: false,
-    loading: () => (
-      <p className="text-sm text-muted-foreground">Loading diff viewer...</p>
-    ),
+    loading: () => <DiffSkeleton />,
   }
 );
 
@@ -29,6 +28,7 @@ export function BranchDiffWorkspace({
           key={`${branch.name}:${branch.revision}`}
           branchName={branch.name}
           revision={branch.revision}
+          commits={branch.commits}
           onExit={onExit}
         />
       </div>

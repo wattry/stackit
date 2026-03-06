@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRepo } from "@/components/providers/repo-provider";
 import { OwnerSwimlane } from "@/components/swimlane/owner-swimlane";
@@ -59,14 +59,16 @@ export default function Home() {
     [stackDetails, repo?.currentUser]
   );
 
+  const [recentCommitsPreference, setRecentCommitsPreference] = useState(true);
   const hasSelection = selectedBranch || selectedStack;
+  const showRecentCommits = selectedBranch ? false : recentCommitsPreference;
   const branchOverlayMode = Boolean(selectedBranch && selectedBranchStack);
   const stacksAndHistoryContent =
     stackDetails.length > 0 ? (
       <div className="flex flex-col justify-end min-h-full">
         {/* Swimlanes: only this area scrolls horizontally */}
         <div className="overflow-x-auto">
-          <div className="flex items-end gap-8 p-6 pb-4 min-w-max">
+          <div className="flex items-end gap-6 p-6 pb-4 min-w-max">
             {/* Your stacks */}
             {yourStacks.length > 0 && (
               <OwnerSwimlane
@@ -99,13 +101,34 @@ export default function Home() {
 
         {/* Trunk line */}
         <div className="flex items-center gap-2 px-6 pb-2 shrink-0">
-          <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
-          <span className="text-xs font-mono text-muted-foreground">{repo?.trunk}</span>
-          <div className="flex-1 border-t-2 border-dashed border-muted-foreground/30" />
+          <div className="flex-1 h-[2px] bg-gradient-to-r from-transparent via-muted-foreground/30 to-muted-foreground/30" />
+          {selectedBranch ? (
+            <span className="text-xs font-mono text-muted-foreground/70 px-2">
+              {repo?.trunk}
+            </span>
+          ) : (
+            <button
+              onClick={() => setRecentCommitsPreference((prev) => !prev)}
+              className="text-xs font-mono text-muted-foreground/70 px-2 hover:text-muted-foreground transition-colors cursor-pointer"
+            >
+              {repo?.trunk}
+            </button>
+          )}
+          <div className="flex-1 h-[2px] bg-gradient-to-l from-transparent via-muted-foreground/30 to-muted-foreground/30" />
         </div>
 
         {/* Recent trunk commits */}
-        <RecentlyMerged compact={branchOverlayMode} />
+        <div
+          className="grid transition-[grid-template-rows,opacity] duration-300 ease-in-out"
+          style={{
+            gridTemplateRows: showRecentCommits ? "1fr" : "0fr",
+            opacity: showRecentCommits ? 1 : 0,
+          }}
+        >
+          <div className="overflow-hidden">
+            <RecentlyMerged compact={branchOverlayMode} />
+          </div>
+        </div>
       </div>
     ) : (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
