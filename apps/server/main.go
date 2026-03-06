@@ -18,7 +18,9 @@ import (
 	"stackit.dev/stackit/internal/app"
 )
 
-//go:embed static
+// all: is required because Next static exports use underscore-prefixed paths like _next/.
+//
+//go:embed all:static
 var staticFiles embed.FS
 
 func main() {

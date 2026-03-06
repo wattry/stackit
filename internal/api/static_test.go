@@ -11,9 +11,11 @@ import (
 
 func TestStaticHandler(t *testing.T) {
 	staticFS := fstest.MapFS{
-		"index.html":     {Data: []byte("<html>index</html>")},
-		"assets/app.js":  {Data: []byte("console.log('ok')")},
-		"assets/app.css": {Data: []byte(".ok{}")},
+		"index.html":                    {Data: []byte("<html>index</html>")},
+		"assets/app.js":                 {Data: []byte("console.log('ok')")},
+		"assets/app.css":                {Data: []byte(".ok{}")},
+		"_next/static/chunks/app.js":    {Data: []byte("console.log('next')")},
+		"_next/static/media/font.woff2": {Data: []byte("fontdata")},
 	}
 
 	handler := newStaticHandler(staticFS)
@@ -43,6 +45,19 @@ func TestStaticHandler(t *testing.T) {
 			t.Fatalf("want 200, got %d", rr.Code)
 		}
 		if !strings.Contains(rr.Body.String(), "console.log") {
+			t.Fatalf("unexpected body: %q", rr.Body.String())
+		}
+	})
+
+	t.Run("serves underscore-prefixed next assets", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/_next/static/chunks/app.js", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d", rr.Code)
+		}
+		if !strings.Contains(rr.Body.String(), "next") {
 			t.Fatalf("unexpected body: %q", rr.Body.String())
 		}
 	})
