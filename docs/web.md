@@ -181,17 +181,15 @@ The web dev server runs at `http://localhost:3000` and proxies API requests to `
 ### Build & Deploy
 
 ```bash
-# Build static export
-mise run web:build
+# Build and run the embedded server locally
+mise run server:run:embedded
 
-# Copy built files into apps/server/static/ for embedding
-mise run web:sync-static
+# Or build the embedded binary without running it
+mise run server:build:embedded
 
-# Build server binary (includes embedded web assets)
-go build -o bin/stackit-server ./apps/server
-
-# Run server
-./bin/stackit-server --port 8080
+# Optional overrides
+STACKIT_SERVER_PORT=9090 mise run server:run:embedded
+STACKIT_SERVER_CWD=/path/to/repo mise run server:run:embedded
 ```
 
 ### Testing

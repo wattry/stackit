@@ -10,5 +10,5 @@ if [ ! -f apps/web/out/index.html ]; then
 fi
 
 mkdir -p apps/server/static
-find apps/server/static -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+find apps/server/static -mindepth 1 -maxdepth 1 ! -name .gitignore -exec rm -rf {} +
 cp -R apps/web/out/. apps/server/static/

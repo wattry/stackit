@@ -147,6 +147,37 @@ run = "pnpm --filter @stackit/web dev"
 description = "Run the server in development mode (auto-reloads on file changes)"
 run = "watchexec -r -e go -w apps/server -w internal -w api -- go run ./apps/server --port 8080"
 
+[tasks."server:build:embedded"]
+description = "Build stackit-server with embedded exported web assets"
+depends = ["web:sync-static"]
+run = """
+  mkdir -p bin
+  go build -o bin/stackit-server ./apps/server
+"""
+
+[tasks."server:run:embedded"]
+description = "Build and run stackit-server with embedded exported web assets"
+depends = ["server:build:embedded"]
+run = """
+  PORT="${STACKIT_SERVER_PORT:-8080}"
+  CWD="${STACKIT_SERVER_CWD:-}"
+
+  if lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Port $PORT is already in use." >&2
+    echo "Stop the existing listener or rerun with STACKIT_SERVER_PORT set to another port." >&2
+    echo "Example: STACKIT_SERVER_PORT=9090 mise run server:run:embedded" >&2
+    lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true
+    exit 1
+  fi
+
+  set -- ./bin/stackit-server --port "$PORT"
+  if [ -n "$CWD" ]; then
+    set -- "$@" --cwd "$CWD"
+  fi
+
+  exec "$@"
+"""
+
 [tasks.dev]
 description = "Run server + web dev servers using overmind and Procfile.dev"
 run = "overmind start -f Procfile.dev"
