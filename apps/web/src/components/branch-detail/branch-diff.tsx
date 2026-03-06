@@ -202,6 +202,7 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
   );
   const [activeFileKey, setActiveFileKey] = useState<string | null>(null);
   const fileSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const diffScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -280,6 +281,11 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
 
   useEffect(() => {
     if (parsed.files.length === 0) return;
+    const diffScrollRoot = diffScrollRef.current;
+    const observerRoot =
+      diffScrollRoot && diffScrollRoot.scrollHeight > diffScrollRoot.clientHeight
+        ? diffScrollRoot
+        : null;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -290,6 +296,7 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
         if (key) setActiveFileKey(key);
       },
       {
+        root: observerRoot,
         rootMargin: "-15% 0px -70% 0px",
         threshold: [0, 0.2, 0.6, 1],
       }
@@ -310,21 +317,25 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
   const showFileCount = !loading && !error && !parsed.parseError;
   const workspaceMode = Boolean(onExit);
   const contentLayoutClass = workspaceMode
-    ? "flex items-start gap-4"
-    : "grid gap-3 lg:grid-cols-[18rem,minmax(0,1fr)] lg:gap-4";
+    ? "flex min-h-0 flex-1 items-stretch gap-4"
+    : "grid gap-3 lg:grid-cols-[18rem,minmax(0,1fr)] lg:items-start lg:gap-4";
   const explorerClass = workspaceMode
-    ? "sticky top-16 self-start h-[calc(100vh-12rem)] w-72 shrink-0 overflow-hidden rounded-md border bg-card"
-    : "rounded-md border bg-card/60 lg:sticky lg:top-4 lg:self-start";
+    ? "flex min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-md border bg-card"
+    : "rounded-md border bg-card/60 lg:flex lg:max-h-[calc(100vh-14rem)] lg:min-h-0 lg:flex-col";
   const explorerListClass = workspaceMode
     ? "h-full overflow-y-auto p-2"
-    : "max-h-56 overflow-auto p-2 lg:max-h-[calc(100vh-14rem)]";
+    : "max-h-56 overflow-auto p-2 lg:max-h-none lg:flex-1";
+  const diffPaneClass = workspaceMode
+    ? "min-h-0 min-w-0 overflow-y-auto pr-1"
+    : "min-w-0 lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1";
+  const rootClassName = workspaceMode ? "flex h-full min-h-0 flex-col" : "space-y-2";
 
   return (
-    <div className="space-y-2">
+    <div className={rootClassName}>
       <div
         className={
           workspaceMode
-            ? "sticky top-0 z-10 -mx-4 mb-2 flex items-center justify-between gap-2 border-b bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+            ? "mb-2 flex shrink-0 items-center justify-between gap-2 border-b px-1 pb-3"
             : "flex items-center justify-between gap-2"
         }
       >
@@ -424,69 +435,71 @@ export function BranchDiff({ branchName, revision, onExit }: BranchDiffProps) {
             </div>
           </aside>
 
-          <div className="min-w-0 flex-1 space-y-3">
-            {parsed.files.map((file, i) => {
-              const fileKey = getFileKey(file, i);
-              const collapsible = hasLineChanges(file);
+          <div ref={diffScrollRef} className={diffPaneClass}>
+            <div className="space-y-3">
+              {parsed.files.map((file, i) => {
+                const fileKey = getFileKey(file, i);
+                const collapsible = hasLineChanges(file);
 
-              return (
-                <div
-                  key={fileKey}
-                  ref={(node) => {
-                    fileSectionRefs.current[fileKey] = node;
-                  }}
-                  data-file-key={fileKey}
-                  className={cn(
-                    "relative rounded-md border bg-background scroll-mt-24",
-                    selectedFileKey === fileKey && "ring-1 ring-primary/20"
-                  )}
-                >
-                  {collapsible && visibleCollapsedFiles[fileKey] ? (
-                    <div className="flex items-center justify-between gap-3 px-3 py-2">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        {getChangeTypeIcon(file)}
-                        <span
-                          className="truncate font-mono text-xs text-muted-foreground"
-                          title={getFileLabel(file)}
-                        >
-                          {getFileLabel(file)}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setCollapsedFiles((prev) => ({
-                            ...prev,
-                            [fileKey]: false,
-                          }))
-                        }
-                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" />
-                        Expand
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {collapsible && (
+                return (
+                  <div
+                    key={fileKey}
+                    ref={(node) => {
+                      fileSectionRefs.current[fileKey] = node;
+                    }}
+                    data-file-key={fileKey}
+                    className={cn(
+                      "relative rounded-md border bg-background scroll-mt-24",
+                      selectedFileKey === fileKey && "ring-1 ring-primary/20"
+                    )}
+                  >
+                    {collapsible && visibleCollapsedFiles[fileKey] ? (
+                      <div className="flex items-center justify-between gap-3 px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          {getChangeTypeIcon(file)}
+                          <span
+                            className="truncate font-mono text-xs text-muted-foreground"
+                            title={getFileLabel(file)}
+                          >
+                            {getFileLabel(file)}
+                          </span>
+                        </div>
                         <button
                           onClick={() =>
                             setCollapsedFiles((prev) => ({
                               ...prev,
-                              [fileKey]: true,
+                              [fileKey]: false,
                             }))
                           }
-                          className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
                         >
-                          <ChevronDown className="h-3.5 w-3.5" />
-                          Collapse
+                          <ChevronRight className="h-3.5 w-3.5" />
+                          Expand
                         </button>
-                      )}
-                      <FileDiff fileDiff={file} options={DIFF_OPTIONS} className="block" />
-                    </>
-                  )}
-                </div>
-              );
-            })}
+                      </div>
+                    ) : (
+                      <>
+                        {collapsible && (
+                          <button
+                            onClick={() =>
+                              setCollapsedFiles((prev) => ({
+                                ...prev,
+                                [fileKey]: true,
+                              }))
+                            }
+                            className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                            Collapse
+                          </button>
+                        )}
+                        <FileDiff fileDiff={file} options={DIFF_OPTIONS} className="block" />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
