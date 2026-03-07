@@ -12,7 +12,7 @@ export function CIChecks({ ci }: { ci?: CIResponse }) {
         CI Checks
       </h4>
       <div className="space-y-0.5">
-        {ci.checks.map((check, i) => (
+        {ci.checks.map((check) => (
           <div
             key={check.name}
             className="flex items-center gap-2 text-sm"

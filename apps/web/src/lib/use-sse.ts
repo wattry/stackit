@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { FeedEvent } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -16,46 +16,39 @@ export function useSSE(
   onUpdate: SSECallback,
   onEvent?: (event: FeedEvent) => void
 ) {
-  const callbackRef = useRef(onUpdate);
-  callbackRef.current = onUpdate;
-
-  const eventCallbackRef = useRef(onEvent);
-  eventCallbackRef.current = onEvent;
-
-  const stableCallback = useCallback(() => {
-    callbackRef.current();
-  }, []);
+  const handleUpdate = useEffectEvent(onUpdate);
+  const handleEvent = useEffectEvent((event: FeedEvent) => {
+    onEvent?.(event);
+  });
 
   useEffect(() => {
     const eventSource = new EventSource(`${API_BASE}/api/events`);
 
     eventSource.addEventListener("stacks_updated", () => {
-      stableCallback();
+      handleUpdate();
     });
 
     eventSource.addEventListener("branch_changed", () => {
-      stableCallback();
+      handleUpdate();
     });
 
     eventSource.addEventListener("refresh", () => {
-      stableCallback();
+      handleUpdate();
     });
 
     eventSource.addEventListener("branch_switched", (e) => {
-      if (eventCallbackRef.current) {
-        try {
-          const data = JSON.parse(e.data);
-          eventCallbackRef.current({
-            kind: "branch_switched",
-            timestamp: data.timestamp || new Date().toISOString(),
-            branch: data.to,
-            detail: `from ${data.from}`,
-          });
-        } catch {
-          // Ignore malformed events
-        }
+      try {
+        const data = JSON.parse(e.data);
+        handleEvent({
+          kind: "branch_switched",
+          timestamp: data.timestamp || new Date().toISOString(),
+          branch: data.to,
+          detail: `from ${data.from}`,
+        });
+      } catch {
+        // Ignore malformed events
       }
-      stableCallback();
+      handleUpdate();
     });
 
     eventSource.onerror = () => {
@@ -65,5 +58,5 @@ export function useSSE(
     return () => {
       eventSource.close();
     };
-  }, [stableCallback]);
+  }, []);
 }
