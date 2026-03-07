@@ -9,14 +9,17 @@ import (
 
 // EventBroadcaster manages SSE connections and broadcasts events.
 type EventBroadcaster struct {
-	mu      sync.RWMutex
-	clients map[chan string]struct{}
+	mu         sync.RWMutex
+	clients    map[chan string]struct{}
+	shutdownCh chan struct{}
+	closed     bool
 }
 
 // NewEventBroadcaster creates a new SSE event broadcaster.
 func NewEventBroadcaster() *EventBroadcaster {
 	return &EventBroadcaster{
-		clients: make(map[chan string]struct{}),
+		clients:    make(map[chan string]struct{}),
+		shutdownCh: make(chan struct{}),
 	}
 }
 
@@ -24,6 +27,9 @@ func NewEventBroadcaster() *EventBroadcaster {
 func (b *EventBroadcaster) Broadcast(event, data string) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	if b.closed {
+		return
+	}
 
 	msg := fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
 	for ch := range b.clients {
@@ -35,18 +41,41 @@ func (b *EventBroadcaster) Broadcast(event, data string) {
 	}
 }
 
-func (b *EventBroadcaster) subscribe() chan string {
+// Done returns a channel that closes when the broadcaster is shutting down.
+func (b *EventBroadcaster) Done() <-chan struct{} {
+	return b.shutdownCh
+}
+
+// Close notifies all subscribers to exit and prevents future broadcasts.
+func (b *EventBroadcaster) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return
+	}
+	b.closed = true
+	close(b.shutdownCh)
+}
+
+func (b *EventBroadcaster) subscribe() (chan string, bool) {
 	ch := make(chan string, 16)
 	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		close(ch)
+		return nil, false
+	}
 	b.clients[ch] = struct{}{}
-	b.mu.Unlock()
-	return ch
+	return ch, true
 }
 
 func (b *EventBroadcaster) unsubscribe(ch chan string) {
 	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := b.clients[ch]; !ok {
+		return
+	}
 	delete(b.clients, ch)
-	b.mu.Unlock()
 	close(ch)
 }
 
@@ -77,7 +106,11 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ch := h.broadcaster.subscribe()
+	ch, ok := h.broadcaster.subscribe()
+	if !ok {
+		http.Error(w, "server shutting down", http.StatusServiceUnavailable)
+		return
+	}
 	defer h.broadcaster.unsubscribe(ch)
 
 	// Send initial heartbeat
@@ -89,6 +122,8 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-h.broadcaster.Done():
 			return
 		case msg, ok := <-ch:
 			if !ok {
