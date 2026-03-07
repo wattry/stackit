@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
 
 func TestNormalizeAPIPrefixes(t *testing.T) {
 	tests := []struct {
@@ -59,5 +63,19 @@ func TestIsAPIPath(t *testing.T) {
 		if got := isAPIPath(tc.path, prefixes); got != tc.want {
 			t.Fatalf("path %q: want %v, got %v", tc.path, tc.want, got)
 		}
+	}
+}
+
+func TestServerShutdownClosesBroadcaster(t *testing.T) {
+	server := NewServer(ServerConfig{}, nil, nil)
+
+	if err := server.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown returned error: %v", err)
+	}
+
+	select {
+	case <-server.Broadcaster().Done():
+	case <-time.After(time.Second):
+		t.Fatal("broadcaster was not closed during shutdown")
 	}
 }

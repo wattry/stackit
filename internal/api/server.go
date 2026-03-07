@@ -142,6 +142,7 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.broadcaster.Close()
 	if s.refWatcher != nil {
 		s.refWatcher.Stop()
 	}
