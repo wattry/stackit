@@ -29,6 +29,15 @@ export function useTheme() {
 
 const STORAGE_KEY = "stackit-theme";
 
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "system";
+
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === "light" || stored === "dark" || stored === "system"
+    ? stored
+    : "system";
+}
+
 function getSystemPreference(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -43,43 +52,30 @@ function applyTheme(theme: Theme) {
   document.documentElement.style.colorScheme = resolved;
 }
 
-function resolveTheme(theme: Theme): ResolvedTheme {
-  return theme === "system" ? getSystemPreference() : theme;
-}
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(
+    getSystemPreference
+  );
+  const resolvedTheme = theme === "system" ? systemTheme : theme;
 
-  // Initialize from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const initial = stored && ["light", "dark", "system"].includes(stored)
-      ? stored
-      : "system";
-    setThemeState(initial);
-    setResolvedTheme(resolveTheme(initial));
-    applyTheme(initial);
-  }, []);
+    applyTheme(theme);
+  }, [theme, systemTheme]);
 
   // Listen for system preference changes when in "system" mode
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
-      if (theme === "system") {
-        setResolvedTheme(getSystemPreference());
-        applyTheme("system");
-      }
-    };
+    const handler = () => setSystemTheme(getSystemPreference());
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [theme]);
+  }, []);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    setResolvedTheme(resolveTheme(next));
-    localStorage.setItem(STORAGE_KEY, next);
-    applyTheme(next);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, next);
+    }
   }, []);
 
   return (

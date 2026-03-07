@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { Github } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { CIResponse, PRResponse } from "@/lib/api";
-import { usePrevious } from "@/hooks/use-previous";
 import { useConfetti } from "@/hooks/use-confetti";
 
 export function CIStatusBadge({ ci }: { ci?: CIResponse }) {
@@ -49,11 +48,13 @@ export function ReviewBadge({ ci }: { ci?: CIResponse }) {
 }
 
 export function PRBadge({ pr }: { pr?: PRResponse }) {
-  const previousState = usePrevious(pr?.state);
   const fireConfetti = useConfetti();
   const hasFiredRef = useRef(false);
+  const previousStateRef = useRef(pr?.state);
 
   useEffect(() => {
+    const previousState = previousStateRef.current;
+
     if (
       pr?.state === "MERGED" &&
       previousState &&
@@ -66,7 +67,9 @@ export function PRBadge({ pr }: { pr?: PRResponse }) {
     if (pr?.state !== "MERGED") {
       hasFiredRef.current = false;
     }
-  }, [pr?.state, previousState, fireConfetti]);
+
+    previousStateRef.current = pr?.state;
+  }, [pr?.state, fireConfetti]);
 
   if (!pr) return null;
 

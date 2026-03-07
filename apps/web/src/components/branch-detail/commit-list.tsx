@@ -15,7 +15,7 @@ export function CommitList({ commits }: { commits?: CommitResponse[] }) {
         Commits
       </h4>
       <div className="space-y-0.5">
-        {commits.map((commit, i) => (
+        {commits.map((commit) => (
           <div
             key={commit.sha}
             className="flex items-baseline gap-2 text-sm"

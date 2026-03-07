@@ -30,7 +30,7 @@ func copyDir(src, dst string) error {
 		}
 
 		// Copy file
-		srcFile, err := os.Open(path)
+		srcFile, err := os.Open(path) //nolint:gosec // G122: test helper, no symlink risk
 		if err != nil {
 			return err
 		}
