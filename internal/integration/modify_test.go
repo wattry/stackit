@@ -196,6 +196,42 @@ func TestModifyWorkflow(t *testing.T) {
 		sh.Log("✓ Modify with --update complete!")
 	})
 
+	t.Run("modify with no changes does nothing", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a branch with a commit
+		sh.Write("feature", "feature content").
+			Run("create feature -m 'Add feature'").
+			OnBranch("feature")
+
+		// Run modify with no changes
+		sh.Run("modify -n").
+			OutputContains("Nothing to modify")
+
+		sh.Log("✓ Modify with no changes correctly does nothing!")
+	})
+
+	t.Run("modify with no staged changes but with message amends commit message", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+
+		// Create a branch with a commit
+		sh.Write("feature", "feature content").
+			Run("create feature -m 'Original message'").
+			OnBranch("feature")
+
+		// Run modify with only a message change (no staged changes)
+		sh.Run("modify -m 'Updated message'").
+			OutputContains("Amended commit")
+
+		// Verify message changed
+		sh.Git("log -1 --format=%s").
+			OutputContains("Updated message")
+
+		sh.Log("✓ Modify with message-only change works!")
+	})
+
 	t.Run("modify errors on trunk branch", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)
