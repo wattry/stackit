@@ -360,7 +360,10 @@ func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output
 						branchErrors[idx] = fmt.Sprintf("Branch %s PR #%d has failing CI checks", name, *prInfo.Number())
 					}
 				default:
-					checksStatus = ChecksPassing
+					if len(status.Checks) > 0 {
+						checksStatus = ChecksPassing
+					}
+					// else: no checks configured, keep ChecksNone
 				}
 			}
 		}

@@ -74,13 +74,19 @@ func (w *CIWaiter) WaitForChecks(ctx context.Context, branchName string, prNumbe
 	lastProgressReport := startTime
 	progressInterval := 1 * time.Second
 
-	// If we expect checks, give GitHub a moment to register them
-	if expectChecks {
+	// If no checks are expected, skip waiting entirely
+	if !expectChecks {
 		if w.output != nil {
-			w.output.Info("   Waiting for CI checks to register...")
+			w.output.Info("   No CI checks configured, skipping wait.")
 		}
-		time.Sleep(CIRegistrationDelay)
+		return &WaitResult{Passed: true}, nil
 	}
+
+	// Give GitHub a moment to register checks
+	if w.output != nil {
+		w.output.Info("   Waiting for CI checks to register...")
+	}
+	time.Sleep(CIRegistrationDelay)
 
 	if w.output != nil {
 		w.output.Info("   Waiting for CI checks (timeout: %v)...", w.timeout)
