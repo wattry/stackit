@@ -85,14 +85,22 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 		}
 	}
 
-	// Check if there are staged changes (for new commits)
+	// Check if there are staged changes
+	hasStagedChanges, err := eng.HasStagedChanges(gctx)
+	if err != nil {
+		return fmt.Errorf("failed to check staged changes: %w", err)
+	}
+
 	if opts.CreateCommit {
-		hasStagedChanges, err := eng.HasStagedChanges(gctx)
-		if err != nil {
-			return fmt.Errorf("failed to check staged changes: %w", err)
-		}
 		if !hasStagedChanges {
 			return fmt.Errorf("no staged changes to commit. Use -a to stage all changes, or stage changes manually with 'git add'")
+		}
+	} else {
+		// When amending, skip if there are no staged changes and no message/edit/author changes
+		hasContentChange := commitMessage != "" || opts.Edit || opts.ResetAuthor
+		if !hasStagedChanges && !hasContentChange {
+			out.Info("Nothing to modify.")
+			return nil
 		}
 	}
 
