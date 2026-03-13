@@ -5,9 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	stackiterrors "stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/tui"
@@ -419,24 +421,17 @@ func TestBuildAgentFileGroups(t *testing.T) {
 		require.True(t, found)
 	})
 
-	t.Run("includes claude slash commands group", func(t *testing.T) {
+	t.Run("claude does not include commands file group", func(t *testing.T) {
 		t.Parallel()
 		target := installTargetForFormat(agentSkillFormatClaude)
 		groups := buildAgentFileGroups(target)
 
-		var found bool
 		for _, g := range groups {
-			if g.destDir == filepath.Join(".claude", "commands") {
-				require.Equal(t, "agents/templates/commands", g.templateDir)
-				require.Equal(t, len(claudeCommandFiles), len(g.files))
-				found = true
-				break
-			}
+			require.NotEqual(t, filepath.Join(".claude", "commands"), g.destDir)
 		}
-		require.True(t, found)
 	})
 
-	t.Run("codex does not include claude slash commands group", func(t *testing.T) {
+	t.Run("codex does not include commands file group", func(t *testing.T) {
 		t.Parallel()
 		target := installTargetForFormat(agentSkillFormatCodex)
 		groups := buildAgentFileGroups(target)
@@ -660,21 +655,23 @@ func TestPrintSuccessMessageIncludesCodex(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	printSuccessMessage(&out, []agentInstallTarget{installTargetForFormat(agentSkillFormatCodex)}, false, "", len(claudeCommandFiles))
+	printSuccessMessage(&out, []agentInstallTarget{installTargetForFormat(agentSkillFormatCodex)}, false, "", len(commandTemplateFiles))
 
 	require.Contains(t, out.String(), "Installed agent files")
 	require.Contains(t, out.String(), "~/.codex/skills/stackit")
+	require.Contains(t, out.String(), ".codex/skills/stack-*/")
 	require.NotContains(t, out.String(), "Slash commands:")
 }
 
-func TestPrintSuccessMessageIncludesClaudeCommands(t *testing.T) {
+func TestPrintSuccessMessageIncludesClaudeSkills(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	printSuccessMessage(&out, []agentInstallTarget{installTargetForFormat(agentSkillFormatClaude)}, false, "", len(claudeCommandFiles))
+	printSuccessMessage(&out, []agentInstallTarget{installTargetForFormat(agentSkillFormatClaude)}, false, "", len(commandTemplateFiles))
 
 	require.Contains(t, out.String(), "~/.claude/skills/stackit")
-	require.Contains(t, out.String(), "Slash commands:")
+	require.Contains(t, out.String(), ".claude/skills/stack-*/")
+	require.NotContains(t, out.String(), "Slash commands:")
 	require.Contains(t, out.String(), "/stack-describe")
 	require.Contains(t, out.String(), "/stack-modify")
 }
@@ -691,12 +688,60 @@ func TestPrintSuccessMessageIncludesMultipleTargets(t *testing.T) {
 		},
 		false,
 		"",
-		len(claudeCommandFiles),
+		len(commandTemplateFiles),
 	)
 
 	require.Contains(t, out.String(), "~/.claude/skills/stackit")
 	require.Contains(t, out.String(), "~/.codex/skills/stackit")
-	require.Contains(t, out.String(), "Slash commands:")
+	require.Contains(t, out.String(), ".claude/skills/stack-*/")
+	require.Contains(t, out.String(), ".codex/skills/stack-*/")
+}
+
+func TestRenderClaudeSkillContent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		skill   string
+		assert  func(t *testing.T, result string)
+	}{
+		{
+			name:    "adds name and preserves command frontmatter",
+			content: "---\ndescription: Test\nmodel: sonnet\nargument-hint: [-m \"message\"] [branch-name]\nallowed-tools: Bash(stackit:*)\n---\n\n## Arguments\n$ARGUMENTS\n",
+			skill:   "stack-create",
+			assert: func(t *testing.T, result string) {
+				frontmatter, body := mustExtractFrontmatter(t, result)
+				var meta map[string]any
+				require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+				require.Equal(t, "stack-create", meta["name"])
+				require.Equal(t, "[-m \"message\"] [branch-name]", meta["argument-hint"])
+				require.Contains(t, body, "$ARGUMENTS")
+			},
+		},
+		{
+			name:    "errors when frontmatter is missing",
+			content: "# no frontmatter",
+			skill:   "stack-sync",
+			assert: func(t *testing.T, result string) {
+				t.Helper()
+				require.Empty(t, result)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := renderClaudeSkillContent([]byte(tt.content), tt.skill)
+			if tt.name == "errors when frontmatter is missing" {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			tt.assert(t, string(result))
+		})
+	}
 }
 
 func TestParseAgentSkillFormat(t *testing.T) {
@@ -773,6 +818,148 @@ func TestResolveInstallBaseDirUsesHomeDirectory(t *testing.T) {
 	baseDir, err := resolveInstallBaseDir()
 	require.NoError(t, err)
 	require.Equal(t, homeDir, baseDir)
+}
+
+func TestRenderCodexSkillContent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		skill   string
+		assert  func(t *testing.T, result string)
+	}{
+		{
+			name:    "injects name and preserves supported frontmatter",
+			content: "---\ndescription: Do stuff\nmodel: sonnet\nallowed-tools: Bash(stackit:*)\n---\n\n# Content",
+			skill:   "stack-create",
+			assert: func(t *testing.T, result string) {
+				frontmatter, body := mustExtractFrontmatter(t, result)
+				var meta map[string]any
+				require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+				require.Equal(t, "stack-create", meta["name"])
+				require.Equal(t, "Do stuff", meta["description"])
+				require.Equal(t, "sonnet", meta["model"])
+				require.Equal(t, "Bash(stackit:*)", meta["allowed-tools"])
+				require.Equal(t, "\n# Content", body)
+			},
+		},
+		{
+			name:    "removes argument hint and rewrites arguments placeholder",
+			content: "---\ndescription: Test\nmodel: sonnet\nargument-hint: [-m \"message\"] [branch-name]\nallowed-tools: Bash\n---\n\n## Arguments\n$ARGUMENTS\n\nBody",
+			skill:   "stack-modify",
+			assert: func(t *testing.T, result string) {
+				frontmatter, body := mustExtractFrontmatter(t, result)
+				require.NotContains(t, frontmatter, "argument-hint:")
+				var meta map[string]any
+				require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+				require.Equal(t, "stack-modify", meta["name"])
+				require.Contains(t, body, "Expected argument shape: `[-m \"message\"] [branch-name]`.")
+				require.NotContains(t, body, "$ARGUMENTS")
+			},
+		},
+		{
+			name:    "errors when frontmatter is missing",
+			content: "# No frontmatter here",
+			skill:   "stack-sync",
+			assert: func(t *testing.T, result string) {
+				t.Helper()
+				require.Empty(t, result)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := renderCodexSkillContent([]byte(tt.content), tt.skill)
+			if tt.name == "errors when frontmatter is missing" {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			tt.assert(t, string(result))
+		})
+	}
+}
+
+func TestInstallClaudeSkillsMatchTemplates(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	require.NoError(t, installCommandsAsClaudeSkills(tmpDir, filepath.Join(".claude", "skills"), "agents/templates/commands", commandTemplateFiles))
+
+	for _, filename := range commandTemplateFiles {
+		expectedTemplate, err := agentTemplates.ReadFile("agents/templates/commands/" + filename)
+		require.NoError(t, err)
+
+		skillName := strings.TrimSuffix(filename, ".md")
+		installedPath := filepath.Join(tmpDir, ".claude", "skills", skillName, "SKILL.md")
+		content, err := os.ReadFile(installedPath)
+		require.NoError(t, err, "skill file should exist for %s", filename)
+
+		expectedFrontmatter, expectedBody := mustExtractFrontmatter(t, string(expectedTemplate))
+		actualFrontmatter, actualBody := mustExtractFrontmatter(t, string(content))
+		var meta map[string]any
+		require.NoError(t, yaml.Unmarshal([]byte(actualFrontmatter), &meta))
+		require.Equal(t, skillName, meta["name"])
+		require.Equal(t, expectedBody, actualBody, "Claude skill body changed for %s", filename)
+		require.Contains(t, actualFrontmatter, "description:")
+		require.Contains(t, actualFrontmatter, "model:")
+		require.Contains(t, actualFrontmatter, "allowed-tools:")
+		if rawArgumentHint, ok := extractRawFrontmatterValue(expectedFrontmatter, "argument-hint"); ok {
+			require.Equal(t, rawArgumentHint, meta["argument-hint"])
+		}
+	}
+}
+
+func TestInstallCodexCommandSkills(t *testing.T) {
+	t.Parallel()
+
+	files := []string{"stack-create.md", "stack-fix.md", "stack-modify.md"}
+	tmpDir := t.TempDir()
+
+	err := installCommandsAsCodexSkills(tmpDir, filepath.Join(".codex", "skills"), "agents/templates/commands", files)
+	require.NoError(t, err)
+
+	for _, filename := range files {
+		skillName := strings.TrimSuffix(filename, ".md")
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", skillName, "SKILL.md")
+
+		content, err := os.ReadFile(skillPath)
+		require.NoError(t, err, "SKILL.md should exist for %s", skillName)
+
+		frontmatter, body := mustExtractFrontmatter(t, string(content))
+		var meta map[string]any
+		require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+		require.Equal(t, skillName, meta["name"])
+		require.Contains(t, frontmatter, "description:")
+		require.NotContains(t, frontmatter, "argument-hint:")
+		require.NotContains(t, body, "$ARGUMENTS")
+	}
+}
+
+func mustExtractFrontmatter(t *testing.T, content string) (frontmatter, body string) {
+	t.Helper()
+
+	const marker = "---\n"
+	require.True(t, strings.HasPrefix(content, marker), "content must start with frontmatter")
+
+	rest := strings.TrimPrefix(content, marker)
+	idx := strings.Index(rest, marker)
+	require.NotEqual(t, -1, idx, "content must include closing frontmatter marker")
+
+	return rest[:idx], rest[idx+len(marker):]
+}
+
+func extractRawFrontmatterValue(frontmatter, key string) (string, bool) {
+	prefix := key + ":"
+	for _, line := range strings.Split(frontmatter, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
+		}
+	}
+	return "", false
 }
 
 func testSkillContent(version string) string {
