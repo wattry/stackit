@@ -2,6 +2,7 @@
 package integrations
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	stackiterrors "stackit.dev/stackit/internal/errors"
 	"stackit.dev/stackit/internal/git"
@@ -92,11 +94,13 @@ const (
 )
 
 type agentInstallTarget struct {
-	format               agentSkillFormat
-	skillDir             string
-	displayPath          string
-	includeAgentsMeta    bool
-	includeClaudeCommand bool
+	format              agentSkillFormat
+	skillDir            string
+	skillsBaseDir       string // base directory for individual skills (e.g., ".claude/skills" or ".codex/skills")
+	displayPath         string
+	includeAgentsMeta   bool
+	includeClaudeSkills bool
+	includeCodexSkills  bool
 }
 
 type existingSkillInstallation struct {
@@ -116,11 +120,11 @@ var (
 
 	subagentFiles = []string{"commit-message.md", "review-triage.md"}
 
-	claudeCommandFiles = []string{
+	commandTemplateFiles = []string{
 		"stack-absorb.md", "stack-create.md", "stack-describe.md", "stack-extract.md",
-		"stack-fix.md", "stack-fold.md", "stack-modify.md", "stack-plan.md", "stack-restack.md",
-		"stack-review.md", "stack-split.md", "stack-status.md", "stack-submit.md",
-		"stack-sync.md", "stack-verify.md",
+		"stack-fix.md", "stack-fold.md", "stack-modify.md", "stack-plan.md", "stack-resolve.md",
+		"stack-restack.md", "stack-review.md", "stack-split.md", "stack-status.md",
+		"stack-submit.md", "stack-sync.md", "stack-tidy.md", "stack-verify.md",
 	}
 
 	promptSelect                 = tui.PromptSelect
@@ -159,6 +163,19 @@ func runAgentInstall(runner git.Runner, local, force bool, formats []string, ver
 				return err
 			}
 		}
+
+		if target.includeClaudeSkills {
+			cleanupOldCommandFiles(baseDir, commandTemplateFiles)
+			if err := installCommandsAsClaudeSkills(baseDir, target.skillsBaseDir, "agents/templates/commands", commandTemplateFiles); err != nil {
+				return err
+			}
+		}
+
+		if target.includeCodexSkills {
+			if err := installCommandsAsCodexSkills(baseDir, target.skillsBaseDir, "agents/templates/commands", commandTemplateFiles); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Install workflow block to CLAUDE.md or AGENTS.md if in a git repo
@@ -171,7 +188,7 @@ func runAgentInstall(runner git.Runner, local, force bool, formats []string, ver
 		}
 	}
 
-	printSuccessMessage(out, targets, workflowBlockInstalled, workflowBlockPath, len(claudeCommandFiles))
+	printSuccessMessage(out, targets, workflowBlockInstalled, workflowBlockPath, len(commandTemplateFiles))
 	return nil
 }
 
@@ -388,31 +405,26 @@ func installTargetForFormat(format agentSkillFormat) agentInstallTarget {
 	switch format {
 	case agentSkillFormatCodex:
 		return agentInstallTarget{
-			format:            agentSkillFormatCodex,
-			skillDir:          filepath.Join(".codex", "skills", "stackit"),
-			displayPath:       "~/.codex/skills/stackit",
-			includeAgentsMeta: true,
+			format:             agentSkillFormatCodex,
+			skillDir:           filepath.Join(".codex", "skills", "stackit"),
+			skillsBaseDir:      filepath.Join(".codex", "skills"),
+			displayPath:        "~/.codex/skills/stackit",
+			includeAgentsMeta:  true,
+			includeCodexSkills: true,
 		}
 	default:
 		return agentInstallTarget{
-			format:               agentSkillFormatClaude,
-			skillDir:             filepath.Join(".claude", "skills", "stackit"),
-			displayPath:          "~/.claude/skills/stackit",
-			includeClaudeCommand: true,
+			format:              agentSkillFormatClaude,
+			skillDir:            filepath.Join(".claude", "skills", "stackit"),
+			skillsBaseDir:       filepath.Join(".claude", "skills"),
+			displayPath:         "~/.claude/skills/stackit",
+			includeClaudeSkills: true,
 		}
 	}
 }
 
 func buildAgentFileGroups(target agentInstallTarget) []fileGroup {
-	groups := buildSkillFileGroups(target.skillDir, target.includeAgentsMeta)
-	if target.includeClaudeCommand {
-		groups = append(groups, fileGroup{
-			templateDir: "agents/templates/commands",
-			destDir:     filepath.Join(".claude", "commands"),
-			files:       claudeCommandFiles,
-		})
-	}
-	return groups
+	return buildSkillFileGroups(target.skillDir, target.includeAgentsMeta)
 }
 
 func resolveInstallBaseDir() (string, error) {
@@ -497,21 +509,185 @@ func installFileGroup(baseDir string, g fileGroup, version string) error {
 	return nil
 }
 
+func installCommandsAsClaudeSkills(baseDir, skillsBaseDir, templateDir string, files []string) error {
+	for _, filename := range files {
+		skillName := strings.TrimSuffix(filename, ".md")
+		content, err := agentTemplates.ReadFile(templateDir + "/" + filename)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", filename, err)
+		}
+
+		content, err = renderClaudeSkillContent(content, skillName)
+		if err != nil {
+			return fmt.Errorf("failed to render Claude skill for %s: %w", skillName, err)
+		}
+
+		destDir := filepath.Join(baseDir, skillsBaseDir, skillName)
+		if err := os.MkdirAll(destDir, 0750); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+		}
+		if err := os.WriteFile(filepath.Join(destDir, "SKILL.md"), content, 0600); err != nil {
+			return fmt.Errorf("failed to write SKILL.md for %s: %w", skillName, err)
+		}
+	}
+	return nil
+}
+
+func installCommandsAsCodexSkills(baseDir, skillsBaseDir, templateDir string, files []string) error {
+	for _, filename := range files {
+		skillName := strings.TrimSuffix(filename, ".md")
+		content, err := agentTemplates.ReadFile(templateDir + "/" + filename)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", filename, err)
+		}
+
+		content, err = renderCodexSkillContent(content, skillName)
+		if err != nil {
+			return fmt.Errorf("failed to render Codex skill for %s: %w", skillName, err)
+		}
+
+		destDir := filepath.Join(baseDir, skillsBaseDir, skillName)
+		if err := os.MkdirAll(destDir, 0750); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+		}
+		if err := os.WriteFile(filepath.Join(destDir, "SKILL.md"), content, 0600); err != nil {
+			return fmt.Errorf("failed to write SKILL.md for %s: %w", skillName, err)
+		}
+	}
+	return nil
+}
+
+func renderClaudeSkillContent(content []byte, name string) ([]byte, error) {
+	frontmatter, body, found := splitFrontmatter(content)
+	if !found {
+		return nil, fmt.Errorf("missing frontmatter")
+	}
+
+	lines := strings.Split(string(frontmatter), "\n")
+	renderedFrontmatter := make([]string, 0, len(lines)+1)
+	renderedFrontmatter = append(renderedFrontmatter, "name: "+name)
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "name:") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "argument-hint:") {
+			raw := strings.TrimSpace(strings.TrimPrefix(trimmed, "argument-hint:"))
+			renderedFrontmatter = append(renderedFrontmatter, "argument-hint: "+encodeYAMLScalar(raw))
+			continue
+		}
+		renderedFrontmatter = append(renderedFrontmatter, line)
+	}
+
+	frontmatterBlock := strings.Join(renderedFrontmatter, "\n")
+	if err := yaml.Unmarshal([]byte(frontmatterBlock), &map[string]any{}); err != nil {
+		return nil, fmt.Errorf("invalid generated frontmatter: %w", err)
+	}
+
+	var result strings.Builder
+	result.WriteString("---\n")
+	result.WriteString(frontmatterBlock)
+	result.WriteString("\n---\n")
+	result.Write(body)
+
+	return []byte(result.String()), nil
+}
+
+func renderCodexSkillContent(content []byte, name string) ([]byte, error) {
+	frontmatter, body, found := splitFrontmatter(content)
+	if !found {
+		return nil, fmt.Errorf("missing frontmatter")
+	}
+
+	lines := strings.Split(string(frontmatter), "\n")
+	renderedFrontmatter := make([]string, 0, len(lines)+1)
+	renderedFrontmatter = append(renderedFrontmatter, "name: "+name)
+
+	var argumentHint string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "name:") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "argument-hint:") {
+			argumentHint = strings.TrimSpace(strings.TrimPrefix(trimmed, "argument-hint:"))
+			continue
+		}
+		renderedFrontmatter = append(renderedFrontmatter, line)
+	}
+
+	frontmatterBlock := strings.Join(renderedFrontmatter, "\n")
+	if err := yaml.Unmarshal([]byte(frontmatterBlock), &map[string]any{}); err != nil {
+		return nil, fmt.Errorf("invalid generated frontmatter: %w", err)
+	}
+
+	bodyText := string(body)
+	if strings.Contains(bodyText, "$ARGUMENTS") {
+		replacement := "If the user included explicit arguments in their request, honor them."
+		if argumentHint != "" {
+			replacement += fmt.Sprintf(" Expected argument shape: `%s`.", argumentHint)
+		}
+		bodyText = strings.Replace(bodyText, "$ARGUMENTS", replacement, 1)
+	}
+
+	var result strings.Builder
+	result.WriteString("---\n")
+	result.WriteString(frontmatterBlock)
+	result.WriteString("\n---\n")
+	result.WriteString(bodyText)
+
+	return []byte(result.String()), nil
+}
+
+func encodeYAMLScalar(raw string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range raw {
+		switch r {
+		case '\\', '"':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+func cleanupOldCommandFiles(baseDir string, files []string) {
+	commandsDir := filepath.Join(baseDir, ".claude", "commands")
+	for _, filename := range files {
+		_ = os.Remove(filepath.Join(commandsDir, filename))
+	}
+}
+
+func splitFrontmatter(content []byte) (frontmatter, body []byte, found bool) {
+	marker := []byte("---\n")
+	if !bytes.HasPrefix(content, marker) {
+		return nil, nil, false
+	}
+
+	rest := content[len(marker):]
+	idx := bytes.Index(rest, marker)
+	if idx < 0 {
+		return nil, nil, false
+	}
+
+	frontmatter = rest[:idx]
+	body = rest[idx+len(marker):]
+	return frontmatter, body, true
+}
+
 func printSuccessMessage(out io.Writer, targets []agentInstallTarget, workflowBlockInstalled bool, workflowBlockPath string, commandCount int) {
 	_, _ = fmt.Fprintln(out, "✓ Installed agent files")
 
-	installedClaudeCommands := false
 	for _, target := range targets {
 		_, _ = fmt.Fprintf(out, "✓ Created %s\n", target.displayPath)
-		if target.includeClaudeCommand {
-			installedClaudeCommands = true
+		if target.includeClaudeSkills || target.includeCodexSkills {
+			_, _ = fmt.Fprintf(out, "✓ Created ~/%s/stack-*/ (%d skills)\n", target.skillsBaseDir, commandCount)
 		}
-	}
-
-	if installedClaudeCommands {
-		_, _ = fmt.Fprintln(out)
-		_, _ = fmt.Fprintln(out, "Slash commands:")
-		_, _ = fmt.Fprintf(out, "✓ Created ~/.claude/commands/stack-*.md (%d commands)\n", commandCount)
 	}
 
 	if workflowBlockInstalled {
@@ -537,6 +713,7 @@ func printSuccessMessage(out io.Writer, targets []agentInstallTarget, workflowBl
 	_, _ = fmt.Fprintln(out, "  /stack-status  - View stack state and health")
 	_, _ = fmt.Fprintln(out, "  /stack-submit  - Submit PRs with generated descriptions")
 	_, _ = fmt.Fprintln(out, "  /stack-sync    - Sync with trunk and cleanup")
+	_, _ = fmt.Fprintln(out, "  /stack-tidy    - Clean up fixup/WIP commits across the stack")
 	_, _ = fmt.Fprintln(out, "  /stack-verify  - Verify stack health by running checks")
 }
 

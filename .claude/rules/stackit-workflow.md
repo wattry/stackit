@@ -39,6 +39,7 @@ Use skills instead of manual commands:
 | `/stack-fix` | Diagnose and fix issues |
 | `/stack-sync` | Sync with trunk, cleanup merged branches |
 | `/stack-restack` | Rebase all branches in stack |
+| `/stack-tidy` | Clean up fixup/WIP commits across the stack |
 
 Run `/stackit` for the full guide.
 
