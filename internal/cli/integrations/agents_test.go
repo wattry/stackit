@@ -294,20 +294,20 @@ func TestInstallWorkflowBlock(t *testing.T) {
 	})
 }
 
-// Not parallel: subtests mutate tui.PromptConfirm.
+// Not parallel: subtests mutate promptConfirm.
 func TestPromptAndInstallWorkflowBlockConfirmDefaultsToSkip(t *testing.T) {
 	t.Run("only CLAUDE.md exists uses false default", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte("# Project"), 0600)
 		require.NoError(t, err)
 
-		originalPromptConfirm := tui.PromptConfirm
+		originalPromptConfirm := promptConfirm
 		t.Cleanup(func() {
-			tui.PromptConfirm = originalPromptConfirm
+			promptConfirm = originalPromptConfirm
 		})
 
 		var called bool
-		tui.PromptConfirm = func(_ string, defaultValue bool) (bool, error) {
+		promptConfirm = func(_ string, defaultValue bool) (bool, error) {
 			called = true
 			require.False(t, defaultValue)
 			return false, nil
@@ -323,13 +323,13 @@ func TestPromptAndInstallWorkflowBlockConfirmDefaultsToSkip(t *testing.T) {
 	t.Run("no agent files exist uses false default", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		originalPromptConfirm := tui.PromptConfirm
+		originalPromptConfirm := promptConfirm
 		t.Cleanup(func() {
-			tui.PromptConfirm = originalPromptConfirm
+			promptConfirm = originalPromptConfirm
 		})
 
 		var called bool
-		tui.PromptConfirm = func(_ string, defaultValue bool) (bool, error) {
+		promptConfirm = func(_ string, defaultValue bool) (bool, error) {
 			called = true
 			require.False(t, defaultValue)
 			return false, nil
@@ -493,7 +493,7 @@ func TestCheckExistingInstallation(t *testing.T) {
 	})
 }
 
-// Not parallel: subtests mutate tui.PromptConfirm.
+// Not parallel: subtests mutate promptConfirm.
 func TestConfirmOverwriteIfNeeded(t *testing.T) {
 	t.Run("continues when user confirms overwrite", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -503,13 +503,13 @@ func TestConfirmOverwriteIfNeeded(t *testing.T) {
 		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
 		require.NoError(t, err)
 
-		originalPromptConfirm := tui.PromptConfirm
+		originalPromptConfirm := promptConfirm
 		t.Cleanup(func() {
-			tui.PromptConfirm = originalPromptConfirm
+			promptConfirm = originalPromptConfirm
 		})
 
 		called := false
-		tui.PromptConfirm = func(prompt string, defaultValue bool) (bool, error) {
+		promptConfirm = func(prompt string, defaultValue bool) (bool, error) {
 			called = true
 			require.Contains(t, prompt, "Existing skill installations detected")
 			require.Contains(t, prompt, "~/.claude/skills/stackit")
@@ -535,11 +535,11 @@ func TestConfirmOverwriteIfNeeded(t *testing.T) {
 		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
 		require.NoError(t, err)
 
-		originalPromptConfirm := tui.PromptConfirm
+		originalPromptConfirm := promptConfirm
 		t.Cleanup(func() {
-			tui.PromptConfirm = originalPromptConfirm
+			promptConfirm = originalPromptConfirm
 		})
-		tui.PromptConfirm = func(_ string, _ bool) (bool, error) {
+		promptConfirm = func(_ string, _ bool) (bool, error) {
 			return false, nil
 		}
 
@@ -561,11 +561,11 @@ func TestConfirmOverwriteIfNeeded(t *testing.T) {
 		err = os.WriteFile(skillPath, []byte(testSkillContent("1.0.0")), 0600)
 		require.NoError(t, err)
 
-		originalPromptConfirm := tui.PromptConfirm
+		originalPromptConfirm := promptConfirm
 		t.Cleanup(func() {
-			tui.PromptConfirm = originalPromptConfirm
+			promptConfirm = originalPromptConfirm
 		})
-		tui.PromptConfirm = func(_ string, _ bool) (bool, error) {
+		promptConfirm = func(_ string, _ bool) (bool, error) {
 			return false, tui.ErrInteractiveDisabled
 		}
 
@@ -593,11 +593,11 @@ func TestConfirmOverwriteIfNeeded(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		originalPromptConfirm := tui.PromptConfirm
+		originalPromptConfirm := promptConfirm
 		t.Cleanup(func() {
-			tui.PromptConfirm = originalPromptConfirm
+			promptConfirm = originalPromptConfirm
 		})
-		tui.PromptConfirm = func(_ string, _ bool) (bool, error) {
+		promptConfirm = func(_ string, _ bool) (bool, error) {
 			return false, tui.ErrInteractiveDisabled
 		}
 
@@ -704,6 +704,7 @@ func TestRenderClaudeSkillContent(t *testing.T) {
 		name    string
 		content string
 		skill   string
+		wantErr bool
 		assert  func(t *testing.T, result string)
 	}{
 		{
@@ -723,10 +724,7 @@ func TestRenderClaudeSkillContent(t *testing.T) {
 			name:    "errors when frontmatter is missing",
 			content: "# no frontmatter",
 			skill:   "stack-sync",
-			assert: func(t *testing.T, result string) {
-				t.Helper()
-				require.Empty(t, result)
-			},
+			wantErr: true,
 		},
 	}
 
@@ -734,7 +732,7 @@ func TestRenderClaudeSkillContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result, err := renderClaudeSkillContent([]byte(tt.content), tt.skill)
-			if tt.name == "errors when frontmatter is missing" {
+			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
@@ -827,6 +825,7 @@ func TestRenderCodexSkillContent(t *testing.T) {
 		name    string
 		content string
 		skill   string
+		wantErr bool
 		assert  func(t *testing.T, result string)
 	}{
 		{
@@ -862,10 +861,7 @@ func TestRenderCodexSkillContent(t *testing.T) {
 			name:    "errors when frontmatter is missing",
 			content: "# No frontmatter here",
 			skill:   "stack-sync",
-			assert: func(t *testing.T, result string) {
-				t.Helper()
-				require.Empty(t, result)
-			},
+			wantErr: true,
 		},
 	}
 
@@ -873,7 +869,7 @@ func TestRenderCodexSkillContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result, err := renderCodexSkillContent([]byte(tt.content), tt.skill)
-			if tt.name == "errors when frontmatter is missing" {
+			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
@@ -887,7 +883,7 @@ func TestInstallClaudeSkillsMatchTemplates(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	require.NoError(t, installCommandsAsClaudeSkills(tmpDir, filepath.Join(".claude", "skills"), "agents/templates/commands", commandTemplateFiles))
+	require.NoError(t, installCommandSkills(tmpDir, filepath.Join(".claude", "skills"), commandTemplateFiles, renderClaudeSkillContent))
 
 	for _, filename := range commandTemplateFiles {
 		expectedTemplate, err := agentTemplates.ReadFile("agents/templates/commands/" + filename)
@@ -919,7 +915,7 @@ func TestInstallCodexCommandSkills(t *testing.T) {
 	files := []string{"stack-create.md", "stack-fix.md", "stack-modify.md"}
 	tmpDir := t.TempDir()
 
-	err := installCommandsAsCodexSkills(tmpDir, filepath.Join(".codex", "skills"), "agents/templates/commands", files)
+	err := installCommandSkills(tmpDir, filepath.Join(".codex", "skills"), files, renderCodexSkillContent)
 	require.NoError(t, err)
 
 	for _, filename := range files {

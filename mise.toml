@@ -11,7 +11,7 @@ _.path = ["{{ config_root }}/bin", "{{ env.HOME }}/go/bin"]
 # Go toolchain
 go = "1.26"
 node = "22"
-pnpm = "10"
+pnpm = "10.32.1"
 
 # Test runner with prettier output
 "go:gotest.tools/gotestsum" = "latest"
