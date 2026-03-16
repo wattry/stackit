@@ -141,7 +141,7 @@ func (h *cliInitHandler) offerIntegrations(splog output.Output) {
 	} else {
 		installAgents, err := tui.PromptConfirm("Install AI agent files? (Claude Code / Codex integration)", false)
 		if err == nil && installAgents {
-			if err := integrations.InstallAgents(h.runner, false, false, h.version, h.writer); err != nil {
+			if err := integrations.InstallAgents(h.runner, false, h.version, h.writer); err != nil {
 				splog.Warn("Failed to install agent files: %v", err)
 			}
 		}

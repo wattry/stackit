@@ -1,7 +1,7 @@
 {
   "name": "stackit-monorepo",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "web:dev": "pnpm --filter @stackit/web dev",
     "web:build": "pnpm --filter @stackit/web build",

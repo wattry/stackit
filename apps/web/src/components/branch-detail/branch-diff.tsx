@@ -44,7 +44,7 @@ function hasLineChanges(file: FileDiffMetadata): boolean {
     hunk.hunkContent.some(
       (content) =>
         content.type === "change" &&
-        (content.additions.length > 0 || content.deletions.length > 0)
+        (content.additions > 0 || content.deletions > 0)
     )
   );
 }

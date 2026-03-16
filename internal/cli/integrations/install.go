@@ -45,9 +45,9 @@ func InstallPrepush(runner git.Runner, out io.Writer) error {
 // InstallAgents installs AI agent integration files.
 // This is a convenience wrapper for use during init.
 // It auto-detects formats from existing directories to avoid a nested prompt.
-func InstallAgents(runner git.Runner, local, force bool, version string, out io.Writer) error {
+func InstallAgents(runner git.Runner, force bool, version string, out io.Writer) error {
 	formats := autoDetectFormats()
-	return runAgentInstall(runner, local, force, formats, version, out)
+	return runAgentInstall(runner, force, formats, version, out)
 }
 
 // autoDetectFormats returns format flags based on which agent directories exist,
