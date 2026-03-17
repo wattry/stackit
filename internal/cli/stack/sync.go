@@ -46,6 +46,12 @@ If trunk cannot be fast-forwarded to match remote, overwrites trunk with the rem
 					})
 				}
 
+				// Check for uncommitted changes BEFORE starting TUI to avoid
+				// terminal control codes leaking on early error exit
+				if ctx.Reader().HasUncommittedChanges(ctx.Context) && !ctx.InManagedWorktree {
+					return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
+				}
+
 				// Create runner (manages terminal state) and handler (processes events)
 				runner, handler := NewSyncUI(ctx.Output, ctx.Logger)
 				defer runner.Cleanup()
