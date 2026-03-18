@@ -25,18 +25,8 @@ func TestSyncAction(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("fails when there are uncommitted changes", func(t *testing.T) {
-		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
-			WithUncommittedChange("unstaged")
-
-		err := Action(s.Context, Options{
-			All:     false,
-			Force:   false,
-			Restack: false,
-		}, nil)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "uncommitted changes")
-	})
+	// Note: uncommitted changes check moved to CLI layer (sync.go) to run
+	// before TUI initialization. Tested in internal/cli/stack/sync_test.go.
 
 	t.Run("syncs with restack flag", func(t *testing.T) {
 		s := scenario.NewScenario(t, nil).

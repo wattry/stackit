@@ -56,15 +56,6 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		out.Info("Syncing branches across all configured trunks...")
 	}
 
-	// Check for uncommitted changes in main repo (not worktrees - those are handled below)
-	// If we're in a worktree with uncommitted changes, the worktree dirty check will skip that stack
-	uncommittedStart := time.Now()
-	hasUncommitted := ctx.Reader().HasUncommittedChanges(gctx)
-	ctx.Logger.Info("check uncommitted changes completed durationMs=%v", time.Since(uncommittedStart).Milliseconds())
-	if hasUncommitted && !ctx.InManagedWorktree {
-		return fmt.Errorf("you have uncommitted changes. Please commit or stash them before syncing")
-	}
-
 	// Collect dirty worktree anchors (stacks to skip entirely)
 	// Rather than failing on dirty worktrees, we skip their entire stack to allow
 	// parallel work in other worktrees while preserving consistency.
