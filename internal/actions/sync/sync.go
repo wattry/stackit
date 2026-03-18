@@ -27,7 +27,8 @@ type DryRunResult struct {
 type Options struct {
 	All          bool
 	Force        bool
-	Restack      bool
+	Restack      bool // Explicitly restack the full current stack (opt-in)
+	NoRestack    bool // Skip all restacking entirely
 	DryRun       bool
 	RestackScope []string // When non-nil, only restack these branches (skip current-branch expansion)
 }
@@ -39,7 +40,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	gctx := ctx.Context
 	summary := &Summary{}
 
-	ctx.Logger.Info("sync started restack=%v force=%v", opts.Restack, opts.Force)
+	ctx.Logger.Info("sync started restack=%v noRestack=%v force=%v", opts.Restack, opts.NoRestack, opts.Force)
 
 	// Use null handler if none provided
 	if handler == nil {
@@ -75,7 +76,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Calculate total operations for progress (rough estimate)
 	totalOps := 1 // trunk sync
-	if opts.Restack {
+	if !opts.NoRestack {
 		// Estimate based on tracked branches
 		progressCountStart := time.Now()
 		branchCount := len(ctx.Navigator().AllBranches())
@@ -219,9 +220,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		branchesToRestack = append(branchesToRestack, branchName)
 	}
 
-	// Restack if requested
-	if !opts.Restack {
-		out.Tip("Try the --restack flag to automatically restack the current stack.")
+	// Phase 4: Restack branches
+	// --no-restack: skip all restacking
+	// --restack: expand to full current stack (old default behavior)
+	// default (neither flag): only restack reparented branches
+	if opts.NoRestack {
 		// Check if everything was up to date
 		if !summary.HasChanges() {
 			summary.UpToDate = true
@@ -230,10 +233,20 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return nil
 	}
 
-	// Phase 4: Restack branches
+	expandScope := opts.Restack
+
+	// Skip restack phase entirely if no branches need restacking and not expanding
+	if !expandScope && len(branchesToRestack) == 0 && opts.RestackScope == nil {
+		if !summary.HasChanges() {
+			summary.UpToDate = true
+		}
+		handler.Complete(*summary)
+		return nil
+	}
+
 	handler.EmitEvent(Event{Phase: PhaseRestack, Type: EventStarted})
 
-	if err := restackBranches(ctx, branchesToRestack, opts.RestackScope, dirtyAnchors, handler, summary); err != nil {
+	if err := restackBranches(ctx, branchesToRestack, opts.RestackScope, expandScope, dirtyAnchors, handler, summary); err != nil {
 		// Even on error, complete with summary
 		handler.Complete(*summary)
 		return err

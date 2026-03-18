@@ -40,7 +40,7 @@ func TestWorktreeWorkingDirAfterRestack(t *testing.T) {
 
 		// Run sync from main repo - this will restack feature onto new main
 		sh.Log("Running sync from main repo...")
-		sh.Run("sync")
+		sh.Run("sync --restack")
 
 		// Check worktree status - it should be clean after restack
 		sh.Log("Checking worktree status...")
@@ -143,7 +143,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// 3. Reparent stackA-child to main
 		// 4. Restack stackB onto updated main (THIS IS WHERE THE BUG MAY OCCUR)
 		sh.OnBranch("main").
-			Run("sync")
+			Run("sync --restack")
 
 		// === Verify: No unexpected conflicts ===
 		sh.Log("Verifying sync completed without unexpected conflicts...")
@@ -197,7 +197,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 
 		// Sync from main - should restack entire worktree stack
 		sh.Log("Running sync from main repo...")
-		sh.Run("sync")
+		sh.Run("sync --restack")
 
 		// Verify all branches restacked without conflict
 		sh.Log("Verifying no conflicts...")
@@ -235,10 +235,10 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 			Git("commit -m 'Main advanced'").
 			Git("push origin main")
 
-		// Sync from the worktree context
+		// Sync from the worktree context with full restack
 		sh.Log("Running sync from worktree...")
 		shW.Checkout("feature").
-			Run("sync")
+			Run("sync --restack")
 
 		// Verify no conflicts
 		shW.OutputNotContains("conflict")
@@ -433,7 +433,7 @@ func TestSyncWithMultipleWorktrees(t *testing.T) {
 		// Run sync from main repo
 		sh.Log("Running sync from main repo...")
 		sh.OnBranch("main").
-			Run("sync")
+			Run("sync --restack")
 
 		// Sync should complete without error (output check)
 		sh.OutputContains("Skipping stack")

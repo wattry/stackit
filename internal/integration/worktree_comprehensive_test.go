@@ -213,8 +213,8 @@ func TestWorktreeSyncOperations(t *testing.T) {
 			Git("commit -m 'Main advanced'").
 			Git("push origin main")
 
-		// Sync from main
-		sh.Run("sync")
+		// Sync from main with full restack
+		sh.Run("sync --restack")
 
 		// Verify stack is restacked
 		sh.ExpectStackStructure(map[string]string{
@@ -253,8 +253,8 @@ func TestWorktreeSyncOperations(t *testing.T) {
 			Git("commit -m 'Main advanced'").
 			Git("push origin main")
 
-		// Sync from worktree
-		shW.Run("sync")
+		// Sync from worktree with full restack
+		shW.Run("sync --restack")
 
 		// Verify stack is restacked
 		sh.ExpectStackStructure(map[string]string{
@@ -601,7 +601,7 @@ func TestWorktreeEdgeCases(t *testing.T) {
 			Git("push origin main")
 
 		// Sync should update both stacks
-		sh.Run("sync")
+		sh.Run("sync --restack")
 
 		// Both worktrees should have the new file
 		wt1Path := sh.GetWorktreePath("stack1")
@@ -841,8 +841,8 @@ func TestWorktreeComplexScenarios(t *testing.T) {
 			Git("commit -m 'Main advanced'").
 			Git("push origin main")
 
-		// Sync from main
-		sh.Run("sync")
+		// Sync from main with full restack
+		sh.Run("sync --restack")
 
 		// Verify both stacks are correct
 		sh.ExpectStackStructure(map[string]string{

@@ -18,6 +18,7 @@ func NewSyncCmd() *cobra.Command {
 		all        bool
 		force      bool
 		restack    bool
+		noRestack  bool
 		dryRun     bool
 		jsonOutput bool
 	)
@@ -26,7 +27,7 @@ func NewSyncCmd() *cobra.Command {
 		Use:   "sync",
 		Short: "Sync all branches with remote",
 		Long: `Sync all branches with remote, prompting to delete any branches for PRs that have been merged or closed.
-Restacks all branches in your repository that can be restacked without conflicts.
+Restacks branches that were reparented during sync. Use --restack to restack all branches in the current stack.
 If trunk cannot be fast-forwarded to match remote, overwrites trunk with the remote version.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -39,10 +40,11 @@ If trunk cannot be fast-forwarded to match remote, overwrites trunk with the rem
 				// JSON output for dry-run mode
 				if jsonOutput && dryRun {
 					return syncDryRunJSON(ctx, sync.Options{
-						All:     all,
-						Force:   force,
-						Restack: restack,
-						DryRun:  true,
+						All:       all,
+						Force:     force,
+						Restack:   restack,
+						NoRestack: noRestack,
+						DryRun:    true,
 					})
 				}
 
@@ -58,30 +60,22 @@ If trunk cannot be fast-forwarded to match remote, overwrites trunk with the rem
 
 				// Run sync action with handler
 				return sync.Action(ctx, sync.Options{
-					All:     all,
-					Force:   force,
-					Restack: restack,
-					DryRun:  dryRun,
+					All:       all,
+					Force:     force,
+					Restack:   restack,
+					NoRestack: noRestack,
+					DryRun:    dryRun,
 				}, handler)
 			})
 		},
 	}
 
-	var noRestack bool
-
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Sync branches across all configured trunks")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Don't prompt for confirmation before overwriting or deleting a branch")
-	cmd.Flags().BoolVar(&restack, "restack", true, "Restack any branches that can be restacked without conflicts")
-	cmd.Flags().BoolVar(&noRestack, "no-restack", false, "Skip restacking branches")
+	cmd.Flags().BoolVar(&restack, "restack", false, "Restack all branches in the current stack")
+	cmd.Flags().BoolVar(&noRestack, "no-restack", false, "Skip restacking branches entirely")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview metadata changes without applying them")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (requires --dry-run)")
-
-	// Apply --no-restack flag
-	cmd.PreRun = func(_ *cobra.Command, _ []string) {
-		if noRestack {
-			restack = false
-		}
-	}
 
 	return cmd
 }
