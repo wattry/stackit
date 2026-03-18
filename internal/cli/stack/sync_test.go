@@ -44,7 +44,6 @@ func TestSyncCommand(t *testing.T) {
   PR info up to date
 📥 Syncing stack branches...
 🧹 Cleaning branches...
-💡 Try the --restack flag to automatically restack the current stack.
 ✨ Everything is up to date!
 `), normalized)
 
@@ -110,7 +109,6 @@ Error: you have uncommitted changes. Please commit or stash them before syncing
   main is up to date
   PR info up to date
 📥 Syncing stack branches...
-💡 Try the --restack flag to automatically restack the current stack.
 ✨ Everything is up to date!
 `), testhelpers.NormalizeOutput(output))
 	})

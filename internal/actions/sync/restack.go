@@ -11,14 +11,15 @@ import (
 
 // restackBranches handles restacking branches after sync operations.
 // When restackScope is non-nil, only those branches are restacked (skipping current-branch expansion).
-func restackBranches(ctx *app.Context, branchesToRestack []string, restackScope []string, dirtyAnchors map[string]bool, handler Handler, summary *Summary) error {
+// When expandScope is true, expands to the full current stack (used when --restack is explicitly passed).
+func restackBranches(ctx *app.Context, branchesToRestack []string, restackScope []string, expandScope bool, dirtyAnchors map[string]bool, handler Handler, summary *Summary) error {
 	nav := ctx.Navigator()
 
 	if restackScope != nil {
 		// Scoped restack: use only the explicitly provided branches
 		branchesToRestack = append(branchesToRestack, restackScope...)
-	} else {
-		// Default behavior: expand from current branch position
+	} else if expandScope {
+		// Explicit --restack: expand from current branch position to full stack
 		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
 
 		currentBranch := nav.CurrentBranch()
@@ -45,6 +46,8 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, restackScope 
 			}
 		}
 	}
+	// When expandScope is false and restackScope is nil, only restack
+	// branches already in branchesToRestack (reparented branches from sync)
 
 	// Remove duplicates and filter out non-existent/untracked branches and dirty stacks
 	seen := make(map[string]bool)
