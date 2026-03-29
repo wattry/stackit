@@ -209,10 +209,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 		// Update parent revision with the correct oldUpstream we calculated earlier.
 		// SetParent uses merge-base which may be incorrect when flattening branches
-		// that have diverged from their original parent.
+		// that have diverged from their original parent. This correction is critical:
+		// without it, the restack will use merge-base as the divergence point, causing
+		// parent branch commits to be included in the flattened branch.
 		if oldUpstream, ok := oldUpstreamMap[move.Branch]; ok {
 			if err := eng.UpdateParentRevision(gctx, move.Branch, oldUpstream); err != nil {
-				out.Debug("Failed to update parent revision for %s: %v", move.Branch, err)
+				handler.OnStep(StepFlattening, basehandler.StatusFailed, err.Error())
+				return fmt.Errorf("failed to update parent revision for %s: %w", move.Branch, err)
 			}
 		}
 
