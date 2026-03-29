@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Github } from "lucide-react";
+import { GitPullRequest } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { CIResponse, PRResponse } from "@/lib/api";
 import { useConfetti } from "@/hooks/use-confetti";
@@ -86,7 +86,7 @@ export function PRBadge({ pr }: { pr?: PRResponse }) {
       rel="noopener noreferrer"
       className={`inline-flex items-center gap-1 text-xs font-mono font-semibold hover:underline ${stateColors[pr.state] || ""}`}
     >
-      <Github className="w-3.5 h-3.5" />
+      <GitPullRequest className="w-3.5 h-3.5" />
       #{pr.number}
       {pr.isDraft && " (draft)"}
     </a>
