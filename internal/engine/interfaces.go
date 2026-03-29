@@ -123,10 +123,15 @@ type BranchTracking interface {
 	TrackBranch(ctx context.Context, branchName string, parentBranchName string) error
 	UntrackBranch(branchName string) error
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
+	// SetParentName updates only the parent branch name in metadata without
+	// modifying ParentBranchRevision. Use this when the caller will set the
+	// correct divergence point separately, or when the existing divergence
+	// point should be preserved as-is.
+	SetParentName(ctx context.Context, branch Branch, parentBranch Branch) error
 	// SetParentPreservingDivergence updates a branch's parent while preserving
 	// the divergence point if it remains a valid ancestor. Use this when moving
 	// a branch to a new parent but the commits belonging to the branch haven't changed.
-	// If oldDivergencePoint is empty, behaves identically to SetParent.
+	// Returns an error if oldDivergencePoint is not empty and is not a valid ancestor.
 	SetParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error
 	UpdateParentRevision(ctx context.Context, branchName string, parentRev string) error
 	SetScope(ctx context.Context, branch Branch, scope Scope) error

@@ -189,12 +189,13 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Execute the flatten
 	handler.OnStep(StepFlattening, basehandler.StatusStarted, "Moving branches...")
 
-	// Build a map of branch -> oldUpstream from the rebase specs
-	// This is needed because SetParent may calculate a different value using merge-base,
-	// but we need to preserve the correct divergence point for proper rebasing
-	oldUpstreamMap := make(map[string]string)
+	// Build a map of branch -> divergence point from the rebase specs.
+	// SetParentPreservingDivergence needs this to set the correct divergence
+	// point, since the underlying SetParent would default to merge-base
+	// (which is too far back and would include parent branch commits).
+	divergencePoints := make(map[string]string)
 	for _, spec := range filteredPlan.RebaseSpecs {
-		oldUpstreamMap[spec.Branch] = spec.OldUpstream
+		divergencePoints[spec.Branch] = spec.OldUpstream
 	}
 
 	// Update parent pointers for all planned moves
@@ -202,21 +203,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		moveBranch := eng.GetBranch(move.Branch)
 		newParentBranch := eng.GetBranch(move.NewParent)
 
-		if err := eng.SetParent(gctx, moveBranch, newParentBranch); err != nil {
+		if err := eng.SetParentPreservingDivergence(gctx, moveBranch, newParentBranch, divergencePoints[move.Branch]); err != nil {
 			handler.OnStep(StepFlattening, basehandler.StatusFailed, err.Error())
 			return fmt.Errorf("failed to set parent for %s to %s: %w", move.Branch, move.NewParent, err)
-		}
-
-		// Update parent revision with the correct oldUpstream we calculated earlier.
-		// SetParent uses merge-base which may be incorrect when flattening branches
-		// that have diverged from their original parent. This correction is critical:
-		// without it, the restack will use merge-base as the divergence point, causing
-		// parent branch commits to be included in the flattened branch.
-		if oldUpstream, ok := oldUpstreamMap[move.Branch]; ok {
-			if err := eng.UpdateParentRevision(gctx, move.Branch, oldUpstream); err != nil {
-				handler.OnStep(StepFlattening, basehandler.StatusFailed, err.Error())
-				return fmt.Errorf("failed to update parent revision for %s: %w", move.Branch, err)
-			}
 		}
 
 		handler.OnBranchMoved(move.Branch, move.OldParent, move.NewParent)

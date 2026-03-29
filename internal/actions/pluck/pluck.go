@@ -182,13 +182,23 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Start the operation
 	handler.Start(source, oldParentName, onto)
 
+	// Build a map of child -> divergence point for preserving during reparent.
+	// Without this, SetParent writes merge-base which is too far back, causing
+	// children to carry the plucked branch's commits.
+	childDivergencePoints := make(map[string]string)
+	for _, spec := range rebaseSpecs {
+		if spec.Branch != source {
+			childDivergencePoints[spec.Branch] = spec.OldUpstream
+		}
+	}
+
 	// Step 1: Reparent children to grandparent
 	var reparentedChildren []string
 	if len(children) > 0 {
 		handler.OnStep(StepReparentingChild, basehandler.StatusStarted, "Reparenting children...")
 
 		for _, child := range children {
-			if err := eng.SetParent(gctx, child, grandparentBranch); err != nil {
+			if err := eng.SetParentPreservingDivergence(gctx, child, grandparentBranch, childDivergencePoints[child.GetName()]); err != nil {
 				handler.OnStep(StepReparentingChild, basehandler.StatusFailed, err.Error())
 				return fmt.Errorf("failed to reparent %s to %s: %w", child.GetName(), grandparentBranch.GetName(), err)
 			}
