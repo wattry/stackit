@@ -123,17 +123,13 @@ type BranchTracking interface {
 	TrackBranch(ctx context.Context, branchName string, parentBranchName string) error
 	UntrackBranch(branchName string) error
 	SetParent(ctx context.Context, branch Branch, parentBranch Branch) error
-	// SetParentName updates only the parent branch name in metadata without
-	// modifying ParentBranchRevision. Use this when the caller will set the
-	// correct divergence point separately, or when the existing divergence
-	// point should be preserved as-is.
-	SetParentName(ctx context.Context, branch Branch, parentBranch Branch) error
-	// SetParentPreservingDivergence updates a branch's parent while preserving
-	// the divergence point if it remains a valid ancestor. Use this when moving
-	// a branch to a new parent but the commits belonging to the branch haven't changed.
-	// Returns an error if oldDivergencePoint is not empty and is not a valid ancestor.
-	SetParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error
-	UpdateParentRevision(ctx context.Context, branchName string, parentRev string) error
+	// ReparentBranch changes a branch's parent while automatically preserving
+	// its divergence point. Preferred over SetParent for existing branches.
+	ReparentBranch(ctx context.Context, branch Branch, newParent Branch) error
+	// ReparentBranches changes multiple branches to the same new parent while
+	// preserving divergence points. All divergence points are captured before
+	// any reparenting begins.
+	ReparentBranches(ctx context.Context, branchNames []string, newParent Branch) error
 	SetScope(ctx context.Context, branch Branch, scope Scope) error
 	SetBranchType(branch Branch, branchType git.BranchType) error
 	SetLocked(ctx context.Context, branches []Branch, reason LockReason) (BatchLockResult, error)

@@ -252,36 +252,24 @@ func parseEditorContent(content string, originalBranches []string) ([]string, er
 func updateParentRelationships(ctx context.Context, eng reorderUpdateEngine, newOrder []string, out output.Output) error {
 	out.Debug("reorder: updateParentRelationships: processing %d branches", len(newOrder))
 
-	// Set parent of first branch to trunk
+	// Set parent of first branch to trunk, then chain each subsequent branch
 	trunk := eng.Trunk()
 	out.Debug("reorder: updateParentRelationships: trunk is %s", trunk.GetName())
 
-	if len(newOrder) > 0 {
-		firstBranch := eng.GetBranch(newOrder[0])
-		out.Debug("reorder: updateParentRelationships: setting parent of %s to trunk (%s)",
-			newOrder[0], trunk.GetName())
-		if err := eng.SetParent(ctx, firstBranch, trunk); err != nil {
-			out.Debug("reorder: updateParentRelationships: failed to set parent of %s: %v",
-				newOrder[0], err)
-			return fmt.Errorf("failed to set parent of %s to %s: %w", newOrder[0], trunk.GetName(), err)
+	for i, branchName := range newOrder {
+		branch := eng.GetBranch(branchName)
+		var parent engine.Branch
+		if i == 0 {
+			parent = trunk
+		} else {
+			parent = eng.GetBranch(newOrder[i-1])
 		}
-		out.Debug("reorder: updateParentRelationships: successfully set parent of %s to %s",
-			newOrder[0], trunk.GetName())
-	}
 
-	// Set parent of each subsequent branch to the branch before it
-	for i := 1; i < len(newOrder); i++ {
-		child := eng.GetBranch(newOrder[i])
-		parent := eng.GetBranch(newOrder[i-1])
 		out.Debug("reorder: updateParentRelationships: setting parent of %s to %s",
-			newOrder[i], newOrder[i-1])
-		if err := eng.SetParent(ctx, child, parent); err != nil {
-			out.Debug("reorder: updateParentRelationships: failed to set parent of %s: %v",
-				newOrder[i], err)
-			return fmt.Errorf("failed to set parent of %s to %s: %w", newOrder[i], newOrder[i-1], err)
+			branchName, parent.GetName())
+		if err := eng.ReparentBranch(ctx, branch, parent); err != nil {
+			return fmt.Errorf("failed to set parent of %s to %s: %w", branchName, parent.GetName(), err)
 		}
-		out.Debug("reorder: updateParentRelationships: successfully set parent of %s to %s",
-			newOrder[i], newOrder[i-1])
 	}
 
 	out.Debug("reorder: updateParentRelationships: all parent relationships updated")

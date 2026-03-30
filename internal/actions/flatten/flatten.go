@@ -189,21 +189,12 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Execute the flatten
 	handler.OnStep(StepFlattening, basehandler.StatusStarted, "Moving branches...")
 
-	// Build a map of branch -> divergence point from the rebase specs.
-	// SetParentPreservingDivergence needs this to set the correct divergence
-	// point, since the underlying SetParent would default to merge-base
-	// (which is too far back and would include parent branch commits).
-	divergencePoints := make(map[string]string)
-	for _, spec := range filteredPlan.RebaseSpecs {
-		divergencePoints[spec.Branch] = spec.OldUpstream
-	}
-
 	// Update parent pointers for all planned moves
 	for _, move := range filteredPlan.Moves {
 		moveBranch := eng.GetBranch(move.Branch)
 		newParentBranch := eng.GetBranch(move.NewParent)
 
-		if err := eng.SetParentPreservingDivergence(gctx, moveBranch, newParentBranch, divergencePoints[move.Branch]); err != nil {
+		if err := eng.ReparentBranch(gctx, moveBranch, newParentBranch); err != nil {
 			handler.OnStep(StepFlattening, basehandler.StatusFailed, err.Error())
 			return fmt.Errorf("failed to set parent for %s to %s: %w", move.Branch, move.NewParent, err)
 		}

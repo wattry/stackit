@@ -204,9 +204,8 @@ func preReparentChildrenWithPreservedDivergence(ctx *app.Context, toDelete []eng
 				continue
 			}
 
-			oldDivergencePoint, _ := eng.GetDivergencePoint(childName)
-			if err := eng.SetParentPreservingDivergence(gctx, child, eng.GetBranch(targetParentName), oldDivergencePoint); err != nil {
-				return nil, fmt.Errorf("failed to preserve divergence while reparenting %s to %s: %w", childName, targetParentName, err)
+			if err := eng.ReparentBranch(gctx, child, eng.GetBranch(targetParentName)); err != nil {
+				return nil, fmt.Errorf("failed to reparent %s to %s: %w", childName, targetParentName, err)
 			}
 			out.Debug("Pre-reparented %s to %s while preserving divergence", childName, targetParentName)
 			if !reparentedSet[childName] {
