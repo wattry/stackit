@@ -189,31 +189,14 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Execute the flatten
 	handler.OnStep(StepFlattening, basehandler.StatusStarted, "Moving branches...")
 
-	// Build a map of branch -> oldUpstream from the rebase specs
-	// This is needed because SetParent may calculate a different value using merge-base,
-	// but we need to preserve the correct divergence point for proper rebasing
-	oldUpstreamMap := make(map[string]string)
-	for _, spec := range filteredPlan.RebaseSpecs {
-		oldUpstreamMap[spec.Branch] = spec.OldUpstream
-	}
-
 	// Update parent pointers for all planned moves
 	for _, move := range filteredPlan.Moves {
 		moveBranch := eng.GetBranch(move.Branch)
 		newParentBranch := eng.GetBranch(move.NewParent)
 
-		if err := eng.SetParent(gctx, moveBranch, newParentBranch); err != nil {
+		if err := eng.ReparentBranch(gctx, moveBranch, newParentBranch); err != nil {
 			handler.OnStep(StepFlattening, basehandler.StatusFailed, err.Error())
 			return fmt.Errorf("failed to set parent for %s to %s: %w", move.Branch, move.NewParent, err)
-		}
-
-		// Update parent revision with the correct oldUpstream we calculated earlier.
-		// SetParent uses merge-base which may be incorrect when flattening branches
-		// that have diverged from their original parent.
-		if oldUpstream, ok := oldUpstreamMap[move.Branch]; ok {
-			if err := eng.UpdateParentRevision(gctx, move.Branch, oldUpstream); err != nil {
-				out.Debug("Failed to update parent revision for %s: %v", move.Branch, err)
-			}
 		}
 
 		handler.OnBranchMoved(move.Branch, move.OldParent, move.NewParent)

@@ -188,7 +188,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		handler.OnStep(StepReparentingChild, basehandler.StatusStarted, "Reparenting children...")
 
 		for _, child := range children {
-			if err := eng.SetParent(gctx, child, grandparentBranch); err != nil {
+			if err := eng.ReparentBranch(gctx, child, grandparentBranch); err != nil {
 				handler.OnStep(StepReparentingChild, basehandler.StatusFailed, err.Error())
 				return fmt.Errorf("failed to reparent %s to %s: %w", child.GetName(), grandparentBranch.GetName(), err)
 			}
@@ -205,9 +205,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		handler.OnStep(StepReparentingChild, basehandler.StatusSkipped, "No children to reparent")
 	}
 
-	// Step 2: Move source to new parent, preserving the divergence point
+	// Step 2: Move source to new parent
 	handler.OnStep(StepMovingSource, basehandler.StatusStarted, "Moving source branch...")
-	if err := eng.SetParentPreservingDivergence(gctx, sourceBranch, ontoBranch, sourceOldParentRev); err != nil {
+	if err := eng.ReparentBranch(gctx, sourceBranch, ontoBranch); err != nil {
 		handler.OnStep(StepMovingSource, basehandler.StatusFailed, err.Error())
 		return fmt.Errorf("failed to set parent: %w", err)
 	}

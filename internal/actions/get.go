@@ -291,9 +291,10 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 					return fmt.Errorf("conflict during sync of %s. Resolve conflicts and try again: %w", branchName, err)
 				}
 			}
-			// Update parent if known
+			// Update parent if known, preserving the divergence point so that
+			// restacking doesn't carry commits from the old parent.
 			if parent, ok := parentMap[branchName]; ok {
-				if err := eng.SetParent(gctx, branch, eng.GetBranch(parent)); err != nil {
+				if err := eng.ReparentBranch(gctx, branch, eng.GetBranch(parent)); err != nil {
 					out.Debug("Failed to update parent for %s: %v", branchName, err)
 				}
 			}

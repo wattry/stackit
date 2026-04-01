@@ -761,14 +761,9 @@ func DetachAction(ctx *app.Context, opts DetachOptions) error {
 
 		if len(childNames) > 0 {
 			trunk := ctx.Engine.Trunk()
-			// Reparent all children to trunk
-			for _, childName := range childNames {
-				childBranch := ctx.Engine.GetBranch(childName)
-				if err := ctx.Engine.SetParent(ctx.Context, childBranch, trunk); err != nil {
-					out.Warn("Failed to reparent %s to trunk: %v", childName, err)
-				} else {
-					out.Debug("Reparented %s to %s", childName, trunk.GetName())
-				}
+			// Reparent all children to trunk, preserving divergence points
+			if err := ctx.Engine.ReparentBranches(ctx.Context, childNames, trunk); err != nil {
+				out.Warn("Failed to reparent children to trunk: %v", err)
 			}
 		}
 

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -205,14 +204,10 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		_, _ = fmt.Fprintf(e.writer, "Warning: failed to delete local metadata ref for %s: %v\n", branchName, err)
 	}
 
-	// Update children to point to parent (SetParent handles its own transactions)
+	// Reparent children to grandparent, preserving divergence points so
+	// children don't carry the deleted branch's commits after restacking.
 	parentBranch := e.GetBranch(parent)
-	var reparentErrs []error
-	for _, child := range children {
-		if err := e.SetParent(ctx, e.GetBranch(child), parentBranch); err != nil {
-			reparentErrs = append(reparentErrs, fmt.Errorf("%s -> %s: %w", child, parent, err))
-		}
-	}
+	reparentErr := e.ReparentBranches(ctx, children, parentBranch)
 
 	// Clean up in-memory cache for deleted branch
 	e.mu.Lock()
@@ -225,8 +220,8 @@ func (e *engineImpl) DeleteBranch(ctx context.Context, branch Branch) error {
 		e.state.setBranches(slices.Delete(e.state.branches, i, i+1))
 	}
 
-	if len(reparentErrs) > 0 {
-		return fmt.Errorf("deleted branch %s but failed to reparent %d child branch(es): %w", branchName, len(reparentErrs), errors.Join(reparentErrs...))
+	if reparentErr != nil {
+		return fmt.Errorf("deleted branch %s but failed to reparent child branch(es): %w", branchName, reparentErr)
 	}
 
 	return nil
@@ -372,29 +367,89 @@ func (e *engineImpl) SetParent(ctx context.Context, branch Branch, parentBranch 
 	})
 }
 
-// SetParentPreservingDivergence updates a branch's parent while preserving
-// the divergence point if it remains a valid ancestor. This is useful when
-// moving a branch to a new parent without changing which commits belong to it.
-func (e *engineImpl) SetParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error {
-	if err := e.SetParent(ctx, branch, newParent); err != nil {
+// setParentName updates only the parent branch name in metadata without
+// modifying ParentBranchRevision.
+func (e *engineImpl) setParentName(ctx context.Context, branch Branch, parentBranch Branch) error {
+	branchName := branch.GetName()
+	parentBranchName := parentBranch.GetName()
+
+	if branchName == parentBranchName {
+		return fmt.Errorf("branch %s cannot be its own parent", branchName)
+	}
+
+	return e.WithRetry(ctx, func() error {
+		meta, err := e.readMetadata(branchName)
+		if err != nil {
+			return fmt.Errorf("failed to read metadata: %w", err)
+		}
+
+		meta = meta.WithParentBranchName(&parentBranchName)
+
+		tx := e.BeginTx(fmt.Sprintf("set parent name: %s -> %s", branchName, parentBranchName))
+		if err := tx.UpdateMeta(branchName, meta); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
+}
+
+// setParentPreservingDivergence updates a branch's parent while preserving
+// the divergence point if it remains a valid ancestor. Uses setParentName
+// (not SetParent) so the existing ParentBranchRevision is never overwritten
+// with an incorrect merge-base value.
+func (e *engineImpl) setParentPreservingDivergence(ctx context.Context, branch Branch, newParent Branch, oldDivergencePoint string) error {
+	if err := e.setParentName(ctx, branch, newParent); err != nil {
 		return err
 	}
 
-	// If we have an old divergence point and it's still a valid ancestor,
-	// restore it to preserve which commits belong to this branch
-	if oldDivergencePoint != "" {
-		isAncestor, err := e.git.IsAncestor(oldDivergencePoint, branch.GetName())
-		if err == nil && isAncestor {
-			return e.UpdateParentRevision(ctx, branch.GetName(), oldDivergencePoint)
+	if oldDivergencePoint == "" {
+		return nil
+	}
+
+	// Set the correct divergence point so restacking replays only this
+	// branch's commits, not commits from the old parent.
+	isAncestor, err := e.git.IsAncestor(oldDivergencePoint, branch.GetName())
+	if err != nil {
+		return fmt.Errorf("failed to check ancestry of divergence point %s for %s: %w", oldDivergencePoint, branch.GetName(), err)
+	}
+	if !isAncestor {
+		return fmt.Errorf("divergence point %s is not an ancestor of %s: cannot preserve divergence point", oldDivergencePoint, branch.GetName())
+	}
+
+	return e.updateParentRevision(ctx, branch.GetName(), oldDivergencePoint)
+}
+
+// ReparentBranch changes a branch's parent while automatically preserving its
+// divergence point. This is the preferred way to reparent an existing branch
+// when the branch's own commits should not change.
+func (e *engineImpl) ReparentBranch(ctx context.Context, branch Branch, newParent Branch) error {
+	div, _ := e.GetDivergencePoint(branch.GetName())
+	return e.setParentPreservingDivergence(ctx, branch, newParent, div)
+}
+
+// ReparentBranches changes multiple branches to the same new parent while
+// preserving each branch's divergence point. Divergence points are captured
+// for all branches before any reparenting begins, ensuring correctness when
+// branches in the list are related to each other.
+func (e *engineImpl) ReparentBranches(ctx context.Context, branchNames []string, newParent Branch) error {
+	divPoints := make(map[string]string, len(branchNames))
+	for _, name := range branchNames {
+		if div, err := e.GetDivergencePoint(name); err == nil {
+			divPoints[name] = div
 		}
 	}
 
+	for _, name := range branchNames {
+		if err := e.setParentPreservingDivergence(ctx, e.GetBranch(name), newParent, divPoints[name]); err != nil {
+			return fmt.Errorf("failed to reparent %s to %s: %w", name, newParent.GetName(), err)
+		}
+	}
 	return nil
 }
 
-// UpdateParentRevision updates the parent revision in metadata using transaction API
+// updateParentRevision updates the parent revision in metadata using transaction API
 // with retry logic for concurrent modification resilience.
-func (e *engineImpl) UpdateParentRevision(ctx context.Context, branchName string, parentRev string) error {
+func (e *engineImpl) updateParentRevision(ctx context.Context, branchName string, parentRev string) error {
 	return e.WithRetry(ctx, func() error {
 		// Read existing metadata (outside lock for performance)
 		meta, err := e.readMetadata(branchName)

@@ -24,6 +24,10 @@ func TestMoveStackID(t *testing.T) {
 		sh.Checkout("b")
 		sh.Run("move --onto main --no-interactive --yes")
 
+		// Verify b and c only contain their own commits
+		sh.CommitCount("main", "b", 1)
+		sh.CommitCount("b", "c", 1)
+
 		// After moving to trunk, b gets a new stack ID when a description is set
 		// Set description to trigger new stack ID creation for b's new stack
 		sh.Run("describe -m 'Second stack'")
@@ -80,6 +84,9 @@ func TestMoveStackID(t *testing.T) {
 		sh.Checkout("b")
 		sh.Run("move --onto x --no-interactive --yes")
 
+		// Verify b only contains its own commit
+		sh.CommitCount("x", "b", 1)
+
 		// Verify b now has the second stack's ID
 		sh.ExpectStackID("b", secondStackID)
 
@@ -123,6 +130,11 @@ func TestMoveStackID(t *testing.T) {
 		// Move b onto x (should also move c and d as descendants)
 		sh.Checkout("b")
 		sh.Run("move --onto x --no-interactive --yes")
+
+		// Verify each branch only contains its own commit
+		sh.CommitCount("x", "b", 1)
+		sh.CommitCount("b", "c", 1)
+		sh.CommitCount("c", "d", 1)
 
 		// Verify b, c, d all now have the second stack's ID
 		sh.ExpectStackID("b", secondStackID)
@@ -190,8 +202,11 @@ func TestMoveStackID(t *testing.T) {
 		sh.Checkout("c")
 		sh.Run("move --onto a --no-interactive --yes")
 
-		// Verify stack structure changed
-		sh.ExpectBranchParent("c", "a")
+		// Verify stack structure changed and each branch has correct commit count
+		sh.ExpectBranchParent("c", "a").
+			CommitCount("main", "a", 1).
+			CommitCount("a", "b", 1).
+			CommitCount("a", "c", 1)
 
 		// Verify all branches still have the same stack ID
 		sh.ExpectStackIDsMatch("a", "b", "c")

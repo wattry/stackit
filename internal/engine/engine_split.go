@@ -126,10 +126,8 @@ func (e *engineImpl) ApplySplitToCommits(ctx context.Context, opts ApplySplitOpt
 	// branch, which is typically the original branch name if it was preserved).
 	if lastBranchName != opts.BranchToSplit {
 		lastBranch := e.GetBranch(lastBranchName)
-		for _, childBranchName := range children {
-			if err := e.SetParent(ctx, e.GetBranch(childBranchName), lastBranch); err != nil {
-				return fmt.Errorf("failed to update parent for %s: %w", childBranchName, err)
-			}
+		if err := e.ReparentBranches(ctx, children, lastBranch); err != nil {
+			return fmt.Errorf("failed to reparent children to %s: %w", lastBranchName, err)
 		}
 	}
 
