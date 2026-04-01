@@ -21,6 +21,9 @@ func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
 		// Move B onto main (changing its parent from A to main)
 		sh.Run("move feature-b --onto main --yes")
 
+		// Verify B only has its own commit after move
+		sh.CommitCount("main", "feature-b", 1)
+
 		// The moved branch (B) should be marked for PR body update
 		sh.ExpectNeedsPRBodyUpdate("feature-b", true)
 
@@ -60,6 +63,9 @@ func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
 		// Move C onto A (changing its parent from B to A)
 		sh.Run("move feature-c --onto feature-a --yes")
 
+		// Verify C only has its own commit after move
+		sh.CommitCount("feature-a", "feature-c", 1)
+
 		// C should be marked (it moved)
 		sh.ExpectNeedsPRBodyUpdate("feature-c", true)
 
@@ -80,6 +86,9 @@ func TestMoveMarksBranchesForPRBodyUpdate(t *testing.T) {
 
 		// Move B onto main
 		sh.Run("move feature-b --onto main --yes")
+
+		// Verify B only has its own commit
+		sh.CommitCount("main", "feature-b", 1)
 
 		// Verify flags are set
 		sh.ExpectNeedsPRBodyUpdate("feature-b", true)

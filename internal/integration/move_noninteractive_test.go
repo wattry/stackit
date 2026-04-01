@@ -33,8 +33,9 @@ func TestMoveNonInteractive(t *testing.T) {
 			OutputContains("Moved b").
 			OutputContains("from a to main")
 
-		// Verify the move happened
-		sh.ExpectBranchParent("b", "main")
+		// Verify the move happened and b only has its own commit
+		sh.ExpectBranchParent("b", "main").
+			CommitCount("main", "b", 1)
 	})
 
 	t.Run("dry-run requires onto flag", func(t *testing.T) {

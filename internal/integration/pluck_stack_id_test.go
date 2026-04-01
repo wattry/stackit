@@ -43,8 +43,11 @@ func TestPluckStackID(t *testing.T) {
 		// Verify a still has the original stack ID
 		sh.ExpectStackID("a", originalStackID)
 
-		// Verify b is now on trunk (its own stack root)
-		sh.ExpectBranchParent("b", "main")
+		// Verify b is now on trunk with only its own commit
+		sh.ExpectBranchParent("b", "main").
+			CommitCount("main", "b", 1)
+		// Verify c (reparented to a) only has its own commit relative to a
+		sh.CommitCount("a", "c", 1)
 	})
 
 	t.Run("plucking branch to different stack inherits that stack ID", func(t *testing.T) {
@@ -90,8 +93,10 @@ func TestPluckStackID(t *testing.T) {
 		sh.ExpectStackID("a", firstStackID)
 		sh.ExpectStackID("c", firstStackID)
 
-		// Verify c was reparented to a (not moved with b)
-		sh.ExpectBranchParent("c", "a")
+		// Verify c was reparented to a (not moved with b) and each branch has correct commits
+		sh.ExpectBranchParent("c", "a").
+			CommitCount("x", "b", 1).
+			CommitCount("a", "c", 1)
 	})
 
 	t.Run("plucking within same stack does not change stack ID", func(t *testing.T) {
@@ -127,8 +132,10 @@ func TestPluckStackID(t *testing.T) {
 		// Verify c is now on a
 		sh.ExpectBranchParent("c", "a")
 
-		// Verify d was reparented to b
-		sh.ExpectBranchParent("d", "b")
+		// Verify d was reparented to b and each branch has correct commits
+		sh.ExpectBranchParent("d", "b").
+			CommitCount("a", "c", 1).
+			CommitCount("b", "d", 1)
 	})
 
 	t.Run("plucking leaf branch to trunk creates new stack", func(t *testing.T) {
@@ -165,7 +172,8 @@ func TestPluckStackID(t *testing.T) {
 		sh.ExpectStackID("a", originalStackID)
 		sh.ExpectStackID("b", originalStackID)
 
-		// Verify c is on trunk
-		sh.ExpectBranchParent("c", "main")
+		// Verify c is on trunk with only its own commit
+		sh.ExpectBranchParent("c", "main").
+			CommitCount("main", "c", 1)
 	})
 }

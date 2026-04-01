@@ -51,9 +51,22 @@ func foldWithKeep(gctx context.Context, ctx *app.Context, currentBranch, parentB
 		return fmt.Errorf("failed to rebuild engine: %w", err)
 	}
 
-	// For each sibling, set parent to current branch and sync stack ID
+	// The current branch absorbed the parent via merge, so it needs a fresh
+	// merge-base calculation against the grandparent (now its parent).
+	// DeleteBranch preserved the old divergence point, which would cause
+	// restack to drop the merged commits. Using SetParent (not
+	// SetParentPreservingDivergence) is intentional here — we want the
+	// merge-base recalculation to include the absorbed commits.
+	refreshedCurrent := eng.GetBranch(currentBranch.GetName())
+	if grandparent := refreshedCurrent.GetParent(); grandparent != nil {
+		if err := eng.SetParent(gctx, refreshedCurrent, *grandparent); err != nil {
+			return fmt.Errorf("failed to reset divergence for %s: %w", currentBranch.GetName(), err)
+		}
+	}
+
+	// For each sibling, reparent to current branch (preserving divergence) and sync stack ID
 	for _, sibling := range siblings {
-		if err := eng.SetParent(gctx, sibling, currentBranch); err != nil {
+		if err := eng.ReparentBranch(gctx, sibling, refreshedCurrent); err != nil {
 			return fmt.Errorf("failed to reparent %s to %s: %w", sibling.GetName(), currentBranch.GetName(), err)
 		}
 		// Sync stack ID to match the new parent's stack

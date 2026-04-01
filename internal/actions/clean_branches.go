@@ -455,7 +455,7 @@ func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *
 
 	// If parent changed, update it
 	if newParentName != parentName {
-		reparentOpts := buildReparentOptions(plan, parentName, eng, branchName, out)
+		reparentOpts := buildReparentOptions(plan, parentName)
 		if err := applyReparent(ctx, eng, branch, newParentName, reparentOpts); err != nil {
 			return "", fmt.Errorf("failed to set parent for %s: %w", branchName, err)
 		}
@@ -474,19 +474,12 @@ func reparentBranchIfNecessary(ctx context.Context, branch engine.Branch, plan *
 type reparentOptions struct {
 	// Preserve existing divergence point when changing parent.
 	preserveDivergence bool
-	// Existing divergence point to preserve when preserveDivergence is true.
-	oldDivergencePoint string
 }
 
-func buildReparentOptions(plan *deletionPlan, oldParentName string, eng engine.Engine, branchName string, out output.Output) reparentOptions {
-	opts := reparentOptions{}
-	if !shouldPreserveDivergenceOnReparent(plan, oldParentName) {
-		return opts
+func buildReparentOptions(plan *deletionPlan, oldParentName string) reparentOptions {
+	return reparentOptions{
+		preserveDivergence: shouldPreserveDivergenceOnReparent(plan, oldParentName),
 	}
-
-	opts.preserveDivergence = true
-	opts.oldDivergencePoint = readDivergencePoint(eng, branchName, out)
-	return opts
 }
 
 // Preserve divergence when old parent is being removed as merged/empty.
@@ -505,23 +498,10 @@ func shouldPreserveDivergenceOnReparent(plan *deletionPlan, oldParentName string
 	}
 }
 
-func readDivergencePoint(eng engine.Engine, branchName string, out output.Output) string {
-	meta, err := eng.Git().ReadMetadata(branchName)
-	if err != nil {
-		out.Debug("Failed to read metadata for %s while preserving divergence: %v", branchName, err)
-		return ""
-	}
-	if meta == nil || meta.GetParentBranchRevision() == nil {
-		return ""
-	}
-
-	return *meta.GetParentBranchRevision()
-}
-
 func applyReparent(ctx context.Context, eng engine.Engine, branch engine.Branch, newParentName string, opts reparentOptions) error {
 	newParent := eng.GetBranch(newParentName)
 	if opts.preserveDivergence {
-		return eng.SetParentPreservingDivergence(ctx, branch, newParent, opts.oldDivergencePoint)
+		return eng.ReparentBranch(ctx, branch, newParent)
 	}
 	return eng.SetParent(ctx, branch, newParent)
 }

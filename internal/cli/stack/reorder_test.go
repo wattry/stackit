@@ -1,9 +1,11 @@
 package stack_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -90,6 +92,92 @@ func TestReorderCommand(t *testing.T) {
 		output, err = cmd.CombinedOutput()
 		require.NoError(t, err, "parent command failed: %s", string(output))
 		require.Contains(t, string(output), "branch2", "branch1 should now have branch2 as parent")
+	})
+
+	t.Run("reorder preserves commit counts per branch", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			// Create initial commit
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+			// Initialize stackit
+			cmd := exec.Command(binaryPath, "init")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			// Create branch-a with 1 commit
+			if err := s.Repo.CreateChange("a change", "file-a", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "branch-a", "-m", "branch-a change")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			// Create branch-b with 1 commit on top of branch-a
+			if err := s.Repo.CreateChange("b change", "file-b", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "branch-b", "-m", "branch-b change")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			// Create branch-c with 1 commit on top of branch-b
+			if err := s.Repo.CreateChange("c change", "file-c", false); err != nil {
+				return err
+			}
+			cmd = exec.Command(binaryPath, "create", "branch-c", "-m", "branch-c change")
+			cmd.Dir = s.Dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			return nil
+		})
+
+		// Helper to get commit count between two refs
+		commitCount := func(t *testing.T, dir, from, to string) int {
+			t.Helper()
+			cmd := exec.Command("git", "rev-list", "--count", from+".."+to)
+			cmd.Dir = dir
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "rev-list failed: %s", string(out))
+			var count int
+			_, err = fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &count)
+			require.NoError(t, err)
+			return count
+		}
+
+		// Verify initial commit counts: each branch has exactly 1 commit relative to parent
+		require.Equal(t, 1, commitCount(t, scene.Dir, "main", "branch-a"), "branch-a should have 1 commit above main")
+		require.Equal(t, 1, commitCount(t, scene.Dir, "branch-a", "branch-b"), "branch-b should have 1 commit above branch-a")
+		require.Equal(t, 1, commitCount(t, scene.Dir, "branch-b", "branch-c"), "branch-c should have 1 commit above branch-b")
+
+		// Reorder: branch-b, branch-a, branch-c (swap first two)
+		editorScript := createEditorScript(t, "branch-b\nbranch-a\nbranch-c\n")
+
+		cmd := exec.Command(binaryPath, "reorder")
+		cmd.Dir = scene.Dir
+		cmd.Env = append(os.Environ(), "EDITOR="+editorScript, "GIT_EDITOR="+editorScript)
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, "reorder command failed: %s", string(output))
+
+		// Run restack to rebase branches onto their new parents
+		cmd = exec.Command(binaryPath, "restack")
+		cmd.Dir = scene.Dir
+		output, err = cmd.CombinedOutput()
+		require.NoError(t, err, "restack command failed: %s", string(output))
+
+		// After reorder + restack: main -> branch-b -> branch-a -> branch-c
+		// Each branch should still have exactly 1 commit relative to its new parent
+		require.Equal(t, 1, commitCount(t, scene.Dir, "main", "branch-b"),
+			"branch-b should have 1 commit above main after reorder")
+		require.Equal(t, 1, commitCount(t, scene.Dir, "branch-b", "branch-a"),
+			"branch-a should have 1 commit above branch-b after reorder")
+		require.Equal(t, 1, commitCount(t, scene.Dir, "branch-a", "branch-c"),
+			"branch-c should have 1 commit above branch-a after reorder")
 	})
 
 	t.Run("reorder with descendants", func(t *testing.T) {

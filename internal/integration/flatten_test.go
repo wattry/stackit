@@ -253,6 +253,219 @@ func TestFlattenUndo(t *testing.T) {
 	})
 }
 
+func TestFlattenCommitIntegrity(t *testing.T) {
+	t.Parallel()
+
+	t.Run("flattened branch only contains its own commits", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario: main -> A -> B -> C (independent changes)
+		// After flatten: main -> A, main -> B, main -> C
+		// Each branch should have exactly 1 commit relative to main
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file-a", "content a").
+			Run("create branch-a -m 'Add file A'")
+
+		sh.Write("file-b", "content b").
+			Run("create branch-b -m 'Add file B'")
+
+		sh.Write("file-c", "content c").
+			Run("create branch-c -m 'Add file C'")
+
+		// Verify commit counts before flatten
+		sh.CommitCount("main", "branch-a", 1).
+			CommitCount("main", "branch-b", 2). // B has A's commit + B's commit
+			CommitCount("main", "branch-c", 3)  // C has A + B + C
+
+		sh.Run("flatten --yes")
+
+		// After flatten, each branch should have exactly 1 commit relative to main
+		sh.CommitCount("main", "branch-a", 1).
+			CommitCount("main", "branch-b", 1).
+			CommitCount("main", "branch-c", 1)
+	})
+
+	t.Run("flattened branch only contains its own commits when main has advanced", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario: User hasn't synced - main has new commits locally
+		// main -> A -> B (independent changes), then main gets a new commit
+		// After flatten: B should have exactly 1 commit relative to main
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file-a", "content a").
+			Run("create branch-a -m 'Add file A'")
+
+		sh.Write("file-b", "content b").
+			Run("create branch-b -m 'Add file B'")
+
+		// Advance main (simulating a local pull or direct commit)
+		sh.Checkout("main").
+			Git("commit --allow-empty -m 'main: advance'")
+
+		// Go back to branch-b and flatten
+		sh.Checkout("branch-b").
+			Run("flatten --yes")
+
+		sh.ExpectStackStructure(map[string]string{
+			"branch-a": "main",
+			"branch-b": "main",
+		})
+
+		// Each branch should have exactly 1 commit relative to main
+		sh.CommitCount("main", "branch-a", 1).
+			CommitCount("main", "branch-b", 1)
+	})
+
+	t.Run("flattened branch excludes parent commits when parent has extra commits", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario: A has 2 commits, B has 1 commit on top
+		// B doesn't depend on A's content so can flatten to main
+		// After flatten: B should have exactly 1 commit relative to main
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file-a1", "content a1").
+			Run("create branch-a -m 'Add file A1'")
+
+		// Add another commit to A
+		sh.Commit("file-a2", "Add file A2")
+
+		// Create B with independent changes
+		sh.Write("file-b", "content b").
+			Run("create branch-b -m 'Add file B'")
+
+		// Verify: A has 2 commits, B has 3 (2 from A + 1 own)
+		sh.CommitCount("main", "branch-a", 2).
+			CommitCount("main", "branch-b", 3)
+
+		sh.Run("flatten --yes")
+
+		sh.ExpectStackStructure(map[string]string{
+			"branch-a": "main",
+			"branch-b": "main",
+		})
+
+		// A should have 2 commits, B should have only 1
+		sh.CommitCount("main", "branch-a", 2).
+			CommitCount("main", "branch-b", 1)
+	})
+
+	t.Run("flatten after parent amended without restacking child", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario: A is created, B is created on top, then A is amended
+		// B is NOT restacked before flatten
+		// After flatten: B should only contain its own commit
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file-a", "content a").
+			Run("create branch-a -m 'Add file A'")
+
+		sh.Write("file-b", "content b").
+			Run("create branch-b -m 'Add file B'")
+
+		// Go back to A and amend it (add more content)
+		sh.Checkout("branch-a").
+			Amend("file-a-extra", "extra content for A")
+
+		// Do NOT restack branch-b — it's now based on old A
+
+		// Go to B and flatten
+		sh.Checkout("branch-b").
+			Run("flatten --yes")
+
+		sh.ExpectStackStructure(map[string]string{
+			"branch-a": "main",
+			"branch-b": "main",
+		})
+
+		// B should have exactly 1 commit relative to main
+		sh.CommitCount("main", "branch-b", 1)
+	})
+
+	t.Run("flatten with main advanced and parent amended", func(t *testing.T) {
+		t.Parallel()
+
+		// Combined scenario: main advanced + parent amended + no restack
+		// This is the most likely scenario for the reported bug
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file-a", "content a").
+			Run("create branch-a -m 'Add file A'")
+
+		sh.Write("file-b", "content b").
+			Run("create branch-b -m 'Add file B'")
+
+		// Advance main
+		sh.Checkout("main").
+			Git("commit --allow-empty -m 'main: advance'")
+
+		// Amend A (adds content, changes SHA)
+		sh.Checkout("branch-a").
+			Amend("file-a-extra", "extra content for A")
+
+		// Do NOT restack branch-b
+
+		// Flatten from B
+		sh.Checkout("branch-b").
+			Run("flatten --yes")
+
+		sh.ExpectStackStructure(map[string]string{
+			"branch-a": "main",
+			"branch-b": "main",
+		})
+
+		// B should have exactly 1 commit relative to main
+		sh.CommitCount("main", "branch-b", 1)
+	})
+
+	t.Run("flatten deep stack preserves correct commit counts", func(t *testing.T) {
+		t.Parallel()
+
+		// Scenario: main -> A -> B -> C -> D (all independent)
+		// After flatten: all on main, each with 1 commit
+
+		sh := NewTestShellInProcess(t)
+
+		sh.Write("file-a", "content a").
+			Run("create branch-a -m 'Add file A'")
+
+		sh.Write("file-b", "content b").
+			Run("create branch-b -m 'Add file B'")
+
+		sh.Write("file-c", "content c").
+			Run("create branch-c -m 'Add file C'")
+
+		sh.Write("file-d", "content d").
+			Run("create branch-d -m 'Add file D'")
+
+		// Before flatten
+		sh.CommitCount("main", "branch-d", 4)
+
+		sh.Run("flatten --yes")
+
+		sh.ExpectStackStructure(map[string]string{
+			"branch-a": "main",
+			"branch-b": "main",
+			"branch-c": "main",
+			"branch-d": "main",
+		})
+
+		// Each should have exactly 1 commit
+		sh.CommitCount("main", "branch-a", 1).
+			CommitCount("main", "branch-b", 1).
+			CommitCount("main", "branch-c", 1).
+			CommitCount("main", "branch-d", 1)
+	})
+}
+
 func TestFlattenTreeStructure(t *testing.T) {
 	t.Parallel()
 

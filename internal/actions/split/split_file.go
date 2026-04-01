@@ -520,12 +520,10 @@ func splitByFileAbove(ctx context.Context, branchToSplit engine.Branch, newBranc
 	// Child branch is now fully set up, don't clean it up on subsequent errors
 	childBranchCreated = false
 
-	// Re-parent existing children to the new child branch
-	for _, existingChildName := range existingChildren {
-		existingChild := eng.GetBranch(existingChildName)
-		if err := eng.SetParent(ctx, existingChild, childBranch); err != nil {
-			return nil, fmt.Errorf("failed to reparent %s: %w", existingChildName, err)
-		}
+	// Re-parent existing children to the new child branch, preserving divergence
+	// points so children don't carry the split-out changes.
+	if err := eng.ReparentBranches(ctx, existingChildren, childBranch); err != nil {
+		return nil, fmt.Errorf("failed to reparent children: %w", err)
 	}
 
 	return &Result{

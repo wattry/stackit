@@ -1325,6 +1325,14 @@ func TestSplitByFileAbove(t *testing.T) {
 
 		// Verify new-child is a child of feature
 		sh.ExpectBranchParent("new-child", "feature")
+
+		// Restack so the git history reflects the new parent relationships
+		sh.Checkout("existing-child").
+			Run("restack")
+
+		// Verify existing-child has exactly 1 commit relative to new-child
+		// (not carrying the split-out changes from the parent)
+		sh.CommitCount("new-child", "existing-child", 1)
 	})
 
 	run("split --by-file --above incompatible with --as-sibling", func(_ *testing.T, sh *TestShell) {
@@ -1386,6 +1394,15 @@ func TestSplitByFileAbove(t *testing.T) {
 
 		// Verify new-child is a child of feature
 		sh.ExpectBranchParent("new-child", "feature")
+
+		// Restack so the git history reflects the new parent relationships
+		sh.Checkout("new-child").
+			Run("restack")
+
+		// Verify each child has exactly 1 commit relative to new-child
+		sh.CommitCount("new-child", "child1", 1).
+			CommitCount("new-child", "child2", 1).
+			CommitCount("new-child", "child3", 1)
 	})
 
 	run("split --by-file --above fails when all files selected", func(_ *testing.T, sh *TestShell) {
