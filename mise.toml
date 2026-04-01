@@ -2,7 +2,7 @@
 experimental = true
 
 [env]
-STACKIT_NO_LOGGING = "1"  # Used for tests
+STACKIT_NO_LOGGING = "1"                                    # Used for tests
 GOBIN = "{{ config_root }}/bin"
 PROJECT_ROOT = "{{ config_root }}"
 _.path = ["{{ config_root }}/bin", "{{ env.HOME }}/go/bin"]
@@ -24,16 +24,16 @@ pnpm = "10.32.1"
 golangci-lint = "latest"
 
 # Development tools
-"aqua:watchexec/watchexec" = "latest" # File watcher for dev auto-reload
+"aqua:watchexec/watchexec" = "latest"   # File watcher for dev auto-reload
 "aqua:goreleaser/goreleaser" = "latest" # Release automation
 
 # CLI utilities (recommended in AGENTS.md)
-"aqua:BurntSushi/ripgrep" = "latest"  # Fast text search (rg)
-"aqua:sharkdp/fd" = "latest"          # Fast file search
-"aqua:ast-grep/ast-grep" = "latest"   # AST-based code search
-"aqua:jqlang/jq" = "latest"           # JSON processing
-"aqua:mikefarah/yq" = "latest"        # YAML processing
-"cargo:tokei" = "latest"              # Code statistics
+"aqua:BurntSushi/ripgrep" = "latest" # Fast text search (rg)
+"aqua:sharkdp/fd" = "latest"         # Fast file search
+"aqua:ast-grep/ast-grep" = "latest"  # AST-based code search
+"aqua:jqlang/jq" = "latest"          # JSON processing
+"aqua:mikefarah/yq" = "latest"       # YAML processing
+"cargo:tokei" = "latest"             # Code statistics
 
 [tasks.compile]
 description = "Check compilation only (~2s)"
