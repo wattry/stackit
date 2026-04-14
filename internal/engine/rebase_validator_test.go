@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"stackit.dev/stackit/internal/engine"
+	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -345,6 +346,94 @@ func TestValidateRebases(t *testing.T) {
 		require.True(t, result.Success)
 		require.Equal(t, engine.ValidationErrorNone, result.ErrorType, "should set ValidationErrorNone for successful validation")
 	})
+}
+
+func TestValidateRebasesUsesRerereResolvedConflicts(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	g := s.Engine.Git()
+	require.NoError(t, g.SetConfig("rerere.enabled", "true"))
+	require.NoError(t, g.SetConfig("rerere.autoupdate", "true"))
+
+	s.Checkout("main").
+		CommitChange("conflicting-file.txt", "original version")
+
+	oldBase, err := s.Engine.GetRevision(s.Engine.Trunk())
+	require.NoError(t, err)
+
+	s.CreateBranch("branch1").
+		CommitChange("conflicting-file.txt", "branch version")
+
+	s.Checkout("main").
+		CommitChange("conflicting-file.txt", "main version")
+
+	result, err := g.Rebase(context.Background(), "branch1", "main", oldBase)
+	require.NoError(t, err)
+	require.Equal(t, git.RebaseConflict, result.Result)
+	require.True(t, g.IsRebaseInProgress(context.Background()))
+
+	require.NoError(t, s.Scene.Repo.ResolveMergeConflicts())
+	require.NoError(t, s.Scene.Repo.MarkMergeConflictsAsResolved())
+	result, err = g.RebaseContinue(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, git.RebaseDone, result.Result)
+
+	require.NoError(t, s.Scene.Repo.CheckoutBranch("main"))
+	require.NoError(t, s.Scene.Repo.RunGitCommand("checkout", "-b", "branch2", oldBase))
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch version", "conflicting-file.txt"))
+
+	validation, err := s.Engine.ValidateRebases(context.Background(), []engine.RebaseSpec{
+		{
+			Branch:      "branch2",
+			NewParent:   "main",
+			OldUpstream: oldBase,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, validation.Success)
+	require.NotEmpty(t, validation.NewSHAs["branch2"])
+}
+
+func TestRestackBranchesPropagatesRerereResolvedCount(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	g := s.Engine.Git()
+	require.NoError(t, g.SetConfig("rerere.enabled", "true"))
+	require.NoError(t, g.SetConfig("rerere.autoupdate", "true"))
+
+	s.Checkout("main").
+		CommitChange("conflicting-file.txt", "original version")
+
+	oldBase, err := s.Engine.GetRevision(s.Engine.Trunk())
+	require.NoError(t, err)
+
+	s.CreateBranch("branch2").
+		CommitChange("conflicting-file.txt", "branch version").
+		TrackBranch("branch2", "main")
+
+	s.Checkout("main").
+		CommitChange("conflicting-file.txt", "main version")
+
+	// Record a rerere resolution for this exact conflict using a throwaway
+	// branch created off oldBase with the same content as branch2.
+	require.NoError(t, s.Scene.Repo.RunGitCommand("checkout", "-b", "branch1", oldBase))
+	require.NoError(t, s.Scene.Repo.CreateChangeAndCommit("branch version", "conflicting-file.txt"))
+	rebaseResult, err := g.Rebase(context.Background(), "branch1", "main", oldBase)
+	require.NoError(t, err)
+	require.Equal(t, git.RebaseConflict, rebaseResult.Result)
+	require.NoError(t, s.Scene.Repo.ResolveMergeConflicts())
+	require.NoError(t, s.Scene.Repo.MarkMergeConflictsAsResolved())
+	rebaseResult, err = g.RebaseContinue(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, git.RebaseDone, rebaseResult.Result)
+
+	// Now restack branch2 through the engine. The same conflict should be
+	// auto-resolved by rerere and the count should propagate through
+	// RestackBranchResult.
+	branch2 := s.Engine.GetBranch("branch2")
+	require.NotNil(t, branch2)
+	batchResult, err := s.Engine.RestackBranches(context.Background(), []engine.Branch{branch2})
+	require.NoError(t, err)
+	require.Equal(t, engine.RestackDone, batchResult.Results["branch2"].Result)
+	require.Greater(t, batchResult.Results["branch2"].RerereResolvedCount, 0)
 }
 
 func TestValidateRebasesParallel(t *testing.T) {

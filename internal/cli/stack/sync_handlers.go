@@ -5,6 +5,7 @@ import (
 	"strings"
 	stdsync "sync"
 
+	"stackit.dev/stackit/internal/actions"
 	syncAction "stackit.dev/stackit/internal/actions/sync"
 	"stackit.dev/stackit/internal/cli/common"
 	"stackit.dev/stackit/internal/engine"
@@ -242,6 +243,9 @@ func (h *SimpleSyncHandler) printRestackEvent(event syncAction.Event) {
 			}
 			msg += fmt.Sprintf(" -> %s", style.ColorDim(event.NewRevision))
 			h.Output.Info("  %s", msg)
+			if event.RerereResolvedCount > 0 {
+				h.Output.Info("%s", actions.FormatRerereResolved(event.RerereResolvedCount))
+			}
 		} else {
 			reason := common.ReasonNoRestackNeeded
 			if event.IsLocked() {
@@ -291,7 +295,7 @@ func (h *SimpleSyncHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
+func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string, rerereResolvedCount int) {
 	// Log reparenting info if applicable
 	if reparented {
 		h.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
@@ -302,14 +306,15 @@ func (h *SimpleSyncHandler) OnRestackBranch(branch string, result syncAction.Res
 
 	// Convert to Event and use existing printRestackEvent
 	event := syncAction.Event{
-		Phase:       syncAction.PhaseRestack,
-		Branch:      branch,
-		PRNumber:    prNumber,
-		NewRevision: newRev,
-		LockReason:  lockReason,
-		Frozen:      frozen,
-		IsCurrent:   isCurrent,
-		Parent:      parent,
+		Phase:               syncAction.PhaseRestack,
+		Branch:              branch,
+		PRNumber:            prNumber,
+		NewRevision:         newRev,
+		LockReason:          lockReason,
+		Frozen:              frozen,
+		IsCurrent:           isCurrent,
+		Parent:              parent,
+		RerereResolvedCount: rerereResolvedCount,
 	}
 
 	switch result {
@@ -565,12 +570,12 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 }
 
 // OnRestackBranch implements RestackHandler for standalone restack operations
-func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
+func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string, rerereResolvedCount int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	// Build detail message
-	detail := h.formatRestackDetail(branch, result, newRev, prNumber, lockReason, frozen, isCurrent, parent)
+	detail := h.formatRestackDetail(branch, result, newRev, prNumber, lockReason, frozen, isCurrent, parent, rerereResolvedCount)
 	if detail != "" {
 		if reparented {
 			detail = fmt.Sprintf("Reparented %s -> %s. %s", oldParent, newParent, detail)
@@ -590,7 +595,7 @@ func (h *InteractiveSyncHandler) OnRestackBranch(branch string, result syncActio
 }
 
 // formatRestackDetail formats a restack event into a detail string
-func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string) string {
+func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncAction.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, rerereResolvedCount int) string {
 	prInfo := ""
 	if prNumber != nil {
 		prInfo = fmt.Sprintf(" (PR #%d)", *prNumber)
@@ -605,6 +610,9 @@ func (h *InteractiveSyncHandler) formatRestackDetail(branch string, result syncA
 			msg += fmt.Sprintf(" on %s", parent)
 		}
 		msg += fmt.Sprintf(" -> %s", newRev)
+		if rerereResolvedCount > 0 {
+			msg += " " + actions.FormatRerereResolved(rerereResolvedCount)
+		}
 		return msg
 	case syncAction.RestackUnneeded:
 		reason := common.ReasonNoRestackNeeded
@@ -641,6 +649,13 @@ func (h *InteractiveSyncHandler) Cleanup() {}
 
 // IsInteractive implements Handler. Returns true for TTY handler.
 func (h *InteractiveSyncHandler) IsInteractive() bool { return true }
+
+// Pause releases the terminal so external prompts can run without contending
+// with the active Bubble Tea program. Implements rerere.Pauser.
+func (h *InteractiveSyncHandler) Pause() { h.runner.Pause() }
+
+// Resume restores the TUI after Pause. Implements rerere.Pauser.
+func (h *InteractiveSyncHandler) Resume() { h.runner.Resume() }
 
 // PromptMetadataConflict implements Handler. Pauses TUI, displays conflict, prompts user.
 func (h *InteractiveSyncHandler) PromptMetadataConflict(diff *engine.MetadataDiff) (bool, error) {

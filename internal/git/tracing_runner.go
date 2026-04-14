@@ -637,21 +637,21 @@ func (t *tracingRunner) CommitAmendNoEdit(ctx context.Context) error {
 
 // RebaseOperations methods
 
-func (t *tracingRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error) {
+func (t *tracingRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseOutcome, error) {
 	start := time.Now()
 	result, err := t.inner.Rebase(ctx, branchName, upstream, oldUpstream)
 	t.trace("Rebase", time.Since(start), err == nil, err, slog.String("branch", branchName), slog.String("upstream", upstream))
 	return result, err
 }
 
-func (t *tracingRunner) RebaseContinue(ctx context.Context) (RebaseResult, error) {
+func (t *tracingRunner) RebaseContinue(ctx context.Context) (RebaseOutcome, error) {
 	start := time.Now()
 	result, err := t.inner.RebaseContinue(ctx)
 	t.trace("RebaseContinue", time.Since(start), err == nil, err)
 	return result, err
 }
 
-func (t *tracingRunner) RebaseContinueNoEdit(ctx context.Context) (RebaseResult, error) {
+func (t *tracingRunner) RebaseContinueNoEdit(ctx context.Context) (RebaseOutcome, error) {
 	start := time.Now()
 	result, err := t.inner.RebaseContinueNoEdit(ctx)
 	t.trace("RebaseContinueNoEdit", time.Since(start), err == nil, err)

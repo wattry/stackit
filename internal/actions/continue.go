@@ -81,6 +81,9 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 			}
 			branchName = currentBranch.GetName()
 		}
+		if result.RerereResolvedCount > 0 {
+			printRerereResolved(ctx, result.RerereResolvedCount)
+		}
 		if err := PrintConflictStatus(ctx, branchName); err != nil {
 			return fmt.Errorf("failed to print conflict status: %w", err)
 		}
@@ -93,6 +96,9 @@ func ContinueAction(ctx *app.Context, opts ContinueOptions) error {
 	}
 
 	out.Info("Resolved rebase conflict for %s.", style.ColorBranchName(result.BranchName, true))
+	if result.RerereResolvedCount > 0 {
+		printRerereResolved(ctx, result.RerereResolvedCount)
+	}
 
 	// Continue with remaining branches to restack
 	if len(continuation.BranchesToRestack) > 0 {

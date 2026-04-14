@@ -18,19 +18,33 @@ const (
 	RebaseConflict
 )
 
-func (r *runner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error) {
+// RebaseOutcome represents the result of a rebase operation, including any
+// conflicts that git rerere resolved automatically.
+type RebaseOutcome struct {
+	Result              RebaseResult
+	RerereResolvedCount int
+}
+
+func (r *runner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseOutcome, error) {
+	outcome := RebaseOutcome{Result: RebaseDone}
+
 	// Use detached HEAD to avoid "already used by worktree" errors
 	// We use branchName~0 to force a detached checkout of the branch tip
 	_, err := r.RunGitCommandWithContext(ctx, "rebase", "--onto", upstream, oldUpstream, branchName+"~0")
 	if err != nil {
 		r.revisionCache.InvalidateAll()
 		if r.IsRebaseInProgress(ctx) {
-			return RebaseConflict, nil
-		}
-		// Abort rebase if it failed for other reasons
-		_, _ = r.RunGitCommandWithContext(ctx, "rebase", "--abort")
+			autoOutcome, autoErr := r.continueRerereResolvedRebase(ctx, err)
+			if autoErr != nil || autoOutcome.Result == RebaseConflict {
+				return autoOutcome, autoErr
+			}
+			outcome = autoOutcome
+		} else {
+			// Abort rebase if it failed for other reasons
+			_, _ = r.RunGitCommandWithContext(ctx, "rebase", "--abort")
 
-		return RebaseConflict, err
+			return RebaseOutcome{Result: RebaseConflict}, err
+		}
 	}
 
 	r.revisionCache.InvalidateAll()
@@ -38,39 +52,88 @@ func (r *runner) Rebase(ctx context.Context, branchName, upstream, oldUpstream s
 	// Since we rebased in detached HEAD, we must manually update the branch ref
 	newRev, err := r.GetCurrentRevision(ctx)
 	if err != nil {
-		return RebaseConflict, fmt.Errorf("failed to get revision after rebase: %w", err)
+		return RebaseOutcome{Result: RebaseConflict, RerereResolvedCount: outcome.RerereResolvedCount}, fmt.Errorf("failed to get revision after rebase: %w", err)
 	}
 
 	if err := r.UpdateBranchRef(ctx, branchName, newRev); err != nil {
-		return RebaseConflict, fmt.Errorf("failed to update branch ref %s: %w", branchName, err)
+		return RebaseOutcome{Result: RebaseConflict, RerereResolvedCount: outcome.RerereResolvedCount}, fmt.Errorf("failed to update branch ref %s: %w", branchName, err)
 	}
 
-	return RebaseDone, nil
+	return outcome, nil
 }
 
-func (r *runner) RebaseContinueNoEdit(ctx context.Context) (RebaseResult, error) {
+func (r *runner) rebaseContinueOnce(ctx context.Context) error {
 	_, err := r.RunGitCommandWithEnv(ctx, []string{"GIT_EDITOR=true"}, "rebase", "--continue")
 	r.revisionCache.InvalidateAll()
-	if err != nil {
-		if r.IsRebaseInProgress(ctx) {
-			return RebaseConflict, nil
-		}
-		return RebaseConflict, err
-	}
-	return RebaseDone, nil
+	return err
 }
 
-func (r *runner) RebaseContinue(ctx context.Context) (RebaseResult, error) {
-	_, err := r.RunGitCommandWithEnv(ctx, []string{"GIT_EDITOR=true"}, "rebase", "--continue")
-	r.revisionCache.InvalidateAll()
-	if err != nil {
-		if r.IsRebaseInProgress(ctx) {
-			return RebaseConflict, nil
+// MaxRerereContinueIterations caps the auto-continue loop so a pathological
+// rebase cannot spin forever. Real rebases finish in far fewer iterations.
+const MaxRerereContinueIterations = 1000
+
+// AutoContinueRerereRebase drives `git rebase --continue` while rerere keeps
+// all conflicts resolved (no unmerged files remain). It returns:
+//   - RebaseOutcome with Result=RebaseDone and the count of rerere-resolved
+//     commits when the rebase completes.
+//   - RebaseOutcome with Result=RebaseConflict and the list of unmerged files
+//     when rerere cannot resolve a conflict.
+//   - a non-nil error if `rebase --continue` fails unexpectedly or the
+//     iteration cap is hit. The originalErr is wrapped into these errors so
+//     callers keep the context that triggered auto-continue.
+func AutoContinueRerereRebase(ctx context.Context, r Runner, originalErr error) (RebaseOutcome, []string, error) {
+	outcome := RebaseOutcome{Result: RebaseConflict}
+
+	for range MaxRerereContinueIterations {
+		if !r.IsRebaseInProgress(ctx) {
+			outcome.Result = RebaseDone
+			return outcome, nil, nil
 		}
-		return RebaseConflict, fmt.Errorf("rebase continue failed: %w", err)
+
+		unmergedFiles, err := r.GetUnmergedFiles(ctx)
+		if err != nil {
+			return outcome, nil, originalErr
+		}
+		if len(unmergedFiles) > 0 {
+			return outcome, unmergedFiles, nil
+		}
+
+		if _, err := r.RunGitCommandWithEnv(ctx, []string{"GIT_EDITOR=true"}, "rebase", "--continue"); err != nil {
+			return outcome, nil, fmt.Errorf("rebase --continue failed after rerere replay: %w", err)
+		}
+		outcome.RerereResolvedCount++
 	}
 
-	return RebaseDone, nil
+	return outcome, nil, fmt.Errorf("rerere auto-continue exceeded %d iterations: %w", MaxRerereContinueIterations, originalErr)
+}
+
+func (r *runner) continueRerereResolvedRebase(ctx context.Context, originalErr error) (RebaseOutcome, error) {
+	outcome, _, err := AutoContinueRerereRebase(ctx, r, originalErr)
+	r.revisionCache.InvalidateAll()
+	return outcome, err
+}
+
+func (r *runner) RebaseContinueNoEdit(ctx context.Context) (RebaseOutcome, error) {
+	err := r.rebaseContinueOnce(ctx)
+	if err != nil {
+		if r.IsRebaseInProgress(ctx) {
+			return r.continueRerereResolvedRebase(ctx, err)
+		}
+		return RebaseOutcome{Result: RebaseConflict}, err
+	}
+	return RebaseOutcome{Result: RebaseDone}, nil
+}
+
+func (r *runner) RebaseContinue(ctx context.Context) (RebaseOutcome, error) {
+	err := r.rebaseContinueOnce(ctx)
+	if err != nil {
+		if r.IsRebaseInProgress(ctx) {
+			return r.continueRerereResolvedRebase(ctx, err)
+		}
+		return RebaseOutcome{Result: RebaseConflict}, fmt.Errorf("rebase continue failed: %w", err)
+	}
+
+	return RebaseOutcome{Result: RebaseDone}, nil
 }
 
 func (r *runner) RebaseAbort(ctx context.Context) error {

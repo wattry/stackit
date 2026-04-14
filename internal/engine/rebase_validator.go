@@ -75,7 +75,9 @@ func (e *engineImpl) ValidateRebases(ctx context.Context, specs []RebaseSpec) (*
 // dryRunRebase performs a rebase without updating branch refs.
 // This allows testing if a rebase would succeed without modifying the repository.
 // Returns the rebase result, the new SHA (if successful), conflicting files (if any), and any error.
-func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUpstream string) (git.RebaseResult, string, []string, error) {
+func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUpstream string) (git.RebaseOutcome, string, []string, error) {
+	outcome := git.RebaseOutcome{Result: git.RebaseDone}
+
 	// Perform rebase in detached HEAD mode using branchName~0.
 	// The ~0 suffix resolves to the same commit as branchName but tells git to check out
 	// the commit directly (detached HEAD) rather than the branch ref. This means the rebase
@@ -84,25 +86,28 @@ func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUp
 	_, err := g.RunGitCommandWithContext(ctx, "rebase", "--onto", upstream, oldUpstream, branchName+"~0")
 	if err != nil {
 		if g.IsRebaseInProgress(ctx) {
-			// Get conflicting files before aborting
-			conflictFiles, _ := g.GetUnmergedFiles(ctx)
-			return git.RebaseConflict, "", conflictFiles, nil
+			autoOutcome, conflictFiles, autoErr := git.AutoContinueRerereRebase(ctx, g, err)
+			if autoErr != nil || autoOutcome.Result == git.RebaseConflict {
+				return autoOutcome, "", conflictFiles, autoErr
+			}
+			outcome = autoOutcome
+		} else {
+			// Abort rebase if it failed for other reasons
+			_, _ = g.RunGitCommandWithContext(ctx, "rebase", "--abort")
+			return git.RebaseOutcome{Result: git.RebaseConflict}, "", nil, err
 		}
-		// Abort rebase if it failed for other reasons
-		_, _ = g.RunGitCommandWithContext(ctx, "rebase", "--abort")
-		return git.RebaseConflict, "", nil, err
 	}
 
 	// Get the resulting SHA from the detached HEAD
 	newSHA, err := g.GetCurrentRevision(ctx)
 	if err != nil {
-		return git.RebaseConflict, "", nil, fmt.Errorf("failed to get revision after rebase: %w", err)
+		return git.RebaseOutcome{Result: git.RebaseConflict, RerereResolvedCount: outcome.RerereResolvedCount}, "", nil, fmt.Errorf("failed to get revision after rebase: %w", err)
 	}
 
 	// DO NOT update the branch ref - this is the key difference from normal Rebase
 	// The branch ref stays unchanged, keeping the main repo unmodified
 
-	return git.RebaseDone, newSHA, nil, nil
+	return outcome, newSHA, nil, nil
 }
 
 // validationLevel represents a group of specs that can be validated in parallel
@@ -368,7 +373,7 @@ func (e *engineImpl) validateSingleSpec(
 
 	// Perform dry-run rebase
 	rebaseResult, newSHA, conflictFiles, err := dryRunRebase(ctx, wtGit, spec.Branch, newParent, spec.OldUpstream)
-	if err != nil || rebaseResult == git.RebaseConflict {
+	if err != nil || rebaseResult.Result == git.RebaseConflict {
 		// Build helpful error message with branch name
 		errorMsg := fmt.Sprintf("conflict rebasing %s onto %s", spec.Branch, spec.NewParent)
 		errorType := ValidationErrorConflict

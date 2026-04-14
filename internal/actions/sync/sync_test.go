@@ -215,12 +215,12 @@ type runtimeConflictRunner struct {
 	injected         bool
 }
 
-func (r *runtimeConflictRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (git.RebaseResult, error) {
+func (r *runtimeConflictRunner) Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (git.RebaseOutcome, error) {
 	if branchName == r.conflictBranch && !r.injected {
 		r.injected = true
 		r.rebaseInProgress = true
 		_ = r.CheckoutDetached(ctx, branchName)
-		return git.RebaseConflict, nil
+		return git.RebaseOutcome{Result: git.RebaseConflict}, nil
 	}
 	return r.Runner.Rebase(ctx, branchName, upstream, oldUpstream)
 }

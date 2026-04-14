@@ -27,24 +27,42 @@ import (
 
 var pluralizeClient = pluralize.NewClient()
 
+// FormatRerereResolved renders the standard message describing how many
+// rebase conflicts git rerere auto-resolved during an operation.
+func FormatRerereResolved(count int) string {
+	return fmt.Sprintf("Resolved %d %s using git rerere.", count, Pluralize("conflict", count))
+}
+
+func printRerereResolved(ctx *app.Context, count int) {
+	ctx.Output.Info("%s", FormatRerereResolved(count))
+}
+
 // Restacker is a minimal interface needed for restacking branches
 type Restacker interface {
 	engine.BranchReader
 	engine.SyncManager
 }
 
-// RestackProgressCallback is called for each branch during restack
-// branchName: the branch being processed
-// result: the restack result (Done, Unneeded, Conflict)
-// newRev: the new revision if restacked (empty if not applicable)
-// conflict: true if this is a conflict
-// lockReason: why the branch is locked (empty if not locked)
-// frozen: true if the branch is frozen
-// isCurrent: true if this is the current branch
-// reparented: true if the branch was reparented
-// oldParent: the old parent name if reparented
-// newParent: the new parent name if reparented
-type RestackProgressCallback func(branchName string, result engine.RestackResult, newRev string, conflict bool, lockReason engine.LockReason, frozen bool, isCurrent bool, reparented bool, oldParent, newParent string)
+// RestackProgress describes the outcome of restacking a single branch. It is
+// passed to RestackProgressCallback so callers can report progress without
+// juggling a long positional parameter list.
+type RestackProgress struct {
+	Branch              string               // the branch being processed
+	Result              engine.RestackResult // Done, Unneeded, or Conflict
+	NewRev              string               // new revision if restacked (empty otherwise)
+	RerereResolvedCount int                  // number of rebase continuations handled by git rerere
+	Conflict            bool                 // true if this is a conflict
+	LockReason          engine.LockReason    // why the branch is locked (empty if not locked)
+	Frozen              bool                 // true if the branch is frozen
+	IsCurrent           bool                 // true if this is the current branch
+	Reparented          bool                 // true if the branch was reparented
+	OldParent           string               // the old parent name if reparented
+	NewParent           string               // the new parent name if reparented
+}
+
+// RestackProgressCallback is called for each branch during restack with a
+// RestackProgress describing the outcome.
+type RestackProgressCallback func(RestackProgress)
 
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
@@ -244,7 +262,18 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 			// Report via callback if provided
 			if callback != nil {
-				callback(branchName, result.Result, newRev, false, result.LockReason, result.Frozen, branchName == currentBranchName, result.Reparented, result.OldParent, result.NewParent)
+				callback(RestackProgress{
+					Branch:              branchName,
+					Result:              result.Result,
+					NewRev:              newRev,
+					RerereResolvedCount: result.RerereResolvedCount,
+					LockReason:          result.LockReason,
+					Frozen:              result.Frozen,
+					IsCurrent:           branchName == currentBranchName,
+					Reparented:          result.Reparented,
+					OldParent:           result.OldParent,
+					NewParent:           result.NewParent,
+				})
 				continue
 			}
 
@@ -264,6 +293,9 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 				ctx.Output.Info("Restacked %s on %s.",
 					style.ColorBranchName(branchName, isCurrent),
 					style.ColorBranchName(parentName, false))
+				if result.RerereResolvedCount > 0 {
+					printRerereResolved(ctx, result.RerereResolvedCount)
+				}
 			case engine.RestackUnneeded:
 				switch {
 				case !branch.CanModify():
@@ -292,7 +324,12 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 		for _, branchName := range conflictBranches {
 			if callback != nil {
-				callback(branchName, engine.RestackConflict, "", true, engine.LockReasonNone, false, branchName == currentBranchName, false, "", "")
+				callback(RestackProgress{
+					Branch:    branchName,
+					Result:    engine.RestackConflict,
+					Conflict:  true,
+					IsCurrent: branchName == currentBranchName,
+				})
 			}
 		}
 	}

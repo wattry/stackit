@@ -69,56 +69,57 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, restackScope 
 	// Restack branches with handler for progress
 	if len(sortedBranches) > 0 {
 		restackStart := time.Now()
-		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool, isCurrent bool, _ bool, _, _ string) {
-			prNumber := getPRNumber(ctx.Status(), branchName)
+		if err := actions.RestackBranchesWithHandler(ctx, sortedBranches, func(p actions.RestackProgress) {
+			prNumber := getPRNumber(ctx.Status(), p.Branch)
 
 			parentName := ""
-			br := nav.GetBranch(branchName)
+			br := nav.GetBranch(p.Branch)
 			if br.GetName() != "" {
-				if p := br.GetParent(); p != nil {
-					parentName = p.GetName()
+				if parent := br.GetParent(); parent != nil {
+					parentName = parent.GetName()
 				} else {
 					parentName = ctx.Engine.Trunk().GetName()
 				}
 			}
 
-			switch result {
+			switch p.Result {
 			case engine.RestackDone:
 				summary.BranchesRestacked++
 				handler.EmitEvent(Event{
-					Phase:       PhaseRestack,
-					Type:        EventCompleted,
-					Branch:      branchName,
-					PRNumber:    prNumber,
-					NewRevision: newRev,
-					LockReason:  lockReason,
-					Frozen:      frozen,
-					IsCurrent:   isCurrent,
-					Parent:      parentName,
+					Phase:               PhaseRestack,
+					Type:                EventCompleted,
+					Branch:              p.Branch,
+					PRNumber:            prNumber,
+					NewRevision:         p.NewRev,
+					LockReason:          p.LockReason,
+					Frozen:              p.Frozen,
+					IsCurrent:           p.IsCurrent,
+					Parent:              parentName,
+					RerereResolvedCount: p.RerereResolvedCount,
 				})
 			case engine.RestackUnneeded:
 				handler.EmitEvent(Event{
 					Phase:      PhaseRestack,
 					Type:       EventCompleted,
-					Branch:     branchName,
+					Branch:     p.Branch,
 					PRNumber:   prNumber,
-					LockReason: lockReason,
-					Frozen:     frozen,
-					IsCurrent:  isCurrent,
+					LockReason: p.LockReason,
+					Frozen:     p.Frozen,
+					IsCurrent:  p.IsCurrent,
 					Parent:     parentName,
 				})
 			case engine.RestackConflict:
 				summary.BranchesSkipped++
-				summary.ConflictBranches = append(summary.ConflictBranches, branchName)
+				summary.ConflictBranches = append(summary.ConflictBranches, p.Branch)
 				handler.EmitEvent(Event{
 					Phase:      PhaseRestack,
 					Type:       EventSkipped,
-					Branch:     branchName,
+					Branch:     p.Branch,
 					PRNumber:   prNumber,
 					Conflict:   true,
-					LockReason: lockReason,
-					Frozen:     frozen,
-					IsCurrent:  isCurrent,
+					LockReason: p.LockReason,
+					Frozen:     p.Frozen,
+					IsCurrent:  p.IsCurrent,
 					Parent:     parentName,
 				})
 			}

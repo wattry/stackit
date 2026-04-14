@@ -155,6 +155,7 @@ func TestInteractiveSyncHandler_OnRestackBranch(t *testing.T) {
 		"main",
 		false, // reparented
 		"", "",
+		0,
 	)
 
 	// Should send PhaseDetailMsg and ProgressTickMsg
