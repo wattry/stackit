@@ -29,7 +29,8 @@ Check the context and look for these indicators:
 - Restack only the affected independent stack:
   - If the affected branch is known, run `command stackit restack --branch <affected-branch> --upstack --no-interactive`.
   - If only the stack root is known, run `command stackit restack --branch <stack-root> --upstack --no-interactive`.
-  - If multiple independent stacks need restack, restack each stack root separately instead of running one broad restack.
+  - If several independent stack roots are known, run `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
+  - If every independent stack should be processed, run `command stackit restack --all-stacks --continue-on-conflict --no-interactive`.
 
 **Orphaned branches** (stackit log shows branch with no parent, or parent was merged):
 - Run `command stackit sync --no-interactive`
@@ -117,26 +118,35 @@ Optionally, verify the command works on current branch first:
 <check-command>
 ```
 
-#### Step 2: Go to bottom of stack and run checks upward
+#### Step 2: Run a depth-aware first-failure search
+Prefer JSON output so branch, status, exit code, and command output are machine-readable. Use `--find-first-failure` so independent branches at the same depth can run in parallel, and descendants after the first failing depth are skipped.
+
+For the current stack:
 ```bash
-command stackit bottom --no-interactive
-command stackit foreach --upstack "<check-command>" 2>&1
+command stackit foreach --stack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
-This starts at the bottom branch (closest to trunk) and walks toward leaves, stopping at the first failure. The failing branch is where the bug was introduced.
-
-**Example foreach output:**
-```
-Running on branch-1...
-✓ branch-1 (exit 0)
-Running on branch-2...
-✗ branch-2 (exit 1)
-  Error: undefined: someVariable
+For a known stack root or affected branch, avoid checking out first and anchor traversal explicitly:
+```bash
+command stackit foreach --branch <branch-or-root> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
-Parse the output to find the FIRST branch with `✗` or non-zero exit - that's where to fix.
+This starts at the selected root/branch and walks toward leaves. A failing branch at the earliest failing depth is where the bug was introduced. Multiple branches can fail at the same depth; inspect each failed result and fix the branch that matches the reported problem.
 
-**If all branches show `✓`**: Report success! Stack is healthy. Skip to "After Fixes".
+**Example JSON output:**
+```json
+{
+  "status": "failure",
+  "results": [
+    {"branch": "branch-1", "status": "done", "exit_code": 0},
+    {"branch": "branch-2", "status": "error", "exit_code": 1, "error": "exit status 1", "output": "undefined: someVariable"}
+  ]
+}
+```
+
+Parse `.results` and find entries whose `status` is not `"done"` or whose `exit_code` is non-zero. The first failing depth is already isolated by `--find-first-failure`.
+
+**If `.status` is `"success"`**: Report success! Stack is healthy. Skip to "After Fixes".
 
 #### Step 3: Checkout the failing branch
 ```bash
@@ -164,7 +174,7 @@ This rebases all child branches onto the fixed branch, propagating your fix.
 
 #### Step 6: Verify all branches now pass
 ```bash
-command stackit foreach --stack "<check-command>" 2>&1
+command stackit foreach --branch <failing-branch> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
 If it stops at another failure, repeat from Step 2 (there may be multiple independent issues).
@@ -192,9 +202,9 @@ The restack command automatically propagates your fix to all child branches.
 
 **Branching stack (multiple children)**: foreach handles this - all descendants are checked.
 
-**Multiple independent stacks**: Independent stack roots are direct children of trunk. Do not run an unscoped restack across unrelated stacks. If more than one independent stack needs restack, run `command stackit restack --branch <stack-root> --upstack --no-interactive` once per affected root.
+**Multiple independent stacks**: Independent stack roots are direct children of trunk. If more than one independent stack needs restack, prefer `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`. If all independent stacks need restack, use `command stackit restack --all-stacks --continue-on-conflict --no-interactive`.
 
-**Multiple independent failures**: After fixing one, re-run foreach to find next failure. For large error outputs with many distinct issues, consider spawning parallel haiku Task subagents to classify and prioritize errors before fixing.
+**Multiple independent failures**: After fixing one, re-run JSON `foreach --find-first-failure` to find the next failing depth. For multiple known independent stack roots, run one anchored `foreach --branch <root> --upstack --json --find-first-failure --jobs 0 "<check-command>"` per root and compare failed JSON results.
 
 **After amending a commit**: Always run `command stackit restack --branch <amended-branch> --upstack --no-interactive` because child branches reference the old commit SHA.
 
