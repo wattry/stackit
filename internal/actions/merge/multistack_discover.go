@@ -29,42 +29,26 @@ func DiscoverStacks(eng engine.BranchReader) ([]MultiStackInfo, error) {
 // DiscoverStacksWithSort is like DiscoverStacks but allows specifying the sort strategy.
 // Use SortStrategySmart to match the ordering of `stackit log`.
 func DiscoverStacksWithSort(eng engine.BranchReader, strategy engine.SortStrategy) ([]MultiStackInfo, error) {
-	graph := engine.BuildStackGraph(eng, strategy, nil)
-	trunk := eng.Trunk()
+	independentStacks := engine.DiscoverIndependentStacksWithSort(eng, strategy)
 
-	// Get the trunk node to find its direct children (stack roots)
-	trunkNode := graph.GetNode(trunk.GetName())
-	if trunkNode == nil {
-		return nil, nil // No trunk found
-	}
-
-	stacks := make([]MultiStackInfo, 0, len(trunkNode.Children))
-	for _, rootName := range trunkNode.Children {
-		rootNode := graph.GetNode(rootName)
-		if rootNode == nil {
-			continue
+	stacks := make([]MultiStackInfo, 0, len(independentStacks))
+	for _, independentStack := range independentStacks {
+		branches := make([]engine.Branch, len(independentStack.Branches))
+		for i, branchName := range independentStack.Branches {
+			branches[i] = eng.GetBranch(branchName)
 		}
-
-		// Collect all branches in this stack using DFS
-		branches := graph.CollectBranches(rootNode.Branch)
-		branchNames := make([]string, len(branches))
-		for i, b := range branches {
-			branchNames[i] = b.GetName()
-		}
-
-		// Count PRs for this stack
-		prCount := countPRs(branches)
 
 		// Get scope from the root branch
 		scope := ""
-		if s := eng.GetScope(rootNode.Branch); !s.IsEmpty() {
+		root := eng.GetBranch(independentStack.RootBranch)
+		if s := eng.GetScope(root); !s.IsEmpty() {
 			scope = s.String()
 		}
 
 		stacks = append(stacks, MultiStackInfo{
-			RootBranch:  rootName,
-			AllBranches: branchNames,
-			PRCount:     prCount,
+			RootBranch:  independentStack.RootBranch,
+			AllBranches: independentStack.Branches,
+			PRCount:     countPRs(branches),
 			Scope:       scope,
 		})
 	}
