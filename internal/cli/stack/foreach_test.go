@@ -214,4 +214,37 @@ All branches completed successfully (3 total)
 			require.Contains(t, branchResult.Error, "exit status 1")
 		}
 	})
+
+	t.Run("find-first-failure json stops before descendants", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+		s.RunCli("create", "root")
+		s.RunCli("create", "child-a")
+		s.RunCli("checkout", "root")
+		s.RunCli("create", "child-b")
+		s.RunCli("checkout", "child-a")
+		s.RunCli("create", "grandchild-a")
+		s.RunCli("checkout", "root")
+
+		command := "case \"$STACKIT_BRANCH\" in child-a|child-b) exit 1;; *) echo $STACKIT_BRANCH;; esac"
+		output, err := s.RunCliAndGetOutput("foreach", "--json", "--find-first-failure", "--jobs", "2", command)
+		require.NoError(t, err)
+
+		var result foreach.JSONResult
+		require.NoError(t, json.Unmarshal([]byte(output), &result))
+		require.Equal(t, foreach.JSONStatusFailure, result.Status)
+		require.Equal(t, 3, result.TotalCount)
+		require.Equal(t, 1, result.SuccessCount)
+		require.Equal(t, 2, result.FailureCount)
+		require.Equal(t, []string{"root", "child-a", "child-b"}, jsonBranchNames(result.Results))
+	})
+}
+
+func jsonBranchNames(results []foreach.JSONBranchResult) []string {
+	names := make([]string, len(results))
+	for i, result := range results {
+		names[i] = result.Branch
+	}
+	return names
 }
