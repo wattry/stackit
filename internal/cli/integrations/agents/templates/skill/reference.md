@@ -65,7 +65,9 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 
 | Command | Description |
 |---------|-------------|
-| `command stackit restack --no-interactive` | Rebase all branches to ensure proper ancestry |
+| `command stackit restack --branch <branch> --upstack --no-interactive` | Rebase a branch and its descendants (preferred) |
+| `command stackit restack --all-stacks --no-interactive` | Rebase every independent stack rooted at trunk |
+| `command stackit restack --stacks <root1>,<root2> --no-interactive` | Rebase specific independent stack roots |
 | `command stackit foreach` | Run command on each branch in stack |
 | `command stackit submit --no-interactive` | Push branches and create/update PRs |
 | `command stackit sync --no-interactive` | Pull trunk, delete merged branches, restack |
@@ -131,7 +133,8 @@ command stackit submit --no-interactive --stack
 ```bash
 git add .
 command stackit modify --no-interactive
-command stackit restack --no-interactive
+# Scope the restack to just this branch and its descendants
+command stackit restack --branch $(git branch --show-current) --upstack --no-interactive
 command stackit submit --no-interactive
 ```
 
@@ -151,7 +154,7 @@ For detailed troubleshooting workflows, see:
 
 | Issue | Solution |
 |-------|----------|
-| "Branch needs restack" | `command stackit restack --no-interactive` |
+| "Branch needs restack" | `command stackit restack --branch <branch> --upstack --no-interactive` (scope to the branch and its descendants) |
 | "Rebase conflict" | Resolve conflicts, `git add <files>`, `command stackit continue` |
 | "Orphaned branch" | `command stackit sync --no-interactive` to reparent |
 | "PR base mismatch" | `command stackit submit --no-interactive` to update PRs |

@@ -8,7 +8,9 @@ Commands for managing the entire stack or multiple branches.
 
 | Command | Description |
 |---------|-------------|
-| `command stackit restack --no-interactive` | Rebase all branches to ensure proper ancestry |
+| `command stackit restack --branch <branch> --upstack --no-interactive` | Rebase a branch and its descendants (preferred — minimizes churn) |
+| `command stackit restack --all-stacks --no-interactive` | Rebase every independent stack rooted at trunk |
+| `command stackit restack --stacks <root1>,<root2> --no-interactive` | Rebase specific independent stack roots |
 | `command stackit sync --no-interactive` | Pull trunk, delete merged branches, restack |
 | `command stackit info --stack --json --no-interactive` | Export full stack metadata as JSON for analysis |
 | `command stackit merge` | Merge approved PRs and cleanup |
@@ -91,9 +93,23 @@ command stackit submit --no-interactive --stack
 ```bash
 git add .
 command stackit modify --no-interactive
-command stackit restack --no-interactive
+# Propagate the amend to descendants of this branch only
+command stackit restack --branch $(git branch --show-current) --upstack --no-interactive
 command stackit submit --no-interactive
 ```
+
+### Restack scope cheat sheet
+
+Prefer the narrowest scope that covers what actually changed:
+
+| Situation | Command |
+|-----------|---------|
+| Amended/modified one branch | `command stackit restack --branch <branch> --upstack --no-interactive` |
+| Uncertain which branches need restack (single stack) | `command stackit restack --branch <stack-root> --upstack --no-interactive` |
+| Multiple independent stacks need restack (post-sync, shared parent change) | `command stackit restack --all-stacks --no-interactive` |
+| Specific set of independent roots | `command stackit restack --stacks <root1>,<root2> --no-interactive` |
+
+Use `--json` for programmatic runs; it reports which branches were restacked, skipped, or conflicted so you can skip a redundant follow-up pass.
 
 ### Sync with main
 ```bash

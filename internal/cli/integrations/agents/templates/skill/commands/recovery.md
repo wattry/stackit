@@ -53,14 +53,20 @@ command stackit log --no-interactive
 
 ### Branch Needs Restack
 
-```bash
-# Rebase all branches to fix ancestry
-command stackit restack --no-interactive
+Prefer the narrowest scope that covers the affected branches:
 
-# Handle conflicts if they occur
-# Then continue
+```bash
+# Most common: restack the flagged branch and its descendants
+command stackit restack --branch <branch> --upstack --no-interactive
+
+# Multiple independent stacks need attention (e.g. after sync reparented roots)
+command stackit restack --all-stacks --no-interactive
+
+# Handle conflicts if they occur, then continue
 command stackit continue --no-interactive
 ```
+
+Use `--json` to see which branches were restacked vs skipped and avoid a redundant second pass.
 
 ### Orphaned Branch (Parent Merged)
 
@@ -68,8 +74,10 @@ command stackit continue --no-interactive
 # Sync will reparent automatically
 command stackit sync --no-interactive
 
-# Or manually restack
-command stackit restack --no-interactive
+# If restack is still needed, scope it — avoid broad restacks
+command stackit restack --branch <reparented-branch> --upstack --no-interactive
+# Or, if sync reparented roots across multiple stacks:
+command stackit restack --all-stacks --no-interactive
 ```
 
 ### PR Base Mismatch

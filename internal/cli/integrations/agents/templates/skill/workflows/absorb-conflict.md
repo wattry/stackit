@@ -103,9 +103,11 @@ git checkout <target-branch>
 git add path/to/file.go
 command stackit modify --no-interactive
 
-# 4. Restack to propagate
-command stackit restack --no-interactive
+# 4. Restack to propagate — scope to the amended branch and its descendants
+command stackit restack --branch <target-branch> --upstack --no-interactive
 ```
+
+Pass `--json` when you want a machine-readable report (which branches were restacked, skipped, or conflicted) instead of doing a second broad restack to "check".
 
 ### Strategy B: Split the Change
 

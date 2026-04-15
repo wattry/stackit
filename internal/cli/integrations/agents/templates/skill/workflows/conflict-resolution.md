@@ -341,10 +341,15 @@ command stackit sync --no-interactive --restack
 ### 3. Restack After Changes
 
 ```bash
-# After modifying a branch, restack children
+# After modifying a branch, restack only that branch's descendants
 command stackit modify --no-interactive
-command stackit restack --no-interactive
+command stackit restack --branch $(git branch --show-current) --upstack --no-interactive
+
+# If modifications affected multiple independent stacks, prefer:
+# command stackit restack --all-stacks --no-interactive
 ```
+
+Use `--json` to confirm which branches were touched and avoid running a second broad restack.
 
 ### 4. Use `command stackit foreach --no-interactive` to Check
 
@@ -420,8 +425,8 @@ command stackit continue --no-interactive
 **Scenario:** Restack causes conflict in `auth.go`
 
 ```bash
-# 1. Restack started
-command stackit restack --no-interactive
+# 1. Restack started (scoped to the affected branch and its descendants)
+command stackit restack --branch feature-x --upstack --no-interactive
 # → Conflict in auth.go
 
 # 2. Check status
