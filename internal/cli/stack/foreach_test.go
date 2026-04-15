@@ -129,4 +129,38 @@ Summary:
 All branches completed successfully (1 total)
 `), testhelpers.NormalizeOutput(output))
 	})
+
+	t.Run("branch flag anchors traversal", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+		s.RunCli("create", "b1")
+		s.RunCli("create", "b2")
+		s.RunCli("create", "b3")
+		s.RunCli("checkout", "b3")
+
+		output, err := s.RunCliAndGetOutput("foreach", "--branch", "b1", "--upstack", "echo", "$STACKIT_BRANCH")
+		require.NoError(t, err)
+		require.Equal(t, testhelpers.NormalizeOutput(`
+Running on branch b1...
+b1
+✓ Command succeeded on branch b1
+Running on branch b2...
+b2
+✓ Command succeeded on branch b2
+Running on branch b3 (current)...
+b3
+✓ Command succeeded on branch b3 (current)
+Summary:
+  ✓ b1
+    b1
+  ✓ b2
+    b2
+  ✓ b3 (current)
+    b3
+All branches completed successfully (3 total)
+`), testhelpers.NormalizeOutput(output))
+
+		s.ExpectBranch("b3")
+	})
 }

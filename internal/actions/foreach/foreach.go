@@ -19,12 +19,13 @@ import (
 
 // Options contains options for the foreach command
 type Options struct {
-	Command  string
-	Args     []string
-	Scope    engine.StackRange
-	FailFast bool
-	Parallel bool
-	Jobs     int
+	Command    string
+	Args       []string
+	BranchName string
+	Scope      engine.StackRange
+	FailFast   bool
+	Parallel   bool
+	Jobs       int
 }
 
 // Action executes a command on each branch in the stack with event handling
@@ -32,13 +33,23 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 
 	currentBranch := eng.CurrentBranch()
-	if currentBranch == nil {
+	if currentBranch == nil && opts.BranchName == "" {
 		return errors.ErrNotOnBranch
+	}
+
+	targetBranch := engine.Branch{}
+	if opts.BranchName != "" {
+		targetBranch = eng.GetBranch(opts.BranchName)
+		if !targetBranch.IsTrunk() && !targetBranch.IsTracked() {
+			return fmt.Errorf("branch %s is not tracked by stackit", opts.BranchName)
+		}
+	} else if currentBranch != nil {
+		targetBranch = *currentBranch
 	}
 
 	// Get branches based on scope
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(*currentBranch, opts.Scope)
+	branches := graph.Range(targetBranch, opts.Scope)
 	if len(branches) == 0 {
 		handler.OnEvent(CompletionEvent{Success: true, Message: "No branches to process"})
 		return nil
@@ -58,7 +69,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Build tree structure for display
-	currentBranchName := currentBranch.GetName()
+	currentBranchName := ""
+	if currentBranch != nil {
+		currentBranchName = currentBranch.GetName()
+	}
 	stackTree := tree.NewStackTree(nonTrunkBranches, currentBranchName, eng.Trunk().GetName())
 
 	// Display the stack

@@ -248,4 +248,86 @@ func TestForeachAction(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("branch option anchors traversal without changing original checkout", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+				"branch3": "branch2",
+			})
+
+		s.Checkout("branch3")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:    "true",
+			BranchName: "branch1",
+			Scope:      engine.StackRange{IncludeCurrent: true, RecursiveChildren: true},
+			FailFast:   true,
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.NoError(t, err)
+
+		var executed []string
+		for _, e := range handler.Events() {
+			if bpe, ok := e.(foreach.BranchProgressEvent); ok && bpe.Status == foreach.StatusDone {
+				executed = append(executed, bpe.BranchName)
+			}
+		}
+		require.Equal(t, []string{"branch1", "branch2", "branch3"}, executed)
+		require.Equal(t, "branch3", s.Engine.CurrentBranch().GetName())
+	})
+
+	t.Run("branch option supports downstack traversal", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+				"branch3": "branch2",
+			})
+
+		s.Checkout("branch1")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:    "true",
+			BranchName: "branch3",
+			Scope:      engine.StackRange{IncludeCurrent: true, RecursiveParents: true},
+			FailFast:   true,
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.NoError(t, err)
+
+		var executed []string
+		for _, e := range handler.Events() {
+			if bpe, ok := e.(foreach.BranchProgressEvent); ok && bpe.Status == foreach.StatusDone {
+				executed = append(executed, bpe.BranchName)
+			}
+		}
+		require.Equal(t, []string{"branch1", "branch2", "branch3"}, executed)
+		require.Equal(t, "branch1", s.Engine.CurrentBranch().GetName())
+	})
+
+	t.Run("branch option rejects untracked branch", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			CreateBranch("untracked").
+			Checkout("main")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:    "true",
+			BranchName: "untracked",
+			Scope:      engine.StackRange{IncludeCurrent: true},
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "branch untracked is not tracked by stackit")
+	})
 }
