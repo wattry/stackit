@@ -169,7 +169,7 @@ func (h *SimpleGetHandler) OnRestackStart(_ int) {
 }
 
 // OnRestackBranch implements RestackHandler for restack phase
-func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string) {
+func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.RestackResult, newRev string, prNumber *int, lockReason engine.LockReason, frozen bool, isCurrent bool, parent string, reparented bool, oldParent, newParent string, rerereResolvedCount int) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -190,6 +190,9 @@ func (h *SimpleGetHandler) OnRestackBranch(branch string, result handlers.Restac
 		}
 		msg += fmt.Sprintf(" -> %s", style.ColorDim(newRev))
 		h.Output.Info("  %s", msg)
+		if rerereResolvedCount > 0 {
+			h.Output.Info("%s", actions.FormatRerereResolved(rerereResolvedCount))
+		}
 	case handlers.RestackUnneeded:
 		reason := common.ReasonNoRestackNeeded
 		if lockReason.IsLocked() {

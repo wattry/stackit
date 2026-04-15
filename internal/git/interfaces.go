@@ -134,9 +134,9 @@ type CommitWriter interface {
 
 // RebaseOperations handles rebase operations.
 type RebaseOperations interface {
-	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseResult, error)
-	RebaseContinue(ctx context.Context) (RebaseResult, error)
-	RebaseContinueNoEdit(ctx context.Context) (RebaseResult, error)
+	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RebaseOutcome, error)
+	RebaseContinue(ctx context.Context) (RebaseOutcome, error)
+	RebaseContinueNoEdit(ctx context.Context) (RebaseOutcome, error)
 	RebaseAbort(ctx context.Context) error
 	InteractiveRebase(ctx context.Context, onto string) error
 	IsRebaseInProgress(ctx context.Context) bool

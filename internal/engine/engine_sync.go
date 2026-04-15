@@ -384,21 +384,23 @@ func (e *engineImpl) restackBranch(
 	gitResult, err := e.git.Rebase(ctx, branchName, parent, oldParentRev)
 	if err != nil {
 		return RestackBranchResult{
-			Result:            RestackConflict,
-			RebasedBranchBase: parentRev,
-			Reparented:        reparented,
-			OldParent:         oldParent,
-			NewParent:         parent,
+			Result:              RestackConflict,
+			RebasedBranchBase:   parentRev,
+			Reparented:          reparented,
+			OldParent:           oldParent,
+			NewParent:           parent,
+			RerereResolvedCount: gitResult.RerereResolvedCount,
 		}, fmt.Errorf("rebase failed for %s onto %s (old base %s): %w", branchName, parent, oldParentRev, err)
 	}
 
-	if gitResult == git.RebaseConflict {
+	if gitResult.Result == git.RebaseConflict {
 		return RestackBranchResult{
-			Result:            RestackConflict,
-			RebasedBranchBase: parentRev,
-			Reparented:        reparented,
-			OldParent:         oldParent,
-			NewParent:         parent,
+			Result:              RestackConflict,
+			RebasedBranchBase:   parentRev,
+			Reparented:          reparented,
+			OldParent:           oldParent,
+			NewParent:           parent,
+			RerereResolvedCount: gitResult.RerereResolvedCount,
 		}, nil
 	}
 
@@ -483,11 +485,12 @@ func (e *engineImpl) restackBranch(
 	}
 
 	return RestackBranchResult{
-		Result:            RestackDone,
-		RebasedBranchBase: parentRev,
-		Reparented:        reparented,
-		OldParent:         oldParent,
-		NewParent:         parent,
+		Result:              RestackDone,
+		RebasedBranchBase:   parentRev,
+		Reparented:          reparented,
+		OldParent:           oldParent,
+		NewParent:           parent,
+		RerereResolvedCount: gitResult.RerereResolvedCount,
 	}, nil
 }
 
@@ -623,11 +626,11 @@ func (e *engineImpl) ContinueRebase(ctx context.Context, branchName string, reba
 	// Call git rebase --continue
 	result, err := e.git.RebaseContinue(ctx)
 	if err != nil {
-		return ContinueRebaseResult{Result: int(git.RebaseConflict), BranchName: branchName}, err
+		return ContinueRebaseResult{Result: int(git.RebaseConflict), BranchName: branchName, RerereResolvedCount: result.RerereResolvedCount}, err
 	}
 
-	if result == git.RebaseConflict {
-		return ContinueRebaseResult{Result: int(git.RebaseConflict), BranchName: branchName}, nil
+	if result.Result == git.RebaseConflict {
+		return ContinueRebaseResult{Result: int(git.RebaseConflict), BranchName: branchName, RerereResolvedCount: result.RerereResolvedCount}, nil
 	}
 
 	// Get the new rebased SHA
@@ -655,8 +658,9 @@ func (e *engineImpl) ContinueRebase(ctx context.Context, branchName string, reba
 	}
 
 	return ContinueRebaseResult{
-		Result:     int(git.RebaseDone),
-		BranchName: branchName,
+		Result:              int(git.RebaseDone),
+		BranchName:          branchName,
+		RerereResolvedCount: result.RerereResolvedCount,
 	}, nil
 }
 
@@ -667,7 +671,7 @@ func (e *engineImpl) Rebase(ctx context.Context, branchName, upstream, oldUpstre
 		return RestackConflict, err
 	}
 
-	if gitResult == git.RebaseConflict {
+	if gitResult.Result == git.RebaseConflict {
 		return RestackConflict, nil
 	}
 

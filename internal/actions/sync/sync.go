@@ -11,6 +11,7 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
+	"stackit.dev/stackit/internal/rerere"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -244,6 +245,11 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return nil
 	}
 
+	pauser, _ := handler.(rerere.Pauser)
+	if _, err := rerere.EnsureEnabled(gctx, ctx.Git(), ctx.Interactive && !ctx.Quiet && handler.IsInteractive(), pauser); err != nil {
+		out.Warn("Failed to enable git rerere: %v", err)
+	}
+
 	handler.EmitEvent(Event{Phase: PhaseRestack, Type: EventStarted})
 
 	if err := restackBranches(ctx, branchesToRestack, opts.RestackScope, expandScope, dirtyAnchors, handler, summary); err != nil {
@@ -318,19 +324,20 @@ const (
 
 // Event represents a progress update during sync
 type Event struct {
-	Phase       Phase             // Current phase
-	Type        EventType         // Event type
-	Branch      string            // Branch name (if applicable)
-	PRNumber    *int              // PR number (if applicable)
-	Message     string            // Human-readable description
-	OldRevision string            // For position changes
-	NewRevision string            // For position changes
-	Conflict    bool              // Is this a conflict?
-	LockReason  engine.LockReason // Why the branch is locked (empty if not locked)
-	Frozen      bool              // Is the branch frozen?
-	IsCurrent   bool              // Is this the current branch?
-	Parent      string            // Parent branch name (if applicable)
-	Error       error             // If non-nil, this step had an error
+	Phase               Phase             // Current phase
+	Type                EventType         // Event type
+	Branch              string            // Branch name (if applicable)
+	PRNumber            *int              // PR number (if applicable)
+	Message             string            // Human-readable description
+	OldRevision         string            // For position changes
+	NewRevision         string            // For position changes
+	Conflict            bool              // Is this a conflict?
+	LockReason          engine.LockReason // Why the branch is locked (empty if not locked)
+	Frozen              bool              // Is the branch frozen?
+	IsCurrent           bool              // Is this the current branch?
+	Parent              string            // Parent branch name (if applicable)
+	RerereResolvedCount int               // Number of rebase continuations handled by git rerere
+	Error               error             // If non-nil, this step had an error
 }
 
 // IsLocked returns true if the event associated branch is locked
@@ -424,7 +431,7 @@ func (h *NullHandler) Complete(Summary) {}
 func (h *NullHandler) OnRestackStart(int) {}
 
 // OnRestackBranch implements RestackHandler.
-func (h *NullHandler) OnRestackBranch(string, RestackResult, string, *int, engine.LockReason, bool, bool, string, bool, string, string) {
+func (h *NullHandler) OnRestackBranch(string, RestackResult, string, *int, engine.LockReason, bool, bool, string, bool, string, string, int) {
 }
 
 // OnRestackComplete implements RestackHandler.

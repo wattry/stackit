@@ -212,12 +212,12 @@ func (d *demoGitRunner) PushBranch(_ context.Context, _, _ string, _ git.PushOpt
 	return nil
 }
 
-func (d *demoGitRunner) Rebase(_ context.Context, _, _, _ string) (git.RebaseResult, error) {
-	return git.RebaseDone, nil
+func (d *demoGitRunner) Rebase(_ context.Context, _, _, _ string) (git.RebaseOutcome, error) {
+	return git.RebaseOutcome{Result: git.RebaseDone}, nil
 }
 
-func (d *demoGitRunner) RebaseContinue(_ context.Context) (git.RebaseResult, error) {
-	return git.RebaseDone, nil
+func (d *demoGitRunner) RebaseContinue(_ context.Context) (git.RebaseOutcome, error) {
+	return git.RebaseOutcome{Result: git.RebaseDone}, nil
 }
 
 func (d *demoGitRunner) RebaseAbort(_ context.Context) error {
@@ -501,8 +501,8 @@ func (d *demoGitRunner) CommitAmendNoEdit(_ context.Context) error {
 	return nil
 }
 
-func (d *demoGitRunner) RebaseContinueNoEdit(_ context.Context) (git.RebaseResult, error) {
-	return git.RebaseDone, nil
+func (d *demoGitRunner) RebaseContinueNoEdit(_ context.Context) (git.RebaseOutcome, error) {
+	return git.RebaseOutcome{Result: git.RebaseDone}, nil
 }
 
 func (d *demoGitRunner) StagePatch(_ context.Context) error {

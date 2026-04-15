@@ -6,6 +6,8 @@ import (
 	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/handlers"
+	"stackit.dev/stackit/internal/rerere"
+	"stackit.dev/stackit/internal/tui"
 )
 
 // RestackOptions contains options for the restack command
@@ -45,6 +47,15 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		handler = &handlers.NullRestackHandler{}
 	}
 
+	interactiveRererePrompt := ctx.Interactive && !ctx.Quiet && tui.IsTTY()
+	if _, jsonOutput := handler.(*handlers.JSONRestackHandler); jsonOutput {
+		interactiveRererePrompt = false
+	}
+	pauser, _ := handler.(rerere.Pauser)
+	if _, err := rerere.EnsureEnabled(ctx.Context, ctx.Git(), interactiveRererePrompt, pauser); err != nil {
+		out.Warn("Failed to enable git rerere: %v", err)
+	}
+
 	// For standalone restack, we need to sort branches topologically for correct restack order
 	sortedBranches := eng.SortBranchesTopologically(branches)
 
@@ -54,9 +65,9 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	var restacked, skipped int
 	var conflicts []string
 
-	if err := RestackBranchesWithHandler(ctx, sortedBranches, func(branchName string, result engine.RestackResult, newRev string, _ bool, lockReason engine.LockReason, frozen bool, isCurrent bool, reparented bool, oldParent, newParent string) {
+	if err := RestackBranchesWithHandler(ctx, sortedBranches, func(p RestackProgress) {
 		res := handlers.RestackDone
-		switch result {
+		switch p.Result {
 		case engine.RestackDone:
 			restacked++
 			res = handlers.RestackDone
@@ -64,16 +75,16 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 			res = handlers.RestackUnneeded
 		case engine.RestackConflict:
 			skipped++
-			conflicts = append(conflicts, branchName)
+			conflicts = append(conflicts, p.Branch)
 			res = handlers.RestackConflict
 		}
 
 		// Determine parent name for consistent output
 		parentName := ""
-		br := eng.GetBranch(branchName)
+		br := eng.GetBranch(p.Branch)
 		if br.GetName() != "" {
-			if p := br.GetParent(); p != nil {
-				parentName = p.GetName()
+			if parent := br.GetParent(); parent != nil {
+				parentName = parent.GetName()
 			} else {
 				parentName = eng.Trunk().GetName()
 			}
@@ -88,7 +99,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 			}
 		}
 
-		handler.OnRestackBranch(branchName, res, newRev, prNumber, lockReason, frozen, isCurrent, parentName, reparented, oldParent, newParent)
+		handler.OnRestackBranch(p.Branch, res, p.NewRev, prNumber, p.LockReason, p.Frozen, p.IsCurrent, parentName, p.Reparented, p.OldParent, p.NewParent, p.RerereResolvedCount)
 	}, true); err != nil {
 		handler.OnRestackComplete(restacked, skipped, conflicts)
 		return fmt.Errorf("restack failed: %w", err)

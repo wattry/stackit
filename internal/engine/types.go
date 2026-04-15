@@ -765,13 +765,14 @@ const (
 
 // RestackBranchResult represents the result of restacking a branch, including the rebased branch base
 type RestackBranchResult struct {
-	Result            RestackResult
-	RebasedBranchBase string     // The new parent revision after successful rebase (only set if Result is RestackDone or RestackConflict)
-	Reparented        bool       // True if the branch was reparented due to merged/deleted parent
-	OldParent         string     // The old parent branch name (only set if Reparented is true)
-	NewParent         string     // The new parent branch name (only set if Reparented is true)
-	LockReason        LockReason // Reason why the branch is locked
-	Frozen            bool       // True if the branch is frozen
+	Result              RestackResult
+	RebasedBranchBase   string     // The new parent revision after successful rebase (only set if Result is RestackDone or RestackConflict)
+	Reparented          bool       // True if the branch was reparented due to merged/deleted parent
+	OldParent           string     // The old parent branch name (only set if Reparented is true)
+	NewParent           string     // The new parent branch name (only set if Reparented is true)
+	LockReason          LockReason // Reason why the branch is locked
+	Frozen              bool       // True if the branch is frozen
+	RerereResolvedCount int        // Number of rebase continuations handled by git rerere
 }
 
 // IsLocked returns true if the branch is locked
@@ -789,8 +790,9 @@ type RestackBatchResult struct {
 
 // ContinueRebaseResult represents the result of continuing a rebase
 type ContinueRebaseResult struct {
-	Result     int    // git.RebaseResult value (0 = RebaseDone, 1 = RebaseConflict)
-	BranchName string // Only set if Result is RebaseDone
+	Result              int    // git.RebaseResult value (0 = RebaseDone, 1 = RebaseConflict)
+	BranchName          string // Only set if Result is RebaseDone
+	RerereResolvedCount int    // Number of rebase continuations handled by git rerere
 }
 
 // PRSubmissionStatus represents the submission status of a branch

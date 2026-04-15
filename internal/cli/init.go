@@ -12,6 +12,7 @@ import (
 	"stackit.dev/stackit/internal/config"
 	"stackit.dev/stackit/internal/git"
 	"stackit.dev/stackit/internal/output"
+	"stackit.dev/stackit/internal/rerere"
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/tui/style"
 )
@@ -79,6 +80,12 @@ func (h *cliInitHandler) OnSuccess(trunkName string, wasInitialized bool, isRese
 	splog.Info("  - undo.depth:     %s", style.ColorDim("10"))
 	splog.Newline()
 	splog.Info("Run '%s' to change these settings.", style.ColorCyan("stackit config"))
+
+	if !h.noInteractive && tui.IsTTY() {
+		if _, err := rerere.EnsureEnabled(context.Background(), h.runner, true, nil); err != nil {
+			splog.Warn("Failed to enable git rerere: %v", err)
+		}
+	}
 
 	// Offer interactive integration installation
 	if !h.noInteractive && tui.IsTTY() {
@@ -196,9 +203,11 @@ func newInitCmd(version string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to get repo root: %w", err)
 			}
+			interactive, _ := cmd.Flags().GetBool("interactive")
+			quiet, _ := cmd.Flags().GetBool("quiet")
 
 			handler := &cliInitHandler{
-				noInteractive: noInteractive,
+				noInteractive: noInteractive || !interactive || quiet,
 				writer:        cmd.OutOrStdout(),
 				version:       version,
 				runner:        runner,
