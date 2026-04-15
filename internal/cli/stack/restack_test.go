@@ -336,6 +336,176 @@ func TestRestackCommand(t *testing.T) {
 		require.Contains(t, normalized, "Summary: restacked 2")
 	})
 
+	t.Run("restack --all-stacks restacks every independent stack", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+
+			if err := s.Repo.CreateChange("stackA change", "stackA", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackA", "stackA change")
+
+			if err := s.Repo.CreateChange("stackA-child change", "stackA-child", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackA-child", "stackA-child change")
+
+			if err := s.Repo.CheckoutBranch("main"); err != nil {
+				return err
+			}
+			if err := s.Repo.CreateChange("stackB change", "stackB", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackB", "stackB change")
+			return nil
+		})
+
+		stackABefore, err := scene.Repo.GetBranchSHA("stackA")
+		require.NoError(t, err)
+		stackAChildBefore, err := scene.Repo.GetBranchSHA("stackA-child")
+		require.NoError(t, err)
+		stackBBefore, err := scene.Repo.GetBranchSHA("stackB")
+		require.NoError(t, err)
+
+		err = scene.Repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = scene.Repo.CreateChangeAndCommit("main update", "main")
+		require.NoError(t, err)
+
+		cmd := exec.Command(binaryPath, "restack", "--all-stacks")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "restack command failed: %s", string(output))
+		normalized := testhelpers.NormalizeOutput(string(output))
+		require.Contains(t, normalized, "Restacked stackA on main")
+		require.Contains(t, normalized, "Restacked stackA-child on stackA")
+		require.Contains(t, normalized, "Restacked stackB on main")
+
+		stackAAfter, err := scene.Repo.GetBranchSHA("stackA")
+		require.NoError(t, err)
+		stackAChildAfter, err := scene.Repo.GetBranchSHA("stackA-child")
+		require.NoError(t, err)
+		stackBAfter, err := scene.Repo.GetBranchSHA("stackB")
+		require.NoError(t, err)
+		require.NotEqual(t, stackABefore, stackAAfter)
+		require.NotEqual(t, stackAChildBefore, stackAChildAfter)
+		require.NotEqual(t, stackBBefore, stackBAfter)
+	})
+
+	t.Run("restack --stacks only restacks selected independent stacks", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "init"); err != nil {
+				return err
+			}
+
+			if err := s.Repo.CreateChange("stackA change", "stackA", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackA", "stackA change")
+
+			if err := s.Repo.CreateChange("stackA-child change", "stackA-child", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackA-child", "stackA-child change")
+
+			if err := s.Repo.CheckoutBranch("main"); err != nil {
+				return err
+			}
+			if err := s.Repo.CreateChange("stackB change", "stackB", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackB", "stackB change")
+			return nil
+		})
+
+		stackABefore, err := scene.Repo.GetBranchSHA("stackA")
+		require.NoError(t, err)
+		stackAChildBefore, err := scene.Repo.GetBranchSHA("stackA-child")
+		require.NoError(t, err)
+		stackBBefore, err := scene.Repo.GetBranchSHA("stackB")
+		require.NoError(t, err)
+
+		err = scene.Repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = scene.Repo.CreateChangeAndCommit("main update", "main")
+		require.NoError(t, err)
+
+		cmd := exec.Command(binaryPath, "restack", "--stacks", "stackA")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "restack command failed: %s", string(output))
+		normalized := testhelpers.NormalizeOutput(string(output))
+		require.Contains(t, normalized, "Restacked stackA on main")
+		require.Contains(t, normalized, "Restacked stackA-child on stackA")
+		require.NotContains(t, normalized, "stackB")
+
+		stackAAfter, err := scene.Repo.GetBranchSHA("stackA")
+		require.NoError(t, err)
+		stackAChildAfter, err := scene.Repo.GetBranchSHA("stackA-child")
+		require.NoError(t, err)
+		stackBAfter, err := scene.Repo.GetBranchSHA("stackB")
+		require.NoError(t, err)
+		require.NotEqual(t, stackABefore, stackAAfter)
+		require.NotEqual(t, stackAChildBefore, stackAChildAfter)
+		require.Equal(t, stackBBefore, stackBAfter)
+	})
+
+	t.Run("restack --all-stacks --continue-on-conflict keeps processing independent stacks", func(t *testing.T) {
+		t.Parallel()
+		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
+			if err := s.Repo.CreateChangeAndCommit("initial", "conflict"); err != nil {
+				return err
+			}
+
+			if err := s.Repo.CreateChange("stackA conflicting change", "conflict", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackA", "stackA conflicting change")
+
+			if err := s.Repo.CheckoutBranch("main"); err != nil {
+				return err
+			}
+			if err := s.Repo.CreateChange("stackB change", "stackB", false); err != nil {
+				return err
+			}
+			createStackitBranch(t, binaryPath, s.Dir, "stackB", "stackB change")
+			return nil
+		})
+
+		stackABefore, err := scene.Repo.GetBranchSHA("stackA")
+		require.NoError(t, err)
+		stackBBefore, err := scene.Repo.GetBranchSHA("stackB")
+		require.NoError(t, err)
+
+		err = scene.Repo.CheckoutBranch("main")
+		require.NoError(t, err)
+		err = scene.Repo.CreateChangeAndCommit("main conflicting change", "conflict")
+		require.NoError(t, err)
+
+		cmd := exec.Command(binaryPath, "restack", "--all-stacks", "--continue-on-conflict")
+		cmd.Dir = scene.Dir
+		output, err := cmd.CombinedOutput()
+
+		require.NoError(t, err, "restack command failed: %s", string(output))
+		normalized := testhelpers.NormalizeOutput(string(output))
+		require.Contains(t, normalized, "Skipped stackA (conflict)")
+		require.Contains(t, normalized, "Restacked stackB on main")
+		require.Contains(t, normalized, "Summary: restacked 1, skipped 1 (conflict)")
+
+		stackAAfter, err := scene.Repo.GetBranchSHA("stackA")
+		require.NoError(t, err)
+		stackBAfter, err := scene.Repo.GetBranchSHA("stackB")
+		require.NoError(t, err)
+		require.Equal(t, stackABefore, stackAAfter)
+		require.NotEqual(t, stackBBefore, stackBAfter)
+	})
+
 	t.Run("restack errors when multiple scope flags specified", func(t *testing.T) {
 		t.Parallel()
 		scene := testhelpers.NewSceneParallel(t, func(s *testhelpers.Scene) error {
@@ -875,4 +1045,13 @@ func TestRestackCommand(t *testing.T) {
 			require.Contains(t, string(infoOutput), "parent", "%s should still have parent as its parent", child)
 		}
 	})
+}
+
+func createStackitBranch(t *testing.T, binaryPath, dir, branch, message string) {
+	t.Helper()
+
+	cmd := exec.Command(binaryPath, "create", branch, "-m", message)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "create command failed: %s", string(output))
 }
