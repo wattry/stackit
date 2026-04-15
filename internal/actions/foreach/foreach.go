@@ -2,6 +2,7 @@ package foreach
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -135,6 +136,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 
 		if err := eng.CheckoutBranch(ctx.Context, branch); err != nil {
 			result.Status = StatusError
+			result.ExitCode = -1
 			result.Error = err
 			handler.OnEvent(BranchProgressEvent{
 				BranchName: branchName,
@@ -169,6 +171,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 
 		if err != nil {
 			result.Status = StatusError
+			result.ExitCode = exitCodeFromError(err)
 			result.Output = outputStr
 			result.Error = err
 			handler.OnEvent(BranchProgressEvent{
@@ -191,6 +194,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 			}
 		} else {
 			result.Status = StatusDone
+			result.ExitCode = 0
 			result.Output = outputStr
 			handler.OnEvent(BranchProgressEvent{
 				BranchName: branchName,
@@ -251,6 +255,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	type result struct {
 		branchName string
 		output     string
+		exitCode   int
 		err        error
 	}
 
@@ -307,6 +312,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 		results <- result{
 			branchName: res.branchName,
 			output:     res.output,
+			exitCode:   res.exitCode,
 			err:        res.err,
 		}
 	})
@@ -323,6 +329,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 		allResults = append(allResults, BranchResult{
 			BranchName: res.branchName,
 			Status:     status,
+			ExitCode:   res.exitCode,
 			Output:     res.output,
 			Error:      res.err,
 		})
@@ -370,11 +377,13 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch engine.Branch, fullCommand string, hooks []string) struct {
 	branchName string
 	output     string
+	exitCode   int
 	err        error
 } {
 	res := struct {
 		branchName string
 		output     string
+		exitCode   int
 		err        error
 	}{branchName: branch.GetName()}
 
@@ -382,6 +391,7 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	// Use SkipPrune variant since foreachParallel already pruned once before parallel execution.
 	worktreePath, cleanup, err := appCtx.Engine.CreateTemporaryWorktreeSkipPrune(ctx, branch.GetName(), "stackit-foreach-*")
 	if err != nil {
+		res.exitCode = -1
 		res.err = err
 		return res
 	}
@@ -399,8 +409,20 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	cmd.Env = append(cmd.Env, "STACKIT_BRANCH="+branch.GetName())
 
 	if err := cmd.Run(); err != nil {
+		res.exitCode = exitCodeFromError(err)
 		res.err = err
 	}
 	res.output = output.String()
 	return res
+}
+
+func exitCodeFromError(err error) int {
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if stderrors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return -1
 }

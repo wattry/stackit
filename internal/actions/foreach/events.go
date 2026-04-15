@@ -49,6 +49,7 @@ func (CompletionEvent) foreachEvent() {}
 type BranchResult struct {
 	BranchName string
 	Status     BranchStatus
+	ExitCode   int
 	Output     string
 	Error      error
 }

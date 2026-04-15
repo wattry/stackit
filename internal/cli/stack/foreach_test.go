@@ -1,10 +1,12 @@
 package stack_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"stackit.dev/stackit/internal/actions/foreach"
 	"stackit.dev/stackit/testhelpers"
 	"stackit.dev/stackit/testhelpers/scenario"
 )
@@ -162,5 +164,54 @@ All branches completed successfully (3 total)
 `), testhelpers.NormalizeOutput(output))
 
 		s.ExpectBranch("b3")
+	})
+
+	t.Run("json output reports branch results", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+		s.RunCli("create", "b1")
+		s.RunCli("create", "b2")
+		s.RunCli("checkout", "b1")
+
+		output, err := s.RunCliAndGetOutput("foreach", "--json", "echo", "$STACKIT_BRANCH")
+		require.NoError(t, err)
+
+		var result foreach.JSONResult
+		require.NoError(t, json.Unmarshal([]byte(output), &result))
+		require.Equal(t, foreach.JSONStatusSuccess, result.Status)
+		require.Equal(t, "echo $STACKIT_BRANCH", result.Command)
+		require.Equal(t, 2, result.TotalCount)
+		require.Equal(t, 2, result.SuccessCount)
+		require.Equal(t, 0, result.FailureCount)
+		require.Equal(t, []foreach.JSONBranchResult{
+			{Branch: "b1", Status: foreach.StatusDone, ExitCode: 0, Output: "b1\n"},
+			{Branch: "b2", Status: foreach.StatusDone, ExitCode: 0, Output: "b2\n"},
+		}, result.Results)
+	})
+
+	t.Run("json output reports command failures", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+		s.RunCli("create", "b1")
+		s.RunCli("create", "b2")
+		s.RunCli("checkout", "b1")
+
+		output, err := s.RunCliAndGetOutput("foreach", "--json", "--no-fail-fast", "false")
+		require.NoError(t, err)
+
+		var result foreach.JSONResult
+		require.NoError(t, json.Unmarshal([]byte(output), &result))
+		require.Equal(t, foreach.JSONStatusFailure, result.Status)
+		require.Equal(t, 2, result.TotalCount)
+		require.Equal(t, 0, result.SuccessCount)
+		require.Equal(t, 2, result.FailureCount)
+		require.Len(t, result.Results, 2)
+		for _, branchResult := range result.Results {
+			require.Equal(t, foreach.StatusError, branchResult.Status)
+			require.Equal(t, 1, branchResult.ExitCode)
+			require.Contains(t, branchResult.Error, "exit status 1")
+		}
 	})
 }

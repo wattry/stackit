@@ -1,6 +1,9 @@
 package stack
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"stackit.dev/stackit/internal/actions/foreach"
@@ -19,6 +22,7 @@ func NewForeachCmd() *cobra.Command {
 		noFailFast bool
 		parallel   bool
 		jobs       int
+		jsonOutput bool
 	)
 
 	cmd := &cobra.Command{
@@ -70,6 +74,21 @@ Examples:
 					}
 				}
 
+				if jsonOutput {
+					jsonHandler := foreach.NewJSONHandler()
+					err := foreach.Action(ctx, opts, jsonHandler)
+					if err != nil {
+						jsonHandler.SetError(err)
+					}
+
+					data, marshalErr := json.MarshalIndent(jsonHandler.Result, "", "  ")
+					if marshalErr != nil {
+						return fmt.Errorf("failed to marshal JSON: %w", marshalErr)
+					}
+					ctx.Output.Info("%s", string(data))
+					return err
+				}
+
 				// Create runner (manages terminal state) and handler (processes events)
 				runner, handler := NewForeachUI(ctx.Output, ctx.Logger, opts.Parallel)
 				defer runner.Cleanup()
@@ -85,6 +104,7 @@ Examples:
 	cmd.Flags().BoolVar(&noFailFast, "no-fail-fast", false, "Don't stop execution on the first failure")
 	cmd.Flags().BoolVarP(&parallel, "parallel", "p", false, "Run commands in parallel using git worktrees")
 	cmd.Flags().IntVarP(&jobs, "jobs", "j", 0, "Number of parallel jobs (default: number of CPUs)")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output results in JSON format.")
 
 	return cmd
 }
