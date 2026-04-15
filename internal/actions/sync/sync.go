@@ -18,10 +18,11 @@ import (
 
 // DryRunResult represents the JSON output for sync --dry-run
 type DryRunResult struct {
-	WouldPull     string   `json:"would_pull,omitempty"`     // Trunk branch that would be pulled
-	WouldClean    []string `json:"would_clean,omitempty"`    // Branches that would be deleted
-	WouldRestack  []string `json:"would_restack,omitempty"`  // Branches that would be restacked
-	SkippedStacks []string `json:"skipped_stacks,omitempty"` // Stacks skipped due to dirty worktrees
+	WouldPull          string   `json:"would_pull,omitempty"`           // Trunk branch that would be pulled
+	WouldClean         []string `json:"would_clean,omitempty"`          // Branches that would be deleted
+	WouldRestack       []string `json:"would_restack,omitempty"`        // Branches that would be restacked
+	WouldRestackStacks []string `json:"would_restack_stacks,omitempty"` // Deduped independent stack roots covering would_restack — pass to `restack --stacks <roots>`
+	SkippedStacks      []string `json:"skipped_stacks,omitempty"`       // Stacks skipped due to dirty worktrees
 }
 
 // Options contains options for the sync command
