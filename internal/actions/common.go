@@ -16,6 +16,9 @@ package actions
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gertd/go-pluralize"
 
@@ -595,7 +598,10 @@ func WithFlagValue(flag string, value string) SnapshotOption {
 	}
 }
 
-// PrintConflictStatus displays conflict information and instructions to the user
+// PrintConflictStatus displays conflict information and instructions to the user.
+// Assumes a rebase is in progress: HEAD-side markers reflect the parent/base and
+// the ">>>>>>>" side reflects the branch being replayed. Both call sites
+// (EnterConflictWorkflow and ContinueAction) operate during rebase.
 func PrintConflictStatus(ctx *app.Context, branchName string) error {
 	reader := ctx.Reader()
 	out := ctx.Output
@@ -607,9 +613,20 @@ func PrintConflictStatus(ctx *app.Context, branchName string) error {
 	// Get unmerged files
 	unmergedFiles, err := reader.GetUnmergedFiles(ctx.Context)
 	if err == nil && len(unmergedFiles) > 0 {
-		out.Info("%s", style.ColorYellow("Unmerged files:"))
+		out.Info("%s", style.ColorYellow("Conflicted files:"))
 		for _, file := range unmergedFiles {
-			out.Info("%s", style.ColorRed(file))
+			sections, sectionErr := conflictMarkerSectionsForFile(ctx.RepoRoot, file)
+			if sectionErr != nil || len(sections) == 0 {
+				out.Info("  %s", style.ColorRed(file))
+				continue
+			}
+			for _, section := range sections {
+				out.Info("  %s (lines %d-%d)",
+					style.ColorRed(file),
+					section.StartLine,
+					section.EndLine,
+				)
+			}
 		}
 		out.Newline()
 	}
@@ -627,11 +644,70 @@ func PrintConflictStatus(ctx *app.Context, branchName string) error {
 		out.Newline()
 	}
 
-	out.Info("%s", style.ColorYellow("To fix and continue your previous Stackit command:"))
-	out.Info("(1) resolve the listed merge conflicts")
-	out.Info("(2) mark them as resolved with %s", style.ColorCyan("stackit add ."))
-	out.Info("(3) run %s to continue executing your previous Stackit command", style.ColorCyan("stackit continue"))
-	out.Info("It's safe to cancel the ongoing rebase with %s.", style.ColorCyan("git rebase --abort"))
+	parentBranch := "the current base"
+	if branch := ctx.Engine.GetBranch(branchName); branch.GetName() != "" {
+		parentBranch = branch.GetParentOrTrunk()
+	}
+
+	out.Info("%s", style.ColorYellow("To resolve:"))
+	out.Info("  1. Open each conflicted file and remove conflict markers:")
+	out.Info("     %s  (incoming changes from %s)", style.ColorCyan("<<<<<<< HEAD"), parentBranch)
+	out.Info("     %s", style.ColorCyan("======="))
+	out.Info("     %s  (changes from %s)", style.ColorCyan(">>>>>>>"), branchName)
+	out.Info("  2. Stage resolved files: %s", style.ColorCyan("stackit add <file>"))
+	out.Info("  3. Continue the previous Stackit command: %s", style.ColorCyan("stackit continue"))
+	out.Info("  4. Abort and restore the pre-command snapshot: %s", style.ColorCyan("stackit abort"))
+	out.Info("Tip: %s stages all resolved files before continuing.", style.ColorCyan("stackit continue --all"))
 
 	return nil
+}
+
+type conflictMarkerSection struct {
+	StartLine int
+	EndLine   int
+}
+
+func conflictMarkerSectionsForFile(repoRoot, file string) ([]conflictMarkerSection, error) {
+	path := file
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(repoRoot, file)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return findConflictMarkerSections(string(content)), nil
+}
+
+// findConflictMarkerSections scans for git conflict regions delimited by
+// <<<<<<<, =======, and >>>>>>> markers. Diff3-style ||||||| ancestor markers
+// between <<<<<<< and ======= are tolerated (ignored). A new <<<<<<< before a
+// section is closed restarts tracking, so unterminated sections do not block
+// detection of subsequent complete sections.
+func findConflictMarkerSections(content string) []conflictMarkerSection {
+	lines := strings.Split(content, "\n")
+	sections := make([]conflictMarkerSection, 0)
+	startLine := 0
+	seenSeparator := false
+
+	for i, line := range lines {
+		lineNo := i + 1
+		switch {
+		case strings.HasPrefix(line, "<<<<<<<"):
+			startLine = lineNo
+			seenSeparator = false
+		case startLine > 0 && strings.HasPrefix(line, "======="):
+			seenSeparator = true
+		case startLine > 0 && seenSeparator && strings.HasPrefix(line, ">>>>>>>"):
+			sections = append(sections, conflictMarkerSection{
+				StartLine: startLine,
+				EndLine:   lineNo,
+			})
+			startLine = 0
+			seenSeparator = false
+		}
+	}
+
+	return sections
 }

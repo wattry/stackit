@@ -44,7 +44,10 @@ func TestConflictResolution(t *testing.T) {
 		sh.Checkout("branch-a").
 			RunExpectError("restack --upstack").
 			OutputContains("conflict").
-			OutputContains("branch-a")
+			OutputContains("branch-a").
+			OutputContains("Conflicted files:").
+			OutputContains("common.txt (lines 1-").
+			OutputContains("stackit continue")
 
 		// 4. Verify: restack stops at branch-a with conflict
 		sh.Log("Verifying conflict on branch-a...")
@@ -55,7 +58,10 @@ func TestConflictResolution(t *testing.T) {
 		sh.WriteFile("common.txt", "main content\nbranch a content").
 			RunExpectError("continue").
 			OutputContains("conflict").
-			OutputContains("branch-b")
+			OutputContains("branch-b").
+			OutputContains("Conflicted files:").
+			OutputContains("common.txt (lines 1-").
+			OutputContains("stackit continue")
 
 		// 6. Verify: restack continues, stops at branch-b with conflict
 		sh.Log("Verifying conflict on branch-b...")
