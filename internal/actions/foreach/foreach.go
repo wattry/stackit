@@ -24,6 +24,8 @@ type Options struct {
 	Args             []string
 	BranchName       string
 	Scope            engine.StackRange
+	AllStacks        bool     // Run across every independent stack rooted at trunk
+	StackRoots       []string // Run across the listed independent stack roots only
 	FailFast         bool
 	Parallel         bool
 	FindFirstFailure bool
@@ -34,24 +36,36 @@ type Options struct {
 func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 
+	multiStack := opts.AllStacks || len(opts.StackRoots) > 0
+
 	currentBranch := eng.CurrentBranch()
-	if currentBranch == nil && opts.BranchName == "" {
+	if !multiStack && currentBranch == nil && opts.BranchName == "" {
 		return errors.ErrNotOnBranch
 	}
 
-	targetBranch := engine.Branch{}
-	if opts.BranchName != "" {
-		targetBranch = eng.GetBranch(opts.BranchName)
-		if !targetBranch.IsTrunk() && !targetBranch.IsTracked() {
-			return fmt.Errorf("branch %s is not tracked by stackit", opts.BranchName)
+	// Build graph once — needed for scope range and for find-first-failure depth grouping.
+	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+
+	var branches []engine.Branch
+	if multiStack {
+		multiStackBranches, err := collectMultiStackBranches(eng, opts)
+		if err != nil {
+			return err
 		}
-	} else if currentBranch != nil {
-		targetBranch = *currentBranch
+		branches = multiStackBranches
+	} else {
+		targetBranch := engine.Branch{}
+		if opts.BranchName != "" {
+			targetBranch = eng.GetBranch(opts.BranchName)
+			if !targetBranch.IsTrunk() && !targetBranch.IsTracked() {
+				return fmt.Errorf("branch %s is not tracked by stackit", opts.BranchName)
+			}
+		} else if currentBranch != nil {
+			targetBranch = *currentBranch
+		}
+		branches = graph.Range(targetBranch, opts.Scope)
 	}
 
-	// Get branches based on scope
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(targetBranch, opts.Scope)
 	if len(branches) == 0 {
 		handler.OnEvent(CompletionEvent{Success: true, Message: "No branches to process"})
 		return nil
@@ -570,6 +584,38 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	}
 	res.output = output.String()
 	return res
+}
+
+// collectMultiStackBranches expands --all-stacks / --stacks into a flat branch list,
+// preserving independent-stack ordering and excluding trunk and untracked branches.
+func collectMultiStackBranches(eng engine.BranchReader, opts Options) ([]engine.Branch, error) {
+	stacks := engine.DiscoverIndependentStacks(eng)
+	if len(opts.StackRoots) > 0 {
+		stackByRoot := make(map[string]engine.IndependentStack, len(stacks))
+		for _, stack := range stacks {
+			stackByRoot[stack.RootBranch] = stack
+		}
+		filtered := make([]engine.IndependentStack, 0, len(opts.StackRoots))
+		for _, root := range opts.StackRoots {
+			stack, ok := stackByRoot[root]
+			if !ok {
+				return nil, fmt.Errorf("stack root %s not found", root)
+			}
+			filtered = append(filtered, stack)
+		}
+		stacks = filtered
+	}
+
+	branches := make([]engine.Branch, 0)
+	for _, stack := range stacks {
+		for _, branchName := range stack.Branches {
+			branch := eng.GetBranch(branchName)
+			if branch.IsTracked() && !branch.IsTrunk() {
+				branches = append(branches, branch)
+			}
+		}
+	}
+	return branches, nil
 }
 
 func exitCodeFromError(err error) int {

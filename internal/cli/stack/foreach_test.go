@@ -239,6 +239,72 @@ All branches completed successfully (3 total)
 		require.Equal(t, 2, result.FailureCount)
 		require.Equal(t, []string{"root", "child-a", "child-b"}, jsonBranchNames(result.Results))
 	})
+
+	t.Run("all-stacks runs across every independent stack", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+
+		// Stack A: main -> alpha-root -> alpha-child
+		s.RunCli("create", "alpha-root", "-m", "alpha root")
+		s.RunCli("create", "alpha-child", "-m", "alpha child")
+
+		// Stack B: main -> beta-root (independent of alpha)
+		s.RunCli("checkout", "main")
+		s.RunCli("create", "beta-root", "-m", "beta root")
+
+		// Invoke from beta-root — with default upstack scope this would only see beta-root.
+		output, err := s.RunCliAndGetOutput("foreach", "--all-stacks", "--json", "echo", "$STACKIT_BRANCH")
+		require.NoError(t, err)
+
+		var result foreach.JSONResult
+		require.NoError(t, json.Unmarshal([]byte(output), &result))
+		require.Equal(t, foreach.JSONStatusSuccess, result.Status)
+		require.ElementsMatch(t, []string{"alpha-root", "alpha-child", "beta-root"}, jsonBranchNames(result.Results))
+	})
+
+	t.Run("stacks filters to the selected independent roots", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+
+		// Two independent stacks.
+		s.RunCli("create", "alpha-root", "-m", "alpha root")
+		s.RunCli("create", "alpha-child", "-m", "alpha child")
+		s.RunCli("checkout", "main")
+		s.RunCli("create", "beta-root", "-m", "beta root")
+
+		output, err := s.RunCliAndGetOutput("foreach", "--stacks", "alpha-root", "--json", "echo", "$STACKIT_BRANCH")
+		require.NoError(t, err)
+
+		var result foreach.JSONResult
+		require.NoError(t, json.Unmarshal([]byte(output), &result))
+		require.Equal(t, foreach.JSONStatusSuccess, result.Status)
+		require.ElementsMatch(t, []string{"alpha-root", "alpha-child"}, jsonBranchNames(result.Results))
+	})
+
+	t.Run("all-stacks rejects --stacks, --branch, and scope flags", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenarioParallel(t, testhelpers.BasicSceneSetup).WithBinaryPath(binaryPath)
+		s.RunCli("init")
+		s.RunCli("create", "root", "-m", "r")
+
+		// --all-stacks and --stacks are mutually exclusive.
+		_, err := s.RunCliAndGetOutput("foreach", "--all-stacks", "--stacks", "root", "echo", "x")
+		require.Error(t, err)
+
+		// --branch can't be combined with multi-stack scopes.
+		_, err = s.RunCliAndGetOutput("foreach", "--all-stacks", "--branch", "root", "echo", "x")
+		require.Error(t, err)
+
+		// Explicit per-branch scope flag conflicts with --all-stacks.
+		_, err = s.RunCliAndGetOutput("foreach", "--all-stacks", "--stack", "echo", "x")
+		require.Error(t, err)
+
+		// Unknown stack root surfaces as an action-level error.
+		_, err = s.RunCliAndGetOutput("foreach", "--stacks", "does-not-exist", "echo", "x")
+		require.Error(t, err)
+	})
 }
 
 func jsonBranchNames(results []foreach.JSONBranchResult) []string {
