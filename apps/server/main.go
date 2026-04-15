@@ -49,6 +49,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if runtimeCtx.Logger != nil {
+			if closeErr := runtimeCtx.Logger.Close(); closeErr != nil {
+				log.Printf("failed to close logger: %v", closeErr)
+			}
+		}
+	}()
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {

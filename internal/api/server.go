@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"stackit.dev/stackit/internal/api/handlers"
@@ -36,6 +37,7 @@ type Server struct {
 	broadcaster       *handlers.EventBroadcaster
 	httpServer        *http.Server
 	refWatcher        *watcher.RefWatcher
+	watcherWG         sync.WaitGroup
 	lastCurrentBranch string
 }
 
@@ -123,11 +125,11 @@ func (s *Server) Start() error {
 
 			s.broadcaster.Broadcast("refresh", "{}")
 		})
-		go func() {
+		s.watcherWG.Go(func() {
 			if err := s.refWatcher.Start(); err != nil {
 				log.Printf("ref watcher stopped: %v", err)
 			}
-		}()
+		})
 	}
 
 	s.httpServer = &http.Server{
@@ -146,6 +148,19 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.refWatcher != nil {
 		s.refWatcher.Stop()
 	}
+
+	// Wait for the ref watcher goroutine to exit, bounded by ctx.
+	watcherDone := make(chan struct{})
+	go func() {
+		s.watcherWG.Wait()
+		close(watcherDone)
+	}()
+	select {
+	case <-watcherDone:
+	case <-ctx.Done():
+		log.Printf("ref watcher did not exit before shutdown deadline")
+	}
+
 	if s.httpServer != nil {
 		return s.httpServer.Shutdown(ctx)
 	}
