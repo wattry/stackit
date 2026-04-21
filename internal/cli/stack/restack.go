@@ -24,6 +24,8 @@ func NewRestackCmd() *cobra.Command {
 		allStacks          bool
 		stacks             []string
 		continueOnConflict bool
+		parallel           bool
+		jobs               int
 		jsonOutput         bool
 	)
 
@@ -59,6 +61,13 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 				if multiStack && scopeFlags > 0 {
 					return fmt.Errorf("--downstack, --only, and --upstack cannot be used with --all-stacks or --stacks")
 				}
+				// --jobs implies --parallel
+				if jobs > 0 {
+					parallel = true
+				}
+				if parallel && !multiStack {
+					return fmt.Errorf("--parallel requires --all-stacks or --stacks")
+				}
 
 				// Determine target branch
 				targetBranch := branch
@@ -86,6 +95,8 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 						AllStacks:          allStacks,
 						StackRoots:         stacks,
 						ContinueOnConflict: continueOnConflict,
+						Parallel:           parallel,
+						Jobs:               jobs,
 					}, jsonHandler)
 
 					// Set error status if there was an error
@@ -115,6 +126,8 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					AllStacks:          allStacks,
 					StackRoots:         stacks,
 					ContinueOnConflict: continueOnConflict,
+					Parallel:           parallel,
+					Jobs:               jobs,
 				}, handler)
 			})
 		},
@@ -127,6 +140,8 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 	cmd.Flags().BoolVar(&allStacks, "all-stacks", false, "Restack every independent stack rooted at trunk.")
 	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Restack specific independent stack roots (comma-separated).")
 	cmd.Flags().BoolVar(&continueOnConflict, "continue-on-conflict", false, "Report restack conflicts without entering conflict resolution, continuing to independent stacks when possible.")
+	cmd.Flags().BoolVarP(&parallel, "parallel", "p", false, "Run independent stack groups in parallel worktrees (requires --all-stacks or --stacks).")
+	cmd.Flags().IntVarP(&jobs, "jobs", "j", 0, "Number of parallel jobs (default: number of CPUs). Implies --parallel.")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output results in JSON format.")
 
 	return cmd

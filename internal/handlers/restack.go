@@ -2,6 +2,8 @@
 package handlers
 
 import (
+	"sync"
+
 	"stackit.dev/stackit/internal/engine"
 )
 
@@ -79,8 +81,10 @@ type RestackConflictInfo struct {
 	Parent string `json:"parent"`
 }
 
-// JSONRestackHandler collects restack results for JSON output
+// JSONRestackHandler collects restack results for JSON output.
+// All methods are mutex-protected so concurrent callers (parallel restack) are safe.
 type JSONRestackHandler struct {
+	mu     sync.Mutex
 	Result *RestackJSONResult
 }
 
@@ -97,11 +101,15 @@ func NewJSONRestackHandler() *JSONRestackHandler {
 
 // OnRestackStart implements RestackHandler.
 func (h *JSONRestackHandler) OnRestackStart(branchCount int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.Result.TotalCount = branchCount
 }
 
 // OnRestackBranch implements RestackHandler.
 func (h *JSONRestackHandler) OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, _ engine.LockReason, _ bool, _ bool, parent string, _ bool, _, _ string, rerereResolvedCount int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	switch result {
 	case RestackDone:
 		h.Result.Restacked = append(h.Result.Restacked, RestackBranchInfo{
@@ -123,6 +131,8 @@ func (h *JSONRestackHandler) OnRestackBranch(branch string, result RestackResult
 
 // OnRestackComplete implements RestackHandler.
 func (h *JSONRestackHandler) OnRestackComplete(restacked, _ int, _ []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.Result.RestackCount = restacked
 	h.Result.ConflictCount = len(h.Result.Conflicts)
 
@@ -137,6 +147,8 @@ func (h *JSONRestackHandler) OnRestackComplete(restacked, _ int, _ []string) {
 // Call this when the restack action returns an error.
 func (h *JSONRestackHandler) SetError(err error) {
 	if err != nil {
+		h.mu.Lock()
+		defer h.mu.Unlock()
 		// If we already observed restack conflicts, keep status as "conflict"
 		// and attach the error details for debugging/context.
 		if len(h.Result.Conflicts) > 0 {
