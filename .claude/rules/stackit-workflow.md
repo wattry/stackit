@@ -9,7 +9,7 @@ This project uses stackit for stacked changes. **NEVER use raw git commands for 
 | `git commit -m "..."` | `command stackit create -m "..."` |
 | `git checkout -b` | `command stackit create -m "..."` |
 | `gh pr create` | `command stackit submit` |
-| `git rebase` | `command stackit restack` |
+| `git rebase` | `command stackit restack --upstack` (or `--all-stacks`) |
 
 **Exception:** `git commit` is allowed when adding commits to an existing stacked branch.
 
@@ -38,7 +38,7 @@ Use skills instead of manual commands:
 | `/stack-status` | Check stack health |
 | `/stack-fix` | Diagnose and fix issues |
 | `/stack-sync` | Sync with trunk, cleanup merged branches |
-| `/stack-restack` | Rebase all branches in stack |
+| `/stack-restack` | Rebase branches (scoped, multi-stack, or parallel) |
 | `/stack-tidy` | Clean up fixup/WIP commits across the stack |
 
 Run `/stackit` for the full guide.
@@ -51,7 +51,7 @@ Run `/stackit` for the full guide.
 | Empty branch created | You forgot to stage; delete branch and retry with staged changes |
 | Using `git commit` for new branch | Use `stackit create` - it creates branch + commit together |
 | Using `git checkout -b` | Use `stackit create` - branch name auto-generated from message |
-| Manual rebase broke stack | Use `stackit restack` to safely rebase all children |
+| Manual rebase broke stack | Use `stackit restack --upstack` to safely rebase children (or `--all-stacks` for all) |
 | Using `gh pr create` | Use `stackit submit` - it handles stacked PR dependencies |
 | Amending wrong commit | Use `stackit absorb` to auto-route changes to correct commits |
 | Stack out of sync after merge | Run `stackit sync` to cleanup merged branches and update trunk |

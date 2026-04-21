@@ -22,9 +22,9 @@ When you receive feedback on a branch in the middle of your stack:
    stackit modify
    ```
 
-3. Update all child branches:
+3. Update child branches:
    ```bash
-   stackit restack
+   stackit restack --upstack
    ```
 
 4. Update the PRs:
