@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"slices"
 	"sync"
 
 	"stackit.dev/stackit/internal/engine"
@@ -61,6 +62,7 @@ type RestackJSONResult struct {
 	Restacked     []RestackBranchInfo   `json:"restacked,omitempty"`
 	Skipped       []string              `json:"skipped,omitempty"`
 	Conflicts     []RestackConflictInfo `json:"conflicts,omitempty"`
+	StackRoots    []string              `json:"stack_roots,omitempty"` // Deduped independent stack roots that were processed
 	TotalCount    int                   `json:"total_count"`
 	RestackCount  int                   `json:"restack_count"`
 	ConflictCount int                   `json:"conflict_count"`
@@ -70,6 +72,7 @@ type RestackJSONResult struct {
 type RestackBranchInfo struct {
 	Name                string `json:"name"`
 	Parent              string `json:"parent"`
+	StackRoot           string `json:"stack_root,omitempty"` // Independent stack root this branch belongs to
 	NewRev              string `json:"new_rev,omitempty"`
 	PRNumber            *int   `json:"pr_number,omitempty"`
 	RerereResolvedCount int    `json:"rerere_resolved_count,omitempty"`
@@ -77,8 +80,9 @@ type RestackBranchInfo struct {
 
 // RestackConflictInfo represents a conflict during restack
 type RestackConflictInfo struct {
-	Branch string `json:"branch"`
-	Parent string `json:"parent"`
+	Branch    string `json:"branch"`
+	Parent    string `json:"parent"`
+	StackRoot string `json:"stack_root,omitempty"` // Independent stack root this branch belongs to
 }
 
 // JSONRestackHandler collects restack results for JSON output.
@@ -140,6 +144,35 @@ func (h *JSONRestackHandler) OnRestackComplete(restacked, _ int, _ []string) {
 		h.Result.Status = RestackJSONStatusConflict
 	} else {
 		h.Result.Status = RestackJSONStatusSuccess
+	}
+}
+
+// SetLastBranchStackRoot annotates the most recently added restacked or conflict
+// entry for the given branch with its independent stack root. It also maintains
+// the deduped top-level StackRoots list. Called outside the handler interface so
+// only JSON output is enriched without touching all implementors.
+func (h *JSONRestackHandler) SetLastBranchStackRoot(branch, stackRoot string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Annotate the matching restacked entry (search from end — just appended).
+	for i := len(h.Result.Restacked) - 1; i >= 0; i-- {
+		if h.Result.Restacked[i].Name == branch {
+			h.Result.Restacked[i].StackRoot = stackRoot
+			break
+		}
+	}
+	// Annotate the matching conflict entry.
+	for i := len(h.Result.Conflicts) - 1; i >= 0; i-- {
+		if h.Result.Conflicts[i].Branch == branch {
+			h.Result.Conflicts[i].StackRoot = stackRoot
+			break
+		}
+	}
+
+	// Maintain deduped StackRoots.
+	if !slices.Contains(h.Result.StackRoots, stackRoot) {
+		h.Result.StackRoots = append(h.Result.StackRoots, stackRoot)
 	}
 }
 

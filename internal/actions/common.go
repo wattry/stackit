@@ -61,6 +61,7 @@ type RestackProgress struct {
 	Reparented          bool                 // true if the branch was reparented
 	OldParent           string               // the old parent name if reparented
 	NewParent           string               // the new parent name if reparented
+	StackRoot           string               // independent stack root (set by multi-stack callers; empty for single-stack)
 }
 
 // RestackProgressCallback is called for each branch during restack with a

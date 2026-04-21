@@ -103,6 +103,32 @@ func TestJSONRestackHandler(t *testing.T) {
 		require.Len(t, handler.Result.Conflicts, 1)
 	})
 
+	t.Run("SetLastBranchStackRoot annotates branches and dedupes roots", func(t *testing.T) {
+		t.Parallel()
+
+		handler := NewJSONRestackHandler()
+		handler.OnRestackStart(3)
+
+		handler.OnRestackBranch("alpha", RestackDone, "aaa", nil, engine.LockReasonNone, false, false, "main", false, "", "", 0)
+		handler.SetLastBranchStackRoot("alpha", "alpha")
+
+		handler.OnRestackBranch("alpha-child", RestackDone, "bbb", nil, engine.LockReasonNone, false, false, "alpha", false, "", "", 0)
+		handler.SetLastBranchStackRoot("alpha-child", "alpha")
+
+		handler.OnRestackBranch("beta", RestackConflict, "", nil, engine.LockReasonNone, false, false, "main", false, "", "", 0)
+		handler.SetLastBranchStackRoot("beta", "beta")
+
+		handler.OnRestackComplete(2, 0, []string{"beta"})
+
+		// Per-branch annotation
+		require.Equal(t, "alpha", handler.Result.Restacked[0].StackRoot)
+		require.Equal(t, "alpha", handler.Result.Restacked[1].StackRoot)
+		require.Equal(t, "beta", handler.Result.Conflicts[0].StackRoot)
+
+		// Deduped top-level roots
+		require.Equal(t, []string{"alpha", "beta"}, handler.Result.StackRoots)
+	})
+
 	t.Run("SetError does nothing for nil error", func(t *testing.T) {
 		t.Parallel()
 

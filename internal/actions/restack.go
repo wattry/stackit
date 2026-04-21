@@ -95,11 +95,14 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		return nil
 	}
 
-	progress := func(p RestackProgress) {
-		handleRestackProgress(eng, handler, p, &restacked, &skipped, &conflicts)
-	}
-
 	for _, group := range branchGroups {
+		// Wrap the progress callback to inject the stack root for this group.
+		groupRoot := group.rootBranch
+		progress := func(p RestackProgress) {
+			p.StackRoot = groupRoot
+			handleRestackProgress(eng, handler, p, &restacked, &skipped, &conflicts)
+		}
+
 		// Sort each independent stack topologically. Keeping groups separate lets
 		// --continue-on-conflict skip a conflicted stack while still restacking
 		// other independent stacks.
@@ -171,7 +174,9 @@ func restackGroupsParallel(
 		wtCtx.RepoRoot = wtPath
 
 		// Thread-safe progress callback that funnels into the shared counters + handler.
+		groupRoot := group.rootBranch
 		progress := func(p RestackProgress) {
+			p.StackRoot = groupRoot
 			mu.Lock()
 			defer mu.Unlock()
 			handleRestackProgress(eng, handler, p, &restacked, &skipped, &conflicts)
@@ -193,7 +198,8 @@ func restackGroupsParallel(
 }
 
 type restackBranchGroup struct {
-	branches []engine.Branch
+	rootBranch string // independent stack root name (direct child of trunk)
+	branches   []engine.Branch
 }
 
 func branchGroupsForIndependentStacks(eng engine.BranchReader, opts RestackOptions) ([]restackBranchGroup, error) {
@@ -226,7 +232,8 @@ func branchGroupsForIndependentStacks(eng engine.BranchReader, opts RestackOptio
 		}
 		if len(branches) > 0 {
 			groups = append(groups, restackBranchGroup{
-				branches: branches,
+				rootBranch: stack.RootBranch,
+				branches:   branches,
 			})
 		}
 	}
@@ -287,4 +294,12 @@ func handleRestackProgress(
 	}
 
 	handler.OnRestackBranch(p.Branch, res, p.NewRev, prNumber, p.LockReason, p.Frozen, p.IsCurrent, parentName, p.Reparented, p.OldParent, p.NewParent, p.RerereResolvedCount)
+
+	// Enrich JSON handler with stack root info (not part of the interface to avoid
+	// touching all implementors for a JSON-only concern).
+	if p.StackRoot != "" {
+		if jsonHandler, ok := handler.(*handlers.JSONRestackHandler); ok {
+			jsonHandler.SetLastBranchStackRoot(p.Branch, p.StackRoot)
+		}
+	}
 }
