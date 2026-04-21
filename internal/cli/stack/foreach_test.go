@@ -229,7 +229,7 @@ All branches completed successfully (3 total)
 
 		command := "case \"$STACKIT_BRANCH\" in child-a|child-b) exit 1;; *) echo $STACKIT_BRANCH;; esac"
 		output, err := s.RunCliAndGetOutput("foreach", "--json", "--find-first-failure", "--jobs", "2", command)
-		require.NoError(t, err)
+		require.Error(t, err)
 
 		var result foreach.JSONResult
 		require.NoError(t, json.Unmarshal([]byte(output), &result))

@@ -102,6 +102,7 @@ Examples:
 				}
 
 				if jsonOutput {
+					cmd.SilenceErrors = true
 					jsonHandler := foreach.NewJSONHandler()
 					err := foreach.Action(ctx, opts, jsonHandler)
 					if err != nil {
@@ -113,7 +114,7 @@ Examples:
 						return fmt.Errorf("failed to marshal JSON: %w", marshalErr)
 					}
 					ctx.Output.Info("%s", string(data))
-					return nil
+					return err
 				}
 
 				// Create runner (manages terminal state) and handler (processes events)

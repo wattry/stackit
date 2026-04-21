@@ -60,7 +60,7 @@ Prefer the narrowest scope that covers the affected branches:
 command stackit restack --branch <branch> --upstack --no-interactive
 
 # Multiple independent stacks need attention (e.g. after sync reparented roots)
-command stackit restack --all-stacks --no-interactive
+command stackit restack --all-stacks --continue-on-conflict --no-interactive
 
 # Handle conflicts if they occur, then continue
 command stackit continue --no-interactive
@@ -77,7 +77,7 @@ command stackit sync --no-interactive
 # If restack is still needed, scope it — avoid broad restacks
 command stackit restack --branch <reparented-branch> --upstack --no-interactive
 # Or, if sync reparented roots across multiple stacks:
-command stackit restack --all-stacks --no-interactive
+command stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
 
 ### PR Base Mismatch

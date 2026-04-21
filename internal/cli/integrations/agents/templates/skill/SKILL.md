@@ -123,7 +123,7 @@ When to use multiple commits vs new branches:
 ### Syncing with Main
 
 1. Sync with trunk and cleanup: `command stackit sync --no-interactive`
-2. If branches were deleted or reparented: `command stackit restack --all-stacks --no-interactive` (covers every independent stack rooted at trunk). For a single stack, scope it: `command stackit restack --branch <root> --upstack --no-interactive`.
+2. If branches were deleted or reparented: `command stackit restack --all-stacks --continue-on-conflict --no-interactive` (covers every independent stack rooted at trunk while letting unaffected stacks proceed). For a single stack, scope it: `command stackit restack --branch <root> --upstack --no-interactive`.
 
 ### Fixing Issues
 

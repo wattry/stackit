@@ -88,6 +88,7 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 
 				// JSON output mode
 				if jsonOutput {
+					cmd.SilenceErrors = true
 					jsonHandler := handlers.NewJSONRestackHandler()
 					err := actions.RestackAction(ctx, actions.RestackOptions{
 						BranchName:         targetBranch,

@@ -56,7 +56,7 @@ After folding, restack only the affected subtree. The parent branch now carries 
 command stackit restack --branch <parent-branch> --upstack --no-interactive
 
 # If you folded in multiple independent stacks in one session, prefer:
-# command stackit restack --all-stacks --no-interactive
+# command stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
 
 Use `--json` to verify only the expected branches were touched; skip a follow-up restack when output shows nothing pending.

@@ -66,8 +66,8 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 | Command | Description |
 |---------|-------------|
 | `command stackit restack --branch <branch> --upstack --no-interactive` | Rebase a branch and its descendants (preferred) |
-| `command stackit restack --all-stacks --no-interactive` | Rebase every independent stack rooted at trunk |
-| `command stackit restack --stacks <root1>,<root2> --no-interactive` | Rebase specific independent stack roots |
+| `command stackit restack --all-stacks --continue-on-conflict --no-interactive` | Rebase every independent stack rooted at trunk while letting unaffected stacks continue |
+| `command stackit restack --stacks <root1>,<root2> --continue-on-conflict --no-interactive` | Rebase specific independent stack roots while letting unaffected selected roots continue |
 | `command stackit foreach` | Run command on each branch in stack |
 | `command stackit submit --no-interactive` | Push branches and create/update PRs |
 | `command stackit sync --no-interactive` | Pull trunk, delete merged branches, restack |

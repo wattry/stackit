@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"errors"
 	"fmt"
 	stdruntime "runtime"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"stackit.dev/stackit/internal/tui"
 	"stackit.dev/stackit/internal/utils"
 )
+
+var newWorktreeEngine = engine.NewEngineForWorktree
 
 // RestackOptions contains options for the restack command
 type RestackOptions struct {
@@ -89,9 +92,13 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 
 	// Parallel mode: dispatch independent stack groups to separate worktrees.
 	if opts.Parallel && len(branchGroups) > 1 {
-		restacked, skipped, conflicts = restackGroupsParallel(ctx, opts, branchGroups, handler)
+		var err error
+		restacked, skipped, conflicts, err = restackGroupsParallel(ctx, opts, branchGroups, handler)
 		ctx.Logger.Info("restack completed (parallel) restacked=%v skipped=%v conflicts=%v", restacked, skipped, len(conflicts))
 		handler.OnRestackComplete(restacked, skipped, conflicts)
+		if err != nil {
+			return fmt.Errorf("restack failed: %w", err)
+		}
 		return nil
 	}
 
@@ -128,7 +135,7 @@ func restackGroupsParallel(
 	opts RestackOptions,
 	groups []restackBranchGroup,
 	handler handlers.RestackHandler,
-) (restacked, skipped int, conflicts []string) {
+) (restacked, skipped int, conflicts []string, err error) {
 	eng := ctx.Engine
 
 	numJobs := opts.Jobs
@@ -147,24 +154,33 @@ func restackGroupsParallel(
 
 	// Shared result counters protected by a mutex.
 	var mu sync.Mutex
+	var groupErrs []error
 
 	utils.RunWithWorkers(groups, numJobs, func(group restackBranchGroup) {
 		// Create a temporary worktree for this group. PruneSkip because we
 		// pruned once above and don't want N workers racing on prune.
 		wtPath, cleanup, err := eng.CreateTemporaryWorktreeSkipPrune(ctx.Context, eng.Trunk().GetName(), "stackit-restack-*")
 		if err != nil {
-			ctx.Logger.Warn("failed to create worktree for parallel restack: %v", err)
+			wrappedErr := fmt.Errorf("stack %s: create worktree: %w", group.rootBranch, err)
+			ctx.Logger.Warn("failed to create worktree for parallel restack: %v", wrappedErr)
+			mu.Lock()
+			groupErrs = append(groupErrs, wrappedErr)
+			mu.Unlock()
 			return
 		}
 		defer cleanup()
 
 		// Build a per-worktree engine from the snapshot.
-		wtEngine, err := engine.NewEngineForWorktree(engine.WorktreeEngineOptions{
+		wtEngine, err := newWorktreeEngine(engine.WorktreeEngineOptions{
 			WorktreePath: wtPath,
 			Snapshot:     snapshot,
 		})
 		if err != nil {
-			ctx.Logger.Warn("failed to create worktree engine: %v", err)
+			wrappedErr := fmt.Errorf("stack %s: create worktree engine: %w", group.rootBranch, err)
+			ctx.Logger.Warn("failed to create worktree engine: %v", wrappedErr)
+			mu.Lock()
+			groupErrs = append(groupErrs, wrappedErr)
+			mu.Unlock()
 			return
 		}
 
@@ -184,7 +200,11 @@ func restackGroupsParallel(
 
 		sortedBranches := eng.SortBranchesTopologically(group.branches)
 		if err := RestackBranchesWithHandler(&wtCtx, sortedBranches, progress, !opts.ContinueOnConflict); err != nil {
-			ctx.Logger.Warn("parallel restack group failed: %v", err)
+			wrappedErr := fmt.Errorf("stack %s: %w", group.rootBranch, err)
+			ctx.Logger.Warn("parallel restack group failed: %v", wrappedErr)
+			mu.Lock()
+			groupErrs = append(groupErrs, wrappedErr)
+			mu.Unlock()
 		}
 	})
 
@@ -194,7 +214,11 @@ func restackGroupsParallel(
 		ctx.Logger.Warn("failed to rebuild engine after parallel restack: %v", err)
 	}
 
-	return restacked, skipped, conflicts
+	if len(groupErrs) > 0 {
+		return restacked, skipped, conflicts, errors.Join(groupErrs...)
+	}
+
+	return restacked, skipped, conflicts, nil
 }
 
 type restackBranchGroup struct {

@@ -346,7 +346,7 @@ command stackit modify --no-interactive
 command stackit restack --branch $(git branch --show-current) --upstack --no-interactive
 
 # If modifications affected multiple independent stacks, prefer:
-# command stackit restack --all-stacks --no-interactive
+# command stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
 
 Use `--json` to confirm which branches were touched and avoid running a second broad restack.
