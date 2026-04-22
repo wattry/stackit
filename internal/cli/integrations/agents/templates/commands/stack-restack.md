@@ -21,7 +21,11 @@ Rebase all branches in the stack to ensure proper parent-child ancestry.
 
 If preconditions fail, inform user and stop.
 
-Otherwise, run `command stackit restack --no-interactive` and show the result.
+Otherwise, choose the narrowest safe restack scope and show the result:
+- If a specific branch caused the issue or was just amended, run `command stackit restack --branch <branch> --upstack --no-interactive`.
+- If a whole independent stack needs restack, run `command stackit restack --branch <stack-root> --upstack --no-interactive`.
+- If multiple independent stacks need restack, run one scoped restack per affected stack root.
+- Only run `command stackit restack --no-interactive` when the user explicitly wants the current stack restacked and no narrower branch/root is known.
 
 If conflicts occur, inform user they need to resolve conflicts and run `command stackit continue`.
 

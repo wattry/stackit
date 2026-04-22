@@ -26,7 +26,10 @@ Check the context and look for these indicators:
 - Follow the Build Failure Workflow below
 
 **Branches need restack** (stackit log shows "needs restack" or branches are out of sync):
-- Run `command stackit restack --no-interactive`
+- Restack only the affected independent stack:
+  - If the affected branch is known, run `command stackit restack --branch <affected-branch> --upstack --no-interactive`.
+  - If only the stack root is known, run `command stackit restack --branch <stack-root> --upstack --no-interactive`.
+  - If multiple independent stacks need restack, restack each stack root separately instead of running one broad restack.
 
 **Orphaned branches** (stackit log shows branch with no parent, or parent was merged):
 - Run `command stackit sync --no-interactive`
@@ -77,7 +80,7 @@ If you made additional fixes and amended them into a commit:
 ```bash
 git add -A
 git commit --amend --no-edit
-command stackit restack --no-interactive
+command stackit restack --branch <amended-branch> --upstack --no-interactive
 ```
 
 Child branches need restacking after an amend because the commit SHA changed.
@@ -151,7 +154,7 @@ command stackit checkout <failing-branch> --no-interactive
 
 #### Step 5: Propagate the fix via restack
 ```bash
-command stackit restack --no-interactive
+command stackit restack --branch <failing-branch> --upstack --no-interactive
 ```
 
 This rebases all child branches onto the fixed branch, propagating your fix.
@@ -189,9 +192,11 @@ The restack command automatically propagates your fix to all child branches.
 
 **Branching stack (multiple children)**: foreach handles this - all descendants are checked.
 
+**Multiple independent stacks**: Independent stack roots are direct children of trunk. Do not run an unscoped restack across unrelated stacks. If more than one independent stack needs restack, run `command stackit restack --branch <stack-root> --upstack --no-interactive` once per affected root.
+
 **Multiple independent failures**: After fixing one, re-run foreach to find next failure. For large error outputs with many distinct issues, consider spawning parallel haiku Task subagents to classify and prioritize errors before fixing.
 
-**After amending a commit**: Always run `command stackit restack --no-interactive` because child branches reference the old commit SHA.
+**After amending a commit**: Always run `command stackit restack --branch <amended-branch> --upstack --no-interactive` because child branches reference the old commit SHA.
 
 ## Tool Trust
 
