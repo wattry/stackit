@@ -125,7 +125,9 @@ func syncDryRunJSON(ctx *app.Context, opts sync.Options) error {
 		}
 	}
 
-	// Sort and dedupe restack roots so callers can pass them directly to `restack --stacks`.
+	// Sort and dedupe restack roots for the current dry-run snapshot. Recompute after
+	// running sync before using these roots for a follow-up `restack --stacks`, since
+	// cleanup and reparenting can change which roots need work.
 	if len(restackRootSet) > 0 {
 		roots := make([]string, 0, len(restackRootSet))
 		for root := range restackRootSet {

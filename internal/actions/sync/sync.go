@@ -21,7 +21,7 @@ type DryRunResult struct {
 	WouldPull          string   `json:"would_pull,omitempty"`           // Trunk branch that would be pulled
 	WouldClean         []string `json:"would_clean,omitempty"`          // Branches that would be deleted
 	WouldRestack       []string `json:"would_restack,omitempty"`        // Branches that would be restacked
-	WouldRestackStacks []string `json:"would_restack_stacks,omitempty"` // Deduped independent stack roots covering would_restack — pass to `restack --stacks <roots>`
+	WouldRestackStacks []string `json:"would_restack_stacks,omitempty"` // Deduped independent stack roots covering the current dry-run's would_restack set; recompute after sync before passing to `restack --stacks <roots>` because cleanup/reparenting can change roots
 	SkippedStacks      []string `json:"skipped_stacks,omitempty"`       // Stacks skipped due to dirty worktrees
 }
 
