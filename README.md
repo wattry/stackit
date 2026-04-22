@@ -194,7 +194,7 @@ Stackit includes specialized commands designed for Claude Code, providing intell
 | `stack-create [branch-name]` | Create a new stacked branch with intelligent naming and commit messages | Adding a new feature branch to your stack |
 | `stack-submit [--stack \| --draft]` | Submit branches as PRs with auto-generated descriptions | Creating or updating pull requests |
 | `stack-sync` | Sync with trunk, cleanup merged branches, and restack | Keeping your stack up-to-date with main |
-| `stack-restack` | Rebase all branches to ensure proper ancestry | Fixing branch relationships after changes |
+| `stack-restack` | Rebase branches with scoped or multi-stack targeting | Fixing branch relationships after changes |
 | `stack-absorb` | Intelligently absorb working changes into correct commits | Applying fixes across multiple stack branches, with conflict resolution guidance |
 | `stack-fix` | Diagnose and fix common stack issues | Resolving compilation errors or structural problems |
 | `stack-describe` | Generate or update stack description from changes | Documenting your stack for PRs |
@@ -272,9 +272,9 @@ stack-submit --stack         # Creates/updates all PRs in the stack
 | Command | Description |
 |:---|:---|
 | `stackit flatten` | Move branches closer to trunk where possible |
-| `stackit restack` | Rebase all branches in the stack to ensure proper ancestry |
+| `stackit restack` | Rebase branches to ensure proper ancestry (`--branch X --upstack`, `--all-stacks`, `--stacks root1,root2`, `--parallel`) |
 | `stackit get [branch|PR]` | Sync a stack or specific PR from remote |
-| `stackit foreach` | Run a shell command on each branch in the stack (default: upstack) |
+| `stackit foreach` | Run a shell command on each branch (`--upstack`, `--all-stacks`, `--stacks`, `--parallel`) |
 | `stackit submit` | Push branches and create/update GitHub PRs (alias: `ss` for `--stack`) |
 | `stackit sync` | Pull trunk, delete merged branches, and restack |
 | `stackit merge` | Interactive merge wizard (use `merge next` or `merge ship` for non-interactive) |
@@ -323,7 +323,7 @@ These flags are available on all `stackit` commands:
 If you receive feedback on a branch in the middle of your stack:
 1. `stackit checkout <branch>` to move to that branch.
 2. Make your changes and run `stackit modify`.
-3. Run `stackit restack` to update all child branches.
+3. Run `stackit restack --upstack` to update child branches (or `--all-stacks` to cover every independent stack).
 4. Run `stackit submit` to update the PRs on GitHub.
 
 ### Using `stackit absorb`
@@ -535,7 +535,7 @@ stackit track
 
 ### Merge conflicts during restack
 
-When `stackit restack` encounters conflicts:
+When `stackit restack` encounters conflicts (use `--continue-on-conflict` to skip conflicted stacks and keep going):
 
 1. Resolve the conflicts in your editor
 2. Stage the resolved files: `git add .`

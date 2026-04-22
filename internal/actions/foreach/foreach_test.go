@@ -248,4 +248,145 @@ func TestForeachAction(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("branch option anchors traversal without changing original checkout", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+				"branch3": "branch2",
+			})
+
+		s.Checkout("branch3")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:    "true",
+			BranchName: "branch1",
+			Scope:      engine.StackRange{IncludeCurrent: true, RecursiveChildren: true},
+			FailFast:   true,
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.NoError(t, err)
+
+		var executed []string
+		for _, e := range handler.Events() {
+			if bpe, ok := e.(foreach.BranchProgressEvent); ok && bpe.Status == foreach.StatusDone {
+				executed = append(executed, bpe.BranchName)
+			}
+		}
+		require.Equal(t, []string{"branch1", "branch2", "branch3"}, executed)
+		require.Equal(t, "branch3", s.Engine.CurrentBranch().GetName())
+	})
+
+	t.Run("branch option supports downstack traversal", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+				"branch3": "branch2",
+			})
+
+		s.Checkout("branch1")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:    "true",
+			BranchName: "branch3",
+			Scope:      engine.StackRange{IncludeCurrent: true, RecursiveParents: true},
+			FailFast:   true,
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.NoError(t, err)
+
+		var executed []string
+		for _, e := range handler.Events() {
+			if bpe, ok := e.(foreach.BranchProgressEvent); ok && bpe.Status == foreach.StatusDone {
+				executed = append(executed, bpe.BranchName)
+			}
+		}
+		require.Equal(t, []string{"branch1", "branch2", "branch3"}, executed)
+		require.Equal(t, "branch1", s.Engine.CurrentBranch().GetName())
+	})
+
+	t.Run("branch option rejects untracked branch", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			CreateBranch("untracked").
+			Checkout("main")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:    "true",
+			BranchName: "untracked",
+			Scope:      engine.StackRange{IncludeCurrent: true},
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "branch untracked is not tracked by stackit")
+	})
+
+	t.Run("find first failure stops after first failing depth", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"root":         "main",
+				"child-a":      "root",
+				"child-b":      "root",
+				"grandchild-a": "child-a",
+			})
+
+		s.Checkout("root")
+
+		handler := &testHandler{}
+		opts := foreach.Options{
+			Command:          "case \"$STACKIT_BRANCH\" in child-a|child-b) exit 1;; *) exit 0;; esac",
+			Scope:            engine.StackRange{IncludeCurrent: true, RecursiveChildren: true},
+			FindFirstFailure: true,
+			Jobs:             2,
+		}
+
+		err := foreach.Action(s.Context, opts, handler)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "command failed at stack depth 2")
+
+		var doneBranches []string
+		var failedBranches []string
+		for _, e := range handler.Events() {
+			if bpe, ok := e.(foreach.BranchProgressEvent); ok {
+				switch bpe.Status {
+				case foreach.StatusDone:
+					doneBranches = append(doneBranches, bpe.BranchName)
+				case foreach.StatusError:
+					failedBranches = append(failedBranches, bpe.BranchName)
+				}
+			}
+		}
+		require.Equal(t, []string{"root"}, doneBranches)
+		require.ElementsMatch(t, []string{"child-a", "child-b"}, failedBranches)
+		require.NotContains(t, append(doneBranches, failedBranches...), "grandchild-a")
+
+		var completion foreach.CompletionEvent
+		for _, e := range handler.Events() {
+			if ev, ok := e.(foreach.CompletionEvent); ok {
+				completion = ev
+			}
+		}
+		require.False(t, completion.Success)
+		require.Len(t, completion.Results, 3)
+		require.Equal(t, []string{"root", "child-a", "child-b"}, branchResultNames(completion.Results))
+	})
+}
+
+func branchResultNames(results []foreach.BranchResult) []string {
+	names := make([]string, len(results))
+	for i, result := range results {
+		names[i] = result.BranchName
+	}
+	return names
 }

@@ -50,11 +50,10 @@ Save this information - you'll need it to find fixes.
      - "Let me specify" - I'll provide the command
 
 ```bash
-command stackit bottom --no-interactive
-command stackit foreach --upstack "<build-command>" 2>&1
+command stackit foreach --stack --json --find-first-failure --jobs 0 "<build-command>" 2>&1
 ```
 
-Parse output to find the FIRST failing branch. The failing branch is where to fix.
+Parse `.results` in the foreach JSON output and find entries whose `status` is not `"done"` or whose `exit_code` is non-zero. `--find-first-failure` stops before descendant depths, so the failed results are the earliest failing branches. The failing branch is where to fix.
 
 **If all branches pass**: Done! Absorb succeeded.
 
@@ -70,7 +69,7 @@ For each broken branch, identify what's missing by reading the error.
   # Edit the file to add the missing code from the unabsorbable hunk content
   git add <files>
   git commit -m "fix: add <missing-item> dependency"
-  command stackit restack --no-interactive
+  command stackit restack --branch <failing-branch> --upstack --no-interactive
   ```
 
 **Source 2: New files**
@@ -81,7 +80,7 @@ For each broken branch, identify what's missing by reading the error.
   # Copy the relevant code from the new file
   git add <files>
   git commit -m "fix: add <missing-item> from new file"
-  command stackit restack --no-interactive
+  command stackit restack --branch <failing-branch> --upstack --no-interactive
   ```
 
 **Source 3: Absorbed upstack (bring down)**
@@ -92,13 +91,13 @@ For each broken branch, identify what's missing by reading the error.
   # Apply the code from the absorbed hunk content
   git add <files>
   git commit -m "fix: bring down <missing-item> from upstack"
-  command stackit restack --no-interactive
+  command stackit restack --branch <failing-branch> --upstack --no-interactive
   ```
 
 ### Phase 4: Verify Fix
 
 ```bash
-command stackit foreach --stack "<build-command>" 2>&1
+command stackit foreach --branch <failing-branch> --upstack --json --find-first-failure --jobs 0 "<build-command>" 2>&1
 ```
 
 If another branch fails, repeat Phase 3 for that branch.
@@ -126,10 +125,11 @@ JSON shows:
 - absorbed: validateUser() call -> add-login branch
 - unabsorbable: hashPassword() definition (commutes_with_all)
 
-$ command stackit foreach --upstack "<build-command>"
+$ command stackit foreach --stack --json --find-first-failure --jobs 0 "<build-command>"
 
-add-auth: PASS
-add-login: FAIL - undefined: hashPassword
+JSON shows:
+- add-auth: PASS
+- add-login: FAIL - undefined: hashPassword
 
 Looking for hashPassword in unabsorbable hunks... Found!
 
@@ -137,9 +137,9 @@ $ command stackit checkout add-login --no-interactive
 # Edit utils/crypto.go to add hashPassword from unabsorbable content
 $ git add utils/crypto.go
 $ git commit -m "fix: add hashPassword dependency"
-$ command stackit restack --no-interactive
+$ command stackit restack --branch add-login --upstack --no-interactive
 
-$ command stackit foreach --stack "<build-command>"
+$ command stackit foreach --branch add-login --upstack --json --find-first-failure --jobs 0 "<build-command>"
 All branches pass!
 ```
 

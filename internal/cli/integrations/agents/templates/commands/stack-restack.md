@@ -16,18 +16,22 @@ allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 Rebase all branches in the stack to ensure proper parent-child ancestry.
 
 **Preconditions** (check context above):
-- Must be on a branch (not detached HEAD)
 - Must have clean working directory (no uncommitted changes)
+- Must be on a branch when using the current stack or `--branch`
+- `--all-stacks` and `--stacks` can be used when no current branch is relevant
 
 If preconditions fail, inform user and stop.
 
 Otherwise, choose the narrowest safe restack scope and show the result:
 - If a specific branch caused the issue or was just amended, run `command stackit restack --branch <branch> --upstack --no-interactive`.
 - If a whole independent stack needs restack, run `command stackit restack --branch <stack-root> --upstack --no-interactive`.
-- If multiple independent stacks need restack, run one scoped restack per affected stack root.
+- If several independent stack roots need restack, run `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
+- If every independent stack needs restack, run `command stackit restack --all-stacks --continue-on-conflict --no-interactive`.
 - Only run `command stackit restack --no-interactive` when the user explicitly wants the current stack restacked and no narrower branch/root is known.
 
-If conflicts occur, inform user they need to resolve conflicts and run `command stackit continue`.
+Conflict handling:
+- If a scoped restack enters conflict state, inform user they need to resolve conflicts and run `command stackit continue`.
+- If `--continue-on-conflict` reports skipped conflicts, no rebase is active for those skipped branches. To resolve one, run `command stackit restack --branch <conflicted-branch> --upstack --no-interactive`, then resolve conflicts and run `command stackit continue`.
 
 ## Follow-up
 

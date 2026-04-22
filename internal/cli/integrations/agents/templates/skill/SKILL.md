@@ -123,7 +123,7 @@ When to use multiple commits vs new branches:
 ### Syncing with Main
 
 1. Sync with trunk and cleanup: `command stackit sync --no-interactive`
-2. If branches were deleted: `command stackit restack --no-interactive`
+2. If branches were deleted or reparented: `command stackit restack --all-stacks --continue-on-conflict --no-interactive` (covers every independent stack rooted at trunk while letting unaffected stacks proceed). For a single stack, scope it: `command stackit restack --branch <root> --upstack --no-interactive`.
 
 ### Fixing Issues
 
@@ -236,7 +236,7 @@ When working with stacks, NEVER use these git commands:
 | `git commit` (for new branches) | `command stackit create` |
 | `git checkout -b` | `command stackit create` |
 | `gh pr create` | `command stackit submit` |
-| `git rebase` | `command stackit restack` |
+| `git rebase` | `command stackit restack --branch <branch> --upstack` (or `--all-stacks`) |
 
 **Exception:** `git commit` is allowed ONLY when adding additional commits to an existing stacked branch.
 

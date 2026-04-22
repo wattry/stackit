@@ -96,10 +96,12 @@ stackit untrack
 When you modify a branch in the middle of a stack, all child branches need to be rebased. This is called **restacking**.
 
 ```bash
-stackit restack
+stackit restack --upstack              # Restack current branch and descendants
+stackit restack --all-stacks           # Restack every independent stack
+stackit restack --all-stacks --parallel  # Same, but in parallel worktrees
 ```
 
-Stackit automatically rebases all affected branches to maintain the stack structure.
+Stackit rebases the affected branches to maintain the stack structure. Use `--branch <name>` to target a specific branch without checking it out first.
 
 ## Metadata
 

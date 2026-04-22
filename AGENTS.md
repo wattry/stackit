@@ -56,7 +56,7 @@ command stackit submit
 command stackit checkout <branch>  # Go to branch with feedback
 # Make changes...
 command stackit modify             # Amend commit
-command stackit restack            # Update children
+command stackit restack --upstack   # Update children of this branch
 command stackit submit             # Update PRs
 ```
 
@@ -67,7 +67,7 @@ command stackit submit             # Update PRs
 | Forgetting to stage | Always `git add -A` before `create` |
 | Using `git commit` for new branch | Use `stackit create` instead |
 | Using `git checkout -b` | Use `stackit create` instead |
-| Manual rebase | Use `stackit restack` |
+| Manual rebase | Use `stackit restack --upstack` (or `--all-stacks`) |
 | Using `gh pr create` | Use `stackit submit` |
 
 **Use `/stack-plan` when starting from scratch** to plan the stack structure before writing code.

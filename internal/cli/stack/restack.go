@@ -17,11 +17,16 @@ import (
 // NewRestackCmd creates the restack command
 func NewRestackCmd() *cobra.Command {
 	var (
-		branch     string
-		downstack  bool
-		only       bool
-		upstack    bool
-		jsonOutput bool
+		branch             string
+		downstack          bool
+		only               bool
+		upstack            bool
+		allStacks          bool
+		stacks             []string
+		continueOnConflict bool
+		parallel           bool
+		jobs               int
+		jsonOutput         bool
 	)
 
 	cmd := &cobra.Command{
@@ -46,10 +51,27 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 				if scopeFlags > 1 {
 					return fmt.Errorf("only one of --downstack, --only, or --upstack can be specified")
 				}
+				multiStack := allStacks || len(stacks) > 0
+				if allStacks && len(stacks) > 0 {
+					return fmt.Errorf("only one of --all-stacks or --stacks can be specified")
+				}
+				if multiStack && branch != "" {
+					return fmt.Errorf("--branch cannot be used with --all-stacks or --stacks")
+				}
+				if multiStack && scopeFlags > 0 {
+					return fmt.Errorf("--downstack, --only, and --upstack cannot be used with --all-stacks or --stacks")
+				}
+				// --jobs implies --parallel
+				if jobs > 0 {
+					parallel = true
+				}
+				if parallel && !multiStack {
+					return fmt.Errorf("--parallel requires --all-stacks or --stacks")
+				}
 
 				// Determine target branch
 				targetBranch := branch
-				if targetBranch == "" {
+				if targetBranch == "" && !multiStack {
 					currentBranch := ctx.Engine.CurrentBranch()
 					if currentBranch == nil {
 						return fmt.Errorf("not on a branch and --branch not specified")
@@ -66,10 +88,16 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 
 				// JSON output mode
 				if jsonOutput {
+					cmd.SilenceErrors = true
 					jsonHandler := handlers.NewJSONRestackHandler()
 					err := actions.RestackAction(ctx, actions.RestackOptions{
-						BranchName: targetBranch,
-						Scope:      rng,
+						BranchName:         targetBranch,
+						Scope:              rng,
+						AllStacks:          allStacks,
+						StackRoots:         stacks,
+						ContinueOnConflict: continueOnConflict,
+						Parallel:           parallel,
+						Jobs:               jobs,
 					}, jsonHandler)
 
 					// Set error status if there was an error
@@ -94,8 +122,13 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 				defer runner.Cleanup()
 
 				return actions.RestackAction(ctx, actions.RestackOptions{
-					BranchName: targetBranch,
-					Scope:      rng,
+					BranchName:         targetBranch,
+					Scope:              rng,
+					AllStacks:          allStacks,
+					StackRoots:         stacks,
+					ContinueOnConflict: continueOnConflict,
+					Parallel:           parallel,
+					Jobs:               jobs,
 				}, handler)
 			})
 		},
@@ -105,6 +138,11 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 	cmd.Flags().BoolVar(&downstack, "downstack", false, "Only restack this branch and its ancestors.")
 	cmd.Flags().BoolVar(&only, "only", false, "Only restack this branch.")
 	cmd.Flags().BoolVar(&upstack, "upstack", false, "Only restack this branch and its descendants.")
+	cmd.Flags().BoolVar(&allStacks, "all-stacks", false, "Restack every independent stack rooted at trunk.")
+	cmd.Flags().StringSliceVar(&stacks, "stacks", nil, "Restack specific independent stack roots (comma-separated).")
+	cmd.Flags().BoolVar(&continueOnConflict, "continue-on-conflict", false, "Report restack conflicts without entering conflict resolution, continuing to independent stacks when possible.")
+	cmd.Flags().BoolVarP(&parallel, "parallel", "p", false, "Run independent stack groups in parallel worktrees (requires --all-stacks or --stacks).")
+	cmd.Flags().IntVarP(&jobs, "jobs", "j", 0, "Number of parallel jobs (default: number of CPUs). Implies --parallel.")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output results in JSON format.")
 
 	return cmd

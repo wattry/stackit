@@ -59,7 +59,7 @@ Manage your entire stack.
 - $$stackit submit$$ - Create/update PRs
 - $$stackit sync$$ - Update from trunk
 - $$stackit merge$$ - Merge your stack
-- $$stackit restack$$ - Rebase all branches
+- $$stackit restack$$ - Rebase branches (scoped with `--upstack`, `--all-stacks`, `--parallel`)
 - $$stackit flatten$$ - Optimize stack structure
 
 ### Worktrees
