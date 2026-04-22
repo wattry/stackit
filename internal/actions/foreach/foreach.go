@@ -2,6 +2,7 @@ package foreach
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,26 +20,52 @@ import (
 
 // Options contains options for the foreach command
 type Options struct {
-	Command  string
-	Args     []string
-	Scope    engine.StackRange
-	FailFast bool
-	Parallel bool
-	Jobs     int
+	Command          string
+	Args             []string
+	BranchName       string
+	Scope            engine.StackRange
+	AllStacks        bool     // Run across every independent stack rooted at trunk
+	StackRoots       []string // Run across the listed independent stack roots only
+	FailFast         bool
+	Parallel         bool
+	FindFirstFailure bool
+	Jobs             int
 }
 
 // Action executes a command on each branch in the stack with event handling
 func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
 
+	multiStack := opts.AllStacks || len(opts.StackRoots) > 0
+
 	currentBranch := eng.CurrentBranch()
-	if currentBranch == nil {
+	if !multiStack && currentBranch == nil && opts.BranchName == "" {
 		return errors.ErrNotOnBranch
 	}
 
-	// Get branches based on scope
+	// Build graph once — needed for scope range and for find-first-failure depth grouping.
 	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-	branches := graph.Range(*currentBranch, opts.Scope)
+
+	var branches []engine.Branch
+	if multiStack {
+		multiStackBranches, err := collectMultiStackBranches(eng, opts)
+		if err != nil {
+			return err
+		}
+		branches = multiStackBranches
+	} else {
+		targetBranch := engine.Branch{}
+		if opts.BranchName != "" {
+			targetBranch = eng.GetBranch(opts.BranchName)
+			if !targetBranch.IsTrunk() && !targetBranch.IsTracked() {
+				return fmt.Errorf("branch %s is not tracked by stackit", opts.BranchName)
+			}
+		} else if currentBranch != nil {
+			targetBranch = *currentBranch
+		}
+		branches = graph.Range(targetBranch, opts.Scope)
+	}
+
 	if len(branches) == 0 {
 		handler.OnEvent(CompletionEvent{Success: true, Message: "No branches to process"})
 		return nil
@@ -58,7 +85,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Build tree structure for display
-	currentBranchName := currentBranch.GetName()
+	currentBranchName := ""
+	if currentBranch != nil {
+		currentBranchName = currentBranch.GetName()
+	}
 	stackTree := tree.NewStackTree(nonTrunkBranches, currentBranchName, eng.Trunk().GetName())
 
 	// Display the stack
@@ -77,6 +107,9 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 	handler.OnEvent(ExecutionStartEvent{Branches: branchInfos})
 
+	if opts.FindFirstFailure {
+		return foreachFindFirstFailure(ctx, opts, nonTrunkBranches, graph, handler)
+	}
 	if opts.Parallel {
 		return foreachParallel(ctx, opts, nonTrunkBranches, handler)
 	}
@@ -121,6 +154,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 
 		if err := eng.CheckoutBranch(ctx.Context, branch); err != nil {
 			result.Status = StatusError
+			result.ExitCode = -1
 			result.Error = err
 			handler.OnEvent(BranchProgressEvent{
 				BranchName: branchName,
@@ -155,6 +189,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 
 		if err != nil {
 			result.Status = StatusError
+			result.ExitCode = exitCodeFromError(err)
 			result.Output = outputStr
 			result.Error = err
 			handler.OnEvent(BranchProgressEvent{
@@ -177,6 +212,7 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 			}
 		} else {
 			result.Status = StatusDone
+			result.ExitCode = 0
 			result.Output = outputStr
 			handler.OnEvent(BranchProgressEvent{
 				BranchName: branchName,
@@ -237,6 +273,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	type result struct {
 		branchName string
 		output     string
+		exitCode   int
 		err        error
 	}
 
@@ -293,6 +330,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 		results <- result{
 			branchName: res.branchName,
 			output:     res.output,
+			exitCode:   res.exitCode,
 			err:        res.err,
 		}
 	})
@@ -309,6 +347,7 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 		allResults = append(allResults, BranchResult{
 			BranchName: res.branchName,
 			Status:     status,
+			ExitCode:   res.exitCode,
 			Output:     res.output,
 			Error:      res.err,
 		})
@@ -353,14 +392,168 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	return nil
 }
 
+func foreachFindFirstFailure(ctx *app.Context, opts Options, branches []engine.Branch, graph *engine.StackGraph, handler Handler) error {
+	numJobs := opts.Jobs
+	if numJobs <= 0 {
+		numJobs = stdruntime.NumCPU()
+	}
+
+	_ = ctx.Engine.PruneWorktrees(ctx.Context)
+
+	approvedHooks, err := worktree.ResolveApprovedHooks(ctx)
+	if err != nil {
+		ctx.Output.Warn("Failed to resolve worktree hooks: %v", err)
+	}
+
+	fullCommand := strings.Join(append([]string{opts.Command}, opts.Args...), " ")
+	branchesByDepth := groupBranchesByDepth(branches, graph)
+
+	allResults := make([]BranchResult, 0, len(branches))
+	depthOpts := opts
+	depthOpts.FailFast = false
+	for _, depthGroup := range branchesByDepth {
+		groupResults := runBranchesInWorktrees(ctx, depthOpts, depthGroup.branches, handler, fullCommand, approvedHooks, numJobs)
+		allResults = append(allResults, groupResults...)
+
+		if hasFailedResult(groupResults) {
+			handler.OnEvent(CompletionEvent{
+				Success: false,
+				Message: fmt.Sprintf("Command failed at stack depth %d", depthGroup.depth),
+				Results: allResults,
+			})
+			return fmt.Errorf("command failed at stack depth %d", depthGroup.depth)
+		}
+	}
+
+	handler.OnEvent(CompletionEvent{
+		Success: true,
+		Message: "Execution complete",
+		Results: allResults,
+	})
+	return nil
+}
+
+type branchDepthGroup struct {
+	depth    int
+	branches []engine.Branch
+}
+
+func groupBranchesByDepth(branches []engine.Branch, graph *engine.StackGraph) []branchDepthGroup {
+	groups := []branchDepthGroup{}
+	groupByDepth := make(map[int]int)
+	for _, branch := range branches {
+		depth := 0
+		if node := graph.GetNode(branch.GetName()); node != nil {
+			depth = node.Depth
+		}
+
+		idx, ok := groupByDepth[depth]
+		if !ok {
+			idx = len(groups)
+			groupByDepth[depth] = idx
+			groups = append(groups, branchDepthGroup{depth: depth})
+		}
+		groups[idx].branches = append(groups[idx].branches, branch)
+	}
+	return groups
+}
+
+func runBranchesInWorktrees(ctx *app.Context, opts Options, branches []engine.Branch, handler Handler, fullCommand string, hooks []string, numJobs int) []BranchResult {
+	type result struct {
+		branchName string
+		output     string
+		exitCode   int
+		err        error
+	}
+
+	results := make(chan result, len(branches))
+	runCtx, cancel := context.WithCancel(ctx.Context)
+	defer cancel()
+
+	utils.RunWithWorkers(branches, numJobs, func(branch engine.Branch) {
+		select {
+		case <-runCtx.Done():
+			return
+		default:
+		}
+
+		branchName := branch.GetName()
+		handler.OnEvent(BranchProgressEvent{
+			BranchName: branchName,
+			Status:     StatusRunning,
+		})
+
+		res := executeCommandOnBranch(runCtx, ctx, branch, fullCommand, hooks)
+		if res.err != nil {
+			if opts.FailFast {
+				cancel()
+			}
+			handler.OnEvent(BranchProgressEvent{
+				BranchName: branchName,
+				Status:     StatusError,
+				Output:     res.output,
+				Error:      res.err,
+			})
+		} else {
+			handler.OnEvent(BranchProgressEvent{
+				BranchName: branchName,
+				Status:     StatusDone,
+				Output:     res.output,
+			})
+		}
+
+		results <- result{
+			branchName: res.branchName,
+			output:     res.output,
+			exitCode:   res.exitCode,
+			err:        res.err,
+		}
+	})
+	close(results)
+
+	resultMap := make(map[string]BranchResult)
+	for res := range results {
+		status := StatusDone
+		if res.err != nil {
+			status = StatusError
+		}
+		resultMap[res.branchName] = BranchResult{
+			BranchName: res.branchName,
+			Status:     status,
+			ExitCode:   res.exitCode,
+			Output:     res.output,
+			Error:      res.err,
+		}
+	}
+
+	sortedResults := make([]BranchResult, 0, len(branches))
+	for _, branch := range branches {
+		if result, ok := resultMap[branch.GetName()]; ok {
+			sortedResults = append(sortedResults, result)
+		}
+	}
+	return sortedResults
+}
+
+func hasFailedResult(results []BranchResult) bool {
+	for _, result := range results {
+		if result.Status == StatusError {
+			return true
+		}
+	}
+	return false
+}
+
 func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch engine.Branch, fullCommand string, hooks []string) struct {
 	branchName string
 	output     string
+	exitCode   int
 	err        error
 } {
 	res := struct {
 		branchName string
 		output     string
+		exitCode   int
 		err        error
 	}{branchName: branch.GetName()}
 
@@ -368,6 +561,7 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	// Use SkipPrune variant since foreachParallel already pruned once before parallel execution.
 	worktreePath, cleanup, err := appCtx.Engine.CreateTemporaryWorktreeSkipPrune(ctx, branch.GetName(), "stackit-foreach-*")
 	if err != nil {
+		res.exitCode = -1
 		res.err = err
 		return res
 	}
@@ -385,8 +579,52 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	cmd.Env = append(cmd.Env, "STACKIT_BRANCH="+branch.GetName())
 
 	if err := cmd.Run(); err != nil {
+		res.exitCode = exitCodeFromError(err)
 		res.err = err
 	}
 	res.output = output.String()
 	return res
+}
+
+// collectMultiStackBranches expands --all-stacks / --stacks into a flat branch list,
+// preserving independent-stack ordering and excluding trunk and untracked branches.
+func collectMultiStackBranches(eng engine.BranchReader, opts Options) ([]engine.Branch, error) {
+	stacks := engine.DiscoverIndependentStacks(eng)
+	if len(opts.StackRoots) > 0 {
+		stackByRoot := make(map[string]engine.IndependentStack, len(stacks))
+		for _, stack := range stacks {
+			stackByRoot[stack.RootBranch] = stack
+		}
+		filtered := make([]engine.IndependentStack, 0, len(opts.StackRoots))
+		for _, root := range opts.StackRoots {
+			stack, ok := stackByRoot[root]
+			if !ok {
+				return nil, fmt.Errorf("stack root %s not found", root)
+			}
+			filtered = append(filtered, stack)
+		}
+		stacks = filtered
+	}
+
+	branches := make([]engine.Branch, 0)
+	for _, stack := range stacks {
+		for _, branchName := range stack.Branches {
+			branch := eng.GetBranch(branchName)
+			if branch.IsTracked() && !branch.IsTrunk() {
+				branches = append(branches, branch)
+			}
+		}
+	}
+	return branches, nil
+}
+
+func exitCodeFromError(err error) int {
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if stderrors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return -1
 }

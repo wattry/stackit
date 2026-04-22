@@ -40,7 +40,7 @@ Practical guides for using stackit effectively in your daily development.
 
 | Task | Command |
 |------|---------|
-| Update after code review | `stackit modify` then `stackit restack` |
+| Update after code review | `stackit modify` then `stackit restack --upstack` |
 | Absorb fixes into correct branches | `stackit absorb` |
 | Sync with main | `stackit sync` |
 | Split commits into branches | `stackit split` |

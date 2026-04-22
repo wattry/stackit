@@ -4,6 +4,7 @@ package stack
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
 
@@ -108,6 +109,7 @@ func syncDryRunJSON(ctx *app.Context, opts sync.Options) error {
 	// Collect candidate branches for deletion and restack checks
 	allBranches := eng.AllBranches()
 	var candidateNames []string
+	restackRootSet := make(map[string]struct{})
 	for _, branch := range allBranches {
 		if branch.IsTrunk() || !branch.IsTracked() {
 			continue
@@ -117,7 +119,22 @@ func syncDryRunJSON(ctx *app.Context, opts sync.Options) error {
 		// Check restack status while iterating
 		if opts.Restack && !branch.IsBranchUpToDate() {
 			result.WouldRestack = append(result.WouldRestack, branch.GetName())
+			if root := eng.GetStackRootForBranch(branch); root != "" {
+				restackRootSet[root] = struct{}{}
+			}
 		}
+	}
+
+	// Sort and dedupe restack roots for the current dry-run snapshot. Recompute after
+	// running sync before using these roots for a follow-up `restack --stacks`, since
+	// cleanup and reparenting can change which roots need work.
+	if len(restackRootSet) > 0 {
+		roots := make([]string, 0, len(restackRootSet))
+		for root := range restackRootSet {
+			roots = append(roots, root)
+		}
+		sort.Strings(roots)
+		result.WouldRestackStacks = roots
 	}
 
 	// Batch-check deletion status for all candidates

@@ -33,24 +33,20 @@ If provided in arguments, use that. Otherwise:
 
 ### 2. Run verification
 
-First, go to bottom of stack to ensure consistent ordering:
+**Quick mode (default)** - run branches at each depth in parallel and stop after the first failing depth:
 ```bash
-command stackit bottom --no-interactive
+command stackit foreach --stack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
-Then run checks:
-
-**Quick mode (default)** - stop at first failure:
+**Full diagnostic mode** - check all branches and collect every failure:
 ```bash
-command stackit foreach --upstack "<check-command>" 2>&1
+command stackit foreach --stack --json --parallel --jobs 0 --no-fail-fast "<check-command>" 2>&1
 ```
 
-**Full diagnostic mode** - check all branches:
+**Anchored mode** - if a branch or independent stack root is known, avoid checkout navigation and verify that upstack only:
 ```bash
-command stackit foreach --upstack --no-fail-fast "<check-command>" 2>&1
+command stackit foreach --branch <branch-or-root> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
-
-**Parallel mode** - For large stacks (5+ branches) with independent branches, consider spawning parallel Task subagents to verify sibling branches simultaneously. Only use this when branches don't have linear dependencies.
 
 If uncertain which mode to use, prompt with `AskUserQuestion`:
 - Header: "Verify mode"
@@ -61,18 +57,22 @@ If uncertain which mode to use, prompt with `AskUserQuestion`:
 
 ### 3. Parse foreach output
 
-Foreach output looks like:
-```
-Running on branch-1...
-✓ branch-1 (exit 0)
-Running on branch-2...
-✓ branch-2 (exit 0)
-Running on branch-3...
-✗ branch-3 (exit 1)
-  internal/foo.go:42: undefined: someVar
+Foreach JSON output looks like:
+```json
+{
+  "status": "failure",
+  "total_count": 3,
+  "success_count": 2,
+  "failure_count": 1,
+  "results": [
+    {"branch": "branch-1", "status": "done", "exit_code": 0},
+    {"branch": "branch-2", "status": "done", "exit_code": 0},
+    {"branch": "branch-3", "status": "error", "exit_code": 1, "output": "internal/foo.go:42: undefined: someVar"}
+  ]
+}
 ```
 
-Look for `✗` or non-zero exit codes to identify failures.
+Look for results whose `status` is not `"done"` or whose `exit_code` is non-zero. In quick mode, `--find-first-failure` already stopped before descendant depths, so the failed results are the earliest failing branches.
 
 ### 4. Present results clearly
 
@@ -84,8 +84,8 @@ Stack Verification Results
 ✓ branch-name-2 - passed
 ✗ branch-name-3 - FAILED
 
-Summary: 2 passed, 1 failed (stopped at first failure)
-First failure: branch-name-3
+Summary: 2 passed, 1 failed (stopped at first failing depth)
+First failing branch: branch-name-3
 ```
 
 **Full diagnostic format** (checks all):

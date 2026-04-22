@@ -291,9 +291,13 @@ mutation {
 
 ### Step 7: Restack
 
+Restack only the reviewed branch and descendants so feedback changes propagate without rebasing unrelated stacks:
+
 ```bash
-command stackit restack --no-interactive
+command stackit restack --branch <reviewed-branch> --upstack --no-interactive
 ```
+
+If apply mode updated multiple independent PR branches, group their stack roots with `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
 
 ### Step 8: Report
 

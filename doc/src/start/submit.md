@@ -83,7 +83,7 @@ After making changes to your stack:
 
 2. Restack child branches:
    ```bash
-   stackit restack
+   stackit restack --upstack
    ```
 
 3. Update the PRs:

@@ -205,6 +205,43 @@ func TestJSONOutput(t *testing.T) {
 		// JSON was valid and parseable - verified by NoError above
 	})
 
+	t.Run("sync --dry-run --json --restack reports stack roots for would_restack branches", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t, WithRemote())
+
+		// Build two independent stacks rooted at trunk:
+		//   main -> alpha-root -> alpha-child
+		//   main -> beta-root
+		sh.Write("alpha_root", "alpha root").
+			Run("create alpha-root -m 'Add alpha root'").
+			Write("alpha_child", "alpha child").
+			Run("create alpha-child -m 'Add alpha child'").
+			Run("trunk").
+			Write("beta_root", "beta root").
+			Run("create beta-root -m 'Add beta root'")
+
+		// Force alpha-root to diverge from trunk by amending trunk's view via a new commit on trunk.
+		// We use a direct git call to shift trunk, then mark alpha-root as needing restack.
+		sh.Run("checkout alpha-root").
+			Git("commit --allow-empty -m 'force restack'")
+
+		// Checkout back to alpha-child so restack scope discovery sees the stack.
+		sh.Run("checkout alpha-child")
+
+		sh.Run("sync --dry-run --json --restack")
+		output := sh.Output()
+
+		var result sync.DryRunResult
+		err := json.Unmarshal([]byte(output), &result)
+		require.NoError(t, err, "sync --dry-run --json --restack should produce valid JSON")
+
+		// Every would_restack branch should map to a root; the deduped set should be
+		// sorted and contain only known stack roots (alpha-root, beta-root).
+		require.NotNil(t, result.WouldRestackStacks, "would_restack_stacks should be populated when branches need restack")
+		require.Equal(t, []string{"alpha-root"}, result.WouldRestackStacks,
+			"should deduplicate and sort restack roots; only alpha's stack has drift")
+	})
+
 	t.Run("log --json with no tracked branches outputs valid JSON", func(t *testing.T) {
 		t.Parallel()
 		sh := NewTestShellInProcess(t)

@@ -33,8 +33,8 @@ Fold (squash) granular branches into their parent branches.
 5. Before each fold, verify:
    - Branch has no children (fold leaf branches first)
    - Parent still not locked/frozen
-6. Execute: `command stackit checkout <branch> && command stackit fold --no-interactive`
-7. Run `command stackit restack --no-interactive` after folding
+6. Execute: `command stackit checkout <branch> --no-interactive && command stackit fold --no-interactive`
+7. After each fold, restack only the affected parent and descendants: `command stackit restack --branch <parent-branch> --upstack --no-interactive`
 8. Show final stack state
 
 ## Tool Trust
@@ -54,13 +54,13 @@ After successful fold, use `AskUserQuestion`:
 - Question: "Branches folded successfully. What would you like to do next?"
 - Options:
   - label: "Restack branches (Recommended)"
-    description: "Rebase all branches to ensure consistency after fold"
+    description: "Rebase affected descendants to ensure consistency after fold"
   - label: "Submit changes"
     description: "Push folded changes to update PRs"
   - label: "Done for now"
     description: "No follow-up action needed"
 
 Based on response:
-- **"Restack branches"**: Invoke `/stack-restack` skill using the `Skill` tool
+- **"Restack branches"**: Invoke `/stack-restack` skill using the `Skill` tool and pass the folded parent branch as the target
 - **"Submit changes"**: Invoke `/stack-submit` skill using the `Skill` tool
 - **"Done for now"**: End with summary of what was folded

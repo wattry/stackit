@@ -49,10 +49,17 @@ command stackit fold --no-interactive
 ```
 
 ### 6. Post-Fold Cleanup
-After folding, ensure the stack is healthy:
+After folding, restack only the affected subtree. The parent branch now carries the folded commits, so descendants of the parent need their ancestry refreshed:
+
 ```bash
-command stackit restack --no-interactive
+# Scope restack to the parent and its descendants — avoid a broad restack
+command stackit restack --branch <parent-branch> --upstack --no-interactive
+
+# If you folded in multiple independent stacks in one session, prefer:
+# command stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
+
+Use `--json` to verify only the expected branches were touched; skip a follow-up restack when output shows nothing pending.
 
 ## Safety Constraints
 - **Never fold into trunk** unless explicitly requested by the user.

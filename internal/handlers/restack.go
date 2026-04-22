@@ -2,6 +2,9 @@
 package handlers
 
 import (
+	"slices"
+	"sync"
+
 	"stackit.dev/stackit/internal/engine"
 )
 
@@ -59,6 +62,7 @@ type RestackJSONResult struct {
 	Restacked     []RestackBranchInfo   `json:"restacked,omitempty"`
 	Skipped       []string              `json:"skipped,omitempty"`
 	Conflicts     []RestackConflictInfo `json:"conflicts,omitempty"`
+	StackRoots    []string              `json:"stack_roots,omitempty"` // Deduped independent stack roots that were processed
 	TotalCount    int                   `json:"total_count"`
 	RestackCount  int                   `json:"restack_count"`
 	ConflictCount int                   `json:"conflict_count"`
@@ -68,6 +72,7 @@ type RestackJSONResult struct {
 type RestackBranchInfo struct {
 	Name                string `json:"name"`
 	Parent              string `json:"parent"`
+	StackRoot           string `json:"stack_root,omitempty"` // Independent stack root this branch belongs to
 	NewRev              string `json:"new_rev,omitempty"`
 	PRNumber            *int   `json:"pr_number,omitempty"`
 	RerereResolvedCount int    `json:"rerere_resolved_count,omitempty"`
@@ -75,12 +80,15 @@ type RestackBranchInfo struct {
 
 // RestackConflictInfo represents a conflict during restack
 type RestackConflictInfo struct {
-	Branch string `json:"branch"`
-	Parent string `json:"parent"`
+	Branch    string `json:"branch"`
+	Parent    string `json:"parent"`
+	StackRoot string `json:"stack_root,omitempty"` // Independent stack root this branch belongs to
 }
 
-// JSONRestackHandler collects restack results for JSON output
+// JSONRestackHandler collects restack results for JSON output.
+// All methods are mutex-protected so concurrent callers (parallel restack) are safe.
 type JSONRestackHandler struct {
+	mu     sync.Mutex
 	Result *RestackJSONResult
 }
 
@@ -97,11 +105,15 @@ func NewJSONRestackHandler() *JSONRestackHandler {
 
 // OnRestackStart implements RestackHandler.
 func (h *JSONRestackHandler) OnRestackStart(branchCount int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.Result.TotalCount = branchCount
 }
 
 // OnRestackBranch implements RestackHandler.
 func (h *JSONRestackHandler) OnRestackBranch(branch string, result RestackResult, newRev string, prNumber *int, _ engine.LockReason, _ bool, _ bool, parent string, _ bool, _, _ string, rerereResolvedCount int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	switch result {
 	case RestackDone:
 		h.Result.Restacked = append(h.Result.Restacked, RestackBranchInfo{
@@ -123,6 +135,8 @@ func (h *JSONRestackHandler) OnRestackBranch(branch string, result RestackResult
 
 // OnRestackComplete implements RestackHandler.
 func (h *JSONRestackHandler) OnRestackComplete(restacked, _ int, _ []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.Result.RestackCount = restacked
 	h.Result.ConflictCount = len(h.Result.Conflicts)
 
@@ -133,10 +147,41 @@ func (h *JSONRestackHandler) OnRestackComplete(restacked, _ int, _ []string) {
 	}
 }
 
+// SetLastBranchStackRoot annotates the most recently added restacked or conflict
+// entry for the given branch with its independent stack root. It also maintains
+// the deduped top-level StackRoots list. Called outside the handler interface so
+// only JSON output is enriched without touching all implementors.
+func (h *JSONRestackHandler) SetLastBranchStackRoot(branch, stackRoot string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Annotate the matching restacked entry (search from end — just appended).
+	for i := len(h.Result.Restacked) - 1; i >= 0; i-- {
+		if h.Result.Restacked[i].Name == branch {
+			h.Result.Restacked[i].StackRoot = stackRoot
+			break
+		}
+	}
+	// Annotate the matching conflict entry.
+	for i := len(h.Result.Conflicts) - 1; i >= 0; i-- {
+		if h.Result.Conflicts[i].Branch == branch {
+			h.Result.Conflicts[i].StackRoot = stackRoot
+			break
+		}
+	}
+
+	// Maintain deduped StackRoots.
+	if !slices.Contains(h.Result.StackRoots, stackRoot) {
+		h.Result.StackRoots = append(h.Result.StackRoots, stackRoot)
+	}
+}
+
 // SetError sets the error status and message on the result.
 // Call this when the restack action returns an error.
 func (h *JSONRestackHandler) SetError(err error) {
 	if err != nil {
+		h.mu.Lock()
+		defer h.mu.Unlock()
 		// If we already observed restack conflicts, keep status as "conflict"
 		// and attach the error details for debugging/context.
 		if len(h.Result.Conflicts) > 0 {

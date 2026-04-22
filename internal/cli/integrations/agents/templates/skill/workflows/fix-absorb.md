@@ -223,8 +223,9 @@ git cherry-pick abc123
 <build-command>
 # ✓ Build succeeded
 
-# 5. Restack children (they're now based on old version)
-command stackit restack --no-interactive
+# 5. Restack children (they're now based on old version) — scope to this subtree
+command stackit restack --branch add-validation --upstack --no-interactive
+# (use --all-stacks only if the fix affected multiple independent stacks)
 
 # 6. Verify entire stack
 command stackit foreach --no-interactive "<build-command>"
