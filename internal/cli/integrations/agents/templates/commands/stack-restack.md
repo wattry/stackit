@@ -1,5 +1,5 @@
 ---
-description: Rebase all branches to ensure proper ancestry
+description: Rebase branches with scoped or multi-stack targeting
 model: haiku
 allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ---
@@ -13,7 +13,7 @@ allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 
 ## Task
 
-Rebase all branches in the stack to ensure proper parent-child ancestry.
+Rebase branches with the narrowest safe scope to ensure proper parent-child ancestry.
 
 **Preconditions** (check context above):
 - Must have clean working directory (no uncommitted changes)
