@@ -156,6 +156,24 @@ func restackGroupsParallel(
 	var mu sync.Mutex
 	var groupErrs []error
 
+	// recordGroupFailure attributes every branch in a failed group to the handler
+	// as a conflict so the final summary reflects what the worker did not process.
+	// Without this a worktree/engine setup failure silently shows "skipped=0" while
+	// an entire stack failed to start. Caller must not already hold mu.
+	recordGroupFailure := func(group restackBranchGroup, wrappedErr error) {
+		mu.Lock()
+		defer mu.Unlock()
+		groupErrs = append(groupErrs, wrappedErr)
+		for _, b := range group.branches {
+			handleRestackProgress(eng, handler, RestackProgress{
+				Branch:    b.GetName(),
+				Result:    engine.RestackConflict,
+				Conflict:  true,
+				StackRoot: group.rootBranch,
+			}, &restacked, &skipped, &conflicts)
+		}
+	}
+
 	utils.RunWithWorkers(groups, numJobs, func(group restackBranchGroup) {
 		// Create a temporary worktree for this group. PruneSkip because we
 		// pruned once above and don't want N workers racing on prune.
@@ -163,9 +181,7 @@ func restackGroupsParallel(
 		if err != nil {
 			wrappedErr := fmt.Errorf("stack %s: create worktree: %w", group.rootBranch, err)
 			ctx.Logger.Warn("failed to create worktree for parallel restack: %v", wrappedErr)
-			mu.Lock()
-			groupErrs = append(groupErrs, wrappedErr)
-			mu.Unlock()
+			recordGroupFailure(group, wrappedErr)
 			return
 		}
 		defer cleanup()
@@ -178,9 +194,7 @@ func restackGroupsParallel(
 		if err != nil {
 			wrappedErr := fmt.Errorf("stack %s: create worktree engine: %w", group.rootBranch, err)
 			ctx.Logger.Warn("failed to create worktree engine: %v", wrappedErr)
-			mu.Lock()
-			groupErrs = append(groupErrs, wrappedErr)
-			mu.Unlock()
+			recordGroupFailure(group, wrappedErr)
 			return
 		}
 
@@ -198,8 +212,11 @@ func restackGroupsParallel(
 			handleRestackProgress(eng, handler, p, &restacked, &skipped, &conflicts)
 		}
 
+		// Parallel mode always reports conflicts via callback: the interactive conflict
+		// workflow writes rebase state into the worktree, which defer cleanup() tears
+		// down, so entering it would silently destroy what the user needs to resolve.
 		sortedBranches := eng.SortBranchesTopologically(group.branches)
-		if err := RestackBranchesWithHandler(&wtCtx, sortedBranches, progress, !opts.ContinueOnConflict); err != nil {
+		if err := RestackBranchesWithHandler(&wtCtx, sortedBranches, progress, false); err != nil {
 			wrappedErr := fmt.Errorf("stack %s: %w", group.rootBranch, err)
 			ctx.Logger.Warn("parallel restack group failed: %v", wrappedErr)
 			mu.Lock()

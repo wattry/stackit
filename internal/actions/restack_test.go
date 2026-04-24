@@ -29,15 +29,28 @@ func TestRestackAction(t *testing.T) {
 			newWorktreeEngine = originalNewWorktreeEngine
 		})
 
+		jsonHandler := handlers.NewJSONRestackHandler()
 		err := RestackAction(s.Context, RestackOptions{
 			AllStacks: true,
 			Parallel:  true,
 			Jobs:      2,
-		}, handlers.NewJSONRestackHandler())
+		}, jsonHandler)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "restack failed")
 		require.ErrorContains(t, err, "alpha-root")
 		require.ErrorContains(t, err, "beta-root")
 		require.ErrorContains(t, err, "create worktree engine")
+
+		// Every branch in a failed group must appear in the summary so users
+		// don't see "skipped=0" while entire stacks silently failed to start.
+		conflictBranches := make([]string, 0, len(jsonHandler.Result.Conflicts))
+		for _, c := range jsonHandler.Result.Conflicts {
+			conflictBranches = append(conflictBranches, c.Branch)
+		}
+		require.ElementsMatch(t,
+			[]string{"alpha-root", "alpha-child", "beta-root"},
+			conflictBranches,
+		)
+		require.Equal(t, len(conflictBranches), jsonHandler.Result.ConflictCount)
 	})
 }
