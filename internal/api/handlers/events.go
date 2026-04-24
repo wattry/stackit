@@ -47,6 +47,8 @@ func (b *EventBroadcaster) Done() <-chan struct{} {
 }
 
 // Close notifies all subscribers to exit and prevents future broadcasts.
+// It closes every active client channel so SSE handlers blocked on a receive
+// unblock promptly and graceful HTTP shutdown can complete.
 func (b *EventBroadcaster) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -55,6 +57,10 @@ func (b *EventBroadcaster) Close() {
 	}
 	b.closed = true
 	close(b.shutdownCh)
+	for ch := range b.clients {
+		close(ch)
+		delete(b.clients, ch)
+	}
 }
 
 func (b *EventBroadcaster) subscribe() (chan string, bool) {
