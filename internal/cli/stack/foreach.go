@@ -35,12 +35,14 @@ func NewForeachCmd() *cobra.Command {
 The command is executed via /bin/sh -c.
 
 By default, it runs on the current branch and all its descendants (up-stack).
+When --parallel is used without an explicit scope, it runs on the whole stack.
 
 Examples:
   st foreach mise run lint
   st foreach --stack 'go test ./... && go build'
   st foreach --downstack go test ./...
   st foreach --parallel mise run test
+  st foreach --jobs 4 mise run test
   st foreach --all-stacks --parallel mise run test:fast
   st foreach --stacks featA,featB --parallel mise run test:fast`,
 		Args:         cobra.MinimumNArgs(1),
@@ -59,6 +61,9 @@ Examples:
 				if cmd.Flags().Changed("upstack") || cmd.Flags().Changed("downstack") || cmd.Flags().Changed("stack") {
 					return fmt.Errorf("--upstack, --downstack, and --stack cannot be used with --all-stacks or --stacks")
 				}
+			}
+			if jobs > 0 && !parallel && !firstFail {
+				parallel = true
 			}
 
 			return common.Run(cmd, func(ctx *app.Context) error {
@@ -134,7 +139,7 @@ Examples:
 	cmd.Flags().BoolVar(&noFailFast, "no-fail-fast", false, "Don't stop execution on the first failure")
 	cmd.Flags().BoolVarP(&parallel, "parallel", "p", false, "Run commands in parallel using git worktrees")
 	cmd.Flags().BoolVar(&firstFail, "find-first-failure", false, "Run branches at each stack depth in parallel and stop after the first failing depth")
-	cmd.Flags().IntVarP(&jobs, "jobs", "j", 0, "Number of parallel jobs (default: number of CPUs)")
+	cmd.Flags().IntVarP(&jobs, "jobs", "j", 0, "Number of parallel jobs (default: number of CPUs). Implies --parallel unless --find-first-failure is set")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output results in JSON format.")
 
 	return cmd

@@ -62,7 +62,21 @@ Summary:
 All branches completed successfully (2 total)
 `), normalized)
 
-		// 3. Failure output
+		// 3. --jobs implies parallel mode
+		output, err = s.RunCliAndGetOutput("foreach", "--jobs", "2", "echo", "jobs")
+		require.NoError(t, err)
+		normalized = testhelpers.NormalizeOutput(output)
+		require.Equal(t, testhelpers.NormalizeOutput(`
+Executing in parallel: ..
+Summary:
+  ✓ branch1 (current)
+    jobs
+  ✓ branch2
+    jobs
+All branches completed successfully (2 total)
+`), normalized)
+
+		// 4. Failure output
 		output, err = s.RunCliAndGetOutput("foreach", "false")
 		require.Error(t, err)
 		normalized = testhelpers.NormalizeOutput(output)

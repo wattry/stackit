@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	stdruntime "runtime"
 	"strings"
-	"sync"
 
 	"stackit.dev/stackit/internal/actions/worktree"
 	"stackit.dev/stackit/internal/app"
@@ -251,6 +250,35 @@ func foreachSequential(ctx *app.Context, opts Options, branches []engine.Branch,
 }
 
 func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, handler Handler) error {
+	fullCommand, approvedHooks, numJobs := prepareWorktreeRun(ctx, opts)
+	sortedResults := runBranchesInWorktrees(ctx, opts, branches, handler, fullCommand, approvedHooks, numJobs)
+
+	if hasFailedResult(sortedResults) {
+		if !opts.FailFast {
+			handler.OnEvent(CompletionEvent{
+				Success: true,
+				Message: "Execution complete",
+				Results: sortedResults,
+			})
+			return nil
+		}
+		handler.OnEvent(CompletionEvent{
+			Success: false,
+			Message: "Command failed on one or more branches",
+			Results: sortedResults,
+		})
+		return fmt.Errorf("command failed on one or more branches")
+	}
+
+	handler.OnEvent(CompletionEvent{
+		Success: true,
+		Message: "Execution complete",
+		Results: sortedResults,
+	})
+	return nil
+}
+
+func prepareWorktreeRun(ctx *app.Context, opts Options) (string, []string, int) {
 	numJobs := opts.Jobs
 	if numJobs <= 0 {
 		numJobs = stdruntime.NumCPU()
@@ -269,143 +297,11 @@ func foreachParallel(ctx *app.Context, opts Options, branches []engine.Branch, h
 	}
 
 	fullCommand := strings.Join(append([]string{opts.Command}, opts.Args...), " ")
-
-	type result struct {
-		branchName string
-		output     string
-		exitCode   int
-		err        error
-	}
-
-	results := make(chan result, len(branches))
-
-	// Context for canceling remaining jobs if fail-fast is on
-	runCtx, cancel := context.WithCancel(ctx.Context)
-	defer cancel()
-
-	var mu sync.Mutex
-	var firstErr error
-
-	utils.RunWithWorkers(branches, numJobs, func(branch engine.Branch) {
-		select {
-		case <-runCtx.Done():
-			return
-		default:
-		}
-
-		branchName := branch.GetName()
-
-		// Emit running event
-		handler.OnEvent(BranchProgressEvent{
-			BranchName: branchName,
-			Status:     StatusRunning,
-		})
-
-		res := executeCommandOnBranch(runCtx, ctx, branch, fullCommand, approvedHooks)
-
-		if res.err != nil {
-			mu.Lock()
-			if firstErr == nil {
-				firstErr = res.err
-			}
-			mu.Unlock()
-			if opts.FailFast {
-				cancel()
-			}
-
-			handler.OnEvent(BranchProgressEvent{
-				BranchName: branchName,
-				Status:     StatusError,
-				Output:     res.output,
-				Error:      res.err,
-			})
-		} else {
-			handler.OnEvent(BranchProgressEvent{
-				BranchName: branchName,
-				Status:     StatusDone,
-				Output:     res.output,
-			})
-		}
-
-		results <- result{
-			branchName: res.branchName,
-			output:     res.output,
-			exitCode:   res.exitCode,
-			err:        res.err,
-		}
-	})
-	close(results)
-
-	// Collect all results for consolidated output
-	allResults := make([]BranchResult, 0, len(branches))
-	for res := range results {
-		// Events already handled in goroutines, but collect results for summary
-		status := StatusDone
-		if res.err != nil {
-			status = StatusError
-		}
-		allResults = append(allResults, BranchResult{
-			BranchName: res.branchName,
-			Status:     status,
-			ExitCode:   res.exitCode,
-			Output:     res.output,
-			Error:      res.err,
-		})
-	}
-
-	// Sort results to match branch order
-	resultMap := make(map[string]BranchResult)
-	for _, r := range allResults {
-		resultMap[r.BranchName] = r
-	}
-	sortedResults := make([]BranchResult, 0, len(branches))
-	for _, branch := range branches {
-		if result, ok := resultMap[branch.GetName()]; ok {
-			sortedResults = append(sortedResults, result)
-		}
-	}
-
-	if firstErr != nil {
-		// Only return error if FailFast is true
-		if opts.FailFast {
-			handler.OnEvent(CompletionEvent{
-				Success: false,
-				Message: "Command failed on one or more branches",
-				Results: sortedResults,
-			})
-			return fmt.Errorf("command failed on one or more branches")
-		}
-		// With --no-fail-fast, continue and return nil (errors are in results)
-		handler.OnEvent(CompletionEvent{
-			Success: true,
-			Message: "Execution complete",
-			Results: sortedResults,
-		})
-		return nil
-	}
-
-	handler.OnEvent(CompletionEvent{
-		Success: true,
-		Message: "Execution complete",
-		Results: sortedResults,
-	})
-	return nil
+	return fullCommand, approvedHooks, numJobs
 }
 
 func foreachFindFirstFailure(ctx *app.Context, opts Options, branches []engine.Branch, graph *engine.StackGraph, handler Handler) error {
-	numJobs := opts.Jobs
-	if numJobs <= 0 {
-		numJobs = stdruntime.NumCPU()
-	}
-
-	_ = ctx.Engine.PruneWorktrees(ctx.Context)
-
-	approvedHooks, err := worktree.ResolveApprovedHooks(ctx)
-	if err != nil {
-		ctx.Output.Warn("Failed to resolve worktree hooks: %v", err)
-	}
-
-	fullCommand := strings.Join(append([]string{opts.Command}, opts.Args...), " ")
+	fullCommand, approvedHooks, numJobs := prepareWorktreeRun(ctx, opts)
 	branchesByDepth := groupBranchesByDepth(branches, graph)
 
 	allResults := make([]BranchResult, 0, len(branches))
@@ -416,9 +312,10 @@ func foreachFindFirstFailure(ctx *app.Context, opts Options, branches []engine.B
 		allResults = append(allResults, groupResults...)
 
 		if hasFailedResult(groupResults) {
+			message := fmt.Sprintf("Command failed at stack depth %d", depthGroup.depth)
 			handler.OnEvent(CompletionEvent{
 				Success: false,
-				Message: fmt.Sprintf("Command failed at stack depth %d", depthGroup.depth),
+				Message: message,
 				Results: allResults,
 			})
 			return fmt.Errorf("command failed at stack depth %d", depthGroup.depth)
@@ -558,7 +455,7 @@ func executeCommandOnBranch(ctx context.Context, appCtx *app.Context, branch eng
 	}{branchName: branch.GetName()}
 
 	// Create a temporary directory for the worktree.
-	// Use SkipPrune variant since foreachParallel already pruned once before parallel execution.
+	// Use SkipPrune variant since worktree execution pruned once before parallel execution.
 	worktreePath, cleanup, err := appCtx.Engine.CreateTemporaryWorktreeSkipPrune(ctx, branch.GetName(), "stackit-foreach-*")
 	if err != nil {
 		res.exitCode = -1
