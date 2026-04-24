@@ -1426,6 +1426,34 @@ func TestSetParentScenarios(t *testing.T) {
 		require.Equal(t, mainNewSHA, *meta.GetParentBranchRevision())
 		require.NotEqual(t, *originalMeta.GetParentBranchRevision(), *meta.GetParentBranchRevision())
 	})
+
+	t.Run("reparent fails when divergence point cannot be determined", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+		s.CreateBranch("branch1").
+			CommitChange("file1.txt", "feat: branch1").
+			TrackBranch("branch1", "main")
+		s.CreateBranch("branch2").
+			CommitChange("file2.txt", "feat: branch2").
+			TrackBranch("branch2", "branch1")
+
+		missingParent := "missing-parent"
+		meta, err := s.Engine.Git().ReadMetadata("branch2")
+		require.NoError(t, err)
+		meta = meta.WithParentBranchName(&missingParent).WithParentBranchRevision(nil)
+		require.NoError(t, s.Engine.Git().WriteMetadata("branch2", meta))
+		require.NoError(t, s.Engine.Rebuild("main"))
+
+		err = s.Engine.ReparentBranch(context.Background(), s.Engine.GetBranch("branch2"), s.Engine.GetBranch("main"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to determine divergence point for branch2")
+
+		meta, err = s.Engine.Git().ReadMetadata("branch2")
+		require.NoError(t, err)
+		require.Equal(t, missingParent, *meta.GetParentBranchName())
+		require.Nil(t, meta.GetParentBranchRevision())
+	})
 }
 
 func TestFrozenBranches(t *testing.T) {

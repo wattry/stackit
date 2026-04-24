@@ -423,7 +423,10 @@ func (e *engineImpl) setParentPreservingDivergence(ctx context.Context, branch B
 // divergence point. This is the preferred way to reparent an existing branch
 // when the branch's own commits should not change.
 func (e *engineImpl) ReparentBranch(ctx context.Context, branch Branch, newParent Branch) error {
-	div, _ := e.GetDivergencePoint(branch.GetName())
+	div, err := e.GetDivergencePoint(branch.GetName())
+	if err != nil {
+		return fmt.Errorf("failed to determine divergence point for %s: %w", branch.GetName(), err)
+	}
 	return e.setParentPreservingDivergence(ctx, branch, newParent, div)
 }
 
@@ -434,9 +437,11 @@ func (e *engineImpl) ReparentBranch(ctx context.Context, branch Branch, newParen
 func (e *engineImpl) ReparentBranches(ctx context.Context, branchNames []string, newParent Branch) error {
 	divPoints := make(map[string]string, len(branchNames))
 	for _, name := range branchNames {
-		if div, err := e.GetDivergencePoint(name); err == nil {
-			divPoints[name] = div
+		div, err := e.GetDivergencePoint(name)
+		if err != nil {
+			return fmt.Errorf("failed to determine divergence point for %s: %w", name, err)
 		}
+		divPoints[name] = div
 	}
 
 	for _, name := range branchNames {
