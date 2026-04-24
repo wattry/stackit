@@ -5,14 +5,89 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { ChevronDown, ChevronRight, Folder, GitCommitHorizontal, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { FileTree, useFileTree } from "@pierre/trees/react";
+import { ChevronDown, ChevronRight, GitCommitHorizontal, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBranchDiff, type BranchDiffResponse, type CommitResponse } from "@/lib/api";
 import { useRepo } from "@/components/providers/repo-provider";
 import { useTheme } from "@/components/providers/theme-provider";
 import { commitUrl } from "@/lib/github";
-import { getFileIcon } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
+
+type TreeGitStatus = "added" | "deleted" | "modified" | "renamed";
+
+function mapDiffTypeToGitStatus(type: FileDiffMetadata["type"]): TreeGitStatus {
+  switch (type) {
+    case "new":
+      return "added";
+    case "deleted":
+      return "deleted";
+    case "rename-pure":
+    case "rename-changed":
+      return "renamed";
+    default:
+      return "modified";
+  }
+}
+
+// Mirrors @pierre/trees' default sort: directories-first with natural-sort on segments.
+function splitIntoNaturalTokens(value: string): (string | number)[] {
+  const tokens: (string | number)[] = [];
+  let tokenStart = 0;
+  let index = 0;
+  const isDigit = (code: number) => code >= 48 && code <= 57;
+  while (index < value.length) {
+    while (index < value.length && !isDigit(value.charCodeAt(index))) index += 1;
+    if (index >= value.length) break;
+    if (index > tokenStart) tokens.push(value.slice(tokenStart, index));
+    let numberValue = 0;
+    while (index < value.length && isDigit(value.charCodeAt(index))) {
+      numberValue = numberValue * 10 + (value.charCodeAt(index) - 48);
+      index += 1;
+    }
+    tokens.push(numberValue);
+    tokenStart = index;
+  }
+  if (tokenStart < value.length || tokens.length === 0) {
+    tokens.push(value.slice(tokenStart));
+  }
+  return tokens;
+}
+
+function compareSegments(left: string, right: string): number {
+  const l = left.toLowerCase();
+  const r = right.toLowerCase();
+  const lt = splitIntoNaturalTokens(l);
+  const rt = splitIntoNaturalTokens(r);
+  const n = Math.min(lt.length, rt.length);
+  for (let i = 0; i < n; i++) {
+    if (lt[i] === rt[i]) continue;
+    if (typeof lt[i] === "number" && typeof rt[i] === "number") {
+      return (lt[i] as number) < (rt[i] as number) ? -1 : 1;
+    }
+    const ls = String(lt[i]);
+    const rs = String(rt[i]);
+    if (ls !== rs) return ls < rs ? -1 : 1;
+  }
+  if (lt.length !== rt.length) return lt.length < rt.length ? -1 : 1;
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
+function compareTreePaths(a: string, b: string): number {
+  const as = a.split("/");
+  const bs = b.split("/");
+  const shared = Math.min(as.length, bs.length);
+  for (let d = 0; d < shared; d++) {
+    if (as[d] === bs[d]) continue;
+    const aIsDir = d < as.length - 1;
+    const bIsDir = d < bs.length - 1;
+    if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
+    return compareSegments(as[d], bs[d]);
+  }
+  if (as.length !== bs.length) return as.length < bs.length ? -1 : 1;
+  return 0;
+}
 
 interface BranchDiffProps {
   branchName: string;
@@ -94,107 +169,6 @@ function getChangeTypeIcon(file: FileDiffMetadata) {
       )}
     </svg>
   );
-}
-
-interface ExplorerFileEntry {
-  key: string;
-  title: string;
-  path: string;
-  name: string;
-}
-
-interface ExplorerFolderNode {
-  name: string;
-  path: string;
-  folders: Map<string, ExplorerFolderNode>;
-  files: ExplorerFileEntry[];
-}
-
-interface ExplorerFolderRow {
-  kind: "folder";
-  key: string;
-  name: string;
-  depth: number;
-}
-
-interface ExplorerFileRow {
-  kind: "file";
-  key: string;
-  fileKey: string;
-  depth: number;
-  name: string;
-  title: string;
-}
-
-type ExplorerRow = ExplorerFolderRow | ExplorerFileRow;
-
-function createFolderNode(name: string, path: string): ExplorerFolderNode {
-  return {
-    name,
-    path,
-    folders: new Map<string, ExplorerFolderNode>(),
-    files: [],
-  };
-}
-
-function buildExplorerRows(entries: ExplorerFileEntry[]): ExplorerRow[] {
-  const root = createFolderNode("", "");
-  const sortedEntries = [...entries].sort((a, b) => a.path.localeCompare(b.path));
-
-  sortedEntries.forEach((entry) => {
-    const segments = entry.path.split("/").filter(Boolean);
-    const fileName = segments.at(-1) ?? entry.path;
-    let node = root;
-    let currentPath = "";
-
-    segments.slice(0, -1).forEach((segment) => {
-      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-      let folder = node.folders.get(segment);
-      if (!folder) {
-        folder = createFolderNode(segment, currentPath);
-        node.folders.set(segment, folder);
-      }
-      node = folder;
-    });
-
-    node.files.push({
-      ...entry,
-      name: fileName,
-    });
-  });
-
-  const rows: ExplorerRow[] = [];
-
-  function walk(node: ExplorerFolderNode, depth: number) {
-    const folders = Array.from(node.folders.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
-    const files = [...node.files].sort((a, b) => a.name.localeCompare(b.name));
-
-    folders.forEach((folder) => {
-      rows.push({
-        kind: "folder",
-        key: `folder:${folder.path}`,
-        name: folder.name,
-        depth,
-      });
-      walk(folder, depth + 1);
-    });
-
-    files.forEach((file) => {
-      rows.push({
-        kind: "file",
-        key: `file:${file.key}`,
-        fileKey: file.key,
-        depth,
-        name: file.name,
-        title: file.title,
-      });
-    });
-  }
-
-  walk(root, 0);
-  return rows;
 }
 
 function relativeTime(iso: string): string {
@@ -296,7 +270,9 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
     }
 
     try {
-      const files = parsePatchFiles(diff.patch).flatMap((group) => group.files);
+      const files = parsePatchFiles(diff.patch)
+        .flatMap((group) => group.files)
+        .sort((a, b) => compareTreePaths(a.name, b.name));
       return { files, parseError: null as string | null };
     } catch (err) {
       return {
@@ -315,19 +291,6 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
     return next;
   }, [collapsedFiles, parsed.files]);
 
-  const explorerRows = useMemo(
-    () =>
-      buildExplorerRows(
-        parsed.files.map((file, index) => ({
-          key: getFileKey(file, index),
-          title: getFileLabel(file),
-          path: file.name,
-          name: file.name,
-        }))
-      ),
-    [parsed.files]
-  );
-
   const fileKeys = useMemo(
     () => parsed.files.map((file, index) => getFileKey(file, index)),
     [parsed.files]
@@ -336,6 +299,85 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
     activeFileKey && fileKeys.includes(activeFileKey)
       ? activeFileKey
       : (fileKeys[0] ?? null);
+
+  const treePaths = useMemo(
+    () => parsed.files.map((file) => file.name),
+    [parsed.files]
+  );
+
+  const treeGitStatus = useMemo(
+    () =>
+      parsed.files.map((file) => ({
+        path: file.name,
+        status: mapDiffTypeToGitStatus(file.type),
+      })),
+    [parsed.files]
+  );
+
+  const parsedFilesRef = useRef(parsed.files);
+  useEffect(() => {
+    parsedFilesRef.current = parsed.files;
+  }, [parsed.files]);
+
+  const skipNextScroll = useRef(false);
+  const suppressCount = useRef(0);
+  const observerLockedUntil = useRef(0);
+
+  const handleTreeSelection = useCallback((paths: readonly string[]) => {
+    if (suppressCount.current > 0) {
+      suppressCount.current -= 1;
+      return;
+    }
+    const path = paths[0];
+    if (!path) return;
+    const files = parsedFilesRef.current;
+    const index = files.findIndex((f) => f.name === path);
+    if (index < 0) return;
+    const key = getFileKey(files[index], index);
+    setActiveFileKey(key);
+    if (skipNextScroll.current) {
+      skipNextScroll.current = false;
+      return;
+    }
+    observerLockedUntil.current = performance.now() + 700;
+    fileSectionRefs.current[key]?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
+  const { model: treeModel } = useFileTree({
+    paths: [],
+    initialExpansion: "open",
+    icons: "standard",
+    onSelectionChange: handleTreeSelection,
+  });
+
+  useEffect(() => {
+    treeModel.resetPaths(treePaths);
+    treeModel.setGitStatus(treeGitStatus);
+    if (treePaths.length > 0) {
+      skipNextScroll.current = true;
+      suppressCount.current += 1;
+      treeModel.getItem(treePaths[0])?.select();
+    }
+  }, [treeModel, treePaths, treeGitStatus]);
+
+  useEffect(() => {
+    if (!selectedFileKey) return;
+    const idx = parsedFilesRef.current.findIndex(
+      (f, i) => getFileKey(f, i) === selectedFileKey
+    );
+    if (idx < 0) return;
+    const path = parsedFilesRef.current[idx].name;
+    const current = treeModel.getSelectedPaths();
+    if (current.length === 1 && current[0] === path) return;
+    const toDeselect = current.filter((p) => p !== path);
+    const shouldSelect = !current.includes(path);
+    suppressCount.current += toDeselect.length + (shouldSelect ? 1 : 0);
+    toDeselect.forEach((p) => treeModel.getItem(p)?.deselect());
+    if (shouldSelect) treeModel.getItem(path)?.select();
+  }, [selectedFileKey, treeModel]);
 
   useEffect(() => {
     if (parsed.files.length === 0) return;
@@ -347,6 +389,7 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (performance.now() < observerLockedUntil.current) return;
         const visible = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
@@ -566,42 +609,7 @@ export function BranchDiff({ branchName, revision, commits, onExit }: BranchDiff
               Files
             </div>
             <div className={explorerListClass}>
-              <ul className="space-y-0.5">
-                {explorerRows.map((row) => (
-                  <li key={row.key}>
-                    {row.kind === "folder" ? (
-                      <div
-                        className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-muted-foreground"
-                        style={{ paddingLeft: `${row.depth * 14 + 8}px` }}
-                      >
-                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                        <span className="truncate">{row.name}</span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setActiveFileKey(row.fileKey);
-                          fileSectionRefs.current[row.fileKey]?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left font-mono text-xs transition-colors",
-                          selectedFileKey === row.fileKey
-                            ? "bg-primary/10 text-foreground"
-                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                        )}
-                        style={{ paddingLeft: `${row.depth * 14 + 8}px` }}
-                        title={row.title}
-                      >
-                        {getFileIcon(row.name)}
-                        <span className="truncate">{row.name}</span>
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <FileTree model={treeModel} style={{ height: "100%" }} />
             </div>
           </aside>
 
