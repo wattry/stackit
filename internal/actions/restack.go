@@ -102,6 +102,11 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		return nil
 	}
 
+	conflictMode := ConflictModeEnterWorkflow
+	if opts.ContinueOnConflict {
+		conflictMode = ConflictModeContinue
+	}
+
 	for _, group := range branchGroups {
 		// Wrap the progress callback to inject the stack root for this group.
 		groupRoot := group.rootBranch
@@ -114,7 +119,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		// --continue-on-conflict skip a conflicted stack while still restacking
 		// other independent stacks.
 		sortedBranches := eng.SortBranchesTopologically(group.branches)
-		if err := RestackBranchesWithHandler(ctx, sortedBranches, progress, !opts.ContinueOnConflict); err != nil {
+		if err := RestackBranchesWithHandler(ctx, sortedBranches, progress, conflictMode); err != nil {
 			handler.OnRestackComplete(restacked, skipped, conflicts)
 			return fmt.Errorf("restack failed: %w", err)
 		}
@@ -126,10 +131,66 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	return nil
 }
 
+// parallelResultCollector serializes progress updates, error accumulation, and
+// counter bookkeeping across parallel restack workers. All methods take the
+// mutex internally; callers must not hold it.
+type parallelResultCollector struct {
+	mu        sync.Mutex
+	eng       engine.BranchReader
+	handler   handlers.RestackHandler
+	restacked int
+	skipped   int
+	conflicts []string
+	errs      []error
+}
+
+// recordProgress routes a progress event from a worker through handleRestackProgress.
+func (c *parallelResultCollector) recordProgress(p RestackProgress) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	handleRestackProgress(c.eng, c.handler, p, &c.restacked, &c.skipped, &c.conflicts)
+}
+
+// recordGroupFailure attributes every branch in a failed group to the handler
+// as a conflict so the final summary reflects what the worker did not process.
+// Without this a worktree/engine setup failure silently shows "skipped=0" while
+// an entire stack failed to start.
+func (c *parallelResultCollector) recordGroupFailure(group restackBranchGroup, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.errs = append(c.errs, err)
+	for _, b := range group.branches {
+		handleRestackProgress(c.eng, c.handler, RestackProgress{
+			Branch:    b.GetName(),
+			Result:    engine.RestackConflict,
+			Conflict:  true,
+			StackRoot: group.rootBranch,
+		}, &c.restacked, &c.skipped, &c.conflicts)
+	}
+}
+
+// recordRebaseError records an unexpected error returned from
+// RestackBranchesWithHandler. Per-branch outcomes were already routed through
+// recordProgress by the progress callback before the error surfaced, so only
+// the error itself needs to be captured.
+func (c *parallelResultCollector) recordRebaseError(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.errs = append(c.errs, err)
+}
+
+// joinedError returns the accumulated errors as a single joined error, or nil.
+func (c *parallelResultCollector) joinedError() error {
+	if len(c.errs) == 0 {
+		return nil
+	}
+	return errors.Join(c.errs...)
+}
+
 // restackGroupsParallel runs each independent stack group in its own temporary
 // worktree. The groups have no shared branches, so rebases + ref updates are
-// safe to interleave. Progress callbacks and handler calls are serialized via
-// a mutex to prevent data races on shared counters.
+// safe to interleave. Progress callbacks and handler calls are serialized
+// through parallelResultCollector to prevent data races on shared counters.
 func restackGroupsParallel(
 	ctx *app.Context,
 	opts RestackOptions,
@@ -152,27 +213,7 @@ func restackGroupsParallel(
 	// Snapshot the parent engine state once — each worktree engine gets a copy.
 	snapshot := eng.SnapshotForWorktree()
 
-	// Shared result counters protected by a mutex.
-	var mu sync.Mutex
-	var groupErrs []error
-
-	// recordGroupFailure attributes every branch in a failed group to the handler
-	// as a conflict so the final summary reflects what the worker did not process.
-	// Without this a worktree/engine setup failure silently shows "skipped=0" while
-	// an entire stack failed to start. Caller must not already hold mu.
-	recordGroupFailure := func(group restackBranchGroup, wrappedErr error) {
-		mu.Lock()
-		defer mu.Unlock()
-		groupErrs = append(groupErrs, wrappedErr)
-		for _, b := range group.branches {
-			handleRestackProgress(eng, handler, RestackProgress{
-				Branch:    b.GetName(),
-				Result:    engine.RestackConflict,
-				Conflict:  true,
-				StackRoot: group.rootBranch,
-			}, &restacked, &skipped, &conflicts)
-		}
-	}
+	collector := &parallelResultCollector{eng: eng, handler: handler}
 
 	utils.RunWithWorkers(groups, numJobs, func(group restackBranchGroup) {
 		// Create a temporary worktree for this group. PruneSkip because we
@@ -181,7 +222,7 @@ func restackGroupsParallel(
 		if err != nil {
 			wrappedErr := fmt.Errorf("stack %s: create worktree: %w", group.rootBranch, err)
 			ctx.Logger.Warn("failed to create worktree for parallel restack: %v", wrappedErr)
-			recordGroupFailure(group, wrappedErr)
+			collector.recordGroupFailure(group, wrappedErr)
 			return
 		}
 		defer cleanup()
@@ -194,7 +235,7 @@ func restackGroupsParallel(
 		if err != nil {
 			wrappedErr := fmt.Errorf("stack %s: create worktree engine: %w", group.rootBranch, err)
 			ctx.Logger.Warn("failed to create worktree engine: %v", wrappedErr)
-			recordGroupFailure(group, wrappedErr)
+			collector.recordGroupFailure(group, wrappedErr)
 			return
 		}
 
@@ -203,25 +244,20 @@ func restackGroupsParallel(
 		wtCtx.Engine = wtEngine
 		wtCtx.RepoRoot = wtPath
 
-		// Thread-safe progress callback that funnels into the shared counters + handler.
 		groupRoot := group.rootBranch
 		progress := func(p RestackProgress) {
 			p.StackRoot = groupRoot
-			mu.Lock()
-			defer mu.Unlock()
-			handleRestackProgress(eng, handler, p, &restacked, &skipped, &conflicts)
+			collector.recordProgress(p)
 		}
 
 		// Parallel mode always reports conflicts via callback: the interactive conflict
 		// workflow writes rebase state into the worktree, which defer cleanup() tears
 		// down, so entering it would silently destroy what the user needs to resolve.
 		sortedBranches := eng.SortBranchesTopologically(group.branches)
-		if err := RestackBranchesWithHandler(&wtCtx, sortedBranches, progress, false); err != nil {
+		if err := RestackBranchesWithHandler(&wtCtx, sortedBranches, progress, ConflictModeContinue); err != nil {
 			wrappedErr := fmt.Errorf("stack %s: %w", group.rootBranch, err)
 			ctx.Logger.Warn("parallel restack group failed: %v", wrappedErr)
-			mu.Lock()
-			groupErrs = append(groupErrs, wrappedErr)
-			mu.Unlock()
+			collector.recordRebaseError(wrappedErr)
 		}
 	})
 
@@ -231,11 +267,7 @@ func restackGroupsParallel(
 		ctx.Logger.Warn("failed to rebuild engine after parallel restack: %v", err)
 	}
 
-	if len(groupErrs) > 0 {
-		return restacked, skipped, conflicts, errors.Join(groupErrs...)
-	}
-
-	return restacked, skipped, conflicts, nil
+	return collector.restacked, collector.skipped, collector.conflicts, collector.joinedError()
 }
 
 type restackBranchGroup struct {

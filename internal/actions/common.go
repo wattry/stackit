@@ -68,15 +68,30 @@ type RestackProgress struct {
 // RestackProgress describing the outcome.
 type RestackProgressCallback func(RestackProgress)
 
+// ConflictMode controls how RestackBranchesWithHandler responds to rebase conflicts.
+type ConflictMode int
+
+const (
+	// ConflictModeEnterWorkflow stops at the first conflict, writes rebase state
+	// to the working tree, and expects the user to resolve it with stackit continue.
+	// This is the standalone CLI default.
+	ConflictModeEnterWorkflow ConflictMode = iota
+
+	// ConflictModeContinue validates all branches first, restacks non-conflicting
+	// ones, and reports conflicts through the progress callback without writing
+	// rebase state. Use this in sync mode, parallel workers (rebase state would
+	// be torn down with the worktree), and --continue-on-conflict flows.
+	ConflictModeContinue
+)
+
 // RestackBranches restacks a list of branches using the engine's batch restack method
 func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
-	return RestackBranchesWithHandler(ctx, branches, nil, true)
+	return RestackBranchesWithHandler(ctx, branches, nil, ConflictModeEnterWorkflow)
 }
 
-// RestackBranchesWithHandler restacks branches with optional progress callback
-// If shouldEnterConflictWorkflow is true, stops at first conflict and enters conflict workflow
-// If false, validates all branches first, restacks non-conflicting ones, and reports conflicts via callback
-func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, callback RestackProgressCallback, shouldEnterConflictWorkflow bool) error {
+// RestackBranchesWithHandler restacks branches with optional progress callback.
+// See ConflictMode for how mode controls conflict handling.
+func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, callback RestackProgressCallback, mode ConflictMode) error {
 	if len(branches) == 0 {
 		return nil
 	}
@@ -169,7 +184,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	}
 
 	// For standalone mode, enter conflict workflow on first conflict
-	if shouldEnterConflictWorkflow && len(conflictBranches) > 0 {
+	if mode == ConflictModeEnterWorkflow && len(conflictBranches) > 0 {
 		firstConflict := conflictBranches[0]
 
 		// Restack successfully up to the conflict
@@ -200,7 +215,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 		// Sync mode should never leave the repo in a conflict workflow unless explicitly requested.
 		// If a runtime conflict occurred despite validation, clean it up and restore checkout state.
-		if !shouldEnterConflictWorkflow && ctx.Engine.Git().IsRebaseInProgress(ctx.Context) {
+		if mode == ConflictModeContinue && ctx.Engine.Git().IsRebaseInProgress(ctx.Context) {
 			conflictBranch := batchResult.ConflictBranch
 			if conflictBranch == "" {
 				conflictBranch = "unknown"
@@ -319,7 +334,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	}
 
 	// Report conflicts via callback for sync mode
-	if !shouldEnterConflictWorkflow && len(conflictBranches) > 0 {
+	if mode == ConflictModeContinue && len(conflictBranches) > 0 {
 		currentBranch := ctx.Engine.CurrentBranch()
 		currentBranchName := ""
 		if currentBranch != nil {
