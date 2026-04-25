@@ -3,7 +3,6 @@ package navigation
 import (
 	"fmt"
 	"slices"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -39,18 +38,11 @@ the --to flag is used to specify a target branch to navigate towards.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				// Parse steps from positional argument if provided
-				if len(args) > 0 {
-					parsedSteps, err := strconv.Atoi(args[0])
-					if err != nil {
-						return fmt.Errorf("invalid steps argument: %s (must be a number)", args[0])
-					}
-					steps = parsedSteps
+				parsedSteps, err := parsePositiveSteps(args, steps)
+				if err != nil {
+					return err
 				}
-
-				if steps < 1 {
-					return fmt.Errorf("steps must be at least 1")
-				}
+				steps = parsedSteps
 
 				// Get current branch
 				currentBranch := ctx.Engine.CurrentBranch()
@@ -133,19 +125,8 @@ the --to flag is used to specify a target branch to navigate towards.`,
 					return nil
 				}
 
-				// Checkout the target branch
-				result, err := actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch}, nil)
-				if err != nil {
-					return err
-				}
-				if common.HandleCheckoutResult(ctx.Output, result) {
-					return nil
-				}
-				if result.WorktreeSwitchPath != "" {
-					_, err = actions.CheckoutAction(ctx, actions.CheckoutOptions{BranchName: targetBranch, SkipWorktreeSwitch: true}, nil)
-					return err
-				}
-				return nil
+				_, err = common.Checkout(ctx, actions.CheckoutOptions{BranchName: targetBranch}, nil)
+				return err
 			})
 		},
 	}

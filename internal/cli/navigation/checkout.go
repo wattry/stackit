@@ -51,18 +51,8 @@ by typing. Use flags to customize which branches are shown.`,
 				}
 
 				// Execute checkout action with handler
-				result, err := actions.CheckoutAction(ctx, opts, handler)
+				_, err := common.Checkout(ctx, opts, handler)
 				if err != nil {
-					return err
-				}
-
-				if result.WorktreeSwitchPath != "" {
-					if common.HandleCheckoutResult(ctx.Output, result) {
-						return nil
-					}
-					// No shell integration - fall back to regular checkout
-					opts.SkipWorktreeSwitch = true
-					_, err = actions.CheckoutAction(ctx, opts, handler)
 					return err
 				}
 

@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"stackit.dev/stackit/internal/actions"
+	"stackit.dev/stackit/internal/app"
 	"stackit.dev/stackit/internal/output"
 )
 
@@ -31,4 +32,31 @@ func HandleCheckoutResult(out output.Output, result actions.CheckoutResult) bool
 		out.Tip("%s", tip)
 	}
 	return false
+}
+
+// CompleteCheckout handles a CheckoutAction result, including the fallback
+// checkout path when shell integration cannot switch worktrees for the caller.
+func CompleteCheckout(ctx *app.Context, result actions.CheckoutResult, fallbackOpts actions.CheckoutOptions, handler actions.CheckoutHandler) error {
+	if HandleCheckoutResult(ctx.Output, result) {
+		return nil
+	}
+	if result.WorktreeSwitchPath == "" {
+		return nil
+	}
+
+	if !fallbackOpts.CheckoutTrunk {
+		fallbackOpts.BranchName = result.TargetBranch
+	}
+	fallbackOpts.SkipWorktreeSwitch = true
+	_, err := actions.CheckoutAction(ctx, fallbackOpts, handler)
+	return err
+}
+
+// Checkout runs CheckoutAction and completes any worktree-switch fallback.
+func Checkout(ctx *app.Context, opts actions.CheckoutOptions, handler actions.CheckoutHandler) (actions.CheckoutResult, error) {
+	result, err := actions.CheckoutAction(ctx, opts, handler)
+	if err != nil {
+		return actions.CheckoutResult{}, err
+	}
+	return result, CompleteCheckout(ctx, result, opts, handler)
 }
