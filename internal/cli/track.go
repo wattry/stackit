@@ -28,16 +28,9 @@ This command can also be used to fix corrupted stackit metadata.`,
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				// Get branch name from args or use current branch
-				branchName := ""
-				if len(args) > 0 {
-					branchName = args[0]
-				} else {
-					currentBranch := ctx.Engine.CurrentBranch()
-					if currentBranch == nil {
-						return errors.ErrNotOnBranch
-					}
-					branchName = currentBranch.GetName()
+				branchName, err := common.ResolveBranchArg(ctx, args, errors.ErrNotOnBranch)
+				if err != nil {
+					return err
 				}
 
 				// Execute track action
