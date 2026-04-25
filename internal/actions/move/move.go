@@ -148,7 +148,7 @@ func validateMoveTargets(eng engine.Engine, source, onto string) error {
 }
 
 func buildMovePlan(eng engine.Engine, out output.Output, source, onto string, rebaseSpecs []engine.RebaseSpec) (*movePlan, error) {
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	sourceBranch := eng.GetBranch(source)
 	ontoBranch := eng.GetBranch(onto)
@@ -341,7 +341,7 @@ func restackAndMark(ctx *app.Context, plan *movePlan, sourceBranch engine.Branch
 	eng := ctx.Engine
 	out := ctx.Output
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	out.Info("Moved %s from %s to %s.",
 		style.ColorBranchName(plan.source, true),

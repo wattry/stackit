@@ -203,7 +203,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 	// issues, we skip the full plan display and use a simple "Merge X into Y?" confirmation.
 	// This reduces friction for the common case of merging a single PR, while still showing
 	// the full plan for complex scenarios where users need to understand all the steps.
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	isSimpleMerge := IsSingleBranchLeafMerge(plan, graph) &&
 		len(validation.Errors) == 0 &&
 		len(validation.Warnings) == 0

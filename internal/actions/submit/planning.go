@@ -140,7 +140,7 @@ func getBranchesToSubmit(ctx *app.Context, opts Options) ([]string, error) {
 	if !stackRange.RecursiveParents && !stackRange.IncludeCurrent && !stackRange.RecursiveChildren {
 		stackRange = engine.StackRangeDownstack(true)
 	}
-	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 	stackBranches := graph.Range(nav.GetBranch(branchName), stackRange)
 	allBranches := make([]string, len(stackBranches))
 	for i, b := range stackBranches {

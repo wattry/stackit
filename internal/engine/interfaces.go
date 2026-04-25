@@ -15,6 +15,7 @@ type StackNavigator interface {
 	CurrentBranch() *Branch
 	Trunk() Branch
 	GetBranch(branchName string) Branch
+	Graph(strategy SortStrategy) *StackGraph
 	BranchesDepthFirst(startBranch Branch) iter.Seq2[Branch, int]
 	SortBranchesTopologically(branches []Branch) []Branch
 	FindBranchForCommit(commitSHA string) (string, error)

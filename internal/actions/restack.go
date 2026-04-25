@@ -43,7 +43,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	} else {
 		// Get branches to restack based on scope
 		branch := eng.GetBranch(opts.BranchName)
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		graph := eng.Graph(engine.SortStrategyAlphabetical)
 		branchGroups = []restackBranchGroup{{
 			branches: graph.Range(branch, opts.Scope),
 		}}

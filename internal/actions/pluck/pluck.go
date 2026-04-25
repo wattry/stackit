@@ -34,7 +34,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 	defer handler.Cleanup()
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Default source to current branch
 	source := opts.Source
@@ -250,7 +250,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	handler.OnStep(StepRestackingOrphans, basehandler.StatusStarted, "Restacking branches...")
 
 	// Rebuild graph after parent changes
-	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph = eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Collect all branches that need restacking:
 	// 1. The children (now on grandparent) and their descendants

@@ -205,7 +205,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		ctx.Output.Warn("Stack metadata cleanup: %s", errMsg)
 	}
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Add branches with new parents to restack list (skip dirty stacks)
 	for _, branchName := range cleanResult.BranchesWithNewParents {

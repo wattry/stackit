@@ -32,7 +32,7 @@ func (a *ViewAssembler) Build(ctx context.Context) (httpcontract.ViewResponse, e
 		return httpcontract.ViewResponse{}, fmt.Errorf("failed to discover stacks: %w", err)
 	}
 
-	graph := engine.BuildStackGraph(a.eng, engine.SortStrategySmart, nil)
+	graph := a.eng.Graph(engine.SortStrategySmart)
 	checksMap := a.fetchChecks(ctx, stacks)
 	details := a.mapStackDetails(graph, stacks, checksMap)
 

@@ -67,7 +67,7 @@ func DefaultNavigationOptions() NavigationOptions {
 func countStackBranches(branch string, eng engine.BranchReader) int {
 	terminalParentName := findTerminalParent(branch, eng)
 	terminalParent := eng.GetBranch(terminalParentName)
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	count := 0
 	branchRef := eng.GetBranch(branch)
@@ -145,7 +145,7 @@ func renderNavigationContent(branch string, eng engine.BranchReader, opts Naviga
 
 		terminalParentName := findTerminalParent(branch, eng)
 		terminalParent := eng.GetBranch(terminalParentName)
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 		// Add scope if present
 		scope := eng.GetScope(branchObj)

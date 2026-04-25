@@ -17,7 +17,7 @@ func DiscoverIndependentStacks(eng BranchReader) []IndependentStack {
 // DiscoverIndependentStacksWithSort is like DiscoverIndependentStacks, but allows
 // callers to choose how sibling branches are ordered.
 func DiscoverIndependentStacksWithSort(eng BranchReader, strategy SortStrategy) []IndependentStack {
-	graph := BuildStackGraph(eng, strategy, nil)
+	graph := eng.Graph(strategy)
 	trunkNode := graph.GetNode(eng.Trunk().GetName())
 	if trunkNode == nil {
 		return nil

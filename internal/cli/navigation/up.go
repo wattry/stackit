@@ -59,7 +59,7 @@ the --to flag is used to specify a target branch to navigate towards.`,
 				}
 
 				// Build StackGraph for efficient traversals
-				graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+				graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 
 				// Traverse up the specified number of steps
 				targetBranch := currentBranch.GetName()

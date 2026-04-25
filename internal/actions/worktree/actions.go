@@ -55,7 +55,7 @@ func ListAction(ctx *app.Context, _ ListOptions) (*ListResult, error) {
 	}
 
 	// Build stack graph once to get stack sizes
-	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 
 	for _, wt := range worktrees {
 		entry := Entry{
@@ -169,7 +169,7 @@ func RemoveAction(ctx *app.Context, opts RemoveOptions) error {
 		anchorBranch := ctx.Engine.GetBranch(wtInfo.AnchorBranch)
 		if anchorBranch.IsTracked() {
 			// Check for children using stack graph
-			graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+			graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 			children := graph.Children(anchorBranch)
 			if len(children) > 0 {
 				out.Warn("Anchor branch %s has children, not deleting", style.ColorBranchName(wtInfo.AnchorBranch, false))
@@ -458,7 +458,7 @@ func PruneAction(ctx *app.Context, opts PruneOptions) (*PruneResult, error) {
 			// Check if anchor branch has children before deleting
 			anchorBranch := ctx.Engine.GetBranch(wt.AnchorBranch)
 			if anchorBranch.IsTracked() {
-				graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+				graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 				children := graph.Children(anchorBranch)
 				if len(children) > 0 {
 					result.Skipped = append(result.Skipped, SkippedEntry{
@@ -756,7 +756,7 @@ func DetachAction(ctx *app.Context, opts DetachOptions) error {
 	// Handle anchor cleanup based on branch type
 	if isWorktreeAnchor {
 		// This was created by `wt create` - reparent children to trunk and delete anchor
-		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+		graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 		childNames := graph.Children(anchorBranch)
 
 		if len(childNames) > 0 {

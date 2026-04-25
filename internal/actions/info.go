@@ -174,7 +174,7 @@ func InfoAction(ctx *app.Context, opts InfoOptions) error {
 		outputLines = append(outputLines, fmt.Sprintf("%s: %s", style.ColorCyan("Parent"), style.ColorBranchNameWithTrunk(parentBranch.GetName(), false, parentBranch.IsTrunk())))
 	}
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	children := graph.ChildBranches(branchObj)
 	if len(children) > 0 {
 		outputLines = append(outputLines, fmt.Sprintf("%s:", style.ColorCyan("Children")))
@@ -319,7 +319,7 @@ func outputBranchInfoJSON(ctx *app.Context, branch engine.Branch) error {
 	}
 
 	// Children
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	for _, child := range graph.ChildBranches(branch) {
 		info.Children = append(info.Children, child.GetName())
 	}

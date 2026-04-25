@@ -40,7 +40,7 @@ func (h *BranchesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BranchesHandler) listBranches(w http.ResponseWriter, r *http.Request) {
-	graph := engine.BuildStackGraph(h.eng, engine.SortStrategyAlphabetical, nil)
+	graph := h.eng.Graph(engine.SortStrategyAlphabetical)
 	allBranches := h.eng.AllBranches()
 
 	// Filter to only tracked (non-trunk) branches
@@ -84,7 +84,7 @@ func (h *BranchesHandler) getBranch(w http.ResponseWriter, r *http.Request, bran
 		return
 	}
 
-	graph := engine.BuildStackGraph(h.eng, engine.SortStrategyAlphabetical, nil)
+	graph := h.eng.Graph(engine.SortStrategyAlphabetical)
 	node := graph.GetNode(branchName)
 	if node == nil {
 		http.Error(w, "branch not in stack graph", http.StatusNotFound)

@@ -265,7 +265,7 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteStatuses map[string]en
 	visited := make(map[string]bool)
 
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Start DFS from trunk children to handle the tracked hierarchy
 	trunk := eng.Trunk()

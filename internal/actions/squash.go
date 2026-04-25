@@ -62,7 +62,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 		IncludeCurrent:    false,
 		RecursiveChildren: true,
 	}
-	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 	upstackBranches := graph.Range(*currentBranch, rng)
 
 	// Log upstack branches for diagnostics

@@ -106,7 +106,7 @@ func ShowConflict(ctx *app.Context) error {
 	}
 
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Get downstack commits
 	downstackBranches := graph.Range(*currentBranchObj, engine.StackRange{RecursiveParents: true})
