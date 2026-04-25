@@ -110,6 +110,15 @@ func CreatePRBodyFooter(branch string, eng engine.BranchReader) string {
 // Returns empty string if neither navigation nor description should be shown.
 // The footer includes both the stack description and the navigation tree in a combined section.
 func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts NavigationOptions) string {
+	content := renderNavigationContent(branch, eng, opts)
+	if content == "" {
+		return ""
+	}
+
+	return footerTitle + content + footerFooter
+}
+
+func renderNavigationContent(branch string, eng engine.BranchReader, opts NavigationOptions) string {
 	branchObj := eng.GetBranch(branch)
 	showNav := ShouldShowNavigation(opts, branch, eng)
 	desc := eng.GetStackDescription(branchObj)
@@ -190,7 +199,7 @@ func CreatePRBodyFooterWithOptions(branch string, eng engine.BranchReader, opts 
 		}
 	}
 
-	return footerTitle + content.String() + footerFooter
+	return content.String()
 }
 
 // UpdatePRBodyFooter updates an existing PR body with a new footer.
@@ -199,54 +208,21 @@ func UpdatePRBodyFooter(existingBody, footer string) string {
 		return footer
 	}
 
-	// 1. Try markers
-	if strings.Contains(existingBody, SectionStart) {
-		startIdx := strings.Index(existingBody, SectionStart)
-		if _, after, ok := strings.Cut(existingBody, SectionEnd); ok {
-			// Find the beginning of the block (including potential leading newlines and <hr/>)
-			blockStart := startIdx
-			// Look back for up to 3 newlines
-			for range 3 {
-				if blockStart > 0 && existingBody[blockStart-1] == '\n' {
-					blockStart--
-				} else {
-					break
-				}
-			}
-			// Also strip <hr/> separator and any whitespace before it
-			hrTag := "<hr/>"
-			before := existingBody[:blockStart]
-			if idx := strings.LastIndex(before, hrTag); idx >= 0 {
-				// Check if there's only whitespace between <hr/> and the section
-				between := strings.TrimSpace(before[idx+len(hrTag):])
-				if between == "" {
-					// Strip the <hr/> and any preceding newlines
-					blockStart = idx
-					for blockStart > 0 && existingBody[blockStart-1] == '\n' {
-						blockStart--
-					}
-				}
-			}
-			return existingBody[:blockStart] + footer + after
-		}
+	if before, after, found := splitGeneratedFooterBlock(existingBody); found {
+		return before + footer + after
 	}
 
-	// 2. Append footer if it doesn't exist
 	return strings.TrimRight(existingBody, "\n") + footer
 }
 
-// StripFooter removes the stackit-generated footer from a PR body.
-// This also strips the <hr/> separator that precedes the footer.
-func StripFooter(body string) string {
-	if body == "" || !strings.Contains(body, SectionStart) {
-		return body
+func splitGeneratedFooterBlock(body string) (before, after string, found bool) {
+	if !strings.Contains(body, SectionStart) {
+		return "", "", false
 	}
 
 	startIdx := strings.Index(body, SectionStart)
 	if _, after, ok := strings.Cut(body, SectionEnd); ok {
-		// Find the beginning of the block (including potential leading newlines and <hr/>)
 		blockStart := startIdx
-		// Look back for up to 3 newlines
 		for range 3 {
 			if blockStart > 0 && body[blockStart-1] == '\n' {
 				blockStart--
@@ -254,21 +230,30 @@ func StripFooter(body string) string {
 				break
 			}
 		}
-		// Also strip <hr/> separator and any whitespace before it
+
 		hrTag := "<hr/>"
 		before := body[:blockStart]
 		if idx := strings.LastIndex(before, hrTag); idx >= 0 {
-			// Check if there's only whitespace between <hr/> and the section
 			between := strings.TrimSpace(before[idx+len(hrTag):])
 			if between == "" {
-				// Strip the <hr/> and any preceding newlines
 				blockStart = idx
 				for blockStart > 0 && body[blockStart-1] == '\n' {
 					blockStart--
 				}
 			}
 		}
-		return strings.TrimRight(body[:blockStart]+after, "\n")
+
+		return body[:blockStart], after, true
+	}
+
+	return "", "", false
+}
+
+// StripFooter removes the stackit-generated footer from a PR body.
+// This also strips the <hr/> separator that precedes the footer.
+func StripFooter(body string) string {
+	if before, after, found := splitGeneratedFooterBlock(body); found {
+		return strings.TrimRight(before+after, "\n")
 	}
 
 	return body
@@ -345,90 +330,12 @@ func StripLockSection(body string) string {
 // This includes both the stack description and the navigation tree.
 // Returns empty string if neither navigation nor description should be shown.
 func CreateNavigationComment(branch string, eng engine.BranchReader, opts NavigationOptions) string {
-	branchObj := eng.GetBranch(branch)
-	showNav := ShouldShowNavigation(opts, branch, eng)
-	desc := eng.GetStackDescription(branchObj)
-	descContent := formatStackDescription(desc)
-
-	// If nothing to show, return empty
-	if !showNav && descContent == "" {
+	content := renderNavigationContent(branch, eng, opts)
+	if content == "" {
 		return ""
 	}
 
-	var content strings.Builder
-	content.WriteString(CommentMarker + "\n")
-
-	// Add description at the start if present
-	if descContent != "" {
-		content.WriteString(descContent)
-		if showNav {
-			content.WriteString("\n\n")
-		}
-	}
-
-	// Add navigation tree if enabled
-	if showNav {
-		content.WriteString("#### Stack\n\n")
-
-		terminalParentName := findTerminalParent(branch, eng)
-		terminalParent := eng.GetBranch(terminalParentName)
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
-
-		// Add scope if present
-		scope := eng.GetScope(branchObj)
-		if !scope.IsEmpty() {
-			fmt.Fprintf(&content, "**Scope**: %s\n\n", scope.String())
-		}
-
-		// Add notice if present in PrInfo
-		prInfo, _ := branchObj.GetPrInfo()
-		if prInfo != nil {
-			if prInfo.MergeBranch() != "" {
-				if prInfo.State() == "MERGED" {
-					content.WriteString("> 💡 **Notice**: This PR was merged via a merge branch.\n\n")
-				} else {
-					mergeBranch := prInfo.MergeBranch()
-					msg := fmt.Sprintf("> 💡 **Notice**: This PR is part of a stack merge into branch `%s`.\n\n", mergeBranch)
-
-					// If we can find the PR number for the merge branch, show it
-					mBranch := eng.GetBranch(mergeBranch)
-					if mPrInfo, err := mBranch.GetPrInfo(); err == nil && mPrInfo != nil && mPrInfo.Number() != nil {
-						msg = fmt.Sprintf("> 💡 **Notice**: This PR is part of a stack merge. See PR #%d for details.\n\n", *mPrInfo.Number())
-					}
-					content.WriteString(msg)
-				}
-			}
-		}
-
-		// Build tree
-		for b, depth := range eng.BranchesDepthFirst(terminalParent) {
-			if !graph.IsRelated(b, branchObj) {
-				continue
-			}
-
-			leaf := buildLeafWithMarker(eng, b.GetName(), depth, branch, opts.Marker)
-			if leaf != "" {
-				content.WriteString(leaf)
-			}
-		}
-
-		// Add merged downstack history if enabled
-		if opts.ShowMerged {
-			mergedHistory := branchObj.GetMergedDownstack()
-			if len(mergedHistory) > 0 {
-				content.WriteString("\n\n**Previously based on:**")
-				for i := len(mergedHistory) - 1; i >= 0; i-- {
-					mp := mergedHistory[i]
-					if mp.PRNumber != nil {
-						fmt.Fprintf(&content, "\n* ~~PR #%d~~ (merged)", *mp.PRNumber)
-					}
-				}
-			}
-		}
-	}
-
-	content.WriteString("\n\n<sub>Auto-generated by [Stackit](https://github.com/getstackit/stackit)</sub>")
-	return content.String()
+	return CommentMarker + "\n" + content + "\n\n<sub>Auto-generated by [Stackit](https://github.com/getstackit/stackit)</sub>"
 }
 
 // IsStackitComment checks if a comment body is a stackit navigation comment.
