@@ -74,9 +74,7 @@ func RenameAction(ctx *app.Context, opts RenameOptions) error {
 		WithArg(newName),
 		WithFlag(opts.Force, "--force"),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	oldBranchObj := eng.GetBranch(currentBranch)
 	newBranchObj := eng.GetBranch(newName)

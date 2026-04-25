@@ -76,9 +76,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	snapshotOpts := actions.NewSnapshot("flatten",
 		actions.WithArg(branchName),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Build the initial flatten plan by testing which branches can move closer to trunk
 	plan, err := buildFlattenPlan(ctx, eng, featureBranches, trunk, func(current, total int, branchName string) {

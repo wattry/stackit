@@ -57,7 +57,7 @@ func Action(ctx *app.Context, opts Options, h Handler) error {
 		return err
 	}
 
-	takeSnapshot(eng, out, opts)
+	takeSnapshot(ctx, opts)
 
 	if err := validateMoveTargets(eng, source, opts.Onto); err != nil {
 		return err
@@ -126,15 +126,12 @@ func ensureOnto(ctx *app.Context, opts *Options, h Handler, source string) error
 	return nil
 }
 
-func takeSnapshot(eng engine.Engine, out output.Output, opts Options) {
+func takeSnapshot(ctx *app.Context, opts Options) {
 	snapshotOpts := actions.NewSnapshot("move",
 		actions.WithFlagValue("--source", opts.Source),
 		actions.WithFlagValue("--onto", opts.Onto),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 }
 
 func validateMoveTargets(eng engine.Engine, source, onto string) error {

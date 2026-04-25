@@ -65,10 +65,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		WithFlag(opts.ContinueOnConflict, "--continue-on-conflict"),
 		WithFlag(opts.Parallel, "--parallel"),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// If no handler provided, use NullRestackHandler (silent)
 	if handler == nil {

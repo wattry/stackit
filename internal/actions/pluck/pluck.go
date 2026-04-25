@@ -51,9 +51,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		actions.WithFlagValue("--source", opts.Source),
 		actions.WithFlagValue("--onto", opts.Onto),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Validate source branch
 	if err := validation.ValidateSourceBranch(eng, source, "pluck"); err != nil {

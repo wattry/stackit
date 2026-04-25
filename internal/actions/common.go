@@ -40,6 +40,14 @@ func printRerereResolved(ctx *app.Context, count int) {
 	ctx.Output.Info("%s", FormatRerereResolved(count))
 }
 
+// TakeBestEffortSnapshot records an undo snapshot and logs failures without
+// aborting the action.
+func TakeBestEffortSnapshot(ctx *app.Context, opts engine.SnapshotOptions) {
+	if err := ctx.Undo().TakeSnapshot(opts); err != nil {
+		ctx.Output.Debug("Failed to take snapshot: %v", err)
+	}
+}
+
 // Restacker is a minimal interface needed for restacking branches
 type Restacker interface {
 	engine.BranchReader
