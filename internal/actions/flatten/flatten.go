@@ -216,6 +216,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 
 	// Collect all branches that need restacking (moved branches and their descendants)
 	branchesToRestack := make([]engine.Branch, 0)
+	seenRestackBranches := make(map[string]bool)
 	for _, move := range filteredPlan.Moves {
 		moveBranch := eng.GetBranch(move.Branch)
 		descendants := graph.Range(moveBranch, engine.StackRange{
@@ -223,8 +224,16 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			IncludeCurrent:    true,
 			RecursiveParents:  false,
 		})
-		branchesToRestack = append(branchesToRestack, descendants...)
+		for _, branch := range descendants {
+			name := branch.GetName()
+			if seenRestackBranches[name] {
+				continue
+			}
+			seenRestackBranches[name] = true
+			branchesToRestack = append(branchesToRestack, branch)
+		}
 	}
+	branchesToRestack = eng.SortBranchesTopologically(branchesToRestack)
 
 	if err := actions.RestackBranches(ctx, branchesToRestack); err != nil {
 		handler.OnStep(StepRestacking, basehandler.StatusFailed, err.Error())

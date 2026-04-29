@@ -563,3 +563,42 @@ func TestFlattenTreeStructure(t *testing.T) {
 		})
 	})
 }
+
+func TestFlattenAncestorAndDescendantMoves(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ancestor move and descendant move to ancestor restack once", func(t *testing.T) {
+		t.Parallel()
+
+		sh := NewTestShellInProcess(t)
+
+		// main -> x -> a -> b -> c
+		// a is independent from x, b depends on a, and c depends on a but not b.
+		// Flattening from c should move a to main and c to a.
+		sh.WriteFile("shared-1", "base\n").
+			WriteFile("shared-2", "base\n").
+			Git("commit -m 'Add shared files'")
+
+		sh.Write("file-x", "content x").
+			Run("create x -m 'Add file X'")
+
+		sh.WriteFile("shared-1", "a\n").
+			WriteFile("shared-2", "a\n").
+			Run("create a -m 'Add file A'")
+
+		sh.WriteFile("shared-1", "b\n").
+			Run("create b -m 'Modify file A in B'")
+
+		sh.WriteFile("shared-2", "c\n").
+			Run("create c -m 'Modify file A in C'")
+
+		sh.Run("flatten --yes")
+
+		sh.ExpectStackStructure(map[string]string{
+			"x": "main",
+			"a": "main",
+			"b": "a",
+			"c": "a",
+		})
+	})
+}
