@@ -189,7 +189,11 @@ export function RepoProvider({ children }: { children: ReactNode }) {
 
   // Initial load
   useEffect(() => {
-    loadData();
+    const timeout = window.setTimeout(() => {
+      loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
   }, [loadData]);
 
   // SSE updates trigger refresh; server events get added directly
