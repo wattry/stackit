@@ -24,6 +24,7 @@ func NewSplitCmd() *cobra.Command {
 		below             bool
 		name              string
 		message           string
+		messageFile       string
 		patchFile         string
 		dryRun            bool
 	)
@@ -74,6 +75,12 @@ Examples:
 		DisableFlagParsing: false,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
+				resolvedMessage, err := common.ReadMessage(message, messageFile)
+				if err != nil {
+					return err
+				}
+				message = resolvedMessage
+
 				// Determine split style - check all flag variants
 				var style split.Style
 				switch {
@@ -173,6 +180,7 @@ Examples:
 	cmd.Flags().BoolVar(&asSibling, "as-sibling", false, "Create split branches as siblings instead of a chain")
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Name for the new split branch (default: auto-generated)")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "Commit message for extraction (only with --by-file)")
+	cmd.Flags().StringVar(&messageFile, "message-file", "", "Read commit message from a file (use \"-\" for stdin). Mutually exclusive with --message.")
 
 	// Direction options (for hunk and file modes)
 	cmd.Flags().BoolVar(&above, "above", false, "Insert new branch above current (as child, upstack)")

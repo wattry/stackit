@@ -68,9 +68,10 @@ stackit create -m "feat: very specific message"
 
 # Prefer — command shape stays constant
 stackit create --message-file /tmp/.stackit-msg
+stackit create -F -      # also accepts stdin via "-"
 ```
 
-(Not all stackit commands support `--message-file` yet; use stdin or temp files where they do.)
+`create`, `modify`, `squash`, and `split --by-file` all accept `--message-file` (`-F`, except for `split` where `-F` is taken).
 
 ## Common Pitfalls
 
