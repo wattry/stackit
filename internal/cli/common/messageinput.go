@@ -46,7 +46,7 @@ func readMessageFrom(path string, stdin *os.File) (string, error) {
 	} else {
 		data, err = os.ReadFile(path)
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", fmt.Errorf("--message-file %q: file not found (use \"-\" to read from stdin)", path)
+			return "", fmt.Errorf("--message-file %q: file not found (use \"-\" to read from stdin): %w", path, err)
 		}
 	}
 	if err != nil {

@@ -15,7 +15,7 @@ Commands for creating, modifying, and managing individual branches.
 **Required workflow for new stacked branches:**
 ```bash
 git add -A                                                # 1. Stage FIRST
-echo "message" | stackit create --no-interactive  # 2. Then create
+echo "message" | stackit create -F - --no-interactive  # 2. Then create
 ```
 
 ## Creating and Modifying
@@ -55,13 +55,13 @@ echo "message" | stackit create --no-interactive  # 2. Then create
 **Preferred usage (pipe format):**
 ```bash
 # Branch name auto-generated from commit message
-echo "feat: add user authentication" | stackit create --no-interactive
+echo "feat: add user authentication" | stackit create -F - --no-interactive
 
 # With explicit branch name
-echo "feat: add user authentication" | stackit create my-branch --no-interactive
+echo "feat: add user authentication" | stackit create -F - my-branch --no-interactive
 
 # Stage all and create
-echo "feat: add user authentication" | stackit create --all --no-interactive
+echo "feat: add user authentication" | stackit create -F - --all --no-interactive
 ```
 
 ### Multiple commits per branch

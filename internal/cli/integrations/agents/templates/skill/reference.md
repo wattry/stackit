@@ -19,7 +19,7 @@ Quick reference for all stackit commands. For detailed documentation, see:
 **Required workflow for new stacked branches:**
 ```bash
 git add -A                                        # 1. Stage FIRST
-echo "message" | stackit create --no-interactive  # 2. Then create
+echo "message" | stackit create -F - --no-interactive  # 2. Then create
 ```
 
 ## Utility Scripts
@@ -108,13 +108,13 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 ### Start a new feature
 ```bash
 git add .
-echo "feat: add new feature" | stackit create --no-interactive
+echo "feat: add new feature" | stackit create -F - --no-interactive
 ```
 
 ### Stack another change
 ```bash
 git add .
-echo "feat: extend feature" | stackit create --no-interactive
+echo "feat: extend feature" | stackit create -F - --no-interactive
 ```
 
 ### Add more commits to current branch

@@ -270,7 +270,7 @@ git checkout <original-branch>
 Dry Run - Branch 1 of 3: <branch-name>
 ======================================
 git checkout "$BACKUP_COMMIT" -- file1.go file2.go
-echo "commit message" | stackit create <branch-name> --no-interactive
+echo "commit message" | stackit create -F - <branch-name> --no-interactive
 <check-command>
 
 [Continue for each branch...]
@@ -352,7 +352,7 @@ git checkout "$BACKUP_COMMIT" -- <file1> <file2> ...
 git diff --cached --stat
 
 # 3. Create the stacked branch
-echo "<commit-message>" | stackit create <branch-name> --no-interactive
+echo "<commit-message>" | stackit create -F - <branch-name> --no-interactive
 
 # 4. Verify the branch was created with commits (not empty)
 #    Check that we're on the new branch and it has the expected files

@@ -89,13 +89,13 @@ bash ~/.claude/skills/stackit/scripts/analyze_stack.sh
 3. **Create branch with commit** (branch name auto-generated from message, respects `branch.pattern` config):
    ```bash
    # Preferred: pipe format (handles multi-line messages and special characters)
-   echo "feat: add user authentication" | stackit create --no-interactive
+   echo "feat: add user authentication" | stackit create -F - --no-interactive
 
    # With explicit branch name
-   echo "feat: add user authentication" | stackit create my-branch --no-interactive
+   echo "feat: add user authentication" | stackit create -F - my-branch --no-interactive
 
    # Stage all changes and create in one command
-   echo "feat: add user authentication" | stackit create --all --no-interactive
+   echo "feat: add user authentication" | stackit create -F - --all --no-interactive
    ```
 4. If currently on trunk (e.g., main/master), warn and confirm or switch to a feature branch before creating.
 5. Show stack: `stackit log --no-interactive`
@@ -198,7 +198,7 @@ When generating commit messages:
 1. Check README.md and CONTRIBUTING.md for project guidelines
 2. Follow documented conventions if available
 3. If no conventions documented, write a clear, descriptive message
-4. **Use pipe format:** `echo "message" | stackit create --no-interactive`
+4. **Use pipe format:** `echo "message" | stackit create -F - --no-interactive`
 
 **Validation loop:**
 - Generate message

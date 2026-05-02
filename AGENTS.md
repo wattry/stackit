@@ -40,16 +40,22 @@ Go CLI for managing stacked changes in Git repositories.
 # Stage changes FIRST (required!)
 git add -A
 
-# Create stacked branch with commit
-stackit create -m "feat: description"
+# Create stacked branch with commit. For agent workflows, prefer piping the
+# message via `-F -` (or reading from a file with `-F <path>`) so the literal
+# message text stays out of the command line — see "Keeping Permission Rules
+# Stable" in .claude/rules/stackit-workflow.md.
+echo "feat: description" | stackit create -F -
 
 # Continue working, stage more changes, create more branches...
 git add -A
-stackit create -m "feat: next phase"
+echo "feat: next phase" | stackit create -F -
 
 # Submit when ready
 stackit submit
 ```
+
+`-m "literal message"` still works for one-off use; switch to `-F -` once a
+flow is repeated so permission rules cover every invocation.
 
 ### Handling PR Feedback
 

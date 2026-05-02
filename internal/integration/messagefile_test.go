@@ -125,6 +125,37 @@ func TestMessageFile(t *testing.T) {
 			RunExpectError("create feature -F " + msgPath).
 			OutputContains("is empty")
 	})
+
+	t.Run("split rejects --message-file - and --patch - together", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+		sh.Write("file", "content").
+			Run("create feature -m 'init'").
+			RunExpectError("split --by-hunk --patch - --message-file -").
+			OutputContains("cannot read both --message-file and --patch from stdin")
+	})
+
+	t.Run("split rejects --message-file before reading any input", func(t *testing.T) {
+		// Regression: previously --by-commit --message-file - drained stdin
+		// (or read the file) before the mode-compat check fired. Now flag
+		// validation runs first.
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+		msgPath := writeMessageFile(t, "feat: should not be read")
+		sh.Write("file", "content").
+			Run("create feature -m 'init'").
+			RunExpectError("split --by-commit --message-file " + msgPath).
+			OutputContains("--message/--message-file can only be used with --by-file")
+	})
+
+	t.Run("split errors when both --message and --message-file are given", func(t *testing.T) {
+		t.Parallel()
+		sh := NewTestShellInProcess(t)
+		sh.Write("file", "content").Run("create feature -m 'init'")
+		msgPath := writeMessageFile(t, "from file")
+		sh.RunExpectError("split --by-file file_test.txt --as-sibling -m 'inline' --message-file " + msgPath).
+			OutputContains("cannot use --message and --message-file together")
+	})
 }
 
 // writeMessageFile writes content to a temp file outside the repo working

@@ -73,7 +73,7 @@ stackit foreach --no-interactive "git status --short"
 ### Start a feature stack
 ```bash
 git add .
-echo "feat: implement user authentication" | stackit create --no-interactive
+echo "feat: implement user authentication" | stackit create -F - --no-interactive
 
 # Add tests to the same branch (branches can have multiple commits)
 git add .
@@ -81,7 +81,7 @@ git commit -m "test: add auth tests"
 
 # Work on next part as a separate stacked branch
 git add .
-echo "feat: add JWT token validation" | stackit create --no-interactive
+echo "feat: add JWT token validation" | stackit create -F - --no-interactive
 ```
 
 ### Submit for review

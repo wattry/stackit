@@ -320,15 +320,15 @@ Smaller, focused branches = fewer conflicts. A branch can have multiple related 
 
 ```bash
 # Good: Small, focused changes (one branch per logical unit)
-echo "feat: add email validation" | stackit create --no-interactive
-echo "feat: add phone validation" | stackit create --no-interactive
+echo "feat: add email validation" | stackit create -F - --no-interactive
+echo "feat: add phone validation" | stackit create -F - --no-interactive
 
 # Also good: Multiple commits in one branch for related work
-echo "feat: add validation helpers" | stackit create --no-interactive
+echo "feat: add validation helpers" | stackit create -F - --no-interactive
 git add . && git commit -m "test: add validation tests"
 
 # Risky: Large, sweeping changes
-echo "feat: refactor entire validation system" | stackit create --no-interactive
+echo "feat: refactor entire validation system" | stackit create -F - --no-interactive
 ```
 
 ### 2. Sync Frequently

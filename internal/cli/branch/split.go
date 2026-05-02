@@ -76,15 +76,6 @@ Examples:
 		DisableFlagParsing: false,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				if messageFile == "-" && patchFile == "-" {
-					return fmt.Errorf("cannot read both --message-file and --patch from stdin")
-				}
-
-				resolvedMessage, err := common.ReadMessage(message, messageFile)
-				if err != nil {
-					return err
-				}
-
 				// Determine split style - check all flag variants
 				var style split.Style
 				switch {
@@ -116,25 +107,31 @@ Examples:
 				}
 				// If direction is empty, wizard will prompt (for hunk mode)
 
-				// Validate flag combinations
-				// --patch can only be used with --by-hunk
+				// Validate flag combinations BEFORE any I/O so an invalid
+				// invocation (e.g. --message-file - --by-commit) fails fast
+				// instead of draining stdin or opening a file first.
 				if patchFile != "" && style != split.StyleHunk {
 					return fmt.Errorf("--patch can only be used with --by-hunk")
 				}
-				// --name and --message require --by-file or --by-hunk with --patch
 				if name != "" && style != split.StyleFile && patchFile == "" {
 					return fmt.Errorf("--name can only be used with --by-file or --by-hunk --patch")
 				}
-				if resolvedMessage != "" && style != split.StyleFile && patchFile == "" {
+				if (message != "" || messageFile != "") && style != split.StyleFile && patchFile == "" {
 					return fmt.Errorf("--message/--message-file can only be used with --by-file or --by-hunk --patch")
 				}
-				// --above/--below make sense with --by-hunk and --by-file
 				if (above || below) && style != "" && style != split.StyleHunk && style != split.StyleFile {
 					return fmt.Errorf("--above/--below can only be used with --by-hunk or --by-file")
 				}
-				// --above with --by-file is incompatible with --as-sibling
 				if above && style == split.StyleFile && asSibling {
 					return fmt.Errorf("--above and --as-sibling cannot be used together")
+				}
+				if messageFile == "-" && patchFile == "-" {
+					return fmt.Errorf("cannot read both --message-file and --patch from stdin")
+				}
+
+				resolvedMessage, err := common.ReadMessage(message, messageFile)
+				if err != nil {
+					return err
 				}
 
 				// Load config for branch pattern and hunk selector

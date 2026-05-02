@@ -66,12 +66,15 @@ stackit create -m "feat: foo"
 # Avoid — every new message text widens the permission surface
 stackit create -m "feat: very specific message"
 
-# Prefer — command shape stays constant
-stackit create --message-file /tmp/.stackit-msg
-stackit create -F -      # also accepts stdin via "-"
+# Prefer — pipe via stdin; command shape stays constant across messages
+echo "feat: anything" | stackit create -F -
+
+# Or use a file path (per-invocation `mktemp` avoids collisions between
+# concurrent agents; a fixed path like /tmp/.stackit-msg is unsafe to share)
+msg=$(mktemp -t stackit-msg) && printf "feat: anything" > "$msg" && stackit create --message-file "$msg"
 ```
 
-`create`, `modify`, `squash`, and `split --by-file` all accept `--message-file` (`-F`, except for `split` where `-F` is taken).
+`create`, `modify`, `squash`, and `split --by-file` all accept `--message-file` (`-F`, except for `split` where `-F` is taken). The flag errors loudly on empty input, missing files, or being passed alongside `-m`, so silent fallthrough to other input paths can't mask a typo.
 
 ## Common Pitfalls
 
