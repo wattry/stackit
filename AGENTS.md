@@ -41,23 +41,23 @@ Go CLI for managing stacked changes in Git repositories.
 git add -A
 
 # Create stacked branch with commit
-command stackit create -m "feat: description"
+stackit create -m "feat: description"
 
 # Continue working, stage more changes, create more branches...
-git add -A && command stackit create -m "feat: next phase"
+git add -A && stackit create -m "feat: next phase"
 
 # Submit when ready
-command stackit submit
+stackit submit
 ```
 
 ### Handling PR Feedback
 
 ```bash
-command stackit checkout <branch>  # Go to branch with feedback
+stackit checkout <branch>  # Go to branch with feedback
 # Make changes...
-command stackit modify             # Amend commit
-command stackit restack --upstack   # Update children of this branch
-command stackit submit             # Update PRs
+stackit modify             # Amend commit
+stackit restack --upstack   # Update children of this branch
+stackit submit             # Update PRs
 ```
 
 ### Common Pitfalls

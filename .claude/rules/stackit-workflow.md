@@ -6,10 +6,10 @@ This project uses stackit for stacked changes. **NEVER use raw git commands for 
 
 | Never Use | Use Instead |
 |-----------|-------------|
-| `git commit -m "..."` | `command stackit create -m "..."` |
-| `git checkout -b` | `command stackit create -m "..."` |
-| `gh pr create` | `command stackit submit` |
-| `git rebase` | `command stackit restack --upstack` (or `--all-stacks`) |
+| `git commit -m "..."` | `stackit create -m "..."` |
+| `git checkout -b` | `stackit create -m "..."` |
+| `gh pr create` | `stackit submit` |
+| `git rebase` | `stackit restack --upstack` (or `--all-stacks`) |
 
 **Exception:** `git commit` is allowed when adding commits to an existing stacked branch.
 
@@ -20,9 +20,9 @@ This project uses stackit for stacked changes. **NEVER use raw git commands for 
 # 2. Stage changes FIRST (required!)
 git add -A
 # 3. Create stacked branch with commit
-command stackit create -m "feat: description"
+stackit create -m "feat: description"
 # 4. Submit when ready
-command stackit submit
+stackit submit
 ```
 
 **Critical:** `stackit create` requires staged changes. Without staged changes, it creates an empty branch.
