@@ -43,6 +43,35 @@ Use skills instead of manual commands:
 
 Run `/stackit` for the full guide.
 
+## Keeping Permission Rules Stable
+
+Claude's permission system matches Bash commands by prefix. Every literal piece of a command becomes part of the match string, so commands with a consistent shape across runs let a small number of rules cover everything. Inconsistent shapes blow up `.claude/settings.local.json` (one entry per literal commit message, redirection variant, etc.) and cause redundant approval prompts.
+
+**Run one command per Bash call.** Don't chain with `&&`. Each command should match its own rule (`Bash(git add:*)`, `Bash(stackit:*)`) rather than requiring a permission entry for the full compound string — which is what generates entries like `Bash(git add -A && stackit create -m "feat: very specific message" 2>&1)`.
+
+```bash
+# Avoid — compound command needs its own rule
+git add -A && stackit create -m "feat: foo"
+
+# Prefer — separate Bash calls, each matches its own rule
+git add -A
+stackit create -m "feat: foo"
+```
+
+**Don't append `2>&1`.** Claude's Bash tool already captures stderr. Appending the redirection extends the literal command string, breaks prefix matching, and creates one-off approval entries.
+
+**Prefer file paths or stdin for variable content.** When a command embeds long or unique text (commit messages, PR descriptions), reading from a file or stdin keeps the command line stable across runs so the same permission rule covers every message.
+
+```bash
+# Avoid — every new message text widens the permission surface
+stackit create -m "feat: very specific message"
+
+# Prefer — command shape stays constant
+stackit create --message-file /tmp/.stackit-msg
+```
+
+(Not all stackit commands support `--message-file` yet; use stdin or temp files where they do.)
+
 ## Common Pitfalls
 
 | Mistake | Fix |
@@ -55,3 +84,5 @@ Run `/stackit` for the full guide.
 | Using `gh pr create` | Use `stackit submit` - it handles stacked PR dependencies |
 | Amending wrong commit | Use `stackit absorb` to auto-route changes to correct commits |
 | Stack out of sync after merge | Run `stackit sync` to cleanup merged branches and update trunk |
+| Permission prompts every commit | Don't chain with `&&`; run `git add` and `stackit create` as separate commands |
+| `settings.local.json` ballooning with literal commit messages | Same root cause — split chained commands so `Bash(stackit:*)` covers the call |

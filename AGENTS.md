@@ -44,7 +44,8 @@ git add -A
 stackit create -m "feat: description"
 
 # Continue working, stage more changes, create more branches...
-git add -A && stackit create -m "feat: next phase"
+git add -A
+stackit create -m "feat: next phase"
 
 # Submit when ready
 stackit submit
