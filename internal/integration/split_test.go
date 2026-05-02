@@ -294,7 +294,7 @@ func TestSplitAsSibling(t *testing.T) {
 
 		// Should error because --message only works with --by-file
 		sh.RunExpectError("split --by-commit --message 'bad message'").
-			OutputContains("--message can only be used with --by-file")
+			OutputContains("--message/--message-file can only be used with --by-file")
 	})
 
 	// Scenario:
@@ -339,7 +339,7 @@ func TestSplitAsSibling(t *testing.T) {
 
 		// Should error because --message requires explicit --by-file
 		sh.RunExpectError("split --message 'bad message'").
-			OutputContains("--message can only be used with --by-file")
+			OutputContains("--message/--message-file can only be used with --by-file")
 	})
 
 	run("split --by-file --as-sibling rejects duplicate custom branch name", func(_ *testing.T, sh *TestShell) {

@@ -35,6 +35,7 @@ Automatically restacks descendants after the modification.
 
 Examples:
   stackit modify -a -m "Updated feature"  # Stage all and amend with message
+  stackit modify -a -F /tmp/msg           # Stage all and amend, reading message from a file
   stackit modify -a                       # Stage all and amend (opens editor)
   stackit modify -p                       # Interactive patch staging then amend
   stackit modify -c -a -m "New commit"    # Create new commit instead of amending

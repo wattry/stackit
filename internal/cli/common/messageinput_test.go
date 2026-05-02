@@ -3,7 +3,6 @@ package common
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,29 +25,28 @@ func TestReadMessage(t *testing.T) {
 		require.Equal(t, "", got)
 	})
 
-	t.Run("errors when both given", func(t *testing.T) {
+	t.Run("errors when both given with actionable hint", func(t *testing.T) {
 		t.Parallel()
 		_, err := ReadMessage("feat: a", "/tmp/msg")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "mutually exclusive")
+		require.Contains(t, err.Error(), "cannot use --message and --message-file together")
+		require.Contains(t, err.Error(), "use --message-file - to read from stdin")
 	})
 
 	t.Run("reads from file path", func(t *testing.T) {
 		t.Parallel()
-		dir := t.TempDir()
-		path := filepath.Join(dir, "msg")
-		require.NoError(t, writeFile(path, "feat: from file\n"))
+		path := filepath.Join(t.TempDir(), "msg")
+		require.NoError(t, os.WriteFile(path, []byte("feat: from file\n"), 0o600))
 
 		got, err := ReadMessage("", path)
 		require.NoError(t, err)
 		require.Equal(t, "feat: from file", got)
 	})
 
-	t.Run("trims trailing whitespace and newlines", func(t *testing.T) {
+	t.Run("trims surrounding whitespace", func(t *testing.T) {
 		t.Parallel()
-		dir := t.TempDir()
-		path := filepath.Join(dir, "msg")
-		require.NoError(t, writeFile(path, "feat: trim me\n\n  \t\n"))
+		path := filepath.Join(t.TempDir(), "msg")
+		require.NoError(t, os.WriteFile(path, []byte("\n\n  feat: trim me  \n\n"), 0o600))
 
 		got, err := ReadMessage("", path)
 		require.NoError(t, err)
@@ -57,30 +55,69 @@ func TestReadMessage(t *testing.T) {
 
 	t.Run("preserves internal newlines for multi-line messages", func(t *testing.T) {
 		t.Parallel()
-		dir := t.TempDir()
-		path := filepath.Join(dir, "msg")
-		require.NoError(t, writeFile(path, "feat: subject\n\nbody paragraph\n"))
+		path := filepath.Join(t.TempDir(), "msg")
+		require.NoError(t, os.WriteFile(path, []byte("feat: subject\n\nbody paragraph\n"), 0o600))
 
 		got, err := ReadMessage("", path)
 		require.NoError(t, err)
 		require.Equal(t, "feat: subject\n\nbody paragraph", got)
 	})
 
-	t.Run("returns error for missing file", func(t *testing.T) {
+	t.Run("errors with stdin hint when file does not exist", func(t *testing.T) {
 		t.Parallel()
 		_, err := ReadMessage("", "/nonexistent/path/to/msg")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "read message file")
+		require.Contains(t, err.Error(), "--message-file")
+		require.Contains(t, err.Error(), "/nonexistent/path/to/msg")
+		require.Contains(t, err.Error(), "file not found")
+		require.Contains(t, err.Error(), `use "-" to read from stdin`)
+	})
+
+	t.Run("errors when file is empty", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "empty")
+		require.NoError(t, os.WriteFile(path, nil, 0o600))
+
+		_, err := ReadMessage("", path)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "is empty")
+	})
+
+	t.Run("errors when file is whitespace-only", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "ws")
+		require.NoError(t, os.WriteFile(path, []byte("\n\n  \t\n"), 0o600))
+
+		_, err := ReadMessage("", path)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "is empty")
 	})
 
 	t.Run("reads from stdin when path is dash", func(t *testing.T) {
 		t.Parallel()
-		got, err := readMessageFrom("-", strings.NewReader("feat: from stdin\n"))
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = r.Close() })
+
+		go func() {
+			_, _ = w.WriteString("feat: from stdin\n")
+			_ = w.Close()
+		}()
+
+		got, err := readMessageFrom("-", r)
 		require.NoError(t, err)
 		require.Equal(t, "feat: from stdin", got)
 	})
-}
 
-func writeFile(path, content string) error {
-	return os.WriteFile(path, []byte(content), 0o600)
+	t.Run("errors when stdin pipe is empty", func(t *testing.T) {
+		t.Parallel()
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = r.Close() })
+		require.NoError(t, w.Close())
+
+		_, err = readMessageFrom("-", r)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "--message-file - received empty input")
+	})
 }

@@ -24,7 +24,12 @@ func NewSquashCmd() *cobra.Command {
 		Long: `Squash all commits in the current branch into a single commit and restack upstack branches.
 
 This command combines all commits in the current branch into a single commit. After squashing,
-all upstack branches (children) are automatically restacked.`,
+all upstack branches (children) are automatically restacked.
+
+Examples:
+  stackit squash -m "feat: combined work"     # Squash with inline message
+  stackit squash -F /tmp/msg                  # Squash, reading message from a file
+  stackit squash --no-edit                    # Squash, keeping the current message`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {

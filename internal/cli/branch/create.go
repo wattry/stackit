@@ -31,7 +31,12 @@ func NewCreateCmd() *cobra.Command {
 
 If no branch name is specified, generate a branch name from the commit message.
 If your working directory contains no changes, an empty branch will be created.
-If you have any unstaged changes, you will be asked whether you'd like to stage them.`,
+If you have any unstaged changes, you will be asked whether you'd like to stage them.
+
+Examples:
+  stackit create -m "feat: add login"             # Inline message
+  stackit create feature -F /tmp/msg              # Read message from a file
+  printf "feat: add login" | stackit create -F -  # Read message from stdin`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
