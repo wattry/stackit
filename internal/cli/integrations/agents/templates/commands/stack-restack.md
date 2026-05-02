@@ -9,7 +9,7 @@ allowed-tools: Bash(stackit:*), Bash(git:*), AskUserQuestion, Skill
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Task
 
@@ -23,15 +23,15 @@ Rebase all branches in the stack to ensure proper parent-child ancestry.
 If preconditions fail, inform user and stop.
 
 Otherwise, choose the narrowest safe restack scope and show the result:
-- If a specific branch caused the issue or was just amended, run `command stackit restack --branch <branch> --upstack --no-interactive`.
-- If a whole independent stack needs restack, run `command stackit restack --branch <stack-root> --upstack --no-interactive`.
-- If several independent stack roots need restack, run `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
-- If every independent stack needs restack, run `command stackit restack --all-stacks --continue-on-conflict --no-interactive`.
-- Only run `command stackit restack --no-interactive` when the user explicitly wants the current stack restacked and no narrower branch/root is known.
+- If a specific branch caused the issue or was just amended, run `stackit restack --branch <branch> --upstack --no-interactive`.
+- If a whole independent stack needs restack, run `stackit restack --branch <stack-root> --upstack --no-interactive`.
+- If several independent stack roots need restack, run `stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
+- If every independent stack needs restack, run `stackit restack --all-stacks --continue-on-conflict --no-interactive`.
+- Only run `stackit restack --no-interactive` when the user explicitly wants the current stack restacked and no narrower branch/root is known.
 
 Conflict handling:
-- If a scoped restack enters conflict state, inform user they need to resolve conflicts and run `command stackit continue`.
-- If `--continue-on-conflict` reports skipped conflicts, no rebase is active for those skipped branches. To resolve one, run `command stackit restack --branch <conflicted-branch> --upstack --no-interactive`, then resolve conflicts and run `command stackit continue`.
+- If a scoped restack enters conflict state, inform user they need to resolve conflicts and run `stackit continue`.
+- If `--continue-on-conflict` reports skipped conflicts, no rebase is active for those skipped branches. To resolve one, run `stackit restack --branch <conflicted-branch> --upstack --no-interactive`, then resolve conflicts and run `stackit continue`.
 
 ## Follow-up
 

@@ -12,7 +12,7 @@ Run verification checks on all branches in the stack and report results.
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
@@ -35,17 +35,17 @@ If provided in arguments, use that. Otherwise:
 
 **Quick mode (default)** - run branches at each depth in parallel and stop after the first failing depth:
 ```bash
-command stackit foreach --stack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
+stackit foreach --stack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
 **Full diagnostic mode** - check all branches and collect every failure:
 ```bash
-command stackit foreach --stack --json --parallel --jobs 0 --no-fail-fast "<check-command>" 2>&1
+stackit foreach --stack --json --parallel --jobs 0 --no-fail-fast "<check-command>" 2>&1
 ```
 
 **Anchored mode** - if a branch or independent stack root is known, avoid checkout navigation and verify that upstack only:
 ```bash
-command stackit foreach --branch <branch-or-root> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
+stackit foreach --branch <branch-or-root> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
 If uncertain which mode to use, prompt with `AskUserQuestion`:
@@ -155,5 +155,5 @@ After verification completes, use `AskUserQuestion` based on results:
 Based on response:
 - **"Submit PRs"**: Invoke `/stack-submit` skill using the `Skill` tool
 - **"Fix issues"**: Invoke `/stack-fix` skill using the `Skill` tool
-- **"View stack"** / **"View details"**: Run `command stackit log --no-interactive`
+- **"View stack"** / **"View details"**: Run `stackit log --no-interactive`
 - **"Done for now"**: End with summary of verification results

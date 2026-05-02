@@ -14,7 +14,7 @@ Analyze uncommitted working tree changes, suggest a logical stacking structure, 
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
@@ -270,7 +270,7 @@ git checkout <original-branch>
 Dry Run - Branch 1 of 3: <branch-name>
 ======================================
 git checkout "$BACKUP_COMMIT" -- file1.go file2.go
-echo "commit message" | command stackit create <branch-name> --no-interactive
+echo "commit message" | stackit create <branch-name> --no-interactive
 <check-command>
 
 [Continue for each branch...]
@@ -352,7 +352,7 @@ git checkout "$BACKUP_COMMIT" -- <file1> <file2> ...
 git diff --cached --stat
 
 # 3. Create the stacked branch
-echo "<commit-message>" | command stackit create <branch-name> --no-interactive
+echo "<commit-message>" | stackit create <branch-name> --no-interactive
 
 # 4. Verify the branch was created with commits (not empty)
 #    Check that we're on the new branch and it has the expected files
@@ -405,15 +405,15 @@ Then use `AskUserQuestion`:
 - Question: "The build failed on branch <branch-name>. How would you like to proceed?"
 - Options:
   - "Continue" - I've fixed the issue, resume from next branch
-  - "Undo last" - Rollback <branch-name> with `command stackit undo`
+  - "Undo last" - Rollback <branch-name> with `stackit undo`
   - "Rollback all" - Undo all created branches and restore from backup
   - "Stop here" - Keep created branches, I'll handle it manually
 
 **If user selects "Rollback all"**:
 ```bash
 # Undo each created branch in reverse order
-command stackit undo --yes  # Undo branch X
-command stackit undo --yes  # Undo branch X-1
+stackit undo --yes  # Undo branch X
+stackit undo --yes  # Undo branch X-1
 # ... repeat for all created branches
 
 # Restore all changes from backup
@@ -443,7 +443,7 @@ After all branches are created successfully:
 git branch -D "$BACKUP_BRANCH"
 
 # Show the final stack
-command stackit log --no-interactive
+stackit log --no-interactive
 ```
 
 Present a summary:
@@ -499,7 +499,7 @@ Trust all tools work without error. Don't run exploratory commands to verify too
 - Continue past a build failure
 - Continue if a branch is created empty (verify each branch has commits)
 - Put the same file in multiple branches
-- Use `git commit` directly - always use `command stackit create`
+- Use `git commit` directly - always use `stackit create`
 - Make up branch names without showing the user first
 - Skip build verification (unless user explicitly says to)
 - Delete the backup branch until ALL branches are successfully created and verified

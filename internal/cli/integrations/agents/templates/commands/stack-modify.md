@@ -12,7 +12,7 @@ argument-hint: [-m "message"] [-a] [-c] [--no-edit]
 - Unstaged changes: !`git diff --stat 2>&1 | head -20`
 - Staged changes: !`git diff --cached --stat 2>&1 | head -20`
 - Recent commits on branch: !`git log --oneline -5 2>&1`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
@@ -41,23 +41,23 @@ Modify the current branch by amending its commit or creating a new commit. Autom
 3. **Run the command:**
    ```bash
    # Amend (default) with message
-   command stackit modify -m "<message>"
+   stackit modify -m "<message>"
 
    # Amend keeping existing message
-   command stackit modify --no-edit
+   stackit modify --no-edit
 
    # New commit
-   command stackit modify -c -m "<message>"
+   stackit modify -c -m "<message>"
 
    # Stage all + amend
-   command stackit modify -a -m "<message>"
+   stackit modify -a -m "<message>"
    ```
 
 4. **Handle results:**
    - On success, report what was modified and that descendants were restacked
    - On failure, report the error clearly
 
-**Never use:** `git commit --amend` — always use `command stackit modify` so descendants are restacked.
+**Never use:** `git commit --amend` — always use `stackit modify` so descendants are restacked.
 
 ## Follow-up
 
