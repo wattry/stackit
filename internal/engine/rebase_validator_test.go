@@ -479,6 +479,114 @@ func TestRestackBranchesWithValidatedRebasesUsesValidationSHA(t *testing.T) {
 	require.Equal(t, mainRev, *meta.GetParentBranchRevision())
 }
 
+func TestRestackBranchesWithValidatedPlanAppliesFrozenBranch(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+
+	s.CreateBranch("parent").
+		Commit("parent change").
+		CreateBranch("child").
+		Commit("child change")
+
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "parent", "main"))
+	require.NoError(t, s.Engine.TrackBranch(context.Background(), "child", "parent"))
+
+	child := s.Engine.GetBranch("child")
+	_, err := s.Engine.SetFrozen(context.Background(), []engine.Branch{child}, true)
+	require.NoError(t, err)
+
+	s.CreateBranch("remote-child").
+		Commit("remote child")
+	remoteSHA, err := s.Engine.GetBranch("remote-child").GetRevision()
+	require.NoError(t, err)
+	s.RunGit("update-ref", "refs/heads/origin/child", remoteSHA)
+
+	plan, err := s.Engine.PlanRestack(context.Background(), []engine.Branch{child})
+	require.NoError(t, err)
+	require.Empty(t, plan.Specs)
+	require.True(t, plan.ApplyMap["child"])
+
+	validation := &engine.RebaseValidation{Success: true, NewSHAs: map[string]string{}, RerereResolved: map[string]int{}}
+	result, err := s.Engine.RestackBranchesWithValidatedPlan(context.Background(), []engine.Branch{child}, validation, plan)
+	require.NoError(t, err)
+	require.Equal(t, engine.RestackDone, result.Results["child"].Result)
+
+	childSHA, err := s.Scene.Repo.GetBranchSHA("child")
+	require.NoError(t, err)
+	require.Equal(t, remoteSHA, childSHA)
+}
+
+func TestRestackBranchesWithValidatedPlanAppliesAnchorBranch(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+		WithStack(map[string]string{
+			"anchor": "main",
+		})
+
+	anchor := s.Engine.GetBranch("anchor")
+	require.NoError(t, s.Engine.SetBranchType(anchor, git.BranchTypeWorktreeAnchor))
+	oldSHA, err := anchor.GetRevision()
+	require.NoError(t, err)
+
+	s.Checkout("main").
+		Commit("main update")
+	trunkSHA, err := s.Engine.Trunk().GetRevision()
+	require.NoError(t, err)
+	require.NotEqual(t, oldSHA, trunkSHA)
+
+	plan, err := s.Engine.PlanRestack(context.Background(), []engine.Branch{anchor})
+	require.NoError(t, err)
+	require.Empty(t, plan.Specs)
+	require.True(t, plan.ApplyMap["anchor"])
+
+	validation := &engine.RebaseValidation{Success: true, NewSHAs: map[string]string{}, RerereResolved: map[string]int{}}
+	result, err := s.Engine.RestackBranchesWithValidatedPlan(context.Background(), []engine.Branch{anchor}, validation, plan)
+	require.NoError(t, err)
+	require.Equal(t, engine.RestackDone, result.Results["anchor"].Result)
+
+	anchorSHA, err := s.Scene.Repo.GetBranchSHA("anchor")
+	require.NoError(t, err)
+	require.Equal(t, trunkSHA, anchorSHA)
+}
+
+func TestRestackBranchesWithValidatedPlanReparentsMergedParent(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+		WithStack(map[string]string{
+			"branch1": "main",
+			"branch2": "branch1",
+		})
+
+	s.Checkout("main").
+		RunGit("merge", "branch1", "--no-ff", "-m", "Merge branch1")
+	s.RunGit("branch", "-D", "branch1")
+	require.NoError(t, s.Engine.Rebuild("main"))
+
+	branch2 := s.Engine.GetBranch("branch2")
+	plan, err := s.Engine.PlanRestack(context.Background(), []engine.Branch{branch2})
+	require.NoError(t, err)
+	require.Len(t, plan.Specs, 1)
+	require.True(t, plan.ApplyMap["branch2"])
+	require.True(t, plan.Items["branch2"].Reparented)
+	require.Equal(t, "branch1", plan.Items["branch2"].OldParent)
+	require.Equal(t, "main", plan.Items["branch2"].NewParent)
+
+	validation, err := s.Engine.ValidateRebases(context.Background(), plan.Specs)
+	require.NoError(t, err)
+	require.True(t, validation.Success)
+
+	result, err := s.Engine.RestackBranchesWithValidatedPlan(context.Background(), []engine.Branch{branch2}, validation, plan)
+	require.NoError(t, err)
+	require.Equal(t, engine.RestackDone, result.Results["branch2"].Result)
+	require.True(t, result.Results["branch2"].Reparented)
+	require.Equal(t, "branch1", result.Results["branch2"].OldParent)
+	require.Equal(t, "main", result.Results["branch2"].NewParent)
+
+	require.NoError(t, s.Engine.Rebuild("main"))
+	branch2 = s.Engine.GetBranch("branch2")
+	require.Equal(t, "main", branch2.GetParentOrTrunk())
+	history := branch2.GetMergedDownstack()
+	require.Len(t, history, 1)
+	require.Equal(t, "branch1", history[0].BranchName)
+}
+
 func TestValidateRebasesParallel(t *testing.T) {
 	t.Parallel()
 

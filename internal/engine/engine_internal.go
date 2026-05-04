@@ -163,10 +163,24 @@ func (e *engineImpl) appendMergedDownstack(
 		return nil
 	}
 
-	// Get old parent metadata
-	oldParentMeta := e.getMetaFromMapOrDisk(oldParent, metaMap)
+	meta = e.withMergedDownstack(meta, oldParent, metaMap)
 
-	// Build MergedParent from old parent
+	// Write and update cache
+	if err := e.writeMetadata(branchName, meta); err != nil {
+		return err
+	}
+	if metaMap != nil {
+		metaMap[branchName] = meta
+	}
+	return nil
+}
+
+func (e *engineImpl) withMergedDownstack(meta *git.Meta, oldParent string, metaMap map[string]*git.Meta) *git.Meta {
+	if meta == nil || oldParent == "" {
+		return meta
+	}
+
+	oldParentMeta := e.getMetaFromMapOrDisk(oldParent, metaMap)
 	mp := git.MergedParent{BranchName: oldParent}
 	if oldParentMeta != nil {
 		oldParentPrInfo := oldParentMeta.GetPrInfo()
@@ -185,15 +199,7 @@ func (e *engineImpl) appendMergedDownstack(
 	// Check if oldParent already in history (prevent duplicates from retried operations)
 	for _, existing := range history {
 		if existing.BranchName == oldParent {
-			// Already captured, skip adding duplicate
-			meta = meta.WithMergedDownstack(history)
-			if err := e.writeMetadata(branchName, meta); err != nil {
-				return err
-			}
-			if metaMap != nil {
-				metaMap[branchName] = meta
-			}
-			return nil
+			return meta.WithMergedDownstack(history)
 		}
 	}
 
@@ -205,16 +211,7 @@ func (e *engineImpl) appendMergedDownstack(
 		history = history[len(history)-maxHistoryEntries:]
 	}
 
-	meta = meta.WithMergedDownstack(history)
-
-	// Write and update cache
-	if err := e.writeMetadata(branchName, meta); err != nil {
-		return err
-	}
-	if metaMap != nil {
-		metaMap[branchName] = meta
-	}
-	return nil
+	return meta.WithMergedDownstack(history)
 }
 
 // getMetaFromMapOrDisk retrieves metadata from the cache map or from disk if not found.

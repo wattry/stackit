@@ -506,21 +506,37 @@ func (e *engineImpl) restackBranchWithValidatedRebase(
 		item, ok = plan.Items[branchName]
 	}
 	if !ok {
-		return e.restackBranch(ctx, branch, metaMap, revMap)
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("missing restack plan item for %s", branchName)
 	}
 	if item.Skip {
 		return item.SkipResult, nil
 	}
-	if item.UseLegacy {
-		return e.restackBranch(ctx, branch, metaMap, revMap)
-	}
 
+	switch item.Action {
+	case RestackPlanApplyFrozen, RestackPlanApplyAnchor:
+		return e.applyPlannedRefUpdate(ctx, branch, item, metaMap, revMap)
+	case RestackPlanApplyValidated:
+		return e.applyValidatedRestack(ctx, branch, validation, item, metaMap, revMap)
+	default:
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("unknown restack plan action for %s", branchName)
+	}
+}
+
+func (e *engineImpl) applyValidatedRestack(
+	ctx context.Context,
+	branch Branch,
+	validation *RebaseValidation,
+	item RestackPlanItem,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	branchName := branch.GetName()
 	newRev := ""
 	if validation != nil && validation.NewSHAs != nil {
 		newRev = validation.NewSHAs[branchName]
 	}
 	if newRev == "" {
-		return e.restackBranch(ctx, branch, metaMap, revMap)
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("missing validated SHA for %s", branchName)
 	}
 
 	parentRev := ""
@@ -541,6 +557,50 @@ func (e *engineImpl) restackBranchWithValidatedRebase(
 		parentRev = rev
 	}
 
+	result, err := e.applyBranchAndMetadata(ctx, branch, item, newRev, parentRev, metaMap, revMap)
+	if err != nil {
+		return result, err
+	}
+
+	if validation != nil && validation.RerereResolved != nil {
+		result.RerereResolvedCount = validation.RerereResolved[branchName]
+	}
+	return result, nil
+}
+
+func (e *engineImpl) applyPlannedRefUpdate(
+	ctx context.Context,
+	branch Branch,
+	item RestackPlanItem,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	if item.TargetRev == "" {
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("missing target revision for %s", item.Branch)
+	}
+
+	parentRev := item.ParentRev
+	if parentRev == "" {
+		rev, err := e.GetBranch(item.NewParent).GetRevision()
+		if err != nil {
+			return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to get parent revision: %w", err)
+		}
+		parentRev = rev
+	}
+
+	return e.applyBranchAndMetadata(ctx, branch, item, item.TargetRev, parentRev, metaMap, revMap)
+}
+
+func (e *engineImpl) applyBranchAndMetadata(
+	ctx context.Context,
+	branch Branch,
+	item RestackPlanItem,
+	newRev string,
+	parentRev string,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	branchName := branch.GetName()
 	meta := (*git.Meta)(nil)
 	if metaMap != nil {
 		meta = metaMap[branchName]
@@ -557,6 +617,10 @@ func (e *engineImpl) restackBranchWithValidatedRebase(
 	oldMetadataSHA, _ := e.git.GetRef(fmt.Sprintf("%s%s", git.MetadataRefPrefix, branchName))
 
 	updatedMeta := meta.WithParentBranchRevision(&parentRev)
+	if item.Reparented {
+		updatedMeta = updatedMeta.WithParentBranchName(&item.NewParent)
+		updatedMeta = e.withMergedDownstack(updatedMeta, item.OldParent, metaMap)
+	}
 	metadataJSON, err := json.Marshal(updatedMeta)
 	if err != nil {
 		return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to marshal metadata: %w", err)
@@ -586,14 +650,12 @@ func (e *engineImpl) restackBranchWithValidatedRebase(
 		revMap[branchName] = newRev
 	}
 
-	rerereResolved := 0
-	if validation != nil && validation.RerereResolved != nil {
-		rerereResolved = validation.RerereResolved[branchName]
-	}
 	return RestackBranchResult{
-		Result:              RestackDone,
-		RebasedBranchBase:   parentRev,
-		RerereResolvedCount: rerereResolved,
+		Result:            RestackDone,
+		RebasedBranchBase: parentRev,
+		Reparented:        item.Reparented,
+		OldParent:         item.OldParent,
+		NewParent:         item.NewParent,
 	}, nil
 }
 

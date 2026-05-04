@@ -113,17 +113,20 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	if err != nil {
 		return fmt.Errorf("failed to plan restack: %w", err)
 	}
-	specs, branchMap, plannedResults := plan.Specs, plan.BranchMap, plan.PlannedResults
-	if len(specs) == 0 {
+	specs, plannedResults := plan.Specs, plan.PlannedResults
+	if len(specs) == 0 && len(plan.ApplyMap) == 0 {
 		reportRestackBatchResults(ctx, branches, engine.RestackBatchResult{Results: plannedResults}, callback)
 		ctx.Logger.Info("restack no specs built, nothing to do")
 		return nil
 	}
 
 	// Validate all rebases in a temporary worktree (clean, no side effects)
-	validation, err := ctx.Engine.ValidateRebases(ctx.Context, specs)
-	if err != nil {
-		return fmt.Errorf("failed to validate rebases: %w", err)
+	validation := &engine.RebaseValidation{Success: true, NewSHAs: map[string]string{}, RerereResolved: map[string]int{}}
+	if len(specs) > 0 {
+		validation, err = ctx.Engine.ValidateRebases(ctx.Context, specs)
+		if err != nil {
+			return fmt.Errorf("failed to validate rebases: %w", err)
+		}
 	}
 
 	// Check if validation failed due to a system error (not a conflict)
@@ -145,7 +148,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	if validation.Success {
 		// All branches succeeded - add them all to success list
 		for _, branch := range branches {
-			if _, exists := branchMap[branch.GetName()]; exists {
+			if _, exists := plan.ApplyMap[branch.GetName()]; exists {
 				successBranches = append(successBranches, branch)
 			}
 		}
@@ -154,6 +157,10 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		positionMap := make(map[string]int)
 		for i, spec := range specs {
 			positionMap[spec.Branch] = i
+		}
+		branchIndex := make(map[string]int, len(branches))
+		for i, branch := range branches {
+			branchIndex[branch.GetName()] = i
 		}
 
 		// Find position of failed branch
@@ -167,13 +174,15 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		// Classify branches based on their position relative to the conflict
 		for _, branch := range branches {
 			branchName := branch.GetName()
-			if _, exists := branchMap[branchName]; !exists {
-				continue // Skip branches without specs
+			if _, exists := plan.ApplyMap[branchName]; !exists {
+				continue
 			}
 
 			pos, ok := positionMap[branchName]
 			if !ok {
-				// Branch not in specs (shouldn't happen)
+				if branchIndex[branchName] < branchIndex[validation.FailedBranch] {
+					successBranches = append(successBranches, branch)
+				}
 				continue
 			}
 

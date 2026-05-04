@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,6 +84,7 @@ const MaxRerereContinueIterations = 1000
 //     callers keep the context that triggered auto-continue.
 func AutoContinueRerereRebase(ctx context.Context, r Runner, originalErr error) (RebaseOutcome, []string, error) {
 	outcome := RebaseOutcome{Result: RebaseConflict}
+	skipNextContinueCount := false
 
 	for range MaxRerereContinueIterations {
 		if !r.IsRebaseInProgress(ctx) {
@@ -95,16 +97,47 @@ func AutoContinueRerereRebase(ctx context.Context, r Runner, originalErr error) 
 			return outcome, nil, originalErr
 		}
 		if len(unmergedFiles) > 0 {
+			if _, rerereErr := r.RunGitCommandWithContext(ctx, "rerere"); rerereErr == nil {
+				unmergedFiles, err = r.GetUnmergedFiles(ctx)
+				if err != nil {
+					return outcome, nil, originalErr
+				}
+			}
+		}
+		if len(unmergedFiles) > 0 {
 			return outcome, unmergedFiles, nil
 		}
 
 		if _, err := r.RunGitCommandWithEnv(ctx, []string{"GIT_EDITOR=true"}, "rebase", "--continue"); err != nil {
+			if isRebaseContinueStagedChangesError(err) && r.IsRebaseInProgress(ctx) {
+				unmergedFiles, filesErr := r.GetUnmergedFiles(ctx)
+				if filesErr == nil && len(unmergedFiles) == 0 {
+					if _, commitErr := r.RunGitCommandWithEnv(ctx, []string{"GIT_EDITOR=true"}, "commit"); commitErr != nil {
+						return outcome, nil, fmt.Errorf("commit after rerere replay failed: %w", commitErr)
+					}
+					outcome.RerereResolvedCount++
+					skipNextContinueCount = true
+					continue
+				}
+			}
 			return outcome, nil, fmt.Errorf("rebase --continue failed after rerere replay: %w", err)
 		}
-		outcome.RerereResolvedCount++
+		if skipNextContinueCount {
+			skipNextContinueCount = false
+		} else {
+			outcome.RerereResolvedCount++
+		}
 	}
 
 	return outcome, nil, fmt.Errorf("rerere auto-continue exceeded %d iterations: %w", MaxRerereContinueIterations, originalErr)
+}
+
+func isRebaseContinueStagedChangesError(err error) bool {
+	var commandErr *CommandError
+	if errors.As(err, &commandErr) {
+		return strings.Contains(commandErr.Stderr, "you have staged changes in your working tree")
+	}
+	return strings.Contains(err.Error(), "you have staged changes in your working tree")
 }
 
 func (r *runner) continueRerereResolvedRebase(ctx context.Context, originalErr error) (RebaseOutcome, error) {
@@ -121,6 +154,9 @@ func (r *runner) RebaseContinueNoEdit(ctx context.Context) (RebaseOutcome, error
 		}
 		return RebaseOutcome{Result: RebaseConflict}, err
 	}
+	if r.IsRebaseInProgress(ctx) {
+		return r.continueRerereResolvedRebase(ctx, nil)
+	}
 	return RebaseOutcome{Result: RebaseDone}, nil
 }
 
@@ -131,6 +167,9 @@ func (r *runner) RebaseContinue(ctx context.Context) (RebaseOutcome, error) {
 			return r.continueRerereResolvedRebase(ctx, err)
 		}
 		return RebaseOutcome{Result: RebaseConflict}, fmt.Errorf("rebase continue failed: %w", err)
+	}
+	if r.IsRebaseInProgress(ctx) {
+		return r.continueRerereResolvedRebase(ctx, nil)
 	}
 
 	return RebaseOutcome{Result: RebaseDone}, nil
