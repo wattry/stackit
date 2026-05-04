@@ -120,8 +120,8 @@ func (m reorderModel) isBranchMoved(branch string) bool {
 	return currentPos != originalPos
 }
 
-// branchNeedsRestack checks if a branch will need restacking
-// A branch needs restack if it has moved OR any branch below it (toward trunk) has moved
+// branchNeedsRestack checks if a branch should show the restack suggestion style.
+// A branch has restack suggested if it has moved OR any branch below it (toward trunk) has moved
 // Since branches are displayed tip-first, "below" means higher index
 func (m reorderModel) branchNeedsRestack(branchIndex int) bool {
 	// Check if this branch or any branch below it (higher index, closer to trunk) has moved
@@ -145,7 +145,7 @@ func (m reorderModel) View() tea.View {
 
 	// Styles
 	movedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12"))  // Blue for moved
-	restackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // Green for needs restack
+	restackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // Green for restack suggestions
 	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))  // Default/white
 	trunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205")) // Pink for trunk
 	dimStyle := lipgloss.NewStyle().Foreground(style.DimColor())        // Dim for tree lines

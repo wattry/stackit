@@ -114,7 +114,7 @@ func registerTreeStories() {
 					"feature-merged":  true,
 					"feature-draft":   true,
 					"feature-active":  true,
-					"feature-failing": false, // needs restack
+					"feature-failing": false, // restack suggested
 				},
 			}
 			renderer := tree.NewRenderer(mock)
@@ -197,7 +197,7 @@ func registerTreeStories() {
 					"base-api":  true,
 					"base-auth": true,
 					"api-v2":    true,
-					"api-docs":  false, // needs restack
+					"api-docs":  false, // restack suggested
 					"auth-fix":  true,
 				},
 			}
@@ -222,7 +222,7 @@ func registerTreeStories() {
 				CheckStatus:  tree.CheckStatusFailing,
 			})
 
-			// Branch without PR, needs restack
+			// Branch without PR, restack suggested
 			renderer.SetAnnotation("api-docs", tree.BranchAnnotation{
 				Scope:       "API",
 				CommitCount: 1,

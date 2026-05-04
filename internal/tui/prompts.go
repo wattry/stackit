@@ -799,7 +799,7 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 
 		// Add restack indicator if needed
 		if !eng.IsUpToDate(branch) {
-			coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
+			coloredBranchName += " " + style.ColorNeedsRestack(tree.RestackSuggestedLabel)
 		}
 
 		display := indent + symbol + " " + coloredBranchName

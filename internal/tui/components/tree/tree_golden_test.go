@@ -193,7 +193,7 @@ func buildGoldenTests() []goldenTest {
 			opts: RenderOptions{Mode: RenderModeFull},
 		},
 
-		// Needs restack indicator
+		// Restack suggestion indicator
 		{
 			name: "needs_restack",
 			mock: &MockTreeData{

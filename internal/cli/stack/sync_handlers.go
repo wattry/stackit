@@ -531,6 +531,7 @@ func (h *InteractiveSyncHandler) Complete(summary syncAction.Summary) {
 
 	// Send complete message
 	h.runner.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
+	h.runner.Wait()
 }
 
 // formatSummary formats the sync summary
@@ -642,6 +643,7 @@ func (h *InteractiveSyncHandler) OnRestackComplete(restacked, skipped int, confl
 
 	// Send complete message
 	h.runner.Send(syncComponent.CompleteMsg{Summary: summaryMsg})
+	h.runner.Wait()
 }
 
 // Cleanup is a no-op - terminal cleanup is handled by the runner via defer.

@@ -15,6 +15,9 @@ type Sender interface {
 	// Resume resumes TUI rendering after a pause.
 	Resume()
 
+	// Wait blocks until the TUI exits.
+	Wait()
+
 	// Cleanup performs terminal cleanup.
 	Cleanup()
 
