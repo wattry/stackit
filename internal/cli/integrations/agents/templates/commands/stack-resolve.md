@@ -1,7 +1,7 @@
 ---
 description: Resolve rebase conflicts with AI assistance
 model: claude-sonnet-4-20250514
-allowed-tools: Read, Edit, AskUserQuestion, Bash(git show *), Bash(git diff *), Bash(git add *), Bash(git rebase --continue), Bash(grep *), Bash(command stackit *), Bash(make *), Bash(npm *), Bash(yarn *), Bash(pnpm *), Bash(go *), Bash(cargo *), Bash(mise run *)
+allowed-tools: Read, Edit, AskUserQuestion, Bash(git show *), Bash(git diff *), Bash(git add *), Bash(git rebase --continue), Bash(grep *), Bash(stackit *), Bash(make *), Bash(npm *), Bash(yarn *), Bash(pnpm *), Bash(go *), Bash(cargo *), Bash(mise run *)
 ---
 
 # Conflict Resolution
@@ -124,13 +124,13 @@ After rebase continues successfully:
 
 2. **If clean:**
    ```bash
-   command stackit log --no-interactive
+   stackit log --no-interactive
    ```
    Show the updated stack state.
 
 3. **If the rebase is fully complete:**
    - Inform the user
-   - Suggest `command stackit submit` if PRs need updating
+   - Suggest `stackit submit` if PRs need updating
 
 ## Communication Style
 

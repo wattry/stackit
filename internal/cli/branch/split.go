@@ -24,6 +24,7 @@ func NewSplitCmd() *cobra.Command {
 		below             bool
 		name              string
 		message           string
+		messageFile       string
 		patchFile         string
 		dryRun            bool
 	)
@@ -68,7 +69,8 @@ Examples:
   stackit split --by-file path/to/file.go --above     # Extract to child branch (above)
   stackit split --by-file path/to/file.go --as-sibling # Extract to sibling branch
   stackit split --by-file path/to/file.go --dry-run   # Preview the split
-  stackit split --by-commit --as-sibling              # Split commits as siblings`,
+  stackit split --by-commit --as-sibling              # Split commits as siblings
+  stackit split --by-file file.go --message-file msg.txt  # Read commit message from file (no -F shorthand on split; -F is --by-file-interactive)`,
 		SilenceUsage: true,
 		// Disable default help flag to allow -h for --by-hunk
 		DisableFlagParsing: false,
@@ -105,25 +107,31 @@ Examples:
 				}
 				// If direction is empty, wizard will prompt (for hunk mode)
 
-				// Validate flag combinations
-				// --patch can only be used with --by-hunk
+				// Validate flag combinations BEFORE any I/O so an invalid
+				// invocation (e.g. --message-file - --by-commit) fails fast
+				// instead of draining stdin or opening a file first.
 				if patchFile != "" && style != split.StyleHunk {
 					return fmt.Errorf("--patch can only be used with --by-hunk")
 				}
-				// --name and --message require --by-file or --by-hunk with --patch
 				if name != "" && style != split.StyleFile && patchFile == "" {
 					return fmt.Errorf("--name can only be used with --by-file or --by-hunk --patch")
 				}
-				if message != "" && style != split.StyleFile && patchFile == "" {
-					return fmt.Errorf("--message can only be used with --by-file or --by-hunk --patch")
+				if (message != "" || messageFile != "") && style != split.StyleFile && patchFile == "" {
+					return fmt.Errorf("--message/--message-file can only be used with --by-file or --by-hunk --patch")
 				}
-				// --above/--below make sense with --by-hunk and --by-file
 				if (above || below) && style != "" && style != split.StyleHunk && style != split.StyleFile {
 					return fmt.Errorf("--above/--below can only be used with --by-hunk or --by-file")
 				}
-				// --above with --by-file is incompatible with --as-sibling
 				if above && style == split.StyleFile && asSibling {
 					return fmt.Errorf("--above and --as-sibling cannot be used together")
+				}
+				if messageFile == "-" && patchFile == "-" {
+					return fmt.Errorf("cannot read both --message-file and --patch from stdin")
+				}
+
+				resolvedMessage, err := common.ReadMessage(message, messageFile)
+				if err != nil {
+					return err
 				}
 
 				// Load config for branch pattern and hunk selector
@@ -150,7 +158,7 @@ Examples:
 					BranchPattern: branchPattern,
 					AsSibling:     asSibling,
 					Name:          name,
-					Message:       message,
+					Message:       resolvedMessage,
 					UseWizard:     useWizard,
 					HunkSelector:  hunkSelector,
 					PatchFile:     patchFile,
@@ -173,6 +181,7 @@ Examples:
 	cmd.Flags().BoolVar(&asSibling, "as-sibling", false, "Create split branches as siblings instead of a chain")
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Name for the new split branch (default: auto-generated)")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "Commit message for extraction (only with --by-file)")
+	cmd.Flags().StringVar(&messageFile, "message-file", "", "Read commit message from a file (use \"-\" for stdin) (only with --by-file or --by-hunk --patch). Mutually exclusive with --message. Note: split has no -F shorthand for this flag (taken by --by-file-interactive).")
 
 	// Direction options (for hunk and file modes)
 	cmd.Flags().BoolVar(&above, "above", false, "Insert new branch above current (as child, upstack)")

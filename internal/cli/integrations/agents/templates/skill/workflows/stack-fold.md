@@ -12,7 +12,7 @@ This workflow guides the LLM through analyzing a branch stack and recommending b
 ### 1. Gather Context
 Fetch the complete metadata for the current stack:
 ```bash
-command stackit info --stack --json --no-interactive
+stackit info --stack --json --no-interactive
 ```
 
 ### 2. Identify Candidates
@@ -30,7 +30,7 @@ Analyze the JSON output to find folding candidates.
 ### 3. Detailed Analysis (Optional but Recommended)
 For high-confidence candidates, verify the actual changes to ensure they are safe to merge into the parent:
 ```bash
-command stackit info <branch-name> --diff --no-interactive
+stackit info <branch-name> --diff --no-interactive
 ```
 
 ### 4. Propose a Fold Plan
@@ -44,8 +44,8 @@ Present your findings to the user. For each recommendation, include:
 Wait for user confirmation. If confirmed, perform the fold:
 ```bash
 # Fold branch into parent (keeps parent name)
-command stackit checkout <branch-to-fold> --no-interactive
-command stackit fold --no-interactive
+stackit checkout <branch-to-fold> --no-interactive
+stackit fold --no-interactive
 ```
 
 ### 6. Post-Fold Cleanup
@@ -53,10 +53,10 @@ After folding, restack only the affected subtree. The parent branch now carries 
 
 ```bash
 # Scope restack to the parent and its descendants — avoid a broad restack
-command stackit restack --branch <parent-branch> --upstack --no-interactive
+stackit restack --branch <parent-branch> --upstack --no-interactive
 
 # If you folded in multiple independent stacks in one session, prefer:
-# command stackit restack --all-stacks --continue-on-conflict --no-interactive
+# stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
 
 Use `--json` to verify only the expected branches were touched; skip a follow-up restack when output shows nothing pending.

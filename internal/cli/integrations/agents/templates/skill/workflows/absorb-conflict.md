@@ -2,7 +2,7 @@
 
 Guide for resolving conflicts during `stackit absorb --no-interactive --force` operations. Unlike regular git conflicts, absorb conflicts occur when staged changes cannot be cleanly applied to their target commits in the stack.
 
-> **CRITICAL:** Always run stackit commands with `command stackit ... --no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
+> **CRITICAL:** Always run stackit commands with `stackit ... --no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
 
 ## Understanding Absorb Conflicts
 
@@ -47,10 +47,10 @@ When absorb fails with a conflict, identify where the change should go:
 
 ```bash
 # Show absorb plan (dry run)
-command stackit absorb --dry-run --no-interactive
+stackit absorb --dry-run --no-interactive
 
 # View commits in current branch's stack
-command stackit log --no-interactive
+stackit log --no-interactive
 
 # See what each commit changed
 git log --oneline --stat HEAD~5..HEAD
@@ -101,10 +101,10 @@ git checkout <target-branch>
 
 # 3. Amend the commit
 git add path/to/file.go
-command stackit modify --no-interactive
+stackit modify --no-interactive
 
 # 4. Restack to propagate — scope to the amended branch and its descendants
-command stackit restack --branch <target-branch> --upstack --no-interactive
+stackit restack --branch <target-branch> --upstack --no-interactive
 ```
 
 Pass `--json` when you want a machine-readable report (which branches were restacked, skipped, or conflicted) instead of doing a second broad restack to "check".
@@ -121,13 +121,13 @@ git reset HEAD
 git add -p  # Use patch mode to select hunks
 
 # 3. Absorb the first part
-command stackit absorb --no-interactive --force
+stackit absorb --no-interactive --force
 
 # 4. Stage the remaining part
 git add -p
 
 # 5. Absorb (will go to different commit)
-command stackit absorb --no-interactive --force
+stackit absorb --no-interactive --force
 ```
 
 ### Strategy C: Create New Commit
@@ -137,7 +137,7 @@ If the change doesn't belong in any existing commit:
 ```bash
 # 1. Keep the staged changes
 # 2. Create a new commit on top
-command stackit create --no-interactive "description of change"
+stackit create --no-interactive "description of change"
 ```
 
 ### Strategy D: Interactive Resolution
@@ -146,10 +146,10 @@ For complex cases, use the absorb conflict workflow:
 
 ```bash
 # 1. Show what absorb wants to do
-command stackit absorb --dry-run --no-interactive
+stackit absorb --dry-run --no-interactive
 
 # 2. If conflict occurs, check state
-command stackit absorb --show-conflict --no-interactive
+stackit absorb --show-conflict --no-interactive
 
 # 3. Resolve the conflict manually
 # Edit the file, removing conflict markers
@@ -158,10 +158,10 @@ command stackit absorb --show-conflict --no-interactive
 git add path/to/file.go
 
 # 5. Re-run absorb after resolution
-command stackit absorb --no-interactive --force
+stackit absorb --no-interactive --force
 
 # Or abort and try a different approach
-command stackit abort --no-interactive
+stackit abort --no-interactive
 ```
 
 ## Step 5: Verify and Complete
@@ -170,11 +170,11 @@ After resolution:
 
 ```bash
 # 1. Verify the stack structure
-command stackit log --no-interactive
+stackit log --no-interactive
 
 # 2. Build/test each affected branch (use project's commands from README.md)
-command stackit foreach --no-interactive "<build-command>"
-command stackit foreach --no-interactive "<test-command>"
+stackit foreach --no-interactive "<build-command>"
+stackit foreach --no-interactive "<test-command>"
 
 # 3. Check for any remaining issues
 git status
@@ -279,7 +279,7 @@ Three-way merge couldn't auto-resolve. Manually resolve or use Claude assistance
 
 ### Left in detached HEAD state
 
-Absorb failed midway. Run `command stackit abort --no-interactive` to recover.
+Absorb failed midway. Run `stackit abort --no-interactive` to recover.
 
 ### Changes lost after conflict
 
@@ -297,4 +297,4 @@ Check `git stash list` - absorb stashes changes before starting. Use `git stash 
 - All staged changes applied to appropriate commits
 - No conflict markers in any files
 - Stack builds and tests pass
-- `command stackit log --no-interactive` shows clean structure
+- `stackit log --no-interactive` shows clean structure

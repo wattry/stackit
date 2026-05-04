@@ -13,14 +13,15 @@ import (
 // NewCreateCmd creates the create command
 func NewCreateCmd() *cobra.Command {
 	var (
-		all      bool
-		insert   bool
-		message  string
-		patch    bool
-		scope    string
-		update   bool
-		verbose  int
-		worktree bool
+		all         bool
+		insert      bool
+		message     string
+		messageFile string
+		patch       bool
+		scope       string
+		update      bool
+		verbose     int
+		worktree    bool
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +31,12 @@ func NewCreateCmd() *cobra.Command {
 
 If no branch name is specified, generate a branch name from the commit message.
 If your working directory contains no changes, an empty branch will be created.
-If you have any unstaged changes, you will be asked whether you'd like to stage them.`,
+If you have any unstaged changes, you will be asked whether you'd like to stage them.
+
+Examples:
+  stackit create -m "feat: add login"             # Inline message
+  stackit create feature -F /tmp/msg              # Read message from a file
+  printf "feat: add login" | stackit create -F -  # Read message from stdin`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
@@ -40,6 +46,11 @@ If you have any unstaged changes, you will be asked whether you'd like to stage 
 					branchName = args[0]
 				}
 
+				resolvedMessage, err := common.ReadMessage(message, messageFile)
+				if err != nil {
+					return err
+				}
+
 				// Get config values
 				cfg, _ := config.LoadConfig(ctx.RepoRoot)
 				branchPattern := cfg.GetBranchPattern()
@@ -47,7 +58,7 @@ If you have any unstaged changes, you will be asked whether you'd like to stage 
 				// Prepare options
 				opts := create.Options{
 					BranchName:    branchName,
-					Message:       message,
+					Message:       resolvedMessage,
 					Scope:         scope,
 					All:           all,
 					Insert:        insert,
@@ -82,6 +93,7 @@ If you have any unstaged changes, you will be asked whether you'd like to stage 
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Stage all unstaged changes before creating the branch, including to untracked files")
 	cmd.Flags().BoolVarP(&insert, "insert", "i", false, "Insert this branch between the current branch and its child. If there are multiple children, prompts you to select which should be moved onto the new branch")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "Specify a commit message")
+	cmd.Flags().StringVarP(&messageFile, "message-file", "F", "", "Read commit message from a file (use \"-\" for stdin). Mutually exclusive with --message.")
 	cmd.Flags().BoolVarP(&patch, "patch", "p", false, "Pick hunks to stage before committing")
 	cmd.Flags().StringVar(&scope, "scope", "", "Set a scope (e.g., Jira ticket ID, Linear ID) for the new branch. If not provided, inherits from parent branch")
 	cmd.Flags().BoolVarP(&update, "update", "u", false, "Stage all updates to tracked files before creating the branch")

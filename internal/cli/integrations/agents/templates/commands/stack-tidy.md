@@ -10,8 +10,8 @@ Clean up commits across the stack by squashing fixup/WIP commits into meaningful
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`command stackit log --no-interactive 2>&1`
-- Stack info: !`command stackit info --stack --json --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
+- Stack info: !`stackit info --stack --json --no-interactive 2>&1`
 
 ## Task
 
@@ -43,8 +43,8 @@ For each commit, classify as **cleanup** or **meaningful**:
 | Condition | Strategy | Action |
 |-----------|----------|--------|
 | 0 or 1 commits | **SKIP** | Nothing to tidy |
-| 1 meaningful + rest noise | **SQUASH** | `command stackit squash -m "<meaningful msg>" --no-edit --no-interactive` |
-| 0 meaningful (all noise) | **SQUASH** | `command stackit squash --no-edit --no-interactive` (keeps oldest msg) |
+| 1 meaningful + rest noise | **SQUASH** | `stackit squash -m "<meaningful msg>" --no-edit --no-interactive` |
+| 0 meaningful (all noise) | **SQUASH** | `stackit squash --no-edit --no-interactive` (keeps oldest msg) |
 | 2+ meaningful commits | **REVIEW** | Show commits, suggest manual action |
 
 ### Step 4: Present Plan
@@ -72,7 +72,7 @@ Use `AskUserQuestion`:
 
 Process branches **closest to trunk first** (bottom-up). For each SQUASH branch:
 
-1. `command stackit checkout <branch> --no-interactive`
+1. `stackit checkout <branch> --no-interactive`
 2. Run the squash command from Step 3
 3. Show result
 
@@ -80,7 +80,7 @@ Skip REVIEW and SKIP branches.
 
 ### Step 7: Show Results
 
-Show final stack state with `command stackit log --no-interactive`.
+Show final stack state with `stackit log --no-interactive`.
 
 ## Tool Trust
 
@@ -91,7 +91,7 @@ Trust all tools work without error. Don't run exploratory commands to verify too
 - Squash branches with only 1 commit
 - Process branches top-down (children before parents) — always bottom-up
 - Modify REVIEW branches without explicit user instruction
-- Use `git rebase -i` — use `command stackit squash` instead
+- Use `git rebase -i` — use `stackit squash` instead
 
 ## Follow-up
 
@@ -108,5 +108,5 @@ After successful tidy, use `AskUserQuestion`:
 
 Based on response:
 - **"Submit changes"**: Invoke `/stack-submit` skill using the `Skill` tool
-- **"View final stack"**: Run `command stackit log --no-interactive` and display
+- **"View final stack"**: Run `stackit log --no-interactive` and display
 - **"Done for now"**: End with summary of what was tidied

@@ -11,8 +11,8 @@ Submit branches to GitHub and create/update PRs.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`command stackit log --no-interactive 2>&1`
-- Branch info: !`command stackit info --json --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
+- Branch info: !`stackit info --json --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
@@ -22,7 +22,7 @@ $ARGUMENTS
 ### Step 1: Pre-flight Checks
 
 Check the branch info JSON:
-- If parent branch doesn't exist or was deleted, run `command stackit sync --no-interactive` first
+- If parent branch doesn't exist or was deleted, run `stackit sync --no-interactive` first
 - If there are uncommitted changes, warn the user
 
 ### Step 2: Identify Branches Needing PRs
@@ -37,12 +37,12 @@ Run submit command:
 
 **Current branch only:**
 ```bash
-command stackit submit --no-interactive
+stackit submit --no-interactive
 ```
 
 **Entire stack:**
 ```bash
-command stackit submit --stack --no-interactive
+stackit submit --stack --no-interactive
 ```
 
 **As drafts:** add `--draft`
@@ -76,5 +76,5 @@ After successful submit, use `AskUserQuestion`:
 
 Based on response:
 - **"Sync with trunk"**: Invoke `/stack-sync` skill using the `Skill` tool
-- **"Check PR status"**: Run `command stackit log full --no-interactive`
+- **"Check PR status"**: Run `stackit log full --no-interactive`
 - **"Done for now"**: End with summary including PR URLs from the submit output

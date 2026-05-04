@@ -10,9 +10,9 @@ Show the current stack state, identify issues, and provide actionable recommenda
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
-- Stack state (text): !`command stackit log --no-interactive 2>&1`
-- Stack state (json): !`command stackit log --json --no-interactive 2>&1`
-- Branch info: !`command stackit info --json --no-interactive 2>&1`
+- Stack state (text): !`stackit log --no-interactive 2>&1`
+- Stack state (json): !`stackit log --json --no-interactive 2>&1`
+- Branch info: !`stackit info --json --no-interactive 2>&1`
 
 ## Task
 
@@ -45,12 +45,12 @@ Based on the stack state, provide actionable next steps:
 
 | Issue | Recommendation |
 |-------|----------------|
-| One branch/stack needs restack | `command stackit restack --branch <branch-or-root> --upstack --no-interactive` |
-| Multiple independent stacks need restack | `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive` |
-| Branches have no PR | `command stackit submit --no-interactive` |
+| One branch/stack needs restack | `stackit restack --branch <branch-or-root> --upstack --no-interactive` |
+| Multiple independent stacks need restack | `stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive` |
+| Branches have no PR | `stackit submit --no-interactive` |
 | CI failing | Check CI logs and fix issues |
-| Branch ready to merge | `command stackit merge <branch> --no-interactive` |
-| Branches need trunk updates | `command stackit sync --no-interactive` |
+| Branch ready to merge | `stackit merge <branch> --no-interactive` |
+| Branches need trunk updates | `stackit sync --no-interactive` |
 
 ### Step 4: Summary
 
@@ -74,8 +74,8 @@ Health:
   ✓  feature-api: CI passing, ready for review
 
 Recommendations:
-  1. Run `command stackit restack --branch feature-models --upstack --no-interactive` to update feature-models and descendants
-  2. Run `command stackit submit` to create PR for feature-api
+  1. Run `stackit restack --branch feature-models --upstack --no-interactive` to update feature-models and descendants
+  2. Run `stackit submit` to create PR for feature-api
 
 Summary: 2 branches, 1 needs attention
 ```
