@@ -2,7 +2,7 @@
 
 Guide for resolving conflicts during stackit operations (restack, sync, merge, etc.).
 
-> **CRITICAL:** Always run stackit commands with `command stackit ... --no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
+> **CRITICAL:** Always run stackit commands with `stackit ... --no-interactive`. For commands that require confirmation, also include the `--yes` or `-y` flag.
 
 ## Understanding Conflicts
 
@@ -194,7 +194,7 @@ Once all conflicts are resolved and verified:
 git add .
 
 # Continue the operation
-command stackit continue --no-interactive
+stackit continue --no-interactive
 
 # Or if using git directly
 git rebase --continue
@@ -303,13 +303,13 @@ If resolution is too complex or you want to reconsider:
 
 ```bash
 # Abort the operation
-command stackit abort --no-interactive
+stackit abort --no-interactive
 
 # Or with git
 git rebase --abort
 
 # Then undo stackit command
-command stackit undo --no-interactive --yes
+stackit undo --no-interactive --yes
 ```
 
 ## Prevention Strategies
@@ -320,42 +320,42 @@ Smaller, focused branches = fewer conflicts. A branch can have multiple related 
 
 ```bash
 # Good: Small, focused changes (one branch per logical unit)
-echo "feat: add email validation" | command stackit create --no-interactive
-echo "feat: add phone validation" | command stackit create --no-interactive
+echo "feat: add email validation" | stackit create -F - --no-interactive
+echo "feat: add phone validation" | stackit create -F - --no-interactive
 
 # Also good: Multiple commits in one branch for related work
-echo "feat: add validation helpers" | command stackit create --no-interactive
+echo "feat: add validation helpers" | stackit create -F - --no-interactive
 git add . && git commit -m "test: add validation tests"
 
 # Risky: Large, sweeping changes
-echo "feat: refactor entire validation system" | command stackit create --no-interactive
+echo "feat: refactor entire validation system" | stackit create -F - --no-interactive
 ```
 
 ### 2. Sync Frequently
 
 ```bash
 # Sync often to stay current with main
-command stackit sync --no-interactive --restack
+stackit sync --no-interactive --restack
 ```
 
 ### 3. Restack After Changes
 
 ```bash
 # After modifying a branch, restack only that branch's descendants
-command stackit modify --no-interactive
-command stackit restack --branch $(git branch --show-current) --upstack --no-interactive
+stackit modify --no-interactive
+stackit restack --branch $(git branch --show-current) --upstack --no-interactive
 
 # If modifications affected multiple independent stacks, prefer:
-# command stackit restack --all-stacks --continue-on-conflict --no-interactive
+# stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
 
 Use `--json` to confirm which branches were touched and avoid running a second broad restack.
 
-### 4. Use `command stackit foreach --no-interactive` to Check
+### 4. Use `stackit foreach --no-interactive` to Check
 
 ```bash
 # Verify entire stack builds before operations (use project's build command from README.md)
-command stackit foreach --no-interactive "<build-command>"
+stackit foreach --no-interactive "<build-command>"
 ```
 
 ## Advanced: Complex Multi-Branch Conflicts
@@ -369,22 +369,22 @@ When restacking affects multiple branches:
 
 ```bash
 # Example workflow
-command stackit log --no-interactive  # Note branch order
+stackit log --no-interactive  # Note branch order
 
 # Resolve first conflict
 git status  # See conflicted files
 # ... resolve conflicts ...
 git add .
-command stackit continue --no-interactive
+stackit continue --no-interactive
 
 # Before moving to next conflict, verify
 <build-command>
-command stackit log --no-interactive  # Confirm structure still correct
+stackit log --no-interactive  # Confirm structure still correct
 
 # Continue to next conflict
 # ... resolve conflicts ...
 git add .
-command stackit continue --no-interactive
+stackit continue --no-interactive
 
 # Repeat until complete
 ```
@@ -396,28 +396,28 @@ command stackit continue --no-interactive
 ```bash
 # Stage all resolved files
 git add .
-command stackit continue --no-interactive
+stackit continue --no-interactive
 ```
 
 ### "No rebase in progress"
 
 ```bash
 # Operation already completed or aborted
-command stackit log --no-interactive  # Check current state
+stackit log --no-interactive  # Check current state
 ```
 
 ### "Conflict resolution broke the build"
 
 ```bash
 # Abort and try again
-command stackit abort --no-interactive
-command stackit undo --no-interactive --yes
+stackit abort --no-interactive
+stackit undo --no-interactive --yes
 
 # Or fix the build issue
 <build-command>  # See error (check README.md for project's build command)
 # Fix the issue
 git add .
-command stackit continue --no-interactive
+stackit continue --no-interactive
 ```
 
 ## Example Walkthrough
@@ -426,7 +426,7 @@ command stackit continue --no-interactive
 
 ```bash
 # 1. Restack started (scoped to the affected branch and its descendants)
-command stackit restack --branch feature-x --upstack --no-interactive
+stackit restack --branch feature-x --upstack --no-interactive
 # → Conflict in auth.go
 
 # 2. Check status
@@ -451,11 +451,11 @@ vim auth.go
 
 # 7. Continue
 git add auth.go
-command stackit continue --no-interactive
+stackit continue --no-interactive
 # → Restack completes
 
 # 8. Verify final state
-command stackit log --no-interactive
+stackit log --no-interactive
 # → Stack structure correct
 ```
 
@@ -465,4 +465,4 @@ command stackit log --no-interactive
 - ✓ Project builds successfully
 - ✓ Tests pass
 - ✓ Operation completed (not still in progress)
-- ✓ Stack structure is correct (`command stackit log --no-interactive`)
+- ✓ Stack structure is correct (`stackit log --no-interactive`)

@@ -17,6 +17,7 @@ func NewModifyCmd() *cobra.Command {
 		edit              bool
 		interactiveRebase bool
 		message           string
+		messageFile       string
 		noEdit            bool
 		patch             bool
 		resetAuthor       bool
@@ -34,6 +35,7 @@ Automatically restacks descendants after the modification.
 
 Examples:
   stackit modify -a -m "Updated feature"  # Stage all and amend with message
+  stackit modify -a -F /tmp/msg           # Stage all and amend, reading message from a file
   stackit modify -a                       # Stage all and amend (opens editor)
   stackit modify -p                       # Interactive patch staging then amend
   stackit modify -c -a -m "New commit"    # Create new commit instead of amending
@@ -41,13 +43,18 @@ Examples:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
+				resolvedMessage, err := common.ReadMessage(message, messageFile)
+				if err != nil {
+					return err
+				}
+
 				// Determine noEdit flag:
 				// - If --no-edit is explicitly set, use it
 				// - If message is provided, don't open editor (noEdit = true)
 				// - If --edit is set, open editor (noEdit = false)
 				// - Default: open editor when amending without message (noEdit = false)
 				noEditFlag := noEdit
-				if message != "" && !edit {
+				if resolvedMessage != "" && !edit {
 					noEditFlag = true
 				}
 
@@ -57,7 +64,7 @@ Examples:
 					Update:            update,
 					Patch:             patch,
 					CreateCommit:      commit,
-					Message:           message,
+					Message:           resolvedMessage,
 					Edit:              edit,
 					NoEdit:            noEditFlag,
 					ResetAuthor:       resetAuthor,
@@ -74,6 +81,7 @@ Examples:
 	cmd.Flags().BoolVarP(&edit, "edit", "e", false, "If passed, open an editor to edit the commit message.")
 	cmd.Flags().BoolVar(&interactiveRebase, "interactive-rebase", false, "Ignore all other flags and start a git interactive rebase on the commits in this branch.")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "The message for the new or amended commit. If passed, no editor is opened.")
+	cmd.Flags().StringVarP(&messageFile, "message-file", "F", "", "Read commit message from a file (use \"-\" for stdin). Mutually exclusive with --message.")
 	cmd.Flags().BoolVarP(&noEdit, "no-edit", "n", false, "Don't modify the existing commit message. Takes precedence over --edit.")
 	cmd.Flags().BoolVarP(&patch, "patch", "p", false, "Pick hunks to stage before committing.")
 	cmd.Flags().BoolVar(&resetAuthor, "reset-author", false, "Set the author of the commit to the current user if amending.")

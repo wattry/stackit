@@ -11,7 +11,7 @@ Diagnose and fix stack problems, including build/lint/test failures.
 ## Context
 - Current branch: !`git branch --show-current`
 - Git status: !`git status --short`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Instructions
 
@@ -27,13 +27,13 @@ Check the context and look for these indicators:
 
 **Branches need restack** (stackit log shows "needs restack" or branches are out of sync):
 - Restack only the affected independent stack:
-  - If the affected branch is known, run `command stackit restack --branch <affected-branch> --upstack --no-interactive`.
-  - If only the stack root is known, run `command stackit restack --branch <stack-root> --upstack --no-interactive`.
-  - If several independent stack roots are known, run `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
-  - If every independent stack should be processed, run `command stackit restack --all-stacks --continue-on-conflict --no-interactive`.
+  - If the affected branch is known, run `stackit restack --branch <affected-branch> --upstack --no-interactive`.
+  - If only the stack root is known, run `stackit restack --branch <stack-root> --upstack --no-interactive`.
+  - If several independent stack roots are known, run `stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
+  - If every independent stack should be processed, run `stackit restack --all-stacks --continue-on-conflict --no-interactive`.
 
 **Orphaned branches** (stackit log shows branch with no parent, or parent was merged):
-- Run `command stackit sync --no-interactive`
+- Run `stackit sync --no-interactive`
 
 **Uncommitted changes** (git status shows modified/untracked files):
 - Use `AskUserQuestion`:
@@ -72,8 +72,8 @@ Fix any lint errors, unused variables, or build failures NOW. This prevents havi
 
 #### Step 4: Stage and continue
 ```bash
-command stackit add .
-command stackit continue
+stackit add .
+stackit continue
 ```
 
 #### Step 5: If you amended a commit, restack children
@@ -81,14 +81,14 @@ If you made additional fixes and amended them into a commit:
 ```bash
 git add -A
 git commit --amend --no-edit
-command stackit restack --branch <amended-branch> --upstack --no-interactive
+stackit restack --branch <amended-branch> --upstack --no-interactive
 ```
 
 Child branches need restacking after an amend because the commit SHA changed.
 
 #### Step 6: Verify
 ```bash
-command stackit log  # Should show clean tree, no "needs restack"
+stackit log  # Should show clean tree, no "needs restack"
 <build-command>      # All checks should pass
 ```
 
@@ -123,12 +123,12 @@ Prefer JSON output so branch, status, exit code, and command output are machine-
 
 For the current stack:
 ```bash
-command stackit foreach --stack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
+stackit foreach --stack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
 For a known stack root or affected branch, avoid checking out first and anchor traversal explicitly:
 ```bash
-command stackit foreach --branch <branch-or-root> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
+stackit foreach --branch <branch-or-root> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
 This starts at the selected root/branch and walks toward leaves. A failing branch at the earliest failing depth is where the bug was introduced. Multiple branches can fail at the same depth; inspect each failed result and fix the branch that matches the reported problem.
@@ -150,7 +150,7 @@ Parse `.results` and find entries whose `status` is not `"done"` or whose `exit_
 
 #### Step 3: Checkout the failing branch
 ```bash
-command stackit checkout <failing-branch> --no-interactive
+stackit checkout <failing-branch> --no-interactive
 ```
 
 #### Step 4: Fix the issue
@@ -164,7 +164,7 @@ command stackit checkout <failing-branch> --no-interactive
 
 #### Step 5: Propagate the fix via restack
 ```bash
-command stackit restack --branch <failing-branch> --upstack --no-interactive
+stackit restack --branch <failing-branch> --upstack --no-interactive
 ```
 
 This rebases all child branches onto the fixed branch, propagating your fix.
@@ -174,7 +174,7 @@ This rebases all child branches onto the fixed branch, propagating your fix.
 
 #### Step 6: Verify all branches now pass
 ```bash
-command stackit foreach --branch <failing-branch> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
+stackit foreach --branch <failing-branch> --upstack --json --find-first-failure --jobs 0 "<check-command>" 2>&1
 ```
 
 If it stops at another failure, repeat from Step 2 (there may be multiple independent issues).
@@ -182,7 +182,7 @@ If it stops at another failure, repeat from Step 2 (there may be multiple indepe
 ### 4. After Fixes
 
 Verify stack is healthy:
-- `command stackit log` shows clean tree
+- `stackit log` shows clean tree
 - All branches pass checks
 
 ## Key Insight
@@ -202,11 +202,11 @@ The restack command automatically propagates your fix to all child branches.
 
 **Branching stack (multiple children)**: foreach handles this - all descendants are checked.
 
-**Multiple independent stacks**: Independent stack roots are direct children of trunk. If more than one independent stack needs restack, prefer `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`. If all independent stacks need restack, use `command stackit restack --all-stacks --continue-on-conflict --no-interactive`.
+**Multiple independent stacks**: Independent stack roots are direct children of trunk. If more than one independent stack needs restack, prefer `stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`. If all independent stacks need restack, use `stackit restack --all-stacks --continue-on-conflict --no-interactive`.
 
 **Multiple independent failures**: After fixing one, re-run JSON `foreach --find-first-failure` to find the next failing depth. For multiple known independent stack roots, run one anchored `foreach --branch <root> --upstack --json --find-first-failure --jobs 0 "<check-command>"` per root and compare failed JSON results.
 
-**After amending a commit**: Always run `command stackit restack --branch <amended-branch> --upstack --no-interactive` because child branches reference the old commit SHA.
+**After amending a commit**: Always run `stackit restack --branch <amended-branch> --upstack --no-interactive` because child branches reference the old commit SHA.
 
 ## Tool Trust
 
@@ -218,9 +218,9 @@ Only apply fixes you're 90%+ confident about. If unsure whether a fix is correct
 
 ## Do NOT
 - Fix the same bug on multiple branches manually
-- Use `git checkout` directly - use `command stackit checkout` instead
-- Use `git rebase --continue` - use `command stackit continue` instead (it handles metadata properly)
-- Use `git rebase --abort` - use `command stackit abort` instead
+- Use `git checkout` directly - use `stackit checkout` instead
+- Use `git rebase --continue` - use `stackit continue` instead (it handles metadata properly)
+- Use `git rebase --abort` - use `stackit abort` instead
 - Make destructive changes without user confirmation
 - Loop indefinitely on fixes (max 2 attempts per issue type)
 - Skip asking what check command to use if unclear

@@ -16,7 +16,7 @@ Perform code reviews on PRs in the stack. Finds bugs, checks CLAUDE.md complianc
 ## Context
 - Current branch: !`git branch --show-current`
 - Repo: !`gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Arguments
 $ARGUMENTS
@@ -51,7 +51,7 @@ Perform code reviews on stack PRs in parallel, reporting high-confidence issues 
 Get all branches in the stack that have open PRs:
 
 ```bash
-command stackit log --json --no-interactive 2>&1
+stackit log --json --no-interactive 2>&1
 ```
 
 Parse the JSON to identify branches with PRs. For each branch, check if the PR is reviewable:
@@ -294,10 +294,10 @@ mutation {
 Restack only the reviewed branch and descendants so feedback changes propagate without rebasing unrelated stacks:
 
 ```bash
-command stackit restack --branch <reviewed-branch> --upstack --no-interactive
+stackit restack --branch <reviewed-branch> --upstack --no-interactive
 ```
 
-If apply mode updated multiple independent PR branches, group their stack roots with `command stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
+If apply mode updated multiple independent PR branches, group their stack roots with `stackit restack --stacks <root-a>,<root-b> --continue-on-conflict --no-interactive`.
 
 ### Step 8: Report
 

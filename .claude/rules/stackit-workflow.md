@@ -6,10 +6,10 @@ This project uses stackit for stacked changes. **NEVER use raw git commands for 
 
 | Never Use | Use Instead |
 |-----------|-------------|
-| `git commit -m "..."` | `command stackit create -m "..."` |
-| `git checkout -b` | `command stackit create -m "..."` |
-| `gh pr create` | `command stackit submit` |
-| `git rebase` | `command stackit restack --upstack` (or `--all-stacks`) |
+| `git commit -m "..."` | `stackit create -m "..."` |
+| `git checkout -b` | `stackit create -m "..."` |
+| `gh pr create` | `stackit submit` |
+| `git rebase` | `stackit restack --upstack` (or `--all-stacks`) |
 
 **Exception:** `git commit` is allowed when adding commits to an existing stacked branch.
 
@@ -20,9 +20,9 @@ This project uses stackit for stacked changes. **NEVER use raw git commands for 
 # 2. Stage changes FIRST (required!)
 git add -A
 # 3. Create stacked branch with commit
-command stackit create -m "feat: description"
+stackit create -m "feat: description"
 # 4. Submit when ready
-command stackit submit
+stackit submit
 ```
 
 **Critical:** `stackit create` requires staged changes. Without staged changes, it creates an empty branch.
@@ -43,6 +43,39 @@ Use skills instead of manual commands:
 
 Run `/stackit` for the full guide.
 
+## Keeping Permission Rules Stable
+
+Claude's permission system matches Bash commands by prefix. Every literal piece of a command becomes part of the match string, so commands with a consistent shape across runs let a small number of rules cover everything. Inconsistent shapes blow up `.claude/settings.local.json` (one entry per literal commit message, redirection variant, etc.) and cause redundant approval prompts.
+
+**Run one command per Bash call.** Don't chain with `&&`. Each command should match its own rule (`Bash(git add:*)`, `Bash(stackit:*)`) rather than requiring a permission entry for the full compound string — which is what generates entries like `Bash(git add -A && stackit create -m "feat: very specific message" 2>&1)`.
+
+```bash
+# Avoid — compound command needs its own rule
+git add -A && stackit create -m "feat: foo"
+
+# Prefer — separate Bash calls, each matches its own rule
+git add -A
+stackit create -m "feat: foo"
+```
+
+**Don't append `2>&1`.** Claude's Bash tool already captures stderr. Appending the redirection extends the literal command string, breaks prefix matching, and creates one-off approval entries.
+
+**Prefer file paths or stdin for variable content.** When a command embeds long or unique text (commit messages, PR descriptions), reading from a file or stdin keeps the command line stable across runs so the same permission rule covers every message.
+
+```bash
+# Avoid — every new message text widens the permission surface
+stackit create -m "feat: very specific message"
+
+# Prefer — pipe via stdin; command shape stays constant across messages
+echo "feat: anything" | stackit create -F -
+
+# Or use a file path (per-invocation `mktemp` avoids collisions between
+# concurrent agents; a fixed path like /tmp/.stackit-msg is unsafe to share)
+msg=$(mktemp -t stackit-msg) && printf "feat: anything" > "$msg" && stackit create --message-file "$msg"
+```
+
+`create`, `modify`, `squash`, and `split --by-file` all accept `--message-file` (`-F`, except for `split` where `-F` is taken). The flag errors loudly on empty input, missing files, or being passed alongside `-m`, so silent fallthrough to other input paths can't mask a typo.
+
 ## Common Pitfalls
 
 | Mistake | Fix |
@@ -55,3 +88,5 @@ Run `/stackit` for the full guide.
 | Using `gh pr create` | Use `stackit submit` - it handles stacked PR dependencies |
 | Amending wrong commit | Use `stackit absorb` to auto-route changes to correct commits |
 | Stack out of sync after merge | Run `stackit sync` to cleanup merged branches and update trunk |
+| Permission prompts every commit | Don't chain with `&&`; run `git add` and `stackit create` as separate commands |
+| `settings.local.json` ballooning with literal commit messages | Same root cause — split chained commands so `Bash(stackit:*)` covers the call |

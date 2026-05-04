@@ -11,7 +11,7 @@ Extract commits or file changes from the current branch to a new independent bra
 ## Context
 - Current branch: !`git branch --show-current`
 - Recent commits: !`git log --oneline -5`
-- Stack state: !`command stackit log --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
 
 ## Instructions
 
@@ -20,7 +20,7 @@ Extract commits or file changes from the current branch to a new independent bra
 If the user wants to extract specific file(s) to an independent branch:
 
 ```bash
-command stackit split --by-file <file-path> --as-sibling --name "<branch-name>"
+stackit split --by-file <file-path> --as-sibling --name "<branch-name>"
 ```
 
 This creates a new branch on the same parent (usually main) with just those file changes.
@@ -29,7 +29,7 @@ The current branch is unchanged - files are NOT removed.
 **Example:**
 ```bash
 # Extract docs changes to a sibling branch
-command stackit split --by-file docs/README.md --as-sibling --name "docs-update"
+stackit split --by-file docs/README.md --as-sibling --name "docs-update"
 ```
 
 ### Use Case 2: Extract to parent branch (Default split behavior)
@@ -37,7 +37,7 @@ command stackit split --by-file docs/README.md --as-sibling --name "docs-update"
 If the extracted files should logically come before the current changes (dependency extraction):
 
 ```bash
-command stackit split --by-file <file-path>
+stackit split --by-file <file-path>
 ```
 
 This creates the split branch as a NEW PARENT of the current branch.
@@ -48,7 +48,7 @@ The files ARE removed from the current branch.
 If you need to split a branch with multiple commits into sibling branches:
 
 ```bash
-command stackit split --by-commit --as-sibling
+stackit split --by-commit --as-sibling
 ```
 
 This interactively lets you select split points. All resulting branches will be
@@ -58,7 +58,7 @@ siblings on the same parent instead of a linear chain.
 
 After extraction, verify:
 ```bash
-command stackit log  # Both branches should be siblings on the same parent
+stackit log  # Both branches should be siblings on the same parent
 <build-command>      # All checks should pass (check README.md for project's build command)
 ```
 

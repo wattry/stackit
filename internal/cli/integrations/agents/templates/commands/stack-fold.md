@@ -10,8 +10,8 @@ Fold (squash) granular branches into their parent branches.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`command stackit log --no-interactive 2>&1`
-- Stack info: !`command stackit info --stack --json --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
+- Stack info: !`stackit info --stack --json --no-interactive 2>&1`
 
 ## Instructions
 
@@ -22,7 +22,7 @@ Fold (squash) granular branches into their parent branches.
    - Parent must not be locked or frozen
    - Must match parent's scope
 2. Propose a fold plan to user with reasoning
-3. Run `command stackit fold --dry-run --no-interactive` to preview
+3. Run `stackit fold --dry-run --no-interactive` to preview
 4. Use `AskUserQuestion` to confirm fold plan:
    - Header: "Fold plan"
    - Question: "Ready to fold these branches into their parents?"
@@ -33,8 +33,8 @@ Fold (squash) granular branches into their parent branches.
 5. Before each fold, verify:
    - Branch has no children (fold leaf branches first)
    - Parent still not locked/frozen
-6. Execute: `command stackit checkout <branch> --no-interactive && command stackit fold --no-interactive`
-7. After each fold, restack only the affected parent and descendants: `command stackit restack --branch <parent-branch> --upstack --no-interactive`
+6. Execute: `stackit checkout <branch> --no-interactive && stackit fold --no-interactive`
+7. After each fold, restack only the affected parent and descendants: `stackit restack --branch <parent-branch> --upstack --no-interactive`
 8. Show final stack state
 
 ## Tool Trust

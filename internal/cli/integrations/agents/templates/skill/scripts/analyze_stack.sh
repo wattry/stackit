@@ -44,7 +44,7 @@ echo -e "${BLUE}Health Checks:${NC}"
 if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     echo -e "${YELLOW}⚠️  Uncommitted changes detected${NC}"
     echo "→ Run: git status"
-    echo "→ Consider: git add . && stackit modify"
+    echo "→ Consider: git add . (then) stackit modify"
     echo
 fi
 
@@ -154,7 +154,7 @@ if [ "$branches_no_pr" -gt 0 ]; then
 elif stackit log full 2>&1 | grep -qi "merged\|closed"; then
     echo "1. Sync with trunk: stackit sync --restack"
 elif ! git diff-index --quiet HEAD -- 2>/dev/null; then
-    echo "1. Commit changes: git add . && stackit modify"
+    echo "1. Commit changes: git add . (then) stackit modify"
 else
     echo -e "${GREEN}✓ Stack is healthy! Ready for development.${NC}"
 fi

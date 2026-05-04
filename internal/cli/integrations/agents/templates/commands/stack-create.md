@@ -33,7 +33,7 @@ Create a new stacked branch with the current changes.
      - "Let me describe" → Wait for user to provide message
 4. If user provided `-m "message"`, use that message
 5. Otherwise, generate a commit message matching the project's style (see recent commits)
-6. Run: `echo "<message>" | command stackit create [branch-name] [--scope <scope> if provided] --no-interactive`
+6. Run: `echo "<message>" | stackit create -F - [branch-name] [--scope <scope> if provided] --no-interactive`
 7. **If create fails due to missing scope** (error mentions scope required):
    - Use `AskUserQuestion`:
      - Header: "Scope"

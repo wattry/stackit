@@ -2,23 +2,23 @@
 
 Commands for troubleshooting, recovery, and diagnostics.
 
-> **CRITICAL:** Always run these commands with `command stackit ... --no-interactive`. For commands that require confirmation, include `--force` (for absorb) or `--yes` (for undo/merge).
+> **CRITICAL:** Always run these commands with `stackit ... --no-interactive`. For commands that require confirmation, include `--force` (for absorb) or `--yes` (for undo/merge).
 
 ## Recovery Commands
 
 | Command | Description |
 |---------|-------------|
-| `command stackit undo --no-interactive --yes` | Restore repo to state before a command |
-| `command stackit continue --no-interactive` | Continue interrupted operation |
-| `command stackit abort --no-interactive` | Abort interrupted operation |
+| `stackit undo --no-interactive --yes` | Restore repo to state before a command |
+| `stackit continue --no-interactive` | Continue interrupted operation |
+| `stackit abort --no-interactive` | Abort interrupted operation |
 
 ## Diagnostic Commands
 
 | Command | Description |
 |---------|-------------|
-| `command stackit doctor --no-interactive` | Diagnose and fix setup issues |
-| `command stackit info --no-interactive` | Show detailed branch info |
-| `command stackit debug --no-interactive` | Dump debugging info |
+| `stackit doctor --no-interactive` | Diagnose and fix setup issues |
+| `stackit info --no-interactive` | Show detailed branch info |
+| `stackit debug --no-interactive` | Dump debugging info |
 
 ## Recovery Workflows
 
@@ -35,20 +35,20 @@ git status
 git add <resolved-files>
 
 # 3. Continue
-command stackit continue --no-interactive
+stackit continue --no-interactive
 
 # Or abort if needed
-command stackit abort --no-interactive
+stackit abort --no-interactive
 ```
 
 ### Undo Last Operation
 
 ```bash
 # Restore to previous state
-command stackit undo --no-interactive --yes
+stackit undo --no-interactive --yes
 
 # Check if it worked
-command stackit log --no-interactive
+stackit log --no-interactive
 ```
 
 ### Branch Needs Restack
@@ -57,13 +57,13 @@ Prefer the narrowest scope that covers the affected branches:
 
 ```bash
 # Most common: restack the flagged branch and its descendants
-command stackit restack --branch <branch> --upstack --no-interactive
+stackit restack --branch <branch> --upstack --no-interactive
 
 # Multiple independent stacks need attention (e.g. after sync reparented roots)
-command stackit restack --all-stacks --continue-on-conflict --no-interactive
+stackit restack --all-stacks --continue-on-conflict --no-interactive
 
 # Handle conflicts if they occur, then continue
-command stackit continue --no-interactive
+stackit continue --no-interactive
 ```
 
 Use `--json` to see which branches were restacked vs skipped and avoid a redundant second pass.
@@ -72,19 +72,19 @@ Use `--json` to see which branches were restacked vs skipped and avoid a redunda
 
 ```bash
 # Sync will reparent automatically
-command stackit sync --no-interactive
+stackit sync --no-interactive
 
 # If restack is still needed, scope it — avoid broad restacks
-command stackit restack --branch <reparented-branch> --upstack --no-interactive
+stackit restack --branch <reparented-branch> --upstack --no-interactive
 # Or, if sync reparented roots across multiple stacks:
-command stackit restack --all-stacks --continue-on-conflict --no-interactive
+stackit restack --all-stacks --continue-on-conflict --no-interactive
 ```
 
 ### PR Base Mismatch
 
 ```bash
 # Submit will update PR base branches
-command stackit submit --no-interactive
+stackit submit --no-interactive
 ```
 
 ### Uncommitted Changes Blocking Operation
@@ -92,7 +92,7 @@ command stackit submit --no-interactive
 ```bash
 # Option 1: Commit them
 git add .
-command stackit modify --no-interactive
+stackit modify --no-interactive
 
 # Option 2: Stash them
 git stash
@@ -107,20 +107,20 @@ git stash pop
 
 ```bash
 # View structure
-command stackit log --no-interactive
+stackit log --no-interactive
 
 # Get detailed info
-command stackit info --no-interactive
+stackit info --no-interactive
 
 # Check for issues
-command stackit doctor --no-interactive
+stackit doctor --no-interactive
 ```
 
 ### Debug Issues
 
 ```bash
 # Dump all diagnostic info
-command stackit debug --no-interactive
+stackit debug --no-interactive
 
 # This shows:
 # - Git refs
@@ -132,8 +132,8 @@ command stackit debug --no-interactive
 ## Troubleshooting Checklist
 
 When things go wrong:
-1. Check status: `git status` and `command stackit log --no-interactive`
+1. Check status: `git status` and `stackit log --no-interactive`
 2. Look for interrupted operations (rebase, merge)
-3. Try `command stackit doctor --no-interactive` for automatic fixes
-4. If stuck, `command stackit abort --no-interactive` then `command stackit undo --no-interactive --yes`
-5. For persistent issues, check `command stackit debug --no-interactive` output
+3. Try `stackit doctor --no-interactive` for automatic fixes
+4. If stuck, `stackit abort --no-interactive` then `stackit undo --no-interactive --yes`
+5. For persistent issues, check `stackit debug --no-interactive` output

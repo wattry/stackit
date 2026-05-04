@@ -10,9 +10,9 @@ Generate a comprehensive description for the current stack based on all changes.
 
 ## Context
 - Current branch: !`git branch --show-current`
-- Stack state: !`command stackit log --no-interactive 2>&1`
-- Stack info: !`command stackit info --stack --json --no-interactive 2>&1`
-- Current description: !`command stackit describe --show --no-interactive 2>&1`
+- Stack state: !`stackit log --no-interactive 2>&1`
+- Stack info: !`stackit info --stack --json --no-interactive 2>&1`
+- Current description: !`stackit describe --show --no-interactive 2>&1`
 
 ## Instructions
 
@@ -54,7 +54,7 @@ Format the description as markdown with:
 Run the describe command:
 
 ```bash
-command stackit describe -m "<title>" -d "<description>" --no-interactive
+stackit describe -m "<title>" -d "<description>" --no-interactive
 ```
 
 Note: The description argument supports multiline text.
@@ -64,7 +64,7 @@ Note: The description argument supports multiline text.
 Show the user what was set:
 
 ```bash
-command stackit describe --show --no-interactive
+stackit describe --show --no-interactive
 ```
 
 ## Example Output
