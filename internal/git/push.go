@@ -8,17 +8,21 @@ import (
 
 // PushOptions contains options for pushing a branch
 type PushOptions struct {
-	Force          bool
-	ForceWithLease bool
-	NoVerify       bool
+	Force                     bool
+	ForceWithLease            bool
+	ForceWithLeaseExpectedSHA string
+	NoVerify                  bool
 }
 
 func (r *runner) PushBranch(ctx context.Context, branchName, remote string, opts PushOptions) error {
 	args := []string{"push", "-u", remote}
 
-	if opts.Force {
+	switch {
+	case opts.Force:
 		args = append(args, "--force")
-	} else if opts.ForceWithLease {
+	case opts.ForceWithLease && opts.ForceWithLeaseExpectedSHA != "":
+		args = append(args, fmt.Sprintf("--force-with-lease=refs/heads/%s:%s", branchName, opts.ForceWithLeaseExpectedSHA))
+	case opts.ForceWithLease:
 		args = append(args, "--force-with-lease")
 	}
 

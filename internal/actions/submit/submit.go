@@ -423,10 +423,17 @@ func pushBranchIfNeeded(ctx *app.Context, submissionInfo Info, opts Options, rem
 
 	forceWithLease := !opts.Force
 	branch := ctx.Navigator().GetBranch(submissionInfo.BranchName)
+	leaseExpectedSHA := ""
+	if forceWithLease {
+		if status, err := ctx.PR().GetBranchRemoteStatus(branch); err == nil {
+			leaseExpectedSHA = status.RemoteSha
+		}
+	}
 	if err := ctx.PR().PushBranch(ctx.Context, branch, remote, git.PushOptions{
-		Force:          opts.Force,
-		ForceWithLease: forceWithLease,
-		NoVerify:       !ctx.Verify,
+		Force:                     opts.Force,
+		ForceWithLease:            forceWithLease,
+		ForceWithLeaseExpectedSHA: leaseExpectedSHA,
+		NoVerify:                  !ctx.Verify,
 	}); err != nil {
 		if errors.Is(err, git.ErrStaleRemoteInfo) {
 			return fmt.Errorf("force-with-lease push of %s failed due to external changes to the remote branch. If you are collaborating on this stack, try 'stackit sync' to pull in changes. Alternatively, use the --force option to bypass the stale info warning", submissionInfo.BranchName)
