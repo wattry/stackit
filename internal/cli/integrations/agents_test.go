@@ -390,7 +390,7 @@ func TestSelectInstallTargetsPromptsWithoutSkipOption(t *testing.T) {
 			"Claude Code - Claude Code CLI skill format (~/.claude/skills/stackit)",
 			"Codex - Codex skill format (~/.codex/skills/stackit)",
 		}, options)
-		require.Equal(t, []bool{true, false}, preSelected)
+		require.Equal(t, []bool{true, true}, preSelected)
 		return []string{options[0]}, nil
 	}
 
@@ -412,13 +412,33 @@ func TestBuildAgentFileGroups(t *testing.T) {
 		var found bool
 		for _, g := range groups {
 			if g.destDir == filepath.Join(".codex", "skills", "stackit", "agents") {
-				require.Equal(t, "agents/templates/skill/agents", g.templateDir)
+				require.Equal(t, "agents/templates/codex/skill/agents", g.templateDir)
 				require.Equal(t, []string{"openai.yaml"}, g.files)
 				found = true
 				break
 			}
 		}
 		require.True(t, found)
+	})
+
+	t.Run("codex uses dedicated template root", func(t *testing.T) {
+		t.Parallel()
+		target := installTargetForFormat(agentSkillFormatCodex)
+		groups := buildAgentFileGroups(target)
+
+		require.NotEmpty(t, groups)
+		require.Equal(t, "agents/templates/codex/skill", groups[0].templateDir)
+		require.Equal(t, []string{"SKILL.md"}, groups[0].files)
+	})
+
+	t.Run("codex does not install shared claude scripts", func(t *testing.T) {
+		t.Parallel()
+		target := installTargetForFormat(agentSkillFormatCodex)
+		groups := buildAgentFileGroups(target)
+
+		for _, g := range groups {
+			require.NotEqual(t, filepath.Join(".codex", "skills", "stackit", "scripts"), g.destDir)
+		}
 	})
 
 	t.Run("claude does not include commands file group", func(t *testing.T) {
@@ -484,6 +504,21 @@ func TestCheckExistingInstallation(t *testing.T) {
 		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
 		require.NoError(t, err)
 		err = os.WriteFile(skillPath, []byte(testSkillContent("2.0.0")), 0600)
+		require.NoError(t, err)
+
+		var out bytes.Buffer
+		err = checkExistingInstallation(tmpDir, agentSkillFormatCodex, "2.0.0", &out)
+		require.NoError(t, err)
+		require.Empty(t, out.String())
+	})
+
+	t.Run("detects codex body version", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		skillPath := filepath.Join(tmpDir, ".codex", "skills", "stackit", "SKILL.md")
+		err := os.MkdirAll(filepath.Dir(skillPath), 0750)
+		require.NoError(t, err)
+		err = os.WriteFile(skillPath, []byte("---\nname: stackit\ndescription: test\n---\n\n<!-- stackit-version: 2.0.0 -->\n"), 0600)
 		require.NoError(t, err)
 
 		var out bytes.Buffer
@@ -660,6 +695,10 @@ func TestPrintSuccessMessageIncludesCodex(t *testing.T) {
 	require.Contains(t, out.String(), "Installed agent files")
 	require.Contains(t, out.String(), "~/.codex/skills/stackit")
 	require.Contains(t, out.String(), ".codex/skills/stack-*/")
+	require.Contains(t, out.String(), "Available Codex skills:")
+	require.Contains(t, out.String(), "stack-create")
+	require.NotContains(t, out.String(), "Available Claude Code commands:")
+	require.NotContains(t, out.String(), "/stack-create")
 	require.NotContains(t, out.String(), "Slash commands:")
 }
 
@@ -829,32 +868,18 @@ func TestRenderCodexSkillContent(t *testing.T) {
 		assert  func(t *testing.T, result string)
 	}{
 		{
-			name:    "injects name and preserves supported frontmatter",
-			content: "---\ndescription: Do stuff\nmodel: sonnet\nallowed-tools: Bash(stackit:*)\n---\n\n# Content",
+			name:    "injects name and keeps codex frontmatter minimal",
+			content: "---\ndescription: Use for Codex\nallowed-tools: Bash(stackit:*), Bash(git:*)\n---\n\n# Body",
 			skill:   "stack-create",
 			assert: func(t *testing.T, result string) {
 				frontmatter, body := mustExtractFrontmatter(t, result)
 				var meta map[string]any
 				require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
 				require.Equal(t, "stack-create", meta["name"])
-				require.Equal(t, "Do stuff", meta["description"])
-				require.Equal(t, "sonnet", meta["model"])
-				require.Equal(t, "Bash(stackit:*)", meta["allowed-tools"])
-				require.Equal(t, "\n# Content", body)
-			},
-		},
-		{
-			name:    "removes argument hint and rewrites arguments placeholder",
-			content: "---\ndescription: Test\nmodel: sonnet\nargument-hint: [-m \"message\"] [branch-name]\nallowed-tools: Bash\n---\n\n## Arguments\n$ARGUMENTS\n\nBody",
-			skill:   "stack-modify",
-			assert: func(t *testing.T, result string) {
-				frontmatter, body := mustExtractFrontmatter(t, result)
-				require.NotContains(t, frontmatter, "argument-hint:")
-				var meta map[string]any
-				require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
-				require.Equal(t, "stack-modify", meta["name"])
-				require.Contains(t, body, "Expected argument shape: `[-m \"message\"] [branch-name]`.")
-				require.NotContains(t, body, "$ARGUMENTS")
+				require.Equal(t, "Use for Codex", meta["description"])
+				require.Len(t, meta, 2)
+				require.NotContains(t, frontmatter, "allowed-tools:")
+				require.Equal(t, "\n# Body", body)
 			},
 		},
 		{
@@ -883,7 +908,7 @@ func TestInstallClaudeSkillsMatchTemplates(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	require.NoError(t, installCommandSkills(tmpDir, filepath.Join(".claude", "skills"), commandTemplateFiles, renderClaudeSkillContent))
+	require.NoError(t, installCommandSkills(tmpDir, filepath.Join(".claude", "skills"), commandTemplateFiles, renderClaudeSkillContent, agentSkillFormatClaude))
 
 	for _, filename := range commandTemplateFiles {
 		expectedTemplate, err := agentTemplates.ReadFile("agents/templates/commands/" + filename)
@@ -915,7 +940,7 @@ func TestInstallCodexCommandSkills(t *testing.T) {
 	files := []string{"stack-create.md", "stack-fix.md", "stack-modify.md"}
 	tmpDir := t.TempDir()
 
-	err := installCommandSkills(tmpDir, filepath.Join(".codex", "skills"), files, renderCodexSkillContent)
+	err := installCommandSkills(tmpDir, filepath.Join(".codex", "skills"), files, renderCodexSkillContent, agentSkillFormatCodex)
 	require.NoError(t, err)
 
 	for _, filename := range files {
@@ -930,8 +955,193 @@ func TestInstallCodexCommandSkills(t *testing.T) {
 		require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
 		require.Equal(t, skillName, meta["name"])
 		require.Contains(t, frontmatter, "description:")
+		require.Len(t, meta, 2)
 		require.NotContains(t, frontmatter, "argument-hint:")
+		require.NotContains(t, frontmatter, "allowed-tools:")
+		require.NotContains(t, frontmatter, "model:")
 		require.NotContains(t, body, "$ARGUMENTS")
+
+		metadataPath := filepath.Join(tmpDir, ".codex", "skills", skillName, "agents", "openai.yaml")
+		metadata, err := os.ReadFile(metadataPath)
+		require.NoError(t, err, "openai.yaml should exist for %s", skillName)
+		var openaiMeta map[string]map[string]string
+		require.NoError(t, yaml.Unmarshal(metadata, &openaiMeta))
+		require.Equal(t, displayNameForSkill(skillName), openaiMeta["interface"]["display_name"])
+		require.Contains(t, openaiMeta["interface"]["default_prompt"], "$"+skillName)
+	}
+}
+
+func TestRenderCodexCommandMetadata(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := renderCodexCommandMetadata("stack-create")
+	require.NoError(t, err)
+
+	var parsed map[string]map[string]string
+	require.NoError(t, yaml.Unmarshal(metadata, &parsed))
+	require.Equal(t, "Stack Create", parsed["interface"]["display_name"])
+	require.Equal(t, "Create branch with auto-naming", parsed["interface"]["short_description"])
+	require.Equal(t, "Use $stack-create to create branch with auto-naming.", parsed["interface"]["default_prompt"])
+}
+
+func TestCodexUsesParallelCommandTemplate(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	err := installCommandSkills(tmpDir, filepath.Join(".codex", "skills"), []string{"stack-create.md"}, renderCodexSkillContent, agentSkillFormatCodex)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, ".codex", "skills", "stack-create", "SKILL.md"))
+	require.NoError(t, err)
+
+	frontmatter, body := mustExtractFrontmatter(t, string(content))
+
+	require.Contains(t, body, "Create one new stacked branch from the current working tree.")
+	require.NotContains(t, body, "Create a new stacked branch with the current changes.")
+	require.NotContains(t, body, "AskUserQuestion")
+
+	var meta map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+	require.Equal(t, "stack-create", meta["name"])
+	require.Contains(t, meta["description"], "stack these changes")
+}
+
+func TestCodexStackPlanReferenceLink(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	err := installCommandSkills(tmpDir, filepath.Join(".codex", "skills"), []string{"stack-plan.md"}, renderCodexSkillContent, agentSkillFormatCodex)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, ".codex", "skills", "stack-plan", "SKILL.md"))
+	require.NoError(t, err)
+
+	_, body := mustExtractFrontmatter(t, string(content))
+	require.Contains(t, body, "../stackit/references/stack-plan-recovery.md")
+	require.NotContains(t, body, "../skill/references/stack-plan-recovery.md")
+}
+
+func TestCodexInstallHasNoClaudeIsms(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	target := installTargetForFormat(agentSkillFormatCodex)
+	for _, g := range buildAgentFileGroups(target) {
+		require.NoError(t, installFileGroup(tmpDir, g, "test"))
+	}
+	require.NoError(t, installCommandSkills(tmpDir, target.skillsBaseDir, commandTemplateFiles, renderCodexSkillContent, agentSkillFormatCodex))
+
+	bannedSubstrings := []struct {
+		needle string
+		reason string
+	}{
+		{"AskUserQuestion", "Codex doesn't have AskUserQuestion — it's a Claude-only tool"},
+		{"!`", "Claude shell-context macros must not leak into Codex output"},
+		{"Claude Code", "Codex output must not describe itself as Claude Code"},
+		{"~/.claude/skills", "Codex output must not reference ~/.claude paths"},
+		{" using the Skill tool", "Skill tool prose must be rewritten for Codex"},
+		{" using Skill tool", "Skill tool prose must be rewritten for Codex"},
+	}
+
+	codexRoot := filepath.Join(tmpDir, ".codex")
+	err := filepath.Walk(codexRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+
+		body := string(content)
+		if strings.HasSuffix(path, ".md") {
+			// Frontmatter `model:` line must not survive in Codex output.
+			// (Match `^model:` or after newline to avoid matching e.g. "data model:" prose.)
+			require.NotRegexp(t, `(?m)^model:`, body, "model: line found in %s", path)
+			require.NotRegexp(t, `(?m)^allowed-tools:`, body, "allowed-tools line found in %s", path)
+			require.NotContains(t, body, "`/stack-", "Markdown slash-command reference found in %s", path)
+			require.NotRegexp(t, `(^|[\s(])/(stack-[a-z-]+)`, body, "plain slash-command reference found in %s", path)
+
+			if strings.HasPrefix(body, "---\n") {
+				frontmatter, _ := mustExtractFrontmatter(t, body)
+				var meta map[string]any
+				require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+				require.Len(t, meta, 2, "Codex frontmatter should only include name and description in %s", path)
+				require.Contains(t, meta, "name", "missing name in %s", path)
+				require.Contains(t, meta, "description", "missing description in %s", path)
+			}
+		}
+
+		for _, b := range bannedSubstrings {
+			require.NotContains(t, body, b.needle, "%s in %s — %s", b.needle, path, b.reason)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestCodexSourceTemplatesAreNative(t *testing.T) {
+	t.Parallel()
+
+	err := filepath.Walk(filepath.Join("agents", "templates", "codex"), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		isRootSkill := strings.HasSuffix(path, filepath.Join("skill", "SKILL.md"))
+		isCommandTemplate := strings.Contains(path, filepath.Join("codex", "commands")+string(os.PathSeparator))
+		if !isRootSkill && !isCommandTemplate {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		frontmatter, _ := mustExtractFrontmatter(t, string(content))
+
+		var meta map[string]any
+		require.NoError(t, yaml.Unmarshal([]byte(frontmatter), &meta))
+		require.Contains(t, meta, "description", "missing description in %s", path)
+		require.NotContains(t, meta, "allowed-tools", "Codex source template should not include allowed-tools in %s", path)
+		require.NotContains(t, meta, "model", "Codex source template should not include model in %s", path)
+		require.NotContains(t, meta, "argument-hint", "Codex source template should not include argument-hint in %s", path)
+		require.NotContains(t, meta, "version", "Codex source template should not include version in %s", path)
+
+		if isRootSkill {
+			require.Equal(t, "stackit", meta["name"])
+			require.Len(t, meta, 2, "Codex root skill should only include name and description")
+		} else {
+			require.NotContains(t, meta, "name", "Codex command source names are injected during install in %s", path)
+			require.Len(t, meta, 1, "Codex command sources should only include description in %s", path)
+		}
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestClaudeInstallUnchangedAfterCodexRefactor(t *testing.T) {
+	t.Parallel()
+
+	// Sanity: a Claude install should still produce per-command SKILL.md files
+	// whose body is byte-identical to the shared template body. This guards
+	// against Codex's parallel template path leaking into the Claude path.
+	tmpDir := t.TempDir()
+	require.NoError(t, installCommandSkills(tmpDir, filepath.Join(".claude", "skills"), commandTemplateFiles, renderClaudeSkillContent, agentSkillFormatClaude))
+
+	for _, filename := range commandTemplateFiles {
+		expectedTemplate, err := agentTemplates.ReadFile("agents/templates/commands/" + filename)
+		require.NoError(t, err)
+
+		skillName := strings.TrimSuffix(filename, ".md")
+		installed, err := os.ReadFile(filepath.Join(tmpDir, ".claude", "skills", skillName, "SKILL.md"))
+		require.NoError(t, err)
+
+		_, expectedBody := mustExtractFrontmatter(t, string(expectedTemplate))
+		_, actualBody := mustExtractFrontmatter(t, string(installed))
+		require.Equal(t, expectedBody, actualBody, "Claude body changed for %s", filename)
 	}
 }
 

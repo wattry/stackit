@@ -43,6 +43,8 @@ type existingSkillInstallation struct {
 var (
 	skillRootFiles = []string{"SKILL.md", "reference.md"}
 
+	codexSkillRootFiles = []string{"SKILL.md"}
+
 	skillCommandFiles = []string{"navigation.md", "branch.md", "stack.md", "recovery.md"}
 
 	skillWorkflowFiles = []string{"absorb-conflict.md", "conflict-resolution.md", "fix-absorb.md", "stack-fold.md"}
@@ -50,6 +52,8 @@ var (
 	skillScriptFiles = []string{"analyze_stack.sh"}
 
 	subagentFiles = []string{"commit-message.md", "review-triage.md"}
+
+	codexReferenceFiles = []string{"workflows.md", "commit-style.md", "stack-plan-recovery.md"}
 
 	commandTemplateFiles = []string{
 		"stack-absorb.md", "stack-create.md", "stack-describe.md", "stack-extract.md",
@@ -80,7 +84,7 @@ func installTargetForFormat(format agentSkillFormat) agentInstallTarget {
 }
 
 func buildAgentFileGroups(target agentInstallTarget) []fileGroup {
-	return buildSkillFileGroups(target.skillDir, target.includeAgentsMeta)
+	return buildSkillFileGroups(target.skillDir, target.format, target.includeAgentsMeta)
 }
 
 func resolveInstallBaseDir() (string, error) {
@@ -91,7 +95,33 @@ func resolveInstallBaseDir() (string, error) {
 	return homeDir, nil
 }
 
-func buildSkillFileGroups(skillDir string, includeAgentsMetadata bool) []fileGroup {
+func buildSkillFileGroups(skillDir string, format agentSkillFormat, includeAgentsMetadata bool) []fileGroup {
+	if format == agentSkillFormatCodex {
+		groups := []fileGroup{
+			{
+				templateDir: "agents/templates/codex/skill",
+				destDir:     skillDir,
+				files:       codexSkillRootFiles,
+				replaceVer:  true,
+			},
+			{
+				templateDir: "agents/templates/codex/skill/references",
+				destDir:     filepath.Join(skillDir, "references"),
+				files:       codexReferenceFiles,
+			},
+		}
+
+		if includeAgentsMetadata {
+			groups = append(groups, fileGroup{
+				templateDir: "agents/templates/codex/skill/agents",
+				destDir:     filepath.Join(skillDir, "agents"),
+				files:       []string{"openai.yaml"},
+			})
+		}
+
+		return groups
+	}
+
 	groups := []fileGroup{
 		{
 			templateDir: "agents/templates/skill",
@@ -120,14 +150,6 @@ func buildSkillFileGroups(skillDir string, includeAgentsMetadata bool) []fileGro
 			destDir:     filepath.Join(skillDir, "subagents"),
 			files:       subagentFiles,
 		},
-	}
-
-	if includeAgentsMetadata {
-		groups = append(groups, fileGroup{
-			templateDir: "agents/templates/skill/agents",
-			destDir:     filepath.Join(skillDir, "agents"),
-			files:       []string{"openai.yaml"},
-		})
 	}
 
 	return groups
@@ -170,11 +192,18 @@ type skillRenderFunc func(content []byte, skillName string) ([]byte, error)
 
 const commandTemplateDir = "agents/templates/commands"
 
+func commandTemplateDirForFormat(format agentSkillFormat) string {
+	if format == agentSkillFormatCodex {
+		return "agents/templates/codex/commands"
+	}
+	return commandTemplateDir
+}
+
 // installCommandSkills installs command templates as individual skills using the given render function.
-func installCommandSkills(baseDir, skillsBaseDir string, files []string, render skillRenderFunc) error {
+func installCommandSkills(baseDir, skillsBaseDir string, files []string, render skillRenderFunc, format agentSkillFormat) error {
 	for _, filename := range files {
 		skillName := strings.TrimSuffix(filename, ".md")
-		content, err := agentTemplates.ReadFile(commandTemplateDir + "/" + filename)
+		content, err := agentTemplates.ReadFile(commandTemplateDirForFormat(format) + "/" + filename)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", filename, err)
 		}
@@ -191,8 +220,74 @@ func installCommandSkills(baseDir, skillsBaseDir string, files []string, render 
 		if err := os.WriteFile(filepath.Join(destDir, "SKILL.md"), content, 0600); err != nil {
 			return fmt.Errorf("failed to write SKILL.md for %s: %w", skillName, err)
 		}
+		if format == agentSkillFormatCodex {
+			metadata, err := renderCodexCommandMetadata(skillName)
+			if err != nil {
+				return err
+			}
+			agentsDir := filepath.Join(destDir, "agents")
+			if err := os.MkdirAll(agentsDir, 0750); err != nil {
+				return fmt.Errorf("failed to create agents directory for %s: %w", skillName, err)
+			}
+			if err := os.WriteFile(filepath.Join(agentsDir, "openai.yaml"), metadata, 0600); err != nil {
+				return fmt.Errorf("failed to write openai.yaml for %s: %w", skillName, err)
+			}
+		}
 	}
 	return nil
+}
+
+func renderCodexCommandMetadata(skillName string) ([]byte, error) {
+	summary, found := stackSkillSummaryForName(skillName)
+	if !found {
+		return nil, fmt.Errorf("missing skill summary for %s", skillName)
+	}
+
+	var b strings.Builder
+	b.WriteString("interface:\n")
+	b.WriteString("  display_name: ")
+	b.WriteString(encodeYAMLScalar(displayNameForSkill(skillName)))
+	b.WriteString("\n")
+	b.WriteString("  short_description: ")
+	b.WriteString(encodeYAMLScalar(summary.description))
+	b.WriteString("\n")
+	b.WriteString("  default_prompt: ")
+	b.WriteString(encodeYAMLScalar(fmt.Sprintf("Use $%s to %s.", skillName, lowercaseFirst(summary.description))))
+	b.WriteString("\n")
+	return []byte(b.String()), nil
+}
+
+func stackSkillSummaryForName(name string) (struct {
+	name        string
+	description string
+}, bool) {
+	for _, summary := range stackSkillSummaries {
+		if summary.name == name {
+			return summary, true
+		}
+	}
+	return struct {
+		name        string
+		description string
+	}{}, false
+}
+
+func displayNameForSkill(name string) string {
+	parts := strings.Split(name, "-")
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+func lowercaseFirst(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	return strings.ToLower(raw[:1]) + raw[1:]
 }
 
 // parseFrontmatter splits content into frontmatter lines and body, injecting the skill name.
@@ -253,22 +348,25 @@ func renderClaudeSkillContent(content []byte, name string) ([]byte, error) {
 }
 
 func renderCodexSkillContent(content []byte, name string) ([]byte, error) {
-	frontmatterLines, body, argumentHint, err := parseFrontmatter(content, name)
+	frontmatterLines, body, _, err := parseFrontmatter(content, name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Codex replaces $ARGUMENTS in the body instead of keeping argument-hint in frontmatter.
-	bodyText := string(body)
-	if strings.Contains(bodyText, "$ARGUMENTS") {
-		replacement := "If the user included explicit arguments in their request, honor them."
-		if argumentHint != "" {
-			replacement += fmt.Sprintf(" Expected argument shape: `%s`.", argumentHint)
-		}
-		bodyText = strings.Replace(bodyText, "$ARGUMENTS", replacement, 1)
+	frontmatterBlock := strings.Join(frontmatterLines, "\n")
+	var meta map[string]any
+	if err := yaml.Unmarshal([]byte(frontmatterBlock), &meta); err != nil {
+		return nil, fmt.Errorf("invalid source frontmatter: %w", err)
+	}
+	description, ok := meta["description"].(string)
+	if !ok || strings.TrimSpace(description) == "" {
+		return nil, fmt.Errorf("missing description in frontmatter")
 	}
 
-	return assembleFrontmatter(frontmatterLines, []byte(bodyText))
+	return assembleFrontmatter([]string{
+		"name: " + name,
+		"description: " + encodeYAMLScalar(description),
+	}, body)
 }
 
 func encodeYAMLScalar(raw string) string {
@@ -312,25 +410,41 @@ func splitFrontmatter(content []byte) (frontmatter, body []byte, found bool) {
 }
 
 func extractVersion(content string) string {
-	// Look for version in frontmatter
 	lines := strings.Split(content, "\n")
-	inFrontmatter := false
+	bodyStart := len(lines)
 
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "---" {
-			if !inFrontmatter {
-				inFrontmatter = true
-				continue
+	// Walk frontmatter watching for `version:` (Claude format) and stop at the
+	// closing `---`. Restricting the body search below to lines after this
+	// boundary keeps a stray "version" token in the description from matching.
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		for i := 1; i < len(lines); i++ {
+			if strings.TrimSpace(lines[i]) == "---" {
+				bodyStart = i + 1
+				break
 			}
-			break
+			if strings.HasPrefix(lines[i], "version:") {
+				parts := strings.SplitN(lines[i], ":", 2)
+				if len(parts) == 2 {
+					return strings.TrimSpace(parts[1])
+				}
+			}
 		}
+	} else {
+		bodyStart = 0
+	}
 
-		if inFrontmatter && strings.HasPrefix(line, "version:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
-			}
+	// Codex skills keep frontmatter limited to name/description, so the version
+	// is embedded in an HTML comment in the body: `<!-- stackit-version: X -->`.
+	// HTML comments don't render to the agent and survive markdown processors.
+	const prefix = "<!-- stackit-version:"
+	const suffix = "-->"
+	for _, line := range lines[bodyStart:] {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, prefix) || !strings.HasSuffix(trimmed, suffix) {
+			continue
 		}
+		value := strings.TrimSuffix(strings.TrimPrefix(trimmed, prefix), suffix)
+		return strings.TrimSpace(value)
 	}
 
 	return ""

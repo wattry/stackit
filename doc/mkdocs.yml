@@ -71,7 +71,7 @@ nav:
     - Management: worktrees/management.md
   - Integrations: &integrations
     - Overview: integrations/index.md
-    - Claude Code: integrations/claude.md
+    - AI Agents: integrations/claude.md
     - GitHub: integrations/github.md
     - Git Hooks: integrations/git-hooks.md
     - Shell: integrations/shell.md
