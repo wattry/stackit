@@ -112,7 +112,7 @@ func BranchStyle(isCurrent, isTrunk, isDim bool) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Bright Blue for others
 }
 
-// ColorNeedsRestack colors the "needs restack" text
+// ColorNeedsRestack colors restack suggestion text.
 func ColorNeedsRestack(text string) string {
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("3")).

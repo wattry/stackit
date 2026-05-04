@@ -34,6 +34,9 @@ func (m *MockRunner) Pause() {}
 // Resume is a no-op for the mock runner.
 func (m *MockRunner) Resume() {}
 
+// Wait is a no-op for the mock runner.
+func (m *MockRunner) Wait() {}
+
 // IsHealthy returns true if the runner has been started and not stopped.
 func (m *MockRunner) IsHealthy() bool { return m.started && !m.stopped }
 

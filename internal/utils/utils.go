@@ -216,6 +216,9 @@ func IsTTY() bool {
 	if atomic.LoadInt32(&interactiveMode) == 0 {
 		return false
 	}
+	if !supportsTerminalControl() {
+		return false
+	}
 	// First check if stdin/stdout are terminals
 	if (!isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd())) ||
 		(!isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd())) {
@@ -227,6 +230,14 @@ func IsTTY() bool {
 		return false
 	}
 	_ = f.Close()
+	return true
+}
+
+func supportsTerminalControl() bool {
+	term := strings.ToLower(os.Getenv("TERM"))
+	if term == "" || term == "dumb" || strings.HasPrefix(term, "dumb-") {
+		return false
+	}
 	return true
 }
 

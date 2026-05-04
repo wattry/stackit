@@ -30,6 +30,9 @@ const (
 	CheckStatusFailing = "FAILING"
 	// CheckStatusPending indicates CI is pending
 	CheckStatusPending = "PENDING"
+
+	// RestackSuggestedLabel marks branches where restacking may reduce review churn.
+	RestackSuggestedLabel = "(restack suggested)"
 )
 
 // MergedParentDisplay represents a historical merged parent for display purposes
@@ -794,7 +797,8 @@ func (r *StackTreeRenderer) getBranchLines(args treeRenderArgs) []string {
 
 		// Add restack indicator
 		if !args.noStyleBranchName && !r.isBranchFixed(args.branchName) {
-			b.WriteString(" (needs restack)")
+			b.WriteString(" ")
+			b.WriteString(RestackSuggestedLabel)
 		}
 
 		return []string{b.String()}
@@ -1016,9 +1020,9 @@ func (r *StackTreeRenderer) getInfoLines(args treeRenderArgs) []string {
 		coloredBranchName += " " + style.ColorScope(annotation.Scope)
 	}
 
-	// Actionable warnings only
+	// Advisory branch state.
 	if !r.isBranchFixed(branchName) {
-		coloredBranchName += " " + style.ColorNeedsRestack("(needs restack)")
+		coloredBranchName += " " + style.ColorNeedsRestack(RestackSuggestedLabel)
 	}
 	if annotation.IsLocked {
 		coloredBranchName += " " + style.IconLocked() + " " + style.ColorDim("(locked)")

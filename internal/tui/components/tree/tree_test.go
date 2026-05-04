@@ -144,7 +144,7 @@ func TestStackTreeRenderer_NeedsRestack(t *testing.T) {
 		},
 		FixedMap: map[string]bool{
 			"main":      true,
-			"feature-1": false, // Not fixed - needs restack
+			"feature-1": false, // Not fixed - restack suggested
 		},
 	}
 
@@ -155,8 +155,8 @@ func TestStackTreeRenderer_NeedsRestack(t *testing.T) {
 	})
 
 	output := strings.Join(lines, "\n")
-	if !strings.Contains(output, "needs restack") {
-		t.Errorf("expected 'needs restack' indicator, got: %s", output)
+	if !strings.Contains(output, "restack suggested") {
+		t.Errorf("expected 'restack suggested' indicator, got: %s", output)
 	}
 }
 
