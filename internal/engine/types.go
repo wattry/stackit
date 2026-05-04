@@ -788,6 +788,26 @@ type RestackBatchResult struct {
 	Results           map[string]RestackBranchResult // Results for each branch attempted
 }
 
+// RestackPlanItem describes how a branch should be handled during restack.
+type RestackPlanItem struct {
+	Branch      string
+	NewParent   string
+	ParentRev   string
+	OldUpstream string
+	Skip        bool
+	SkipResult  RestackBranchResult
+	UseLegacy   bool
+}
+
+// RestackPlan describes validation specs, pre-skipped branch results, and
+// per-branch apply decisions for a restack operation.
+type RestackPlan struct {
+	Specs          []RebaseSpec
+	BranchMap      map[string]bool
+	PlannedResults map[string]RestackBranchResult
+	Items          map[string]RestackPlanItem
+}
+
 // ContinueRebaseResult represents the result of continuing a rebase
 type ContinueRebaseResult struct {
 	Result              int    // git.RebaseResult value (0 = RebaseDone, 1 = RebaseConflict)

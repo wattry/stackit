@@ -43,24 +43,6 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 	}
 }
 
-// updateBranchInCache updates the cache for a specific branch after restack/metadata changes
-func (e *engineImpl) updateBranchInCache(branchName string) {
-	if branchName == e.trunk {
-		return
-	}
-
-	// Read metadata for this branch
-	meta, err := e.readMetadata(branchName)
-	if err != nil {
-		e.state.removeBranch(branchName)
-		return
-	}
-
-	// Read local metadata too
-	localMeta, _ := e.readLocalMetadata(branchName)
-	e.state.updateBranchFromMetadata(branchName, meta, localMeta)
-}
-
 // rebuild loads all branches and their metadata from Git
 func (e *engineImpl) rebuild() error {
 	// Clear metadata cache to pick up external changes (e.g., branches created in another terminal)

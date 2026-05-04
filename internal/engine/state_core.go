@@ -212,23 +212,3 @@ func (s *stateCore) updateBranchStateFromLocalMeta(branch string, meta *git.Loca
 	state := s.branchState.GetOrCreate(branch)
 	state.Frozen = meta.Frozen
 }
-
-func (s *stateCore) updateBranchFromMetadata(branchName string, meta *git.Meta, localMeta *git.LocalMeta) {
-	oldParent := ""
-	if oldState := s.branchState.GetByName(branchName); oldState != nil {
-		oldParent = oldState.Parent
-	}
-
-	if meta == nil || meta.GetParentBranchName() == nil || *meta.GetParentBranchName() == "" {
-		if oldParent != "" {
-			s.removeFromChildren(oldParent, branchName)
-		}
-		s.branchState.Delete(branchName)
-		return
-	}
-
-	s.updateBranchStateFromMeta(branchName, meta)
-	if localMeta != nil {
-		s.updateBranchStateFromLocalMeta(branchName, localMeta)
-	}
-}

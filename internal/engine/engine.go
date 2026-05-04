@@ -39,7 +39,10 @@ type SyncManager interface {
 	// Sync operations
 	PullTrunk(ctx context.Context) (PullResult, error)
 	ResetTrunkToRemote(ctx context.Context) error
+	PlanRestack(ctx context.Context, branches []Branch) (*RestackPlan, error)
 	RestackBranches(ctx context.Context, branches []Branch) (RestackBatchResult, error)
+	RestackBranchesWithValidatedRebases(ctx context.Context, branches []Branch, validation *RebaseValidation) (RestackBatchResult, error)
+	RestackBranchesWithValidatedPlan(ctx context.Context, branches []Branch, validation *RebaseValidation, plan *RestackPlan) (RestackBatchResult, error)
 	ContinueRebase(ctx context.Context, branchName string, rebasedBranchBase string) (ContinueRebaseResult, error)
 	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RestackResult, error)
 

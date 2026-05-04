@@ -436,6 +436,49 @@ func TestRestackBranchesPropagatesRerereResolvedCount(t *testing.T) {
 	require.Greater(t, batchResult.Results["branch2"].RerereResolvedCount, 0)
 }
 
+func TestRestackBranchesWithValidatedRebasesUsesValidationSHA(t *testing.T) {
+	s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+		WithStack(map[string]string{
+			"branch1": "main",
+		})
+
+	s.Checkout("main").
+		Commit("main update").
+		Checkout("branch1")
+
+	mainRev, err := s.Engine.GetRevision(s.Engine.Trunk())
+	require.NoError(t, err)
+	oldBase, err := s.Engine.Git().GetMergeBase("main", "branch1")
+	require.NoError(t, err)
+
+	validation, err := s.Engine.ValidateRebases(context.Background(), []engine.RebaseSpec{{
+		Branch:      "branch1",
+		NewParent:   "main",
+		OldUpstream: oldBase,
+	}})
+	require.NoError(t, err)
+	require.True(t, validation.Success)
+	require.NotEmpty(t, validation.NewSHAs["branch1"])
+
+	branch1 := s.Engine.GetBranch("branch1")
+	oldBranchRev, err := branch1.GetRevision()
+	require.NoError(t, err)
+	require.NotEqual(t, validation.NewSHAs["branch1"], oldBranchRev)
+
+	result, err := s.Engine.RestackBranchesWithValidatedRebases(context.Background(), []engine.Branch{branch1}, validation)
+	require.NoError(t, err)
+	require.Equal(t, engine.RestackDone, result.Results["branch1"].Result)
+
+	newBranchRev, err := s.Engine.GetBranch("branch1").GetRevision()
+	require.NoError(t, err)
+	require.Equal(t, validation.NewSHAs["branch1"], newBranchRev)
+
+	meta, err := s.Engine.Git().ReadMetadata("branch1")
+	require.NoError(t, err)
+	require.NotNil(t, meta.GetParentBranchRevision())
+	require.Equal(t, mainRev, *meta.GetParentBranchRevision())
+}
+
 func TestValidateRebasesParallel(t *testing.T) {
 	t.Parallel()
 
