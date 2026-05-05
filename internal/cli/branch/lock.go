@@ -30,15 +30,9 @@ This operation can be undone with 'st unlock'.`,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				branchName := ""
-				if len(args) > 0 {
-					branchName = args[0]
-				} else {
-					current := ctx.Engine.CurrentBranch()
-					if current == nil {
-						return errors.ErrNotOnBranchNoBranchSpecified
-					}
-					branchName = current.GetName()
+				branchName, err := common.ResolveBranchArg(ctx, args, errors.ErrNotOnBranchNoBranchSpecified)
+				if err != nil {
+					return err
 				}
 
 				handler := NewLockUI(ctx.Output, utils.IsInteractive())
@@ -66,15 +60,9 @@ to enable modifications.`,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				branchName := ""
-				if len(args) > 0 {
-					branchName = args[0]
-				} else {
-					current := ctx.Engine.CurrentBranch()
-					if current == nil {
-						return errors.ErrNotOnBranchNoBranchSpecified
-					}
-					branchName = current.GetName()
+				branchName, err := common.ResolveBranchArg(ctx, args, errors.ErrNotOnBranchNoBranchSpecified)
+				if err != nil {
+					return err
 				}
 
 				handler := NewLockUI(ctx.Output, utils.IsInteractive())

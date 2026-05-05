@@ -752,7 +752,7 @@ func PromptBranchCheckout(branches []engine.Branch, eng engine.BranchReader) (st
 	renderer.SetAnnotations(annotations)
 
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Calculate depth for each branch to create proper tree indentation
 	branchDepth := make(map[string]int)

@@ -196,7 +196,7 @@ func (e *engineImpl) SortBranchesTopologically(branches []Branch) []Branch {
 	}
 
 	// Build a full graph once and sort by computed depth, then name for stability.
-	graph := BuildStackGraph(e, SortStrategyAlphabetical, nil)
+	graph := e.Graph(SortStrategyAlphabetical)
 	result := make([]Branch, len(branches))
 	copy(result, branches)
 	for i := 0; i < len(result)-1; i++ {

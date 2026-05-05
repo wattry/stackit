@@ -93,7 +93,7 @@ func buildStackNodes(eng engine.Engine, currentBranch string) []StackNode {
 	var nodes []StackNode
 
 	// Get all branches and build the stack
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	current := eng.GetBranch(currentBranch)
 	if current.GetName() == "" {
 		return nodes

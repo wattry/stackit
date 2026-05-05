@@ -185,7 +185,7 @@ func CollectMergeBranches(ctx context.Context, eng mergePlanEngine, splog output
 	var planCurrentBranch string
 
 	// Build a StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	if opts.Scope != "" {
 		// Collect all branches with the specified scope

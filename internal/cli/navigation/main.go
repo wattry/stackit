@@ -20,18 +20,8 @@ Navigates to the configured trunk branch (typically "main" or "master").`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return common.Run(cmd, func(ctx *app.Context) error {
-				result, err := actions.CheckoutAction(ctx, actions.CheckoutOptions{CheckoutTrunk: true}, nil)
-				if err != nil {
-					return err
-				}
-				if common.HandleCheckoutResult(ctx.Output, result) {
-					return nil
-				}
-				if result.WorktreeSwitchPath != "" {
-					_, err = actions.CheckoutAction(ctx, actions.CheckoutOptions{CheckoutTrunk: true, SkipWorktreeSwitch: true}, nil)
-					return err
-				}
-				return nil
+				_, err := common.Checkout(ctx, actions.CheckoutOptions{CheckoutTrunk: true}, nil)
+				return err
 			})
 		},
 	}

@@ -39,7 +39,7 @@ func ReorderAction(ctx *app.Context) error {
 
 	// Build StackGraph for efficient traversals
 	out.Debug("reorder: building stack graph")
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	out.Debug("reorder: stack graph built successfully")
 
 	// Collect branches: get ancestors from trunk to current branch

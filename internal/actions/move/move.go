@@ -57,7 +57,7 @@ func Action(ctx *app.Context, opts Options, h Handler) error {
 		return err
 	}
 
-	takeSnapshot(eng, out, opts)
+	takeSnapshot(ctx, opts)
 
 	if err := validateMoveTargets(eng, source, opts.Onto); err != nil {
 		return err
@@ -126,15 +126,12 @@ func ensureOnto(ctx *app.Context, opts *Options, h Handler, source string) error
 	return nil
 }
 
-func takeSnapshot(eng engine.Engine, out output.Output, opts Options) {
+func takeSnapshot(ctx *app.Context, opts Options) {
 	snapshotOpts := actions.NewSnapshot("move",
 		actions.WithFlagValue("--source", opts.Source),
 		actions.WithFlagValue("--onto", opts.Onto),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 }
 
 func validateMoveTargets(eng engine.Engine, source, onto string) error {
@@ -148,7 +145,7 @@ func validateMoveTargets(eng engine.Engine, source, onto string) error {
 }
 
 func buildMovePlan(eng engine.Engine, out output.Output, source, onto string, rebaseSpecs []engine.RebaseSpec) (*movePlan, error) {
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	sourceBranch := eng.GetBranch(source)
 	ontoBranch := eng.GetBranch(onto)
@@ -341,7 +338,7 @@ func restackAndMark(ctx *app.Context, plan *movePlan, sourceBranch engine.Branch
 	eng := ctx.Engine
 	out := ctx.Output
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	out.Info("Moved %s from %s to %s.",
 		style.ColorBranchName(plan.source, true),

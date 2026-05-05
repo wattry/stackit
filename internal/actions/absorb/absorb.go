@@ -54,13 +54,10 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		actions.WithFlag(opts.Force, "--force"),
 		actions.WithFlag(opts.Patch, "--patch"),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Build a StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Check if there are staged changes (before handling flags)
 	_, err := eng.HasStagedChanges(ctx.Context)
@@ -302,7 +299,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	// Restack all branches above the oldest modified branch
 	if oldestModifiedBranch != "" {
 		// Rebuild graph with fresh engine state
-		graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		graph = eng.Graph(engine.SortStrategyAlphabetical)
 		upstackBranches := graph.Range(eng.GetBranch(oldestModifiedBranch), engine.StackRange{RecursiveChildren: true})
 
 		if len(upstackBranches) > 0 {

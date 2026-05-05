@@ -176,7 +176,7 @@ var stackSkillSummaries = []struct {
 	{"stack-modify", "Amend current branch commit"},
 	{"stack-plan", "Plan and create stack from uncommitted changes"},
 	{"stack-resolve", "Resolve rebase conflicts with AI assistance"},
-	{"stack-restack", "Rebase all branches in stack"},
+	{"stack-restack", "Rebase branches with scoped or multi-stack targeting"},
 	{"stack-review", "Apply PR review comments and mark resolved"},
 	{"stack-split", "Split changes between current and new child branch"},
 	{"stack-status", "View stack state and health"},

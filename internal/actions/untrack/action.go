@@ -31,7 +31,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Find descendants
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	descendants := graph.Range(branch, engine.StackRange{RecursiveChildren: true})
 
 	// If there are descendants and not forced, prompt for confirmation

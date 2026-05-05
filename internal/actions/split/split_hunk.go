@@ -251,7 +251,7 @@ func splitByHunkWithHandler(ctx *app.Context, branchToSplit engine.Branch, eng s
 		IncludeCurrent:    false,
 		RecursiveChildren: true,
 	}
-	upstackGraph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	upstackGraph := eng.Graph(engine.SortStrategyAlphabetical)
 	upstackBranches := upstackGraph.Range(branchToSplit, upstackRng)
 
 	// Apply the split to commits
@@ -522,7 +522,7 @@ func splitByHunkAbove(ctx *app.Context, branchToSplit engine.Branch, eng splitBy
 	gitCtx := ctx.Context
 
 	// Get existing children before we modify anything
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	existingChildren := graph.Children(branchToSplit)
 
 	// Detach and reset branch changes (all changes become unstaged)

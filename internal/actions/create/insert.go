@@ -12,7 +12,7 @@ import (
 
 func handleInsert(ctx context.Context, newBranch, currentBranch string, runtimeCtx *app.Context, opts *Options) error {
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(runtimeCtx.Engine, engine.SortStrategyAlphabetical, nil)
+	graph := runtimeCtx.Engine.Graph(engine.SortStrategyAlphabetical)
 
 	children := graph.ChildBranches(runtimeCtx.Engine.GetBranch(currentBranch))
 	siblings := []string{}

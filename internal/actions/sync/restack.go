@@ -20,7 +20,7 @@ func restackBranches(ctx *app.Context, branchesToRestack []string, restackScope 
 		branchesToRestack = append(branchesToRestack, restackScope...)
 	} else if expandScope {
 		// Explicit --restack: expand from current branch position to full stack
-		graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+		graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 
 		currentBranch := nav.CurrentBranch()
 		if currentBranch != nil {

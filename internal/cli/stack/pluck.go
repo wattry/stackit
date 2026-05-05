@@ -94,7 +94,7 @@ func interactivePluckOntoSelection(ctx *app.Context, sourceBranch string) (strin
 	eng := ctx.Engine
 
 	// Get descendants of source to exclude them (can't pluck onto descendant)
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	descendants := graph.Range(eng.GetBranch(sourceBranch), engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,

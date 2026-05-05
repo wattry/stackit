@@ -156,6 +156,11 @@ func BuildStackGraph(eng BranchReader, strategy SortStrategy, filter func(Branch
 	return graph
 }
 
+// Graph constructs a full StackGraph for the current engine state.
+func (e *engineImpl) Graph(strategy SortStrategy) *StackGraph {
+	return BuildStackGraph(e, strategy, nil)
+}
+
 // GetNode returns the StackNode for a branch by name, or nil if not found.
 func (g *StackGraph) GetNode(branchName string) *StackNode {
 	return g.nodes[branchName]

@@ -44,7 +44,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Build stack graph to get all related branches
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	branches := graph.FullStack(branch)
 
 	if len(branches) == 0 {
@@ -76,9 +76,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	snapshotOpts := actions.NewSnapshot("flatten",
 		actions.WithArg(branchName),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Build the initial flatten plan by testing which branches can move closer to trunk
 	plan, err := buildFlattenPlan(ctx, eng, featureBranches, trunk, func(current, total int, branchName string) {
@@ -212,7 +210,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	handler.OnStep(StepRestacking, basehandler.StatusStarted, "Restacking branches...")
 
 	// Rebuild graph after parent changes
-	graph = engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph = eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Collect all branches that need restacking (moved branches and their descendants)
 	branchesToRestack := make([]engine.Branch, 0)

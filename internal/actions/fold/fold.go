@@ -103,10 +103,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		actions.WithFlag(opts.Keep, "--keep"),
 		actions.WithFlag(opts.AllowTrunk, "--allow-trunk"),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Get parent branch
 	parentName := currentBranchObj.GetParentOrTrunk()

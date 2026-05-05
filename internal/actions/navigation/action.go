@@ -35,7 +35,7 @@ func SwitchBranchAction(direction Direction, ctx *app.Context, handler Handler) 
 	var targetBranch string
 	var err error
 
-	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 
 	switch direction {
 	case DirectionBottom:

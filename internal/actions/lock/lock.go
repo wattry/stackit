@@ -31,7 +31,7 @@ func Action(ctx *app.Context, branchName string, handler Handler) error {
 	}
 
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Get downstack (ancestors including current)
 	branches := graph.Range(branch, engine.StackRange{
@@ -127,7 +127,7 @@ func Unlock(ctx *app.Context, branchName string, handler Handler) error {
 	}
 
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Get upstack (descendants including current)
 	branches := graph.Range(branch, engine.StackRange{
