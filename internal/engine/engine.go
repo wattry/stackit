@@ -41,8 +41,9 @@ type SyncManager interface {
 	ResetTrunkToRemote(ctx context.Context) error
 	PlanRestack(ctx context.Context, branches []Branch) (*RestackPlan, error)
 	RestackBranches(ctx context.Context, branches []Branch) (RestackBatchResult, error)
-	RestackBranchesWithValidatedRebases(ctx context.Context, branches []Branch, validation *RebaseValidation) (RestackBatchResult, error)
-	RestackBranchesWithValidatedPlan(ctx context.Context, branches []Branch, validation *RebaseValidation, plan *RestackPlan) (RestackBatchResult, error)
+	RestackBranchesWithProgress(ctx context.Context, branches []Branch, progress RestackBranchProgressFunc) (RestackBatchResult, error)
+	RestackBranchesWithValidatedRebases(ctx context.Context, branches []Branch, validation *RebaseValidation, progress RestackBranchProgressFunc) (RestackBatchResult, error)
+	RestackBranchesWithValidatedPlan(ctx context.Context, branches []Branch, validation *RebaseValidation, plan *RestackPlan, progress RestackBranchProgressFunc) (RestackBatchResult, error)
 	ContinueRebase(ctx context.Context, branchName string, rebasedBranchBase string) (ContinueRebaseResult, error)
 	Rebase(ctx context.Context, branchName, upstream, oldUpstream string) (RestackResult, error)
 

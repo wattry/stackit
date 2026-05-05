@@ -512,6 +512,33 @@ func TestRestackBranches(t *testing.T) {
 		require.Equal(t, engine.RestackUnneeded, batchResult.Results["branch1"].Result)
 	})
 
+	t.Run("reports progress as each branch is processed", func(t *testing.T) {
+		t.Parallel()
+		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).
+			WithStack(map[string]string{
+				"branch1": "main",
+				"branch2": "branch1",
+			})
+
+		s.Checkout("main").
+			Commit("main update")
+
+		branches := []engine.Branch{
+			s.Engine.GetBranch("branch1"),
+			s.Engine.GetBranch("branch2"),
+		}
+		var progressed []string
+
+		batchResult, err := s.Engine.RestackBranchesWithProgress(context.Background(), branches, func(branch engine.Branch, result engine.RestackBranchResult) {
+			progressed = append(progressed, branch.GetName())
+			require.Contains(t, []engine.RestackResult{engine.RestackDone, engine.RestackUnneeded}, result.Result)
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{"branch1", "branch2"}, progressed)
+		require.Equal(t, engine.RestackDone, batchResult.Results["branch1"].Result)
+		require.Equal(t, engine.RestackDone, batchResult.Results["branch2"].Result)
+	})
+
 	t.Run("auto-tracks branch when branch is not tracked", func(t *testing.T) {
 		t.Parallel()
 		s := scenario.NewScenario(t, testhelpers.BasicSceneSetup).

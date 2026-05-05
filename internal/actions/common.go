@@ -115,7 +115,7 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	}
 	specs, plannedResults := plan.Specs, plan.PlannedResults
 	if len(specs) == 0 && len(plan.ApplyMap) == 0 {
-		reportRestackBatchResults(ctx, branches, engine.RestackBatchResult{Results: plannedResults}, callback)
+		reportPlannedResults(ctx, branches, plannedResults, callback)
 		ctx.Logger.Info("restack no specs built, nothing to do")
 		return nil
 	}
@@ -203,7 +203,10 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 
 		// Restack successfully up to the conflict
 		if len(successBranches) > 0 {
-			if _, err := ctx.Engine.RestackBranchesWithValidatedPlan(ctx.Context, successBranches, validation, plan); err != nil {
+			currentBranchName := getCurrentBranchName(ctx.Engine)
+			if _, err := ctx.Engine.RestackBranchesWithValidatedPlan(ctx.Context, successBranches, validation, plan, func(branch engine.Branch, result engine.RestackBranchResult) {
+				reportRestackResult(ctx, branch, result, currentBranchName, callback)
+			}); err != nil {
 				return fmt.Errorf("failed to restack branches before conflict: %w", err)
 			}
 		}
@@ -213,11 +216,6 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	}
 
 	// For sync mode (or standalone with no conflicts), restack all successful branches
-	combinedResults := engine.RestackBatchResult{Results: plannedResults}
-	if combinedResults.Results == nil {
-		combinedResults.Results = make(map[string]engine.RestackBranchResult)
-	}
-
 	if len(successBranches) > 0 {
 		// Keep track of where we started so sync mode can recover if a runtime conflict
 		// slips past validation and leaves a rebase in progress.
@@ -227,12 +225,12 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 			originalRev, _ = ctx.Engine.Git().GetCurrentRevision(ctx.Context)
 		}
 
-		batchResult, err := ctx.Engine.RestackBranchesWithValidatedPlan(ctx.Context, successBranches, validation, plan)
+		currentBranchName := getCurrentBranchName(ctx.Engine)
+		batchResult, err := ctx.Engine.RestackBranchesWithValidatedPlan(ctx.Context, successBranches, validation, plan, func(branch engine.Branch, result engine.RestackBranchResult) {
+			reportRestackResult(ctx, branch, result, currentBranchName, callback)
+		})
 		if err != nil {
 			return fmt.Errorf("batch restack failed: %w", err)
-		}
-		for branchName, result := range batchResult.Results {
-			combinedResults.Results[branchName] = result
 		}
 
 		// Sync mode should never leave the repo in a conflict workflow unless explicitly requested.
@@ -260,8 +258,10 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 				}
 			}
 		}
+
+		logRestackResults(ctx, batchResult.Results)
 	}
-	reportRestackBatchResults(ctx, branches, combinedResults, callback)
+	reportPlannedResults(ctx, branches, plannedResults, callback)
 
 	// Report conflicts via callback for sync mode
 	if mode == ConflictModeContinue && len(conflictBranches) > 0 {
@@ -286,100 +286,121 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 	return nil
 }
 
-func reportRestackBatchResults(ctx *app.Context, branches []engine.Branch, batchResult engine.RestackBatchResult, callback RestackProgressCallback) {
-	if len(batchResult.Results) == 0 {
+func getCurrentBranchName(eng engine.BranchReader) string {
+	currentBranch := eng.CurrentBranch()
+	if currentBranch == nil {
+		return ""
+	}
+	return currentBranch.GetName()
+}
+
+// restackResultName returns the diagnostic string for a RestackResult.
+func restackResultName(r engine.RestackResult) string {
+	switch r {
+	case engine.RestackDone:
+		return "done"
+	case engine.RestackUnneeded:
+		return "unneeded"
+	case engine.RestackConflict:
+		return "conflict"
+	}
+	return "unknown"
+}
+
+// logRestackResults emits a diagnostic log entry for each restack result.
+func logRestackResults(ctx *app.Context, results map[string]engine.RestackBranchResult) {
+	for branchName, result := range results {
+		ctx.Logger.Info("restack result branch=%v result=%v reparented=%v oldParent=%v newParent=%v",
+			branchName, restackResultName(result.Result), result.Reparented, result.OldParent, result.NewParent)
+	}
+}
+
+// reportPlannedResults streams pre-skipped branch outcomes (locked, frozen,
+// anchor) produced by PlanRestack. Branches that go through the actual rebase
+// loop are reported via the engine's progress callback instead.
+func reportPlannedResults(ctx *app.Context, branches []engine.Branch, plannedResults map[string]engine.RestackBranchResult, callback RestackProgressCallback) {
+	if len(plannedResults) == 0 {
+		return
+	}
+	logRestackResults(ctx, plannedResults)
+	currentBranchName := getCurrentBranchName(ctx.Engine)
+	for _, branch := range branches {
+		result, ok := plannedResults[branch.GetName()]
+		if !ok {
+			continue
+		}
+		reportRestackResult(ctx, branch, result, currentBranchName, callback)
+	}
+}
+
+func reportRestackResult(ctx *app.Context, branch engine.Branch, result engine.RestackBranchResult, currentBranchName string, callback RestackProgressCallback) {
+	branchName := branch.GetName()
+
+	// Get new revision if available.
+	newRev := ""
+	if result.Result == engine.RestackDone {
+		if rev, err := branch.GetRevision(); err == nil {
+			if len(rev) > 7 {
+				newRev = rev[:7]
+			} else {
+				newRev = rev
+			}
+		}
+	}
+
+	// Report via callback if provided.
+	if callback != nil {
+		callback(RestackProgress{
+			Branch:              branchName,
+			Result:              result.Result,
+			NewRev:              newRev,
+			RerereResolvedCount: result.RerereResolvedCount,
+			LockReason:          result.LockReason,
+			Frozen:              result.Frozen,
+			IsCurrent:           branchName == currentBranchName,
+			Reparented:          result.Reparented,
+			OldParent:           result.OldParent,
+			NewParent:           result.NewParent,
+		})
 		return
 	}
 
-	for branchName, result := range batchResult.Results {
-		resultStr := "unknown"
-		switch result.Result {
-		case engine.RestackDone:
-			resultStr = "done"
-		case engine.RestackUnneeded:
-			resultStr = "unneeded"
-		case engine.RestackConflict:
-			resultStr = "conflict"
-		}
-		ctx.Logger.Info("restack result branch=%v result=%v reparented=%v oldParent=%v newParent=%v", branchName, resultStr, result.Reparented, result.OldParent, result.NewParent)
+	// Log via splog only when no callback is provided.
+	if result.Reparented {
+		isCurrent := branchName == currentBranchName
+		ctx.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
+			style.ColorBranchName(branchName, isCurrent),
+			style.ColorBranchName(result.OldParent, false),
+			style.ColorBranchName(result.NewParent, false))
 	}
 
-	currentBranch := ctx.Engine.CurrentBranch()
-	currentBranchName := ""
-	if currentBranch != nil {
-		currentBranchName = currentBranch.GetName()
-	}
-
-	for _, branch := range branches {
-		branchName := branch.GetName()
-		result, exists := batchResult.Results[branchName]
-		if !exists {
-			continue
+	switch result.Result {
+	case engine.RestackDone:
+		parentName := branch.GetParentOrTrunk()
+		isCurrent := branchName == currentBranchName
+		ctx.Output.Info("Restacked %s on %s.",
+			style.ColorBranchName(branchName, isCurrent),
+			style.ColorBranchName(parentName, false))
+		if result.RerereResolvedCount > 0 {
+			printRerereResolved(ctx, result.RerereResolvedCount)
 		}
-
-		newRev := ""
-		if result.Result == engine.RestackDone {
-			if rev, err := branch.GetRevision(); err == nil {
-				if len(rev) > 7 {
-					newRev = rev[:7]
-				} else {
-					newRev = rev
-				}
-			}
-		}
-
-		if callback != nil {
-			callback(RestackProgress{
-				Branch:              branchName,
-				Result:              result.Result,
-				NewRev:              newRev,
-				RerereResolvedCount: result.RerereResolvedCount,
-				LockReason:          result.LockReason,
-				Frozen:              result.Frozen,
-				IsCurrent:           branchName == currentBranchName,
-				Reparented:          result.Reparented,
-				OldParent:           result.OldParent,
-				NewParent:           result.NewParent,
-			})
-			continue
-		}
-
-		if result.Reparented {
-			isCurrent := branchName == currentBranchName
-			ctx.Output.Info("Reparented %s from %s to %s (parent was merged/deleted).",
-				style.ColorBranchName(branchName, isCurrent),
-				style.ColorBranchName(result.OldParent, false),
-				style.ColorBranchName(result.NewParent, false))
-		}
-
-		switch result.Result {
-		case engine.RestackDone:
-			parentName := branch.GetParentOrTrunk()
-			isCurrent := branchName == currentBranchName
-			ctx.Output.Info("Restacked %s on %s.",
-				style.ColorBranchName(branchName, isCurrent),
-				style.ColorBranchName(parentName, false))
-			if result.RerereResolvedCount > 0 {
-				printRerereResolved(ctx, result.RerereResolvedCount)
-			}
-		case engine.RestackUnneeded:
-			switch {
-			case result.LockReason.IsLocked():
-				ctx.Output.Info("%s locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), result.LockReason)
-			case result.Frozen:
+	case engine.RestackUnneeded:
+		switch {
+		case result.LockReason.IsLocked():
+			ctx.Output.Info("%s locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), result.LockReason)
+		case result.Frozen:
+			ctx.Output.Info("%s frozen", style.ColorBranchName(branchName, branchName == currentBranchName))
+		case !branch.CanModify():
+			if branch.IsLocked() {
+				ctx.Output.Info("%s locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
+			} else {
 				ctx.Output.Info("%s frozen", style.ColorBranchName(branchName, branchName == currentBranchName))
-			case !branch.CanModify():
-				if branch.IsLocked() {
-					ctx.Output.Info("%s locked: %s", style.ColorBranchName(branchName, branchName == currentBranchName), branch.GetLockReason())
-				} else {
-					ctx.Output.Info("%s frozen", style.ColorBranchName(branchName, branchName == currentBranchName))
-				}
-			case branch.IsTrunk():
-				ctx.Output.Info("%s up to date", style.ColorBranchName(branchName, false))
-			default:
-				isCurrent := branchName == currentBranchName
-				ctx.Output.Info("%s up to date", style.ColorBranchName(branchName, isCurrent))
 			}
+		case branch.IsTrunk():
+			ctx.Output.Info("%s up to date", style.ColorBranchName(branchName, false))
+		default:
+			isCurrent := branchName == currentBranchName
+			ctx.Output.Info("%s up to date", style.ColorBranchName(branchName, isCurrent))
 		}
 	}
 }
