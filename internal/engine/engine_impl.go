@@ -232,9 +232,13 @@ func (e *engineImpl) Reset(newTrunkName string) error {
 		return fmt.Errorf("failed to get metadata refs: %w", err)
 	}
 
-	for branchName := range metadataRefs {
-		if err := e.git.DeleteMetadata(branchName); err != nil {
-			continue
+	if len(metadataRefs) > 0 {
+		refNames := make([]string, 0, len(metadataRefs))
+		for branchName := range metadataRefs {
+			refNames = append(refNames, git.MetadataRefName(branchName))
+		}
+		if err := e.git.DeleteRefsBatch(context.Background(), refNames); err != nil {
+			return fmt.Errorf("failed to delete metadata refs: %w", err)
 		}
 	}
 
