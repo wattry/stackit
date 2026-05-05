@@ -105,7 +105,6 @@ func (e *engineImpl) restackBranch(
 	branch Branch,
 	metaMap map[string]*git.Meta,
 	revMap map[string]string,
-	rebuildAfterRestack bool,
 ) (RestackBranchResult, error) {
 	branchName := branch.GetName()
 	if e.IsTrunk(branch) {
@@ -479,11 +478,6 @@ func (e *engineImpl) restackBranch(
 		}
 	}
 
-	// Update cache incrementally if requested (much faster than full rebuild)
-	if rebuildAfterRestack {
-		e.updateBranchInCache(branchName)
-	}
-
 	return RestackBranchResult{
 		Result:              RestackDone,
 		RebasedBranchBase:   parentRev,
@@ -494,11 +488,204 @@ func (e *engineImpl) restackBranch(
 	}, nil
 }
 
+func (e *engineImpl) restackBranchWithValidatedRebase(
+	ctx context.Context,
+	branch Branch,
+	validation *RebaseValidation,
+	plan *RestackPlan,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	branchName := branch.GetName()
+	if e.IsTrunk(branch) {
+		return RestackBranchResult{Result: RestackUnneeded}, nil
+	}
+
+	item, ok := RestackPlanItem{}, false
+	if plan != nil && plan.Items != nil {
+		item, ok = plan.Items[branchName]
+	}
+	if !ok {
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("missing restack plan item for %s", branchName)
+	}
+	if item.Skip {
+		return item.SkipResult, nil
+	}
+
+	switch item.Action {
+	case RestackPlanApplyFrozen, RestackPlanApplyAnchor:
+		return e.applyPlannedRefUpdate(ctx, branch, item, metaMap, revMap)
+	case RestackPlanApplyValidated:
+		return e.applyValidatedRestack(ctx, branch, validation, item, metaMap, revMap)
+	default:
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("unknown restack plan action for %s", branchName)
+	}
+}
+
+func (e *engineImpl) applyValidatedRestack(
+	ctx context.Context,
+	branch Branch,
+	validation *RebaseValidation,
+	item RestackPlanItem,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	branchName := branch.GetName()
+	newRev := ""
+	if validation != nil && validation.NewSHAs != nil {
+		newRev = validation.NewSHAs[branchName]
+	}
+	if newRev == "" {
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("missing validated SHA for %s", branchName)
+	}
+
+	parentRev := ""
+	if validation != nil && validation.NewSHAs != nil {
+		parentRev = validation.NewSHAs[item.NewParent]
+	}
+	if parentRev == "" && revMap != nil {
+		parentRev = revMap[item.NewParent]
+	}
+	if parentRev == "" {
+		parentRev = item.ParentRev
+	}
+	if parentRev == "" {
+		rev, err := e.GetBranch(item.NewParent).GetRevision()
+		if err != nil {
+			return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to get parent revision: %w", err)
+		}
+		parentRev = rev
+	}
+
+	result, err := e.applyBranchAndMetadata(ctx, branch, item, newRev, parentRev, metaMap, revMap)
+	if err != nil {
+		return result, err
+	}
+
+	if validation != nil && validation.RerereResolved != nil {
+		result.RerereResolvedCount = validation.RerereResolved[branchName]
+	}
+	return result, nil
+}
+
+func (e *engineImpl) applyPlannedRefUpdate(
+	ctx context.Context,
+	branch Branch,
+	item RestackPlanItem,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	if item.TargetRev == "" {
+		return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("missing target revision for %s", item.Branch)
+	}
+
+	parentRev := item.ParentRev
+	if parentRev == "" {
+		rev, err := e.GetBranch(item.NewParent).GetRevision()
+		if err != nil {
+			return RestackBranchResult{Result: RestackConflict}, fmt.Errorf("failed to get parent revision: %w", err)
+		}
+		parentRev = rev
+	}
+
+	return e.applyBranchAndMetadata(ctx, branch, item, item.TargetRev, parentRev, metaMap, revMap)
+}
+
+func (e *engineImpl) applyBranchAndMetadata(
+	ctx context.Context,
+	branch Branch,
+	item RestackPlanItem,
+	newRev string,
+	parentRev string,
+	metaMap map[string]*git.Meta,
+	revMap map[string]string,
+) (RestackBranchResult, error) {
+	branchName := branch.GetName()
+	meta := (*git.Meta)(nil)
+	if metaMap != nil {
+		meta = metaMap[branchName]
+	}
+	if meta == nil {
+		var err error
+		meta, err = e.readMetadata(branchName)
+		if err != nil {
+			return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to read metadata: %w", err)
+		}
+	}
+
+	oldBranchSHA, _ := branch.GetRevision()
+	oldMetadataSHA, _ := e.git.GetRef(fmt.Sprintf("%s%s", git.MetadataRefPrefix, branchName))
+
+	updatedMeta := meta.WithParentBranchRevision(&parentRev)
+	if item.Reparented {
+		updatedMeta = updatedMeta.WithParentBranchName(&item.NewParent)
+		updatedMeta = e.withMergedDownstack(updatedMeta, item.OldParent, metaMap)
+	}
+	metadataJSON, err := json.Marshal(updatedMeta)
+	if err != nil {
+		return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	metadataSHA, err := e.git.CreateBlob(string(metadataJSON))
+	if err != nil {
+		return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to prepare metadata blob: %w", err)
+	}
+
+	updates := []git.RefUpdate{
+		{RefName: fmt.Sprintf("refs/heads/%s", branchName), NewSHA: newRev, OldSHA: oldBranchSHA},
+		{RefName: fmt.Sprintf("%s%s", git.MetadataRefPrefix, branchName), NewSHA: metadataSHA, OldSHA: oldMetadataSHA},
+	}
+	if err := e.git.UpdateRefsBatch(ctx, updates); err != nil {
+		return RestackBranchResult{Result: RestackConflict, RebasedBranchBase: parentRev}, fmt.Errorf("failed to update refs atomically: %w", err)
+	}
+
+	if worktreePath, wtErr := e.git.GetWorktreePathForBranch(ctx, branchName); wtErr == nil && worktreePath != "" {
+		_ = e.git.ResetWorktreeWorkingDir(ctx, worktreePath) //nolint:errcheck // best-effort
+	}
+
+	if metaMap != nil {
+		metaMap[branchName] = updatedMeta
+	}
+	if revMap != nil {
+		revMap[branchName] = newRev
+	}
+
+	return RestackBranchResult{
+		Result:            RestackDone,
+		RebasedBranchBase: parentRev,
+		Reparented:        item.Reparented,
+		OldParent:         item.OldParent,
+		NewParent:         item.NewParent,
+	}, nil
+}
+
 // RestackBranches implements a hybrid batch approach for performance:
 // 1. Collect all data required for the restack (in bulk)
 // 2. Process branches using individual restackBranch calls with deferred rebuilds
 // 3. Final cache rebuild
 func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (RestackBatchResult, error) {
+	return e.restackBranches(ctx, branches, nil, nil)
+}
+
+// RestackBranchesWithValidatedRebases applies successful dry-run validation
+// commits directly to branch refs. Validation worktrees share the repository's
+// object database, so the rebased commits can be reused instead of replaying
+// the same rebase a second time.
+func (e *engineImpl) RestackBranchesWithValidatedRebases(ctx context.Context, branches []Branch, validation *RebaseValidation) (RestackBatchResult, error) {
+	plan, err := e.PlanRestack(ctx, branches)
+	if err != nil {
+		return RestackBatchResult{}, err
+	}
+	return e.restackBranches(ctx, branches, validation, plan)
+}
+
+// RestackBranchesWithValidatedPlan applies successful dry-run validation
+// commits using the caller's restack plan.
+func (e *engineImpl) RestackBranchesWithValidatedPlan(ctx context.Context, branches []Branch, validation *RebaseValidation, plan *RestackPlan) (RestackBatchResult, error) {
+	return e.restackBranches(ctx, branches, validation, plan)
+}
+
+func (e *engineImpl) restackBranches(ctx context.Context, branches []Branch, validation *RebaseValidation, plan *RestackPlan) (RestackBatchResult, error) {
 	// Save current branch to restore after restacking
 	originalBranch := e.CurrentBranch()
 	var originalRev string
@@ -556,7 +743,13 @@ func (e *engineImpl) RestackBranches(ctx context.Context, branches []Branch) (Re
 
 	for i, branch := range branches {
 		branchName := branch.GetName()
-		result, err := e.restackBranch(ctx, branch, allMeta, allRevisions, false) // Don't rebuild after each branch
+		var result RestackBranchResult
+		var err error
+		if validation != nil {
+			result, err = e.restackBranchWithValidatedRebase(ctx, branch, validation, plan, allMeta, allRevisions)
+		} else {
+			result, err = e.restackBranch(ctx, branch, allMeta, allRevisions)
+		}
 		results[branchName] = result
 
 		if err == nil && (result.Result == RestackDone || result.Result == RestackUnneeded) {

@@ -225,6 +225,15 @@ func (r *runtimeConflictRunner) Rebase(ctx context.Context, branchName, upstream
 	return r.Runner.Rebase(ctx, branchName, upstream, oldUpstream)
 }
 
+func (r *runtimeConflictRunner) UpdateRefsBatch(ctx context.Context, updates []git.RefUpdate) error {
+	if !r.injected {
+		r.injected = true
+		r.rebaseInProgress = true
+		return nil
+	}
+	return r.Runner.UpdateRefsBatch(ctx, updates)
+}
+
 func (r *runtimeConflictRunner) CheckoutBranch(ctx context.Context, branchName string) error {
 	if r.rebaseInProgress {
 		return fmt.Errorf("cannot checkout %s while rebase is in progress", branchName)

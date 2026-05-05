@@ -306,8 +306,9 @@ func TestRebaseContinueAutoContinuesThroughRerereResolvedCommit(t *testing.T) {
 	seedResult, err := runner.Rebase(context.Background(), "seed", "main", mainAfterM1)
 	require.NoError(t, err)
 	require.Equal(t, git.RebaseConflict, seedResult.Result)
-	require.NoError(t, scene.Repo.ResolveMergeConflicts())
-	require.NoError(t, scene.Repo.MarkMergeConflictsAsResolved())
+	require.NoError(t, scene.Repo.RunGitCommand("checkout", "--theirs", "fileB.txt_test.txt"))
+	require.NoError(t, scene.Repo.RunGitCommand("add", "fileB.txt_test.txt"))
+	require.NoError(t, scene.Repo.RunGitCommand("rerere"))
 	seedResult, err = runner.RebaseContinue(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, git.RebaseDone, seedResult.Result)
@@ -326,8 +327,8 @@ func TestRebaseContinueAutoContinuesThroughRerereResolvedCommit(t *testing.T) {
 	require.True(t, runner.IsRebaseInProgress(context.Background()))
 
 	// User resolves the B1/fileA conflict manually.
-	require.NoError(t, scene.Repo.ResolveMergeConflicts())
-	require.NoError(t, scene.Repo.MarkMergeConflictsAsResolved())
+	require.NoError(t, scene.Repo.RunGitCommand("checkout", "--theirs", "fileA.txt_test.txt"))
+	require.NoError(t, scene.Repo.RunGitCommand("add", "fileA.txt_test.txt"))
 
 	// RebaseContinue should drive the remaining B2 cherry-pick through
 	// rerere and finish the rebase cleanly.

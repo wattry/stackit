@@ -43,24 +43,6 @@ func (e *engineImpl) applyRebuild(branches []string, currentBranch string, allMe
 	}
 }
 
-// updateBranchInCache updates the cache for a specific branch after restack/metadata changes
-func (e *engineImpl) updateBranchInCache(branchName string) {
-	if branchName == e.trunk {
-		return
-	}
-
-	// Read metadata for this branch
-	meta, err := e.readMetadata(branchName)
-	if err != nil {
-		e.state.removeBranch(branchName)
-		return
-	}
-
-	// Read local metadata too
-	localMeta, _ := e.readLocalMetadata(branchName)
-	e.state.updateBranchFromMetadata(branchName, meta, localMeta)
-}
-
 // rebuild loads all branches and their metadata from Git
 func (e *engineImpl) rebuild() error {
 	// Clear metadata cache to pick up external changes (e.g., branches created in another terminal)
@@ -181,10 +163,24 @@ func (e *engineImpl) appendMergedDownstack(
 		return nil
 	}
 
-	// Get old parent metadata
-	oldParentMeta := e.getMetaFromMapOrDisk(oldParent, metaMap)
+	meta = e.withMergedDownstack(meta, oldParent, metaMap)
 
-	// Build MergedParent from old parent
+	// Write and update cache
+	if err := e.writeMetadata(branchName, meta); err != nil {
+		return err
+	}
+	if metaMap != nil {
+		metaMap[branchName] = meta
+	}
+	return nil
+}
+
+func (e *engineImpl) withMergedDownstack(meta *git.Meta, oldParent string, metaMap map[string]*git.Meta) *git.Meta {
+	if meta == nil || oldParent == "" {
+		return meta
+	}
+
+	oldParentMeta := e.getMetaFromMapOrDisk(oldParent, metaMap)
 	mp := git.MergedParent{BranchName: oldParent}
 	if oldParentMeta != nil {
 		oldParentPrInfo := oldParentMeta.GetPrInfo()
@@ -203,15 +199,7 @@ func (e *engineImpl) appendMergedDownstack(
 	// Check if oldParent already in history (prevent duplicates from retried operations)
 	for _, existing := range history {
 		if existing.BranchName == oldParent {
-			// Already captured, skip adding duplicate
-			meta = meta.WithMergedDownstack(history)
-			if err := e.writeMetadata(branchName, meta); err != nil {
-				return err
-			}
-			if metaMap != nil {
-				metaMap[branchName] = meta
-			}
-			return nil
+			return meta.WithMergedDownstack(history)
 		}
 	}
 
@@ -223,16 +211,7 @@ func (e *engineImpl) appendMergedDownstack(
 		history = history[len(history)-maxHistoryEntries:]
 	}
 
-	meta = meta.WithMergedDownstack(history)
-
-	// Write and update cache
-	if err := e.writeMetadata(branchName, meta); err != nil {
-		return err
-	}
-	if metaMap != nil {
-		metaMap[branchName] = meta
-	}
-	return nil
+	return meta.WithMergedDownstack(history)
 }
 
 // getMetaFromMapOrDisk retrieves metadata from the cache map or from disk if not found.
