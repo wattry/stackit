@@ -57,9 +57,9 @@ func TestIsAgentsInstalled(t *testing.T) {
 
 // Not parallel: subtests use t.Setenv.
 func TestAutoDetectFormats(t *testing.T) {
-	t.Run("defaults to claude when no dirs exist", func(t *testing.T) {
+	t.Run("defaults to both formats when no dirs exist", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
-		require.Equal(t, []string{"claude"}, autoDetectFormats())
+		require.Equal(t, []string{"claude", "codex"}, autoDetectFormats())
 	})
 
 	t.Run("detects both dirs", func(t *testing.T) {

@@ -1,0 +1,35 @@
+---
+description: Use when the stack appears broken and the user wants automated diagnosis and repair. Trigger phrases include "fix the stack", "my stack is broken", and "diagnose stack issues". Runs Stackit diagnostic and recovery commands.
+---
+
+# Stack Fix
+
+Diagnose stack problems and apply the smallest safe repair.
+
+## Workflow
+
+1. Inspect:
+
+   ```bash
+   git status --short
+   stackit log --no-interactive
+   stackit doctor --no-interactive
+   ```
+
+2. If an operation is in progress, inspect conflicts and route to `stack-resolve`.
+
+3. If branches need ancestry repair, run:
+
+   ```bash
+   stackit restack --upstack --no-interactive
+   ```
+
+4. If the last Stackit operation clearly caused the problem and rollback is safest, ask before:
+
+   ```bash
+   stackit undo --no-interactive --yes
+   ```
+
+5. Verify with `stackit log --no-interactive` and the lightest relevant build/test command.
+
+Do not delete branches or undo work without explicit user approval.

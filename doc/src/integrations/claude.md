@@ -1,16 +1,16 @@
 ---
 icon: material/robot
-title: Claude Code Integration
-description: AI-assisted stacking with Claude Code. Intelligent commands for creating branches, syncing stacks, absorbing changes, and fixing issues.
+title: AI Agent Integration
+description: AI-assisted stacking with Claude Code and Codex. Intelligent skills for creating branches, syncing stacks, absorbing changes, and fixing issues.
 ---
 
-# Claude Code Integration
+# AI Agent Integration
 
-Stackit includes specialized commands designed for Claude Code, providing intelligent automation for common stacking workflows.
+Stackit includes specialized skills for Claude Code and Codex, providing intelligent automation for common stacking workflows.
 
 ## Overview
 
-Claude Code integration enables AI-assisted stacking with commands that:
+Agent integration enables AI-assisted stacking with skills that:
 
 - **Understand Context**: Analyze your current stack state and git status
 - **Provide Validation**: Include quality checks and error handling
@@ -19,15 +19,23 @@ Claude Code integration enables AI-assisted stacking with commands that:
 
 ## Setup
 
-Install the Claude integration files:
+Install the agent integration files:
 
 ```bash
 stackit agent install
 ```
 
-This creates the necessary integration files for Claude Code, plus Codex/Cursor agent formats.
+This creates integration files for Claude Code, Codex, and Cursor.
 
-## Available commands
+| Agent | Installed files |
+|:------|:----------------|
+| Claude Code | `~/.claude/skills/stackit/` plus `~/.claude/skills/stack-*/` |
+| Codex | `~/.codex/skills/stackit/` plus `~/.codex/skills/stack-*/` |
+| Cursor and other agents | Repository guidance in `AGENTS.md` when selected |
+
+Use `--format=claude`, `--format=codex`, or `--format=claude,codex` to install a specific skill format in non-interactive environments.
+
+## Available skills
 
 ### stack-status
 
@@ -115,10 +123,10 @@ stack-describe
 
 ## Example workflow
 
-Here's a typical Claude-assisted workflow:
+Here's a typical AI-assisted workflow:
 
 ```bash
-# Claude helps create a branch with proper commit message
+# Claude Code or Codex helps create a branch with a proper commit message
 stack-create add-user-auth
 
 # Make your changes...
@@ -135,7 +143,7 @@ stack-submit --stack
 
 ## How it works
 
-Claude Code commands are executed through skills that:
+Stackit agent workflows are executed through skills that:
 
 1. **Analyze current state**: Check git status, stack structure, and branch relationships
 2. **Execute operations**: Perform the requested action with appropriate flags
@@ -144,30 +152,30 @@ Claude Code commands are executed through skills that:
 
 ## Integration with regular commands
 
-Claude commands complement regular stackit commands. You can mix and match:
+Agent skills complement regular stackit commands. You can mix and match:
 
 ```bash
-# Use Claude for complex operations
+# Use an agent skill for complex operations
 stack-create my-feature
 
 # Use regular commands for simple tasks
 stackit log
 stackit checkout parent-branch
 
-# Back to Claude for multi-branch operations
+# Back to an agent skill for multi-branch operations
 stack-absorb
 ```
 
 ## Best practices
 
-1. **Let Claude handle complexity**: Use Claude commands for operations involving multiple branches
+1. **Let the agent handle complexity**: Use agent skills for operations involving multiple branches
 2. **Use regular commands for navigation**: Simple operations like $$stackit log$$ don't need AI assistance
-3. **Review suggestions**: Claude will explain what it's doing—review before proceeding
-4. **Leverage context awareness**: Claude commands understand your stack structure and can make intelligent decisions
+3. **Review suggestions**: The agent will explain what it's doing—review before proceeding
+4. **Leverage context awareness**: The skills understand your stack structure and can make intelligent decisions
 
 ## Troubleshooting
 
-If Claude commands aren't working:
+If agent skills aren't working:
 
 1. Verify installation:
    ```bash

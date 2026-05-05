@@ -102,11 +102,11 @@ func runAgentInstall(runner git.Runner, force bool, formats []string, version st
 		switch target.format {
 		case agentSkillFormatClaude:
 			cleanupOldCommandFiles(baseDir, commandTemplateFiles)
-			if err := installCommandSkills(baseDir, target.skillsBaseDir, commandTemplateFiles, renderClaudeSkillContent); err != nil {
+			if err := installCommandSkills(baseDir, target.skillsBaseDir, commandTemplateFiles, renderClaudeSkillContent, target.format); err != nil {
 				return err
 			}
 		case agentSkillFormatCodex:
-			if err := installCommandSkills(baseDir, target.skillsBaseDir, commandTemplateFiles, renderCodexSkillContent); err != nil {
+			if err := installCommandSkills(baseDir, target.skillsBaseDir, commandTemplateFiles, renderCodexSkillContent, target.format); err != nil {
 				return err
 			}
 		}
@@ -129,7 +129,14 @@ func runAgentInstall(runner git.Runner, force bool, formats []string, version st
 func printSuccessMessage(out io.Writer, targets []agentInstallTarget, workflowBlockInstalled bool, workflowBlockPath string, commandCount int) {
 	_, _ = fmt.Fprintln(out, "✓ Installed agent files")
 
+	var hasClaude, hasCodex bool
 	for _, target := range targets {
+		switch target.format {
+		case agentSkillFormatClaude:
+			hasClaude = true
+		case agentSkillFormatCodex:
+			hasCodex = true
+		}
 		_, _ = fmt.Fprintf(out, "✓ Created %s\n", target.displayPath)
 		_, _ = fmt.Fprintf(out, "✓ Created ~/%s/stack-*/ (%d skills)\n", target.skillsBaseDir, commandCount)
 	}
@@ -140,23 +147,41 @@ func printSuccessMessage(out io.Writer, targets []agentInstallTarget, workflowBl
 		_, _ = fmt.Fprintf(out, "✓ Added stacking workflow block to %s\n", workflowBlockPath)
 	}
 
+	if hasClaude {
+		printStackSkillList(out, "Available Claude Code commands:", "/")
+	}
+	if hasCodex {
+		printStackSkillList(out, "Available Codex skills:", "")
+	}
+}
+
+func printStackSkillList(out io.Writer, title, prefix string) {
 	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "Available Claude Code commands:")
-	_, _ = fmt.Fprintln(out, "  /stack-absorb  - Intelligently absorb changes into commits")
-	_, _ = fmt.Fprintln(out, "  /stack-create  - Create branch with auto-naming")
-	_, _ = fmt.Fprintln(out, "  /stack-describe - Generate PR descriptions from git history")
-	_, _ = fmt.Fprintln(out, "  /stack-extract - Extract commits/files to independent branch")
-	_, _ = fmt.Fprintln(out, "  /stack-fix     - Diagnose and fix stack issues")
-	_, _ = fmt.Fprintln(out, "  /stack-fold    - Fold granular branches into parents")
-	_, _ = fmt.Fprintln(out, "  /stack-modify  - Amend current branch commit")
-	_, _ = fmt.Fprintln(out, "  /stack-plan    - Plan and create stack from uncommitted changes")
-	_, _ = fmt.Fprintln(out, "  /stack-resolve - Resolve rebase conflicts with AI assistance")
-	_, _ = fmt.Fprintln(out, "  /stack-restack - Rebase all branches in stack")
-	_, _ = fmt.Fprintln(out, "  /stack-review  - Apply PR review comments and mark resolved")
-	_, _ = fmt.Fprintln(out, "  /stack-split   - Split changes between current and new child branch")
-	_, _ = fmt.Fprintln(out, "  /stack-status  - View stack state and health")
-	_, _ = fmt.Fprintln(out, "  /stack-submit  - Submit PRs with generated descriptions")
-	_, _ = fmt.Fprintln(out, "  /stack-sync    - Sync with trunk and cleanup")
-	_, _ = fmt.Fprintln(out, "  /stack-tidy    - Clean up fixup/WIP commits across the stack")
-	_, _ = fmt.Fprintln(out, "  /stack-verify  - Verify stack health by running checks")
+	_, _ = fmt.Fprintln(out, title)
+	for _, skill := range stackSkillSummaries {
+		_, _ = fmt.Fprintf(out, "  %s%-14s - %s\n", prefix, skill.name, skill.description)
+	}
+}
+
+var stackSkillSummaries = []struct {
+	name        string
+	description string
+}{
+	{"stack-absorb", "Intelligently absorb changes into commits"},
+	{"stack-create", "Create branch with auto-naming"},
+	{"stack-describe", "Generate PR descriptions from git history"},
+	{"stack-extract", "Extract commits/files to independent branch"},
+	{"stack-fix", "Diagnose and fix stack issues"},
+	{"stack-fold", "Fold granular branches into parents"},
+	{"stack-modify", "Amend current branch commit"},
+	{"stack-plan", "Plan and create stack from uncommitted changes"},
+	{"stack-resolve", "Resolve rebase conflicts with AI assistance"},
+	{"stack-restack", "Rebase all branches in stack"},
+	{"stack-review", "Apply PR review comments and mark resolved"},
+	{"stack-split", "Split changes between current and new child branch"},
+	{"stack-status", "View stack state and health"},
+	{"stack-submit", "Submit PRs with generated descriptions"},
+	{"stack-sync", "Sync with trunk and cleanup"},
+	{"stack-tidy", "Clean up fixup/WIP commits across the stack"},
+	{"stack-verify", "Verify stack health by running checks"},
 }

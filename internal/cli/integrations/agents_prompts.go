@@ -33,7 +33,7 @@ func selectInstallTargets(baseDir string, formats []string) ([]agentInstallTarge
 		hasCodexDir,
 	}
 	if !hasClaudeDir && !hasCodexDir {
-		preSelected = []bool{true, false}
+		preSelected = []bool{true, true}
 	}
 
 	selected, err := promptMultiSelectWithDefault(

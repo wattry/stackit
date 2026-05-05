@@ -7,5 +7,5 @@ import "embed"
 // Kept for backward compatibility but should not be referenced.
 var TemplateVersion = "dev"
 
-//go:embed agents/templates/skill/*.md agents/templates/skill/agents/*.yaml agents/templates/skill/commands/*.md agents/templates/skill/workflows/*.md agents/templates/skill/scripts/*.sh agents/templates/commands/*.md agents/templates/subagents/*.md agents/templates/agents-block.md
+//go:embed agents/templates/skill/*.md agents/templates/skill/agents/*.yaml agents/templates/skill/commands/*.md agents/templates/skill/workflows/*.md agents/templates/skill/scripts/*.sh agents/templates/commands/*.md agents/templates/subagents/*.md agents/templates/agents-block.md agents/templates/codex/skill/*.md agents/templates/codex/skill/agents/*.yaml agents/templates/codex/skill/references/*.md agents/templates/codex/commands/*.md
 var agentTemplates embed.FS

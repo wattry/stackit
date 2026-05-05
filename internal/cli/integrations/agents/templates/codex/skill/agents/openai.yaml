@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stackit"
+  short_description: "Manage stacked Git branches"
+  default_prompt: "Use $stackit to inspect my current stack and recommend the right Stackit workflow."

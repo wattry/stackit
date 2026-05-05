@@ -33,11 +33,11 @@ description: Stackit is a CLI tool for managing stacked Git branches. Break larg
 
     Merge stacks bottom-up or squash top-down with intelligent workflows
 
--   :material-robot:{ .lg .middle } **Claude Code integration**
+-   :material-robot:{ .lg .middle } **AI agent integration**
 
     ---
 
-    Generate integration files for AI assistants with context-aware commands
+    Generate Claude Code and Codex skills with context-aware commands
 
 -   :simple-github:{ .lg .middle } **GitHub integration**
 

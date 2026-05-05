@@ -51,11 +51,11 @@ func InstallAgents(runner git.Runner, force bool, version string, out io.Writer)
 }
 
 // autoDetectFormats returns format flags based on which agent directories exist,
-// defaulting to claude if none are found.
+// defaulting to both first-class formats if none are found.
 func autoDetectFormats() []string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return []string{"claude"}
+		return []string{"claude", "codex"}
 	}
 
 	var formats []string
@@ -66,7 +66,7 @@ func autoDetectFormats() []string {
 		formats = append(formats, "codex")
 	}
 	if len(formats) == 0 {
-		formats = []string{"claude"}
+		formats = []string{"claude", "codex"}
 	}
 	return formats
 }

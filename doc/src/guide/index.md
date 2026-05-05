@@ -54,4 +54,4 @@ Or check the [FAQ](../community/faq.md) for frequently asked questions.
 
 - [Workflows →](../workflows/index.md) — Daily, advanced, and team collaboration patterns
 - [Worktrees →](../worktrees/index.md) — Work on multiple stacks in parallel
-- [Integrations →](../integrations/index.md) — Claude Code, GitHub, git hooks, and shell
+- [Integrations →](../integrations/index.md) — AI agents, GitHub, git hooks, and shell

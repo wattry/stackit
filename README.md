@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Command Reference](#command-reference)
 - [Common Workflows](#common-workflows)
-- [Claude Code Integration](#claude-code-integration)
+- [AI Agent Integration](#ai-agent-integration)
 - [Branch Protection](#frozen--locked-branches)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
@@ -182,11 +182,11 @@ stackit merge ship     # Consolidate into single PR and merge
 
 ---
 
-## Claude Code Integration
+## AI Agent Integration
 
-Stackit includes specialized commands designed for Claude Code, providing intelligent automation for common stacking workflows. These commands understand stack context and can perform complex operations with minimal user input.
+Stackit includes specialized skills for Claude Code and Codex, providing intelligent automation for common stacking workflows. These skills understand stack context and can perform complex operations with minimal user input.
 
-### Available Claude Commands
+### Available Agent Skills
 
 | Command | Description | When to Use |
 |:---|:---|:---|
@@ -205,17 +205,25 @@ Stackit includes specialized commands designed for Claude Code, providing intell
 stackit agent install
 ```
 
-This creates integration files for Claude Code, Codex, and Cursor. The Claude commands are designed to:
+This creates integration files for Claude Code, Codex, and Cursor.
+
+Generated files include:
+
+- `~/.claude/skills/stackit/` plus `~/.claude/skills/stack-*/` for Claude Code
+- `~/.codex/skills/stackit/` plus `~/.codex/skills/stack-*/` for Codex
+- Repository workflow guidance for `CLAUDE.md` or `AGENTS.md` when you opt in
+
+The generated skills are designed to:
 
 - **Understand Context**: Each command analyzes your current stack state and git status
 - **Provide Validation**: Commands include quality checks and error handling
 - **Guide Through Issues**: When conflicts or errors occur, commands provide step-by-step resolution guidance
 - **Ensure Safety**: All commands prioritize data safety and provide undo capabilities
 
-### Example Claude Workflow
+### Example Agent Workflow
 
 ```bash
-# Claude can help with complex stacking operations
+# Claude Code or Codex can help with complex stacking operations
 stack-create add-user-auth    # Creates branch with proper commit message
 # Make changes...
 stack-absorb                 # Intelligently distributes changes across commits
