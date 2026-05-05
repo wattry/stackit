@@ -775,6 +775,10 @@ type RestackBranchResult struct {
 	RerereResolvedCount int        // Number of rebase continuations handled by git rerere
 }
 
+// RestackBranchProgressFunc is called after a branch has been processed during
+// a batch restack.
+type RestackBranchProgressFunc func(branch Branch, result RestackBranchResult)
+
 // IsLocked returns true if the branch is locked
 func (r RestackBranchResult) IsLocked() bool {
 	return r.LockReason.IsLocked()
