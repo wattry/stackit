@@ -53,6 +53,7 @@ type RebaseValidation struct {
 	ErrorMessage     string              // Error message describing the failure
 	ConflictingFiles []string            // Files that have conflicts (if ErrorType is ValidationErrorConflict)
 	NewSHAs          map[string]string   // Branch -> resulting SHA after rebase (if successful)
+	RerereResolved   map[string]int      // Branch -> number of conflicts auto-resolved by rerere during validation
 }
 
 // ValidateRebases tests if a sequence of rebases will succeed by performing them
@@ -165,13 +166,14 @@ func maxDepth(m map[int][]RebaseSpec) int {
 
 // validationResult holds the result of validating a single spec
 type validationResult struct {
-	spec          RebaseSpec
-	success       bool
-	newSHA        string
-	errorMessage  string
-	errorType     ValidationErrorType
-	oldSHA        string
-	conflictFiles []string
+	spec           RebaseSpec
+	success        bool
+	newSHA         string
+	errorMessage   string
+	errorType      ValidationErrorType
+	oldSHA         string
+	conflictFiles  []string
+	rerereResolved int
 }
 
 // ValidateRebasesParallel validates rebases in parallel where possible.
@@ -182,7 +184,7 @@ type validationResult struct {
 // Results are tracked thread-safely across parallel validations.
 func (e *engineImpl) ValidateRebasesParallel(ctx context.Context, specs []RebaseSpec) (*RebaseValidation, error) {
 	if len(specs) == 0 {
-		return &RebaseValidation{Success: true, NewSHAs: map[string]string{}}, nil
+		return &RebaseValidation{Success: true, NewSHAs: map[string]string{}, RerereResolved: map[string]int{}}, nil
 	}
 
 	// Prune stale worktree entries ONCE before starting parallel validation.
@@ -205,8 +207,9 @@ func (e *engineImpl) ValidateRebasesParallel(ctx context.Context, specs []Rebase
 	levels := e.groupSpecsByDepth(specs)
 
 	result := &RebaseValidation{
-		Success: true,
-		NewSHAs: make(map[string]string),
+		Success:        true,
+		NewSHAs:        make(map[string]string),
+		RerereResolved: make(map[string]int),
 	}
 
 	// Thread-safe maps for tracking rebased SHAs across parallel executions
@@ -305,6 +308,9 @@ func (e *engineImpl) processValidationLevel(
 
 		// Store successful result
 		result.NewSHAs[valResult.spec.Branch] = valResult.newSHA
+		if valResult.rerereResolved > 0 {
+			result.RerereResolved[valResult.spec.Branch] = valResult.rerereResolved
+		}
 		rebasedByName.Store(valResult.spec.Branch, valResult.newSHA)
 		if valResult.oldSHA != "" {
 			rebasedBySHA.Store(valResult.oldSHA, valResult.newSHA)
@@ -397,9 +403,10 @@ func (e *engineImpl) validateSingleSpec(
 	}
 
 	return validationResult{
-		spec:    spec,
-		success: true,
-		newSHA:  newSHA,
-		oldSHA:  oldBranchSHA,
+		spec:           spec,
+		success:        true,
+		newSHA:         newSHA,
+		oldSHA:         oldBranchSHA,
+		rerereResolved: rebaseResult.RerereResolvedCount,
 	}
 }

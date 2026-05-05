@@ -788,6 +788,42 @@ type RestackBatchResult struct {
 	Results           map[string]RestackBranchResult // Results for each branch attempted
 }
 
+// RestackPlanAction describes how a planned branch should be applied.
+type RestackPlanAction int
+
+const (
+	// RestackPlanApplyValidated applies a SHA produced by rebase validation.
+	RestackPlanApplyValidated RestackPlanAction = iota
+	// RestackPlanApplyFrozen updates a frozen branch from its remote ref.
+	RestackPlanApplyFrozen
+	// RestackPlanApplyAnchor updates a worktree anchor to trunk.
+	RestackPlanApplyAnchor
+)
+
+// RestackPlanItem describes how a branch should be handled during restack.
+type RestackPlanItem struct {
+	Branch      string
+	NewParent   string
+	ParentRev   string
+	OldUpstream string
+	TargetRev   string
+	Action      RestackPlanAction
+	Skip        bool
+	SkipResult  RestackBranchResult
+	Reparented  bool
+	OldParent   string
+}
+
+// RestackPlan describes validation specs, pre-skipped branch results, and
+// per-branch apply decisions for a restack operation.
+type RestackPlan struct {
+	Specs          []RebaseSpec
+	BranchMap      map[string]bool
+	ApplyMap       map[string]bool
+	PlannedResults map[string]RestackBranchResult
+	Items          map[string]RestackPlanItem
+}
+
 // ContinueRebaseResult represents the result of continuing a rebase
 type ContinueRebaseResult struct {
 	Result              int    // git.RebaseResult value (0 = RebaseDone, 1 = RebaseConflict)
