@@ -52,6 +52,20 @@ func Run(cmd *cobra.Command, fn func(ctx *app.Context) error) error {
 	return nil
 }
 
+// ResolveBranchArg returns the first positional branch argument, or the current
+// branch name when no argument was provided.
+func ResolveBranchArg(ctx *app.Context, args []string, missingErr error) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+
+	currentBranch := ctx.Engine.CurrentBranch()
+	if currentBranch == nil {
+		return "", missingErr
+	}
+	return currentBranch.GetName(), nil
+}
+
 // HandleCommandError formats known error types for user display.
 func HandleCommandError(err error) error {
 	if errors.Is(err, errors.ErrCanceled) {

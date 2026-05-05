@@ -139,7 +139,7 @@ func DebugAction(ctx *app.Context, opts DebugOptions) error {
 	}
 	allMeta, _ := eng.Git().BatchReadMetadata(branchNames)
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	branchInfos := make([]BranchInfo, 0, len(allBranches))
 	for _, branch := range allBranches {
 		branchName := branch.GetName()

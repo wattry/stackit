@@ -362,7 +362,7 @@ func splitByFileAbove(ctx context.Context, branchToSplit engine.Branch, newBranc
 	}
 
 	// Get existing children before we modify anything
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	existingChildren := graph.Children(branchToSplit)
 
 	// Detach and reset branch changes (all changes become unstaged)

@@ -38,32 +38,7 @@ func (e *engineImpl) BatchGetRevisions(branchNames []string) (map[string]string,
 
 // GetCommitCount returns the number of commits for a branch
 func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
-	branchName := branch.GetName()
-	e.mu.RLock()
-	trunk := e.trunk
-	state := e.state.branchState.GetByName(branchName)
-	e.mu.RUnlock()
-
-	parent := trunk
-	if state != nil {
-		parent = state.Parent
-	}
-
-	// Get base revision (stored parent revision)
-	meta, err := e.readMetadata(branchName)
-	var base string
-	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
-		base = *rev
-	} else {
-		// Fallback to current parent branch tip if metadata is missing
-		baseRev, err := e.git.GetRevision(parent)
-		if err != nil {
-			return 0, err
-		}
-		base = baseRev
-	}
-
-	branchRev, err := e.git.GetRevision(branchName)
+	base, branchRev, err := e.resolveBranchComparisonRevisions(branch.GetName())
 	if err != nil {
 		return 0, err
 	}
@@ -83,31 +58,7 @@ func (e *engineImpl) GetCommitCount(branch Branch) (int, error) {
 
 // GetDiffStats returns diff stats for a branch
 func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
-	branchName := branch.GetName()
-	e.mu.RLock()
-	trunk := e.trunk
-	state := e.state.branchState.GetByName(branchName)
-	e.mu.RUnlock()
-
-	parent := trunk
-	if state != nil {
-		parent = state.Parent
-	}
-
-	// Get base revision (stored parent revision)
-	meta, err := e.readMetadata(branchName)
-	var base string
-	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
-		base = *rev
-	} else {
-		baseRev, err := e.git.GetRevision(parent)
-		if err != nil {
-			return 0, 0, err
-		}
-		base = baseRev
-	}
-
-	branchRev, err := e.git.GetRevision(branchName)
+	base, branchRev, err := e.resolveBranchComparisonRevisions(branch.GetName())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -140,6 +91,37 @@ func (e *engineImpl) GetDiffStats(branch Branch) (int, int, error) {
 	}
 
 	return added, deleted, nil
+}
+
+func (e *engineImpl) resolveBranchComparisonRevisions(branchName string) (base, branchRev string, err error) {
+	e.mu.RLock()
+	trunk := e.trunk
+	state := e.state.branchState.GetByName(branchName)
+	e.mu.RUnlock()
+
+	parent := trunk
+	if state != nil {
+		parent = state.Parent
+	}
+
+	// Get base revision (stored parent revision)
+	meta, err := e.readMetadata(branchName)
+	if rev := meta.GetParentBranchRevision(); err == nil && rev != nil {
+		base = *rev
+	} else {
+		baseRev, err := e.git.GetRevision(parent)
+		if err != nil {
+			return "", "", err
+		}
+		base = baseRev
+	}
+
+	branchRev, err = e.git.GetRevision(branchName)
+	if err != nil {
+		return "", "", err
+	}
+
+	return base, branchRev, nil
 }
 
 // PreloadBranchData batch-loads metadata and revisions for all tracked branches

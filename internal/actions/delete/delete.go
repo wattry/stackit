@@ -60,7 +60,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) (Result, error) {
 	}
 
 	// Build StackGraph for efficient traversals
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Determine branches to delete
 	toDelete := []engine.Branch{branch}
@@ -184,7 +184,7 @@ func preReparentChildrenWithPreservedDivergence(ctx *app.Context, toDelete []eng
 		toDeleteSet[b.GetName()] = true
 	}
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	reparentedChildren := make([]string, 0)
 	reparentedSet := make(map[string]bool)
 

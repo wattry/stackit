@@ -196,7 +196,7 @@ func GetAction(ctx *app.Context, branchOrPR string, opts GetOptions, handler Get
 	// If target branch exists locally, identify local descendants
 	targetBranchObj := eng.GetBranch(targetBranch)
 	if !opts.Downstack && targetBranchObj.IsTracked() {
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		graph := eng.Graph(engine.SortStrategyAlphabetical)
 		upstack := graph.Range(targetBranchObj, engine.StackRange{RecursiveChildren: true})
 		for _, b := range upstack {
 			if !contains(branchesToSync, b.GetName()) {

@@ -43,7 +43,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 	}
 
 	// Build graph once — needed for scope range and for find-first-failure depth grouping.
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	var branches []engine.Branch
 	if multiStack {

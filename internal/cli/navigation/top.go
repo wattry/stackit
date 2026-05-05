@@ -30,17 +30,7 @@ to follow.`,
 				if err != nil {
 					return err
 				}
-				if common.HandleCheckoutResult(ctx.Output, result) {
-					return nil
-				}
-				if result.WorktreeSwitchPath != "" {
-					_, err = actions.CheckoutAction(ctx, actions.CheckoutOptions{
-						BranchName:         result.TargetBranch,
-						SkipWorktreeSwitch: true,
-					}, nil)
-					return err
-				}
-				return nil
+				return common.CompleteCheckout(ctx, result, actions.CheckoutOptions{BranchName: result.TargetBranch}, nil)
 			})
 		},
 	}

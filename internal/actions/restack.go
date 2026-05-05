@@ -43,7 +43,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	} else {
 		// Get branches to restack based on scope
 		branch := eng.GetBranch(opts.BranchName)
-		graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+		graph := eng.Graph(engine.SortStrategyAlphabetical)
 		branchGroups = []restackBranchGroup{{
 			branches: graph.Range(branch, opts.Scope),
 		}}
@@ -65,10 +65,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		WithFlag(opts.ContinueOnConflict, "--continue-on-conflict"),
 		WithFlag(opts.Parallel, "--parallel"),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// If no handler provided, use NullRestackHandler (silent)
 	if handler == nil {

@@ -101,7 +101,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 			}
 
 			// Get children of current branch
-			graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+			graph := eng.Graph(engine.SortStrategyAlphabetical)
 			childNames := graph.Children(*currentBranch)
 
 			dirCtx := DirectionContext{
@@ -223,7 +223,7 @@ func RunWizard(ctx *app.Context, handler InteractiveHandler, opts WizardOptions)
 				IncludeCurrent:    false,
 				RecursiveChildren: true,
 			}
-			graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+			graph := eng.Graph(engine.SortStrategyAlphabetical)
 			upstackBranches := graph.Range(*currentBranch, rng)
 			if len(upstackBranches) > 0 {
 				if err := actions.RestackBranches(ctx, upstackBranches); err != nil {

@@ -544,7 +544,7 @@ func (m *Model) renderStackTree() string {
 
 	// Mark children as re-parented when direction is "above"
 	if m.direction == DirectionAbove {
-		graph := engine.BuildStackGraph(m.config.Engine, engine.SortStrategySmart, nil)
+		graph := m.config.Engine.Graph(engine.SortStrategySmart)
 		for _, child := range graph.Children(m.config.Branch) {
 			renderer.SetAnnotation(child, tree.BranchAnnotation{
 				CustomLabel: "(re-parented)",
@@ -646,7 +646,7 @@ func (m *Model) buildStackPath() {
 		return
 	}
 
-	graph := engine.BuildStackGraph(m.config.Engine, engine.SortStrategySmart, nil)
+	graph := m.config.Engine.Graph(engine.SortStrategySmart)
 	currentName := m.config.Branch.GetName()
 
 	var path []string
@@ -671,7 +671,7 @@ func (m *Model) buildVirtualTree() *virtualTree {
 		trunkBranch = m.stackPath[0]
 	}
 
-	graph := engine.BuildStackGraph(m.config.Engine, engine.SortStrategySmart, nil)
+	graph := m.config.Engine.Graph(engine.SortStrategySmart)
 	children := graph.Children(m.config.Branch)
 
 	return &virtualTree{

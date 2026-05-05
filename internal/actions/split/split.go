@@ -249,7 +249,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 				IncludeCurrent:    false,
 				RecursiveChildren: true,
 			}
-			graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+			graph := eng.Graph(engine.SortStrategyAlphabetical)
 			upstackBranches := graph.Range(*currentBranch, rng)
 			if len(upstackBranches) > 0 {
 				if err := actions.RestackBranches(ctx, upstackBranches); err != nil {
@@ -277,7 +277,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		IncludeCurrent:    false,
 		RecursiveChildren: true,
 	}
-	upstackGraph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	upstackGraph := eng.Graph(engine.SortStrategyAlphabetical)
 	upstackBranches := upstackGraph.Range(*currentBranch, upstackRng)
 
 	// Apply the split

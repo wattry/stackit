@@ -83,7 +83,7 @@ stack-sync
 
 ### stack-restack
 
-Rebase all branches to ensure proper ancestry.
+Rebase branches with scoped or multi-stack targeting to ensure proper ancestry.
 
 ```bash
 stack-restack

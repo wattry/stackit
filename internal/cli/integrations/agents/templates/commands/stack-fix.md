@@ -244,7 +244,7 @@ After all issues are fixed and verification passes, use `AskUserQuestion`:
   - label: "Submit updates (Recommended)"
     description: "Push fixed branches to update PRs"
   - label: "Restack branches"
-    description: "Rebase all branches to ensure consistency"
+    description: "Rebase affected branches to ensure consistency"
   - label: "Done for now"
     description: "No follow-up action needed"
 

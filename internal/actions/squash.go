@@ -39,10 +39,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 		WithFlagValue("-m", opts.Message),
 		WithFlag(opts.NoEdit, "--no-edit"),
 	)
-	if err := ctx.Undo().TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Squash current branch
 	if err := eng.SquashCurrentBranch(context, engine.SquashOptions{
@@ -62,7 +59,7 @@ func SquashAction(ctx *app.Context, opts SquashOptions) error {
 		IncludeCurrent:    false,
 		RecursiveChildren: true,
 	}
-	graph := engine.BuildStackGraph(ctx.Engine, engine.SortStrategyAlphabetical, nil)
+	graph := ctx.Engine.Graph(engine.SortStrategyAlphabetical)
 	upstackBranches := graph.Range(*currentBranch, rng)
 
 	// Log upstack branches for diagnostics

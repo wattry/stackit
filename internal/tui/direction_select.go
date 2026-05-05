@@ -212,7 +212,7 @@ type DirectionSelectModel struct {
 // NewDirectionSelectModel creates a model for selecting split direction
 func NewDirectionSelectModel(eng engine.BranchReader, currentBranch, parentBranch string, children []string) *DirectionSelectModel {
 	// Build the path from trunk to current branch
-	graph := engine.BuildStackGraph(eng, engine.SortStrategySmart, nil)
+	graph := eng.Graph(engine.SortStrategySmart)
 
 	var stackPath []string
 	current := currentBranch

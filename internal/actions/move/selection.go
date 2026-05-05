@@ -29,7 +29,7 @@ func PrepareSelection(ctx *app.Context, source string) (*Selection, error) {
 	eng := ctx.Engine
 	sourceBranch := eng.GetBranch(source)
 
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	descendants := graph.Range(sourceBranch, engine.StackRange{
 		RecursiveChildren: true,
 		IncludeCurrent:    true,

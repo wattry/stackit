@@ -127,7 +127,7 @@ func ModifyAction(ctx *app.Context, opts ModifyOptions) error {
 	}
 
 	// Restack upstack branches
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	upstackBranches := graph.Range(currentBranchObj, engine.StackRange{RecursiveChildren: true})
 
 	if len(upstackBranches) > 0 {
@@ -174,7 +174,7 @@ func interactiveRebaseAction(ctx *app.Context, _ ModifyOptions) error {
 	out.Info("Interactive rebase completed.")
 
 	// Restack upstack branches
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	upstackBranches := graph.Range(*currentBranch, engine.StackRange{RecursiveChildren: true})
 
 	if len(upstackBranches) > 0 {

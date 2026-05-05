@@ -49,7 +49,7 @@ func (h *StacksHandler) listStacks(w http.ResponseWriter) {
 		return
 	}
 
-	graph := engine.BuildStackGraph(h.eng, engine.SortStrategySmart, nil)
+	graph := h.eng.Graph(engine.SortStrategySmart)
 
 	summaries := make([]httpcontract.StackSummary, 0, len(stacks))
 	for _, stack := range stacks {
@@ -80,7 +80,7 @@ func (h *StacksHandler) getStack(w http.ResponseWriter, r *http.Request, rootBra
 		return
 	}
 
-	graph := engine.BuildStackGraph(h.eng, engine.SortStrategySmart, nil)
+	graph := h.eng.Graph(engine.SortStrategySmart)
 
 	// Fetch CI checks if GitHub client is available
 	var checksMap map[string]*github.CheckStatus

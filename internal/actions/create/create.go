@@ -72,10 +72,7 @@ func Action(ctx *app.Context, opts Options, h Handler) (Result, error) {
 		actions.WithFlag(opts.Update, "--update"),
 		actions.WithFlag(opts.Worktree, "--worktree"),
 	)
-	if err := eng.TakeSnapshot(snapshotOpts); err != nil {
-		// Log but don't fail - snapshot is best effort
-		out.Debug("Failed to take snapshot: %v", err)
-	}
+	actions.TakeBestEffortSnapshot(ctx, snapshotOpts)
 
 	// Handle staging first if we might need the message to name the branch
 	hasStaged, err := eng.HasStagedChanges(ctx.Context)

@@ -125,7 +125,7 @@ func (e *engineImpl) groupSpecsByDepth(specs []RebaseSpec) []validationLevel {
 	}
 
 	// Build a graph to understand branch relationships
-	graph := BuildStackGraph(e, SortStrategySmart, nil)
+	graph := e.Graph(SortStrategySmart)
 
 	// Group specs by their depth in the stack
 	specsByDepth := make(map[int][]RebaseSpec)

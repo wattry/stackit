@@ -245,7 +245,7 @@ func logActionJSON(ctx *app.Context, opts LogOptions) error {
 	}
 
 	// Build stack graph
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 
 	// Get all branches in stack order
 	var branchesToInclude []engine.Branch

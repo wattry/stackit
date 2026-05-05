@@ -174,7 +174,7 @@ After successful absorb (all branches pass), use `AskUserQuestion`:
 - Question: "Changes absorbed successfully. What would you like to do next?"
 - Options:
   - label: "Restack to propagate (Recommended)"
-    description: "Rebase all branches to ensure consistency"
+    description: "Rebase affected branches to ensure consistency"
   - label: "Submit changes"
     description: "Push absorbed changes to update PRs"
   - label: "Done for now"

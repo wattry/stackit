@@ -153,7 +153,7 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 // Unlike PushMetadataAndSyncPRs, this does NOT immediately update GitHub PRs.
 func markStackAndPushMetadata(ctx *app.Context, eng engine.Engine, stackRoot string) error {
 	// Mark all branches in the stack for PR body update
-	graph := engine.BuildStackGraph(eng, engine.SortStrategyAlphabetical, nil)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
 	root := eng.GetBranch(stackRoot)
 	if root.IsTracked() {
 		branches := graph.CollectBranches(root)
