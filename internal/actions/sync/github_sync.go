@@ -10,6 +10,7 @@ import (
 	"stackit.dev/stackit/internal/engine"
 	"stackit.dev/stackit/internal/github"
 	"stackit.dev/stackit/internal/tui/style"
+	"stackit.dev/stackit/internal/utils"
 )
 
 // GitHubSyncResult holds the results from GitHub PR info sync (network operation)
@@ -163,8 +164,15 @@ func PushParentsToGitHub(ctx *app.Context, result *GitHubSyncResult, dirtyAnchor
 	githubClient := ctx.GitHub()
 
 	allBranches := eng.AllBranches()
-	updated := []string{}
 
+	type baseUpdate struct {
+		branchName      string
+		prNumber        int
+		oldBase         string
+		localParentName string
+	}
+
+	var pending []baseUpdate
 	for _, branch := range allBranches {
 		if branch.IsTrunk() {
 			continue
@@ -182,8 +190,6 @@ func PushParentsToGitHub(ctx *app.Context, result *GitHubSyncResult, dirtyAnchor
 			continue
 		}
 
-		githubBase := prInfo.Base
-
 		// Get local parent
 		currentParent := branch.GetParent()
 		localParentName := ""
@@ -193,28 +199,44 @@ func PushParentsToGitHub(ctx *app.Context, result *GitHubSyncResult, dirtyAnchor
 			localParentName = currentParent.GetName()
 		}
 
-		// If local parent differs from GitHub base, update GitHub to match local
-		if githubBase != localParentName {
-			out.Debug("PR for %s has base %s, but local parent is %s. Updating GitHub PR base...",
-				branch.GetName(), githubBase, localParentName)
-
-			updateOpts := github.UpdatePROptions{
-				Base: &localParentName,
-			}
-
-			if _, err := githubClient.UpdatePullRequest(gctx, result.RepoOwner, result.RepoName, prInfo.Number, updateOpts); err != nil {
-				out.Debug("Failed to update PR base for %s: %v", branch.GetName(), err)
-				continue
-			}
-
-			out.Info("Updated PR base for %s: %s → %s",
-				style.ColorBranchName(branch.GetName(), false),
-				style.ColorDim(githubBase),
-				style.ColorBranchName(localParentName, false))
-
-			updated = append(updated, branch.GetName())
+		if prInfo.Base == localParentName {
+			continue
 		}
+
+		pending = append(pending, baseUpdate{
+			branchName:      branch.GetName(),
+			prNumber:        prInfo.Number,
+			oldBase:         prInfo.Base,
+			localParentName: localParentName,
+		})
 	}
+
+	var (
+		mu      sync.Mutex
+		updated []string
+	)
+	utils.Run(pending, func(u baseUpdate) {
+		out.Debug("PR for %s has base %s, but local parent is %s. Updating GitHub PR base...",
+			u.branchName, u.oldBase, u.localParentName)
+
+		updateOpts := github.UpdatePROptions{
+			Base: &u.localParentName,
+		}
+
+		if _, err := githubClient.UpdatePullRequest(gctx, result.RepoOwner, result.RepoName, u.prNumber, updateOpts); err != nil {
+			out.Debug("Failed to update PR base for %s: %v", u.branchName, err)
+			return
+		}
+
+		out.Info("Updated PR base for %s: %s → %s",
+			style.ColorBranchName(u.branchName, false),
+			style.ColorDim(u.oldBase),
+			style.ColorBranchName(u.localParentName, false))
+
+		mu.Lock()
+		updated = append(updated, u.branchName)
+		mu.Unlock()
+	})
 
 	return &ParentsToGitHubResult{
 		BranchesUpdated: updated,

@@ -597,11 +597,13 @@ func pushMetadataRefs(ctx *app.Context, branches []engine.Branch) error {
 
 	rm := ctx.RemoteMetadata()
 
-	// Update LastModifiedBy for each branch
-	for _, branch := range branches {
-		if err := rm.SetLastModifiedBy(branch.GetName()); err != nil {
-			return fmt.Errorf("failed to update metadata for %s: %w", branch.GetName(), err)
-		}
+	branchNames := make([]string, len(branches))
+	for i, branch := range branches {
+		branchNames[i] = branch.GetName()
+	}
+
+	if err := rm.BatchSetLastModifiedBy(branchNames); err != nil {
+		return fmt.Errorf("failed to update metadata: %w", err)
 	}
 
 	// Check if remote sync is enabled; if not, run compatibility test first
@@ -614,12 +616,6 @@ func pushMetadataRefs(ctx *app.Context, branches []engine.Branch) error {
 		if err := ctx.Git().EnsureMetadataRefspecConfigured(); err != nil {
 			ctx.Output.Debug("Failed to configure metadata refspec: %v", err)
 		}
-	}
-
-	// Extract branch names for PushMetadataRefs
-	branchNames := make([]string, len(branches))
-	for i, branch := range branches {
-		branchNames[i] = branch.GetName()
 	}
 
 	// Push metadata refs
