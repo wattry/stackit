@@ -682,12 +682,10 @@ func (e *engineImpl) RenameBranch(ctx context.Context, oldBranch, newBranch Bran
 	oldLocalRef := fmt.Sprintf("%s%s", git.LocalMetadataRefPrefix, oldName)
 	newLocalRef := fmt.Sprintf("%s%s", git.LocalMetadataRefPrefix, newName)
 	if sha, err := e.git.GetRef(oldLocalRef); err == nil {
-		if err := e.git.UpdateRef(newLocalRef, sha); err == nil {
-			if err := e.git.DeleteRef(oldLocalRef); err != nil {
-				_, _ = fmt.Fprintf(e.writer, "Warning: failed to delete old local metadata ref: %v\n", err)
-			}
-		} else {
+		if err := e.git.UpdateRef(newLocalRef, sha); err != nil {
 			_, _ = fmt.Fprintf(e.writer, "Warning: failed to update new local metadata ref: %v\n", err)
+		} else if err := e.git.DeleteRef(oldLocalRef); err != nil {
+			_, _ = fmt.Fprintf(e.writer, "Warning: failed to delete old local metadata ref: %v\n", err)
 		}
 	}
 
