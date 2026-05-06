@@ -100,6 +100,15 @@ func RestackBranches(ctx *app.Context, branches []engine.Branch) error {
 // RestackBranchesWithHandler restacks branches with optional progress callback.
 // See ConflictMode for how mode controls conflict handling.
 func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, callback RestackProgressCallback, mode ConflictMode) error {
+	return restackBranchesWithPlan(ctx, branches, nil, callback, mode)
+}
+
+// restackBranchesWithPlan is the implementation of RestackBranchesWithHandler
+// with an optional pre-computed engine plan. When prePlan is non-nil, the
+// engine.PlanRestack call is skipped — used by RestackAction when the CLI
+// already built the plan to gate TUI initialization, so we don't pay for
+// roughly 3 git operations per branch twice per invocation.
+func restackBranchesWithPlan(ctx *app.Context, branches []engine.Branch, prePlan *engine.RestackPlan, callback RestackProgressCallback, mode ConflictMode) error {
 	if len(branches) == 0 {
 		return nil
 	}
@@ -116,10 +125,14 @@ func RestackBranchesWithHandler(ctx *app.Context, branches []engine.Branch, call
 		return fmt.Errorf("pre-flight validation failed: %w", err)
 	}
 
-	// Build rebase specs for validation
-	plan, err := ctx.Engine.PlanRestack(ctx.Context, branches)
-	if err != nil {
-		return fmt.Errorf("failed to plan restack: %w", err)
+	// Build rebase specs for validation (or reuse the caller's plan).
+	plan := prePlan
+	var err error
+	if plan == nil {
+		plan, err = ctx.Engine.PlanRestack(ctx.Context, branches)
+		if err != nil {
+			return fmt.Errorf("failed to plan restack: %w", err)
+		}
 	}
 	specs, plannedResults := plan.Specs, plan.PlannedResults
 	if len(specs) == 0 && len(plan.ApplyMap) == 0 {

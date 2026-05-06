@@ -86,19 +86,28 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					RecursiveChildren: !only && !downstack, // Default or upstack
 				}
 
+				opts := actions.RestackOptions{
+					BranchName:         targetBranch,
+					Scope:              rng,
+					AllStacks:          allStacks,
+					StackRoots:         stacks,
+					ContinueOnConflict: continueOnConflict,
+					Parallel:           parallel,
+					Jobs:               jobs,
+				}
+
+				// Build the plan once. RestackAction reuses it so we don't
+				// pay for engine.PlanRestack twice (~3 git ops per branch).
+				plan, err := actions.PlanRestack(ctx, opts)
+				if err != nil {
+					return err
+				}
+
 				// JSON output mode
 				if jsonOutput {
 					cmd.SilenceErrors = true
 					jsonHandler := handlers.NewJSONRestackHandler()
-					err := actions.RestackAction(ctx, actions.RestackOptions{
-						BranchName:         targetBranch,
-						Scope:              rng,
-						AllStacks:          allStacks,
-						StackRoots:         stacks,
-						ContinueOnConflict: continueOnConflict,
-						Parallel:           parallel,
-						Jobs:               jobs,
-					}, jsonHandler)
+					err := actions.RestackAction(ctx, plan, jsonHandler)
 
 					// Set error status if there was an error
 					if err != nil {
@@ -117,24 +126,10 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					return err
 				}
 
-				opts := actions.RestackOptions{
-					BranchName:         targetBranch,
-					Scope:              rng,
-					AllStacks:          allStacks,
-					StackRoots:         stacks,
-					ContinueOnConflict: continueOnConflict,
-					Parallel:           parallel,
-					Jobs:               jobs,
-				}
-
-				// Check whether there's any work BEFORE starting the TUI to
-				// avoid leaking bubbletea startup/teardown escape codes when
-				// the action would return immediately.
-				hasWork, err := actions.HasRestackWork(ctx.Engine, opts)
-				if err != nil {
-					return err
-				}
-				if !hasWork {
+				// Skip the TUI when the scope is empty — the runner would set
+				// output to quiet, suppress the message, and only flash
+				// bubbletea startup/teardown escape codes.
+				if !plan.HasBranches() {
 					ctx.Output.Info("No branches to restack.")
 					return nil
 				}
@@ -144,19 +139,15 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 				// in that case so its startup/teardown queries (kitty keyboard,
 				// modifyOtherKeys, mode reports) don't leak as garbled text on
 				// terminals that don't recognize them.
-				hasActualWork, err := actions.HasActualRestackWork(ctx, opts)
-				if err != nil {
-					return err
-				}
-				if !hasActualWork {
-					return actions.RestackAction(ctx, opts, NewSimpleSyncHandler(ctx.Output))
+				if !plan.HasWork() {
+					return actions.RestackAction(ctx, plan, NewSimpleSyncHandler(ctx.Output))
 				}
 
 				// Create runner (manages terminal state) and handler (processes events)
 				runner, handler := NewSyncUI(ctx.Output, ctx.Logger)
 				defer runner.Cleanup()
 
-				return actions.RestackAction(ctx, opts, handler)
+				return actions.RestackAction(ctx, plan, handler)
 			})
 		},
 	}
