@@ -566,7 +566,8 @@ func (h *InteractiveSyncHandler) OnRestackStart(branchCount int) {
 	// Update model with total ops and start restack phase
 	h.runner.Send(syncComponent.ProgressTickMsg{Completed: 0, Total: branchCount})
 	h.runner.Send(syncComponent.PhaseStartMsg{
-		Phase: syncComponent.Phase(syncAction.PhaseRestack),
+		Phase:   syncComponent.Phase(syncAction.PhaseRestack),
+		Message: phaseMessages[syncAction.PhaseRestack],
 	})
 }
 

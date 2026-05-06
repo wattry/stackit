@@ -117,11 +117,7 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					return err
 				}
 
-				// Create runner (manages terminal state) and handler (processes events)
-				runner, handler := NewSyncUI(ctx.Output, ctx.Logger)
-				defer runner.Cleanup()
-
-				return actions.RestackAction(ctx, actions.RestackOptions{
+				opts := actions.RestackOptions{
 					BranchName:         targetBranch,
 					Scope:              rng,
 					AllStacks:          allStacks,
@@ -129,7 +125,38 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					ContinueOnConflict: continueOnConflict,
 					Parallel:           parallel,
 					Jobs:               jobs,
-				}, handler)
+				}
+
+				// Check whether there's any work BEFORE starting the TUI to
+				// avoid leaking bubbletea startup/teardown escape codes when
+				// the action would return immediately.
+				hasWork, err := actions.HasRestackWork(ctx.Engine, opts)
+				if err != nil {
+					return err
+				}
+				if !hasWork {
+					ctx.Output.Info("No branches to restack.")
+					return nil
+				}
+
+				// If every branch is already up-to-date, restack is a no-op
+				// that only streams "up to date" lines. Skip the bubbletea TUI
+				// in that case so its startup/teardown queries (kitty keyboard,
+				// modifyOtherKeys, mode reports) don't leak as garbled text on
+				// terminals that don't recognize them.
+				hasActualWork, err := actions.HasActualRestackWork(ctx, opts)
+				if err != nil {
+					return err
+				}
+				if !hasActualWork {
+					return actions.RestackAction(ctx, opts, NewSimpleSyncHandler(ctx.Output))
+				}
+
+				// Create runner (manages terminal state) and handler (processes events)
+				runner, handler := NewSyncUI(ctx.Output, ctx.Logger)
+				defer runner.Cleanup()
+
+				return actions.RestackAction(ctx, opts, handler)
 			})
 		},
 	}

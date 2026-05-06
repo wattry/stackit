@@ -33,20 +33,9 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	eng := ctx.Engine
 	out := ctx.Output
 
-	var branchGroups []restackBranchGroup
-	if opts.AllStacks || len(opts.StackRoots) > 0 {
-		var err error
-		branchGroups, err = branchGroupsForIndependentStacks(eng, opts)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Get branches to restack based on scope
-		branch := eng.GetBranch(opts.BranchName)
-		graph := eng.Graph(engine.SortStrategyAlphabetical)
-		branchGroups = []restackBranchGroup{{
-			branches: graph.Range(branch, opts.Scope),
-		}}
+	branchGroups, err := planRestackBranchGroups(eng, opts)
+	if err != nil {
+		return err
 	}
 
 	branchCount := countRestackBranches(branchGroups)
@@ -270,6 +259,57 @@ func restackGroupsParallel(
 type restackBranchGroup struct {
 	rootBranch string // independent stack root name (direct child of trunk)
 	branches   []engine.Branch
+}
+
+// planRestackBranchGroups computes the branch groups that RestackAction would
+// process for the given options. Extracted so callers can detect "no work"
+// before starting an interactive TUI (which would otherwise leak terminal
+// codes when the action returns immediately).
+func planRestackBranchGroups(eng engine.BranchReader, opts RestackOptions) ([]restackBranchGroup, error) {
+	if opts.AllStacks || len(opts.StackRoots) > 0 {
+		return branchGroupsForIndependentStacks(eng, opts)
+	}
+	branch := eng.GetBranch(opts.BranchName)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
+	return []restackBranchGroup{{
+		branches: graph.Range(branch, opts.Scope),
+	}}, nil
+}
+
+// HasRestackWork reports whether RestackAction would process at least one
+// branch for the given options. Use this to gate TUI initialization so that
+// a no-op restack does not leak bubbletea startup/teardown escape codes.
+func HasRestackWork(eng engine.BranchReader, opts RestackOptions) (bool, error) {
+	groups, err := planRestackBranchGroups(eng, opts)
+	if err != nil {
+		return false, err
+	}
+	return countRestackBranches(groups) > 0, nil
+}
+
+// HasActualRestackWork reports whether any branch in the requested scope
+// requires an actual rebase. Branches that are up-to-date, locked, or frozen
+// do not count. Use this to skip a heavyweight progress TUI when restack would
+// just stream "up to date" lines — the TUI startup/teardown escape codes are
+// pure noise in that case and look like garbled text on terminals that don't
+// support every bubbletea query.
+func HasActualRestackWork(ctx *app.Context, opts RestackOptions) (bool, error) {
+	eng := ctx.Engine
+	groups, err := planRestackBranchGroups(eng, opts)
+	if err != nil {
+		return false, err
+	}
+	for _, group := range groups {
+		sorted := eng.SortBranchesTopologically(group.branches)
+		plan, err := eng.PlanRestack(ctx.Context, sorted)
+		if err != nil {
+			return false, err
+		}
+		if len(plan.Specs) > 0 || len(plan.ApplyMap) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func branchGroupsForIndependentStacks(eng engine.BranchReader, opts RestackOptions) ([]restackBranchGroup, error) {
