@@ -39,6 +39,24 @@ Examples:
 					targetBranch = args[0]
 				}
 
+				opts := flatten.Options{
+					BranchName:  targetBranch,
+					SkipConfirm: yes,
+				}
+
+				// Pre-flight: detect "nothing to do" cases BEFORE starting the
+				// TUI runner. Otherwise the runner sets output to quiet, the
+				// "no branches" message gets suppressed, and the user only
+				// sees bubbletea startup/teardown escape codes flash.
+				hasWork, err := flatten.HasFlattenWork(ctx, opts)
+				if err != nil {
+					return err
+				}
+				if !hasWork {
+					ctx.Output.Info("No branches to flatten.")
+					return nil
+				}
+
 				// Create runner and handler
 				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger)
 				if runner != nil {
@@ -46,10 +64,7 @@ Examples:
 				}
 
 				// Run flatten action
-				return flatten.Action(ctx, flatten.Options{
-					BranchName:  targetBranch,
-					SkipConfirm: yes,
-				}, handler)
+				return flatten.Action(ctx, opts, handler)
 			})
 		},
 	}

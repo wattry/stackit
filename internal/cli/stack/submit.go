@@ -141,6 +141,19 @@ func executeSubmit(cmd *cobra.Command, f *submitFlags) error {
 			ConfigAssignees: configAssignees,
 		}
 
+		// Pre-flight: skip the TUI when there's no submittable scope. The
+		// runner sets output to quiet, so without this check the
+		// "No branches to submit" CompletionEvent races with the deferred
+		// Cleanup and the user only sees bubbletea startup/teardown codes.
+		hasWork, err := submit.HasSubmitWork(ctx, opts)
+		if err != nil {
+			return err
+		}
+		if !hasWork {
+			ctx.Output.Info("No branches to submit.")
+			return nil
+		}
+
 		// Create runner (manages terminal state) and handler (processes events)
 		runner, handler := NewSubmitUI(ctx.Output, ctx.Logger)
 		defer runner.Cleanup()

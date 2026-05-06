@@ -31,6 +31,49 @@ type Options struct {
 	Jobs             int
 }
 
+// HasForeachWork reports whether Action would have at least one non-trunk
+// branch to execute the command on. Use this from the CLI to gate TUI
+// initialization — when the answer is no, starting the bubbletea runner
+// only flashes startup/teardown escape codes and races with the deferred
+// Cleanup before the "no branches to process" CompletionEvent can render.
+func HasForeachWork(ctx *app.Context, opts Options) (bool, error) {
+	eng := ctx.Engine
+	multiStack := opts.AllStacks || len(opts.StackRoots) > 0
+
+	currentBranch := eng.CurrentBranch()
+	if !multiStack && currentBranch == nil && opts.BranchName == "" {
+		return false, errors.ErrNotOnBranch
+	}
+
+	var branches []engine.Branch
+	if multiStack {
+		multiStackBranches, err := collectMultiStackBranches(eng, opts)
+		if err != nil {
+			return false, err
+		}
+		branches = multiStackBranches
+	} else {
+		targetBranch := engine.Branch{}
+		if opts.BranchName != "" {
+			targetBranch = eng.GetBranch(opts.BranchName)
+			if !targetBranch.IsTrunk() && !targetBranch.IsTracked() {
+				return false, fmt.Errorf("branch %s is not tracked by stackit", opts.BranchName)
+			}
+		} else if currentBranch != nil {
+			targetBranch = *currentBranch
+		}
+		graph := eng.Graph(engine.SortStrategyAlphabetical)
+		branches = graph.Range(targetBranch, opts.Scope)
+	}
+
+	for _, branch := range branches {
+		if !branch.IsTrunk() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // Action executes a command on each branch in the stack with event handling
 func Action(ctx *app.Context, opts Options, handler Handler) error {
 	eng := ctx.Engine
