@@ -60,10 +60,9 @@ Examples:
 					return fmt.Errorf("merge wizard requires a TTY. Use 'merge next' or 'merge ship' for non-interactive mode (add --yes to skip prompts)")
 				}
 
+				// runner.Cleanup is nil-safe so no extra guard is needed.
 				runner, handler := NewMergeUI(ctx.Output, ctx.Logger)
-				if runner != nil {
-					defer runner.Cleanup()
-				}
+				defer runner.Cleanup()
 
 				// NewMergeUI returns an interactive handler when TTY is available
 				// (which we've verified above), so this cast should always succeed

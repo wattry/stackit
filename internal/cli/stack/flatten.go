@@ -57,11 +57,10 @@ Examples:
 					return nil
 				}
 
-				// Create runner and handler
+				// Create runner and handler. runner.Cleanup is nil-safe so
+				// no extra guard is needed for the non-TTY path.
 				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger)
-				if runner != nil {
-					defer runner.Cleanup()
-				}
+				defer runner.Cleanup()
 
 				// Run flatten action
 				return flatten.Action(ctx, opts, handler)

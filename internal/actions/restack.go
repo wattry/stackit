@@ -115,18 +115,14 @@ func PlanRestack(ctx *app.Context, opts RestackOptions) (*RestackPlan, error) {
 }
 
 // RestackAction performs the restack operation using a pre-computed plan.
-// Build the plan via PlanRestack. Passing nil computes the plan internally
-// (useful for callers that don't need the gating-checks the plan supports).
+// Build the plan via PlanRestack — callers are expected to use the plan to
+// gate UX decisions (e.g. whether to start a TUI), so requiring it here
+// keeps the two phases consistent.
 func RestackAction(ctx *app.Context, plan *RestackPlan, handler handlers.RestackHandler) error {
-	out := ctx.Output
-
 	if plan == nil {
-		var err error
-		plan, err = PlanRestack(ctx, RestackOptions{})
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("restack plan is required")
 	}
+	out := ctx.Output
 	opts := plan.opts
 	eng := ctx.Engine
 

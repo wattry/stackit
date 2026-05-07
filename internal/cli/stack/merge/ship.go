@@ -165,11 +165,9 @@ func runMergeShip(ctx *app.Context, opts mergeShipOptions, postMergeHandler Post
 	cfg, _ := config.LoadConfig(ctx.RepoRoot)
 	undoStackDepth := cfg.UndoStackDepth()
 
-	// Create handler for progress reporting
+	// Create handler for progress reporting. runner.Cleanup is nil-safe.
 	runner, eventHandler := NewMergeUI(ctx.Output, ctx.Logger)
-	if runner != nil {
-		defer runner.Cleanup()
-	}
+	defer runner.Cleanup()
 
 	// Resolve merge method if specified via flag
 	var mergeMethod github.MergeMethod
