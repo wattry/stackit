@@ -122,6 +122,20 @@ Examples:
 					return err
 				}
 
+				// Pre-flight: skip the TUI when there's nothing to run on. The
+				// runner sets output to quiet, so without this check the
+				// "No branches to process" CompletionEvent races with the
+				// deferred Cleanup and the user only sees bubbletea
+				// startup/teardown codes flash.
+				hasWork, err := foreach.HasForeachWork(ctx, opts)
+				if err != nil {
+					return err
+				}
+				if !hasWork {
+					ctx.Output.Info("No branches to process.")
+					return nil
+				}
+
 				// Create runner (manages terminal state) and handler (processes events)
 				runner, handler := NewForeachUI(ctx.Output, ctx.Logger, opts.Parallel)
 				defer runner.Cleanup()

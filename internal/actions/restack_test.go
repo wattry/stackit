@@ -30,11 +30,13 @@ func TestRestackAction(t *testing.T) {
 		})
 
 		jsonHandler := handlers.NewJSONRestackHandler()
-		err := RestackAction(s.Context, RestackOptions{
+		plan, err := PlanRestack(s.Context, RestackOptions{
 			AllStacks: true,
 			Parallel:  true,
 			Jobs:      2,
-		}, jsonHandler)
+		})
+		require.NoError(t, err)
+		err = RestackAction(s.Context, plan, jsonHandler)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "restack failed")
 		require.ErrorContains(t, err, "alpha-root")

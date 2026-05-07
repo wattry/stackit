@@ -42,10 +42,9 @@ func handlePostMergeAction(ctx *app.Context, action mergeAction.PostMergeAction)
 			common.HandleCheckoutResult(ctx.Output, result)
 		}
 
+		// runner.Cleanup is nil-safe so no extra guard is needed.
 		runner, handler := NewSyncUI(ctx.Output, ctx.Logger)
-		if runner != nil {
-			defer runner.Cleanup()
-		}
+		defer runner.Cleanup()
 
 		return sync.Action(ctx, sync.Options{
 			Restack: true,

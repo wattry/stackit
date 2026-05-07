@@ -39,17 +39,31 @@ Examples:
 					targetBranch = args[0]
 				}
 
-				// Create runner and handler
-				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger)
-				if runner != nil {
-					defer runner.Cleanup()
-				}
-
-				// Run flatten action
-				return flatten.Action(ctx, flatten.Options{
+				opts := flatten.Options{
 					BranchName:  targetBranch,
 					SkipConfirm: yes,
-				}, handler)
+				}
+
+				// Pre-flight: detect "nothing to do" cases BEFORE starting the
+				// TUI runner. Otherwise the runner sets output to quiet, the
+				// "no branches" message gets suppressed, and the user only
+				// sees bubbletea startup/teardown escape codes flash.
+				hasWork, err := flatten.HasFlattenWork(ctx, opts)
+				if err != nil {
+					return err
+				}
+				if !hasWork {
+					ctx.Output.Info("No branches to flatten.")
+					return nil
+				}
+
+				// Create runner and handler. runner.Cleanup is nil-safe so
+				// no extra guard is needed for the non-TTY path.
+				runner, handler := NewFlattenUI(ctx.Output, ctx.Logger)
+				defer runner.Cleanup()
+
+				// Run flatten action
+				return flatten.Action(ctx, opts, handler)
 			})
 		},
 	}

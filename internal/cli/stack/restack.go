@@ -86,19 +86,28 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					RecursiveChildren: !only && !downstack, // Default or upstack
 				}
 
+				opts := actions.RestackOptions{
+					BranchName:         targetBranch,
+					Scope:              rng,
+					AllStacks:          allStacks,
+					StackRoots:         stacks,
+					ContinueOnConflict: continueOnConflict,
+					Parallel:           parallel,
+					Jobs:               jobs,
+				}
+
+				// Build the plan once. RestackAction reuses it so we don't
+				// pay for engine.PlanRestack twice (~3 git ops per branch).
+				plan, err := actions.PlanRestack(ctx, opts)
+				if err != nil {
+					return err
+				}
+
 				// JSON output mode
 				if jsonOutput {
 					cmd.SilenceErrors = true
 					jsonHandler := handlers.NewJSONRestackHandler()
-					err := actions.RestackAction(ctx, actions.RestackOptions{
-						BranchName:         targetBranch,
-						Scope:              rng,
-						AllStacks:          allStacks,
-						StackRoots:         stacks,
-						ContinueOnConflict: continueOnConflict,
-						Parallel:           parallel,
-						Jobs:               jobs,
-					}, jsonHandler)
+					err := actions.RestackAction(ctx, plan, jsonHandler)
 
 					// Set error status if there was an error
 					if err != nil {
@@ -117,19 +126,28 @@ If conflicts are encountered, you will be prompted to resolve them via an intera
 					return err
 				}
 
+				// Skip the TUI when the scope is empty — the runner would set
+				// output to quiet, suppress the message, and only flash
+				// bubbletea startup/teardown escape codes.
+				if !plan.HasBranches() {
+					ctx.Output.Info("No branches to restack.")
+					return nil
+				}
+
+				// If every branch is already up-to-date, restack is a no-op
+				// that only streams "up to date" lines. Skip the bubbletea TUI
+				// in that case so its startup/teardown queries (kitty keyboard,
+				// modifyOtherKeys, mode reports) don't leak as garbled text on
+				// terminals that don't recognize them.
+				if !plan.HasWork() {
+					return actions.RestackAction(ctx, plan, NewSimpleSyncHandler(ctx.Output))
+				}
+
 				// Create runner (manages terminal state) and handler (processes events)
 				runner, handler := NewSyncUI(ctx.Output, ctx.Logger)
 				defer runner.Cleanup()
 
-				return actions.RestackAction(ctx, actions.RestackOptions{
-					BranchName:         targetBranch,
-					Scope:              rng,
-					AllStacks:          allStacks,
-					StackRoots:         stacks,
-					ContinueOnConflict: continueOnConflict,
-					Parallel:           parallel,
-					Jobs:               jobs,
-				}, handler)
+				return actions.RestackAction(ctx, plan, handler)
 			})
 		},
 	}

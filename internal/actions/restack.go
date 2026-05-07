@@ -28,28 +28,105 @@ type RestackOptions struct {
 	Jobs               int  // Number of parallel workers (0 = NumCPU)
 }
 
-// RestackAction performs the restack operation
-func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.RestackHandler) error {
-	eng := ctx.Engine
-	out := ctx.Output
+// RestackPlan is the precomputed work for a restack operation. Build it via
+// PlanRestack, inspect via HasBranches/HasWork, then pass it to RestackAction.
+//
+// Sharing the plan between the CLI's "is there work?" gate and the action
+// itself avoids running engine.PlanRestack twice — that's ~3 git operations
+// per branch, ~10ms/branch on a warm filesystem.
+type RestackPlan struct {
+	opts   RestackOptions
+	groups []restackPlannedGroup
+}
 
-	var branchGroups []restackBranchGroup
-	if opts.AllStacks || len(opts.StackRoots) > 0 {
-		var err error
-		branchGroups, err = branchGroupsForIndependentStacks(eng, opts)
-		if err != nil {
-			return err
+// restackPlannedGroup pairs an independent stack with the engine plan that
+// describes which of its branches actually need rebasing. enginePlan is nil
+// for empty groups (which never reach the action's main loop).
+type restackPlannedGroup struct {
+	rootBranch     string
+	sortedBranches []engine.Branch
+	enginePlan     *engine.RestackPlan
+}
+
+// HasBranches reports whether any branch was resolved from the requested
+// scope. False means the scope is empty (e.g. on trunk with no children).
+func (p *RestackPlan) HasBranches() bool {
+	for _, g := range p.groups {
+		if len(g.sortedBranches) > 0 {
+			return true
 		}
-	} else {
-		// Get branches to restack based on scope
-		branch := eng.GetBranch(opts.BranchName)
-		graph := eng.Graph(engine.SortStrategyAlphabetical)
-		branchGroups = []restackBranchGroup{{
-			branches: graph.Range(branch, opts.Scope),
-		}}
 	}
+	return false
+}
 
-	branchCount := countRestackBranches(branchGroups)
+// HasWork reports whether any resolved branch needs an actual rebase.
+// Branches that are up-to-date, locked, or frozen do not count.
+func (p *RestackPlan) HasWork() bool {
+	for _, g := range p.groups {
+		if g.enginePlan == nil {
+			continue
+		}
+		if len(g.enginePlan.Specs) > 0 || len(g.enginePlan.ApplyMap) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// BranchCount returns the total number of branches across all groups.
+func (p *RestackPlan) BranchCount() int {
+	n := 0
+	for _, g := range p.groups {
+		n += len(g.sortedBranches)
+	}
+	return n
+}
+
+// PlanRestack resolves the branch groups for opts and pre-computes the
+// engine restack plan for each group. Pass the result to RestackAction to
+// skip recomputing those plans during execution.
+//
+// The per-group engine plan is *not* reused in parallel mode — each worktree
+// has its own engine and must compute its own plan against worktree-local
+// state.
+func PlanRestack(ctx *app.Context, opts RestackOptions) (*RestackPlan, error) {
+	eng := ctx.Engine
+	rawGroups, err := planRestackBranchGroups(eng, opts)
+	if err != nil {
+		return nil, err
+	}
+	plan := &RestackPlan{opts: opts}
+	for _, g := range rawGroups {
+		sorted := eng.SortBranchesTopologically(g.branches)
+		var enginePlan *engine.RestackPlan
+		if len(sorted) > 0 {
+			enginePlan, err = eng.PlanRestack(ctx.Context, sorted)
+			if err != nil {
+				return nil, err
+			}
+		}
+		plan.groups = append(plan.groups, restackPlannedGroup{
+			rootBranch:     g.rootBranch,
+			sortedBranches: sorted,
+			enginePlan:     enginePlan,
+		})
+	}
+	return plan, nil
+}
+
+// RestackAction performs the restack operation using a pre-computed plan.
+// Build the plan via PlanRestack — callers are expected to use the plan to
+// gate UX decisions (e.g. whether to start a TUI), so requiring it here
+// keeps the two phases consistent.
+func RestackAction(ctx *app.Context, plan *RestackPlan, handler handlers.RestackHandler) error {
+	if plan == nil {
+		return fmt.Errorf("restack plan is required")
+	}
+	out := ctx.Output
+	opts := plan.opts
+	eng := ctx.Engine
+
+	branchCount := plan.BranchCount()
 	if branchCount == 0 {
 		out.Info("No branches to restack.")
 		return nil
@@ -88,9 +165,11 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 	var conflicts []string
 
 	// Parallel mode: dispatch independent stack groups to separate worktrees.
-	if opts.Parallel && len(branchGroups) > 1 {
+	// The pre-computed engine plans are not portable across worktree engines,
+	// so each worker computes its own plan inside its worktree.
+	if opts.Parallel && len(plan.groups) > 1 {
 		var err error
-		restacked, skipped, conflicts, err = restackGroupsParallel(ctx, opts, branchGroups, handler)
+		restacked, skipped, conflicts, err = restackGroupsParallel(ctx, opts, plan.groups, handler)
 		ctx.Logger.Info("restack completed (parallel) restacked=%v skipped=%v conflicts=%v", restacked, skipped, len(conflicts))
 		handler.OnRestackComplete(restacked, skipped, conflicts)
 		if err != nil {
@@ -104,7 +183,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 		conflictMode = ConflictModeContinue
 	}
 
-	for _, group := range branchGroups {
+	for _, group := range plan.groups {
 		// Wrap the progress callback to inject the stack root for this group.
 		groupRoot := group.rootBranch
 		progress := func(p RestackProgress) {
@@ -112,11 +191,7 @@ func RestackAction(ctx *app.Context, opts RestackOptions, handler handlers.Resta
 			handleRestackProgress(eng, handler, p, &restacked, &skipped, &conflicts)
 		}
 
-		// Sort each independent stack topologically. Keeping groups separate lets
-		// --continue-on-conflict skip a conflicted stack while still restacking
-		// other independent stacks.
-		sortedBranches := eng.SortBranchesTopologically(group.branches)
-		if err := RestackBranchesWithHandler(ctx, sortedBranches, progress, conflictMode); err != nil {
+		if err := restackBranchesWithPlan(ctx, group.sortedBranches, group.enginePlan, progress, conflictMode); err != nil {
 			handler.OnRestackComplete(restacked, skipped, conflicts)
 			return fmt.Errorf("restack failed: %w", err)
 		}
@@ -152,11 +227,11 @@ func (c *parallelResultCollector) recordProgress(p RestackProgress) {
 // as a conflict so the final summary reflects what the worker did not process.
 // Without this a worktree/engine setup failure silently shows "skipped=0" while
 // an entire stack failed to start.
-func (c *parallelResultCollector) recordGroupFailure(group restackBranchGroup, err error) {
+func (c *parallelResultCollector) recordGroupFailure(group restackPlannedGroup, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.errs = append(c.errs, err)
-	for _, b := range group.branches {
+	for _, b := range group.sortedBranches {
 		handleRestackProgress(c.eng, c.handler, RestackProgress{
 			Branch:    b.GetName(),
 			Result:    engine.RestackConflict,
@@ -188,10 +263,14 @@ func (c *parallelResultCollector) joinedError() error {
 // worktree. The groups have no shared branches, so rebases + ref updates are
 // safe to interleave. Progress callbacks and handler calls are serialized
 // through parallelResultCollector to prevent data races on shared counters.
+//
+// Each worker calls RestackBranchesWithHandler which computes its own engine
+// plan against the worktree-local engine; the parent's pre-computed plan in
+// restackPlannedGroup.enginePlan is not portable across engines.
 func restackGroupsParallel(
 	ctx *app.Context,
 	opts RestackOptions,
-	groups []restackBranchGroup,
+	groups []restackPlannedGroup,
 	handler handlers.RestackHandler,
 ) (restacked, skipped int, conflicts []string, err error) {
 	eng := ctx.Engine
@@ -212,7 +291,7 @@ func restackGroupsParallel(
 
 	collector := &parallelResultCollector{eng: eng, handler: handler}
 
-	utils.RunWithWorkers(groups, numJobs, func(group restackBranchGroup) {
+	utils.RunWithWorkers(groups, numJobs, func(group restackPlannedGroup) {
 		// Create a temporary worktree for this group. PruneSkip because we
 		// pruned once above and don't want N workers racing on prune.
 		wtPath, cleanup, err := eng.CreateTemporaryWorktreeSkipPrune(ctx.Context, eng.Trunk().GetName(), "stackit-restack-*")
@@ -250,8 +329,7 @@ func restackGroupsParallel(
 		// Parallel mode always reports conflicts via callback: the interactive conflict
 		// workflow writes rebase state into the worktree, which defer cleanup() tears
 		// down, so entering it would silently destroy what the user needs to resolve.
-		sortedBranches := eng.SortBranchesTopologically(group.branches)
-		if err := RestackBranchesWithHandler(&wtCtx, sortedBranches, progress, ConflictModeContinue); err != nil {
+		if err := RestackBranchesWithHandler(&wtCtx, group.sortedBranches, progress, ConflictModeContinue); err != nil {
 			wrappedErr := fmt.Errorf("stack %s: %w", group.rootBranch, err)
 			ctx.Logger.Warn("parallel restack group failed: %v", wrappedErr)
 			collector.recordRebaseError(wrappedErr)
@@ -270,6 +348,21 @@ func restackGroupsParallel(
 type restackBranchGroup struct {
 	rootBranch string // independent stack root name (direct child of trunk)
 	branches   []engine.Branch
+}
+
+// planRestackBranchGroups computes the branch groups that RestackAction would
+// process for the given options. Extracted so callers can detect "no work"
+// before starting an interactive TUI (which would otherwise leak terminal
+// codes when the action returns immediately).
+func planRestackBranchGroups(eng engine.BranchReader, opts RestackOptions) ([]restackBranchGroup, error) {
+	if opts.AllStacks || len(opts.StackRoots) > 0 {
+		return branchGroupsForIndependentStacks(eng, opts)
+	}
+	branch := eng.GetBranch(opts.BranchName)
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
+	return []restackBranchGroup{{
+		branches: graph.Range(branch, opts.Scope),
+	}}, nil
 }
 
 func branchGroupsForIndependentStacks(eng engine.BranchReader, opts RestackOptions) ([]restackBranchGroup, error) {
@@ -312,14 +405,6 @@ func branchGroupsForIndependentStacks(eng engine.BranchReader, opts RestackOptio
 
 func joinStrings(values []string) string {
 	return strings.Join(values, ",")
-}
-
-func countRestackBranches(groups []restackBranchGroup) int {
-	count := 0
-	for _, group := range groups {
-		count += len(group.branches)
-	}
-	return count
 }
 
 func handleRestackProgress(

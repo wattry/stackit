@@ -17,6 +17,37 @@ type Options struct {
 	SkipConfirm bool   // Skip confirmation prompt (--yes flag)
 }
 
+// HasFlattenWork reports whether Action has at least one feature branch in
+// the requested stack that's a candidate for flattening. Use this from the
+// CLI to gate TUI initialization — if there's no candidate, starting the
+// bubbletea runner only flashes startup/teardown escape codes and silences
+// the explanatory "no branches to flatten" message via quiet mode.
+//
+// This does *not* run the expensive flatten plan; a candidate found here may
+// still end up unmoved after validation, in which case Action falls back to
+// the handler.Complete summary path.
+func HasFlattenWork(ctx *app.Context, opts Options) (bool, error) {
+	eng := ctx.Engine
+	branchName, err := actions.ResolveBranchName(eng, opts.BranchName)
+	if err != nil {
+		return false, err
+	}
+	branch := eng.GetBranch(branchName)
+	if !branch.IsTracked() && !branch.IsTrunk() {
+		return false, fmt.Errorf("branch %q is not tracked by stackit", branchName)
+	}
+
+	graph := eng.Graph(engine.SortStrategyAlphabetical)
+	branches := graph.FullStack(branch)
+	trunk := eng.Trunk()
+	for _, b := range branches {
+		if !b.IsTrunk() && b.GetName() != trunk.GetName() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // Action performs the flatten operation.
 // Flatten analyzes the stack and moves branches as close to trunk as possible
 // while respecting dependencies (branches that would conflict stay in place).

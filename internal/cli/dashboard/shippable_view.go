@@ -141,9 +141,9 @@ func (m *shippableModel) renderStackList(width, height int) string {
 	// Show appropriate content based on state
 	if len(m.stacks) == 0 {
 		if m.state == stateLoading {
-			sb.WriteString(commonStyles.Dim.Render("Loading stacks..."))
+			sb.WriteString(commonStyles().Dim.Render("Loading stacks..."))
 		} else {
-			sb.WriteString(commonStyles.Dim.Render("No stacks found. Create one with `stackit create`"))
+			sb.WriteString(commonStyles().Dim.Render("No stacks found. Create one with `stackit create`"))
 		}
 		// Add help hints at bottom even when empty
 		sb.WriteString("\n\n" + style.ColorDim("↑/↓ navigate"))
@@ -360,7 +360,7 @@ func (m *shippableModel) renderDetailsPanel(width, height int) string {
 	if m.focusedStack != nil {
 		content, selectedLine, selectedLineEnd = m.renderStackDetails(m.focusedStack)
 	} else {
-		content = commonStyles.Dim.Render("Select a stack to see details")
+		content = commonStyles().Dim.Render("Select a stack to see details")
 	}
 
 	// Size the viewport to fill the pane minus border, padding, and header
@@ -416,7 +416,7 @@ func (m *shippableModel) renderDetailsPanelHeader(stack *shippable.Stack, width 
 		title = title[:maxTitleWidth-3] + "..."
 	}
 
-	titleLine := commonStyles.Bold.Render(title) + " " + statusBadge
+	titleLine := commonStyles().Bold.Render(title) + " " + statusBadge
 
 	// Line 2: quick stats
 	statsRow := m.renderQuickStats(stack)
@@ -744,7 +744,7 @@ func (m *shippableModel) renderHelp() string {
 	sb.WriteString(helpKeyStyle.Render("?") + helpDescStyle.Render("Toggle this help") + "\n")
 	sb.WriteString(helpKeyStyle.Render("q") + helpDescStyle.Render("Quit") + "\n")
 
-	sb.WriteString("\n" + commonStyles.Dim.Render("Press any key to close"))
+	sb.WriteString("\n" + commonStyles().Dim.Render("Press any key to close"))
 
 	return dialogStyle.Render(sb.String())
 }
