@@ -345,3 +345,206 @@ func TestSquashMergeChildBecomesEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, strings.TrimSpace(out))
 }
+
+// User-induced inconsistency cases:
+// the user did something locally that left stackit's view of the world
+// out of sync with reality. Each test documents what sync actually does.
+
+// TestUserDeletedMergedBranchBeforeSync: user runs `git branch -D` on the
+// merged branch directly (forgetting to use stackit). The engine sees the
+// branch is gone; the child's metadata still references it. Sync should
+// recover gracefully and reparent the child rather than crash.
+func TestUserDeletedMergedBranchBeforeSync(t *testing.T) {
+	t.Parallel()
+	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	disableCommitSigning(t, sh)
+
+	sh.CreateBranch("branch-a").
+		CommitChange("file-a", "a").
+		TrackBranch("branch-a", "main")
+	sh.CreateBranch("branch-b").
+		CommitChange("file-b", "b").
+		TrackBranch("branch-b", "branch-a")
+
+	mainName := sh.Engine.Trunk().GetName()
+	sh.Checkout("main")
+	sh.CommitChange("file-a", "a")
+	markPrMerged(t, sh, "branch-a", 1, mainName)
+
+	// User reaches for raw git instead of stackit.
+	require.NoError(t, sh.Scene.Repo.RunGitCommand("branch", "-D", "branch-a"))
+
+	// Refresh the engine so it sees that branch-a is gone — equivalent to a
+	// fresh CLI invocation.
+	require.NoError(t, sh.Engine.Rebuild(mainName))
+
+	// Sync runs and shouldn't error.
+	require.NoError(t, sync.Action(sh.Context, sync.Options{Restack: true}, nil))
+
+	branches, err := sh.Scene.Repo.GetLocalBranches()
+	require.NoError(t, err)
+	require.NotContains(t, branches, "branch-a")
+	require.Contains(t, branches, "branch-b")
+
+	// KNOWN ISSUE: when the user manually deletes a merged branch before
+	// sync, sync does NOT currently re-parent the orphaned child to trunk.
+	// `evaluateDeletionStatus` doesn't fire on branch-a (it's no longer in
+	// AllBranches), so the deletion plan never marks it, and
+	// `findNonDeletingAncestor` for B's ghost parent returns the ghost
+	// itself. B is left with a dangling parent reference.
+	//
+	// This test pins down today's behavior so we notice if/when it gets
+	// fixed. If a future change makes sync auto-recover, flip this assertion.
+	bParent := sh.Engine.GetBranch("branch-b").GetParent()
+	require.NotNil(t, bParent, "B must have a parent entry after sync")
+	require.Equal(t, "branch-a", bParent.GetName(),
+		"BUG: B's metadata still points at the deleted ghost branch — "+
+			"sync should reparent to %q but currently leaves it dangling", mainName)
+
+	out, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
+	require.NoError(t, err)
+	require.Empty(t, strings.TrimSpace(out))
+}
+
+// TestUserManuallyRebasedChildBeforeSync: between the GitHub squash-merge
+// and `stackit sync`, the user did `git rebase main child` directly.
+// This rewrites child's history so the divergence point captured in
+// metadata (parent's pre-squash tip) is no longer an ancestor of child.
+//
+// This test pins down today's behavior so we notice if it changes —
+// either to a clearer error message or to graceful auto-recovery.
+func TestUserManuallyRebasedChildBeforeSync(t *testing.T) {
+	t.Parallel()
+	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	disableCommitSigning(t, sh)
+
+	sh.CreateBranch("branch-a").
+		CommitChange("file-a", "a").
+		TrackBranch("branch-a", "main")
+	sh.CreateBranch("branch-b").
+		CommitChange("file-b", "b").
+		TrackBranch("branch-b", "branch-a")
+
+	mainName := sh.Engine.Trunk().GetName()
+	sh.Checkout("main")
+	sh.CommitChange("file-a", "a")
+	markPrMerged(t, sh, "branch-a", 1, mainName)
+
+	// User reaches for `git rebase` directly, rewriting B's history.
+	// B is now based on main's new tip — A's old tip is no longer in B's history.
+	require.NoError(t, sh.Scene.Repo.RunGitCommand("rebase", mainName, "branch-b"))
+
+	err := sync.Action(sh.Context, sync.Options{Restack: true}, nil)
+	// Document current behavior: errors loudly, A is left in place.
+	// If a future change makes sync recover gracefully, update both branches
+	// of this assertion together.
+	if err != nil {
+		require.Contains(t, err.Error(), "divergence point",
+			"if sync errors here, the message should still mention divergence point so users can diagnose")
+		branches, lerr := sh.Scene.Repo.GetLocalBranches()
+		require.NoError(t, lerr)
+		require.Contains(t, branches, "branch-a",
+			"sync aborted before deletion — A should still exist")
+		require.Contains(t, branches, "branch-b")
+		return
+	}
+	// Future-graceful path: if sync ever handles this without error,
+	// it must still leave the world consistent.
+	branches, lerr := sh.Scene.Repo.GetLocalBranches()
+	require.NoError(t, lerr)
+	require.NotContains(t, branches, "branch-a")
+	require.Contains(t, branches, "branch-b")
+	require.Equal(t, mainName, sh.Engine.GetBranch("branch-b").GetParent().GetName())
+}
+
+// TestMergeCommitNotSquash: GitHub merged the PR with the merge-commit
+// strategy (not squash), so trunk has A's actual commits in its history.
+// The MERGED metadata path AND the IsMerged git path both fire; verify
+// cleanup runs cleanly.
+func TestMergeCommitNotSquash(t *testing.T) {
+	t.Parallel()
+	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	disableCommitSigning(t, sh)
+
+	sh.CreateBranch("branch-a").
+		CommitChange("file-a", "a").
+		TrackBranch("branch-a", "main")
+	sh.CreateBranch("branch-b").
+		CommitChange("file-b", "b").
+		TrackBranch("branch-b", "branch-a")
+
+	mainName := sh.Engine.Trunk().GetName()
+
+	// Merge-commit strategy: trunk now contains A's real commits via a merge,
+	// not a single squash. A's tip becomes an ancestor of trunk.
+	sh.Checkout("main")
+	require.NoError(t, sh.Scene.Repo.RunGitCommand("merge", "--no-ff", "branch-a", "-m", "Merge A"))
+	markPrMerged(t, sh, "branch-a", 1, mainName)
+
+	require.NoError(t, sync.Action(sh.Context, sync.Options{Restack: true}, nil))
+
+	branches, err := sh.Scene.Repo.GetLocalBranches()
+	require.NoError(t, err)
+	require.NotContains(t, branches, "branch-a", "merge-committed branch should be cleaned up too")
+	require.Contains(t, branches, "branch-b")
+
+	require.Equal(t, mainName, sh.Engine.GetBranch("branch-b").GetParent().GetName())
+
+	// B's commit boundary must be preserved — A's commits are already in trunk.
+	bCount, err := sh.Engine.GetCommitCount(sh.Engine.GetBranch("branch-b"))
+	require.NoError(t, err)
+	require.Equal(t, 1, bCount, "B should have its own commit only, not a duplicate of A's")
+
+	out, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
+	require.NoError(t, err)
+	require.Empty(t, strings.TrimSpace(out))
+}
+
+// TestUserLocallyAdvancedTrunkBeforeSync: user did `git pull` (or some
+// equivalent) and trunk locally is already at the post-squash state when
+// sync runs. The MERGED metadata + already-current trunk shouldn't cause
+// double-application or restack churn on the surviving child.
+func TestUserLocallyAdvancedTrunkBeforeSync(t *testing.T) {
+	t.Parallel()
+	sh := scenario.NewScenario(t, testhelpers.BasicSceneSetup)
+	disableCommitSigning(t, sh)
+
+	sh.CreateBranch("branch-a").
+		CommitChange("file-a", "a").
+		TrackBranch("branch-a", "main")
+	sh.CreateBranch("branch-b").
+		CommitChange("file-b", "b").
+		TrackBranch("branch-b", "branch-a")
+
+	mainName := sh.Engine.Trunk().GetName()
+
+	// Squash already on trunk locally before sync starts.
+	sh.Checkout("main")
+	sh.CommitChange("file-a", "a")
+	mainSHABeforeSync, err := sh.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", mainName)
+	require.NoError(t, err)
+
+	markPrMerged(t, sh, "branch-a", 1, mainName)
+	require.NoError(t, sync.Action(sh.Context, sync.Options{Restack: true}, nil))
+
+	// Trunk shouldn't have moved — sync had nothing to apply on top of it.
+	mainSHAAfterSync, err := sh.Scene.Repo.RunGitCommandAndGetOutput("rev-parse", mainName)
+	require.NoError(t, err)
+	require.Equal(t, strings.TrimSpace(mainSHABeforeSync), strings.TrimSpace(mainSHAAfterSync),
+		"trunk must not move during sync when it's already at the merged state")
+
+	branches, err := sh.Scene.Repo.GetLocalBranches()
+	require.NoError(t, err)
+	require.NotContains(t, branches, "branch-a")
+	require.Contains(t, branches, "branch-b")
+
+	require.Equal(t, mainName, sh.Engine.GetBranch("branch-b").GetParent().GetName())
+
+	bCount, err := sh.Engine.GetCommitCount(sh.Engine.GetBranch("branch-b"))
+	require.NoError(t, err)
+	require.Equal(t, 1, bCount)
+
+	out, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
+	require.NoError(t, err)
+	require.Empty(t, strings.TrimSpace(out))
+}
