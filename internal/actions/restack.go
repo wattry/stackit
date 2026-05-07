@@ -407,14 +407,6 @@ func joinStrings(values []string) string {
 	return strings.Join(values, ",")
 }
 
-func countRestackBranches(groups []restackBranchGroup) int {
-	count := 0
-	for _, group := range groups {
-		count += len(group.branches)
-	}
-	return count
-}
-
 func handleRestackProgress(
 	eng engine.BranchReader,
 	handler handlers.RestackHandler,
