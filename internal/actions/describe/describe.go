@@ -79,42 +79,15 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 			Title:       opts.Title,
 			Description: opts.Description,
 		}
-		if err := eng.SetStackDescription(ctx.Context, *currentBranch, desc); err != nil {
-			return fmt.Errorf("failed to set stack description: %w", err)
-		}
-		out.Info("Set stack description for stack rooted at %s:", style.ColorBranchName(stackRoot, false))
-		out.Info("  Title: %s", style.ColorDim(opts.Title))
-		if opts.Description != "" {
-			out.Info("  Description: %s", style.ColorDim(opts.Description))
-		}
-
-		// Mark stack for PR updates and push metadata
-		if err := markStackAndPushMetadata(ctx, eng, stackRoot); err != nil {
-			out.Debug("Failed to push metadata changes: %v", err)
-		}
-		return nil
+		return applyStackDescription(ctx, *currentBranch, stackRoot, desc, opts.Description)
 	}
 
 	// Try reading from stdin when not interactive
 	if !handler.IsInteractive() {
 		stdinContent, err := utils.ReadFromStdin()
 		if err == nil && stdinContent != "" {
-			desc := ParseEditorContent(stdinContent)
-			if desc != nil {
-				if err := eng.SetStackDescription(ctx.Context, *currentBranch, desc); err != nil {
-					return fmt.Errorf("failed to set stack description: %w", err)
-				}
-				out.Info("Set stack description for stack rooted at %s:", style.ColorBranchName(stackRoot, false))
-				out.Info("  Title: %s", style.ColorDim(desc.Title))
-				if desc.Description != "" {
-					out.Info("  Description: %s", style.ColorDim(TruncateDescription(desc.Description, 60)))
-				}
-
-				// Mark stack for PR updates and push metadata
-				if err := markStackAndPushMetadata(ctx, eng, stackRoot); err != nil {
-					out.Debug("Failed to push metadata changes: %v", err)
-				}
-				return nil
+			if desc := ParseEditorContent(stdinContent); desc != nil {
+				return applyStackDescription(ctx, *currentBranch, stackRoot, desc, TruncateDescription(desc.Description, 60))
 			}
 		}
 		return fmt.Errorf("must specify --message or run in interactive mode")
@@ -131,21 +104,29 @@ func Action(ctx *app.Context, opts Options, handler Handler) error {
 		return nil
 	}
 
-	if err := eng.SetStackDescription(ctx.Context, *currentBranch, newDesc); err != nil {
+	return applyStackDescription(ctx, *currentBranch, stackRoot, newDesc, TruncateDescription(newDesc.Description, 60))
+}
+
+// applyStackDescription sets the description on the stack root, prints a
+// confirmation, and pushes metadata. displayDesc is the (possibly truncated)
+// description text shown in the confirmation; pass "" to omit that line.
+func applyStackDescription(ctx *app.Context, branch engine.Branch, stackRoot string, desc *git.StackDescription, displayDesc string) error {
+	eng := ctx.Engine
+	out := ctx.Output
+
+	if err := eng.SetStackDescription(ctx.Context, branch, desc); err != nil {
 		return fmt.Errorf("failed to set stack description: %w", err)
 	}
 
 	out.Info("Set stack description for stack rooted at %s:", style.ColorBranchName(stackRoot, false))
-	out.Info("  Title: %s", style.ColorDim(newDesc.Title))
-	if newDesc.Description != "" {
-		out.Info("  Description: %s", style.ColorDim(TruncateDescription(newDesc.Description, 60)))
+	out.Info("  Title: %s", style.ColorDim(desc.Title))
+	if displayDesc != "" {
+		out.Info("  Description: %s", style.ColorDim(displayDesc))
 	}
 
-	// Mark stack for PR updates and push metadata
 	if err := markStackAndPushMetadata(ctx, eng, stackRoot); err != nil {
 		out.Debug("Failed to push metadata changes: %v", err)
 	}
-
 	return nil
 }
 
