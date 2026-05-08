@@ -1,14 +1,12 @@
 package git
 
 import (
-	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 
 	"stackit.dev/stackit/internal/utils"
 )
@@ -106,40 +104,6 @@ func iterateCommitsNoLock(repo *Repository, headHash, baseHash plumbing.Hash) ([
 	return commits, nil
 }
 
-// getCommitRangeGitFallback uses git rev-list as a fallback when go-git fails.
-// This is especially important for worktrees where go-git might not find all
-// objects because it doesn't handle the 'commondir' redirection properly.
-func (r *runner) getCommitRangeGitFallback(base, head string) ([]string, error) {
-	var args []string
-	if base == "" {
-		// Walk to root: git rev-list <head>
-		args = []string{"rev-list", head}
-	} else {
-		// Range: git rev-list <base>..<head>
-		args = []string{"rev-list", base + ".." + head}
-	}
-
-	output, err := r.RunGitCommandWithContext(context.Background(), args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get commit range via git: %w", err)
-	}
-
-	if output == "" {
-		return []string{}, nil
-	}
-
-	// Split output into lines (one SHA per line)
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	result := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line != "" {
-			result = append(result, line)
-		}
-	}
-
-	return result, nil
-}
-
 // resolveRefHash resolves a ref (branch name, SHA, or ref path) to a hash
 func (r *runner) resolveRefHash(repo *Repository, ref string) (plumbing.Hash, error) {
 	// Synchronize go-git operations to prevent concurrent packfile access
@@ -177,46 +141,30 @@ func (r *runner) resolveRefHashInternal(repo *Repository, ref string) (plumbing.
 		return *hash, nil
 	}
 
-	// FALLBACK: Use git rev-parse if go-git fails.
-	// This is especially important for worktrees where go-git might not find all refs
-	// because it doesn't always handle the 'commondir' redirection in worktrees.
-	if output, err := r.RunGitCommandWithContext(context.Background(), "rev-parse", ref); err == nil {
-		trimmed := strings.TrimSpace(output)
-		if len(trimmed) == 40 || len(trimmed) == 64 { // valid SHA1 or SHA256
-			return plumbing.NewHash(trimmed), nil
-		}
-	}
-
 	return plumbing.ZeroHash, fmt.Errorf("failed to resolve ref %s: reference not found", ref)
 }
 
 // LoadAllBranchRevisions populates the revision cache for all local branches
-// using a single `git show-ref --heads` call. This replaces N individual
-// go-git ref resolutions (each requiring goGitMu) with one subprocess call.
+// using one go-git reference iteration. This replaces N individual ref
+// resolutions and avoids spawning a git process for the common preload path.
 func (r *runner) LoadAllBranchRevisions() error {
-	output, err := r.RunGitCommandWithContext(context.Background(), "show-ref", "--heads")
+	repo, err := r.ensureRepo()
 	if err != nil {
-		// show-ref returns exit code 1 if no refs found (empty repo)
-		return nil //nolint:nilerr
+		return err
 	}
 
-	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
-	for line := range lines {
-		if line == "" {
-			continue
-		}
-		// Format: "SHA refs/heads/branchname"
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		sha := parts[0]
-		ref := parts[1]
-		if branchName, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
-			r.revisionCache.Put(branchName, sha)
-		}
+	branches, err := repo.Branches()
+	if err != nil {
+		return fmt.Errorf("failed to list branches: %w", err)
 	}
-	return nil
+	defer branches.Close()
+
+	return branches.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Name().IsBranch() {
+			r.revisionCache.Put(ref.Name().Short(), ref.Hash().String())
+		}
+		return nil
+	})
 }
 
 func (r *runner) batchGetRevisions(repo *Repository, branchNames []string) (map[string]string, []error) {

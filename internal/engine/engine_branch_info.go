@@ -127,7 +127,7 @@ func (e *engineImpl) resolveBranchComparisonRevisions(branchName string) (base, 
 // PreloadBranchData batch-loads metadata and revisions for all tracked branches
 // into their respective caches. This replaces N individual lookups (each requiring
 // mutex acquisition or subprocess spawning) with two bulk operations:
-//   - git show-ref --heads (one subprocess for all branch SHAs)
+//   - one batched branch-ref load for all branch SHAs
 //   - BatchReadMetadata (parallel metadata reads, cached via sync.Map)
 //
 // After calling this, parallel annotation building via utils.Run will find all
@@ -140,7 +140,7 @@ func (e *engineImpl) PreloadBranchData() {
 	}
 	e.mu.RUnlock()
 
-	// Batch load all branch revisions via single git show-ref --heads call
+	// Batch load all branch revisions in one pass
 	_ = e.git.LoadAllBranchRevisions()
 
 	// Batch load all metadata (populates metadataCache via sync.Map)
@@ -185,7 +185,7 @@ func (e *engineImpl) GetAllCommits(branch Branch, format CommitFormat) ([]string
 		baseRevision = *rev
 	}
 
-	// Use GetCommitRange directly — handles formatting in-process via go-git
-	// (with CLI fallback), avoiding per-commit git process spawns
+	// Use GetCommitRange directly to handle formatting in-process via go-git,
+	// avoiding per-commit git process spawns.
 	return e.git.GetCommitRange(baseRevision, branchRevision, string(format))
 }

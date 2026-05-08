@@ -186,28 +186,37 @@ func (r *runner) ResetWorktreeWorkingDir(ctx context.Context, worktreePath strin
 }
 
 // WorktreeHasUncommittedChanges checks if a worktree has uncommitted changes.
-func (r *runner) WorktreeHasUncommittedChanges(ctx context.Context, worktreePath string) (bool, error) {
-	output, err := r.RunGitCommandWithContext(ctx, "-C", worktreePath, "status", "--porcelain")
+func (r *runner) WorktreeHasUncommittedChanges(_ context.Context, worktreePath string) (bool, error) {
+	repo, err := OpenRepository(worktreePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to check status in worktree %s: %w", worktreePath, err)
 	}
-	return strings.TrimSpace(output) != "", nil
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return false, fmt.Errorf("failed to open worktree %s: %w", worktreePath, err)
+	}
+	status, err := worktree.Status()
+	if err != nil {
+		return false, fmt.Errorf("failed to check status in worktree %s: %w", worktreePath, err)
+	}
+	return !status.IsClean(), nil
 }
 
 // GetWorktreeCurrentBranch returns the name of the branch currently checked out in a worktree.
 // Returns empty string if the worktree is in detached HEAD state.
-func (r *runner) GetWorktreeCurrentBranch(ctx context.Context, worktreePath string) (string, error) {
-	output, err := r.RunGitCommandWithContext(ctx, "-C", worktreePath, "rev-parse", "--abbrev-ref", detachedHEAD)
+func (r *runner) GetWorktreeCurrentBranch(_ context.Context, worktreePath string) (string, error) {
+	repo, err := OpenRepository(worktreePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch in worktree %s: %w", worktreePath, err)
 	}
-
-	branch := strings.TrimSpace(output)
-	if branch == detachedHEAD {
-		// Detached HEAD state
+	head, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch in worktree %s: %w", worktreePath, err)
+	}
+	if !head.Name().IsBranch() {
 		return "", nil
 	}
-	return branch, nil
+	return head.Name().Short(), nil
 }
 
 // ListWorktreeMetas lists all registered worktree metadata

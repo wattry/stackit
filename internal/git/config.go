@@ -3,11 +3,12 @@
 package git
 
 import (
-	"errors"
-	"os/exec"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	format "github.com/go-git/go-git/v6/plumbing/format/config"
 )
 
 // GetCurrentDate returns the current date and time in yyyyMMddHHmmss format in UTC
@@ -27,55 +28,99 @@ func NewConfigStore(repoRoot string) *ConfigStore {
 	return &ConfigStore{repoRoot: repoRoot}
 }
 
+type configKey struct {
+	section    string
+	subsection string
+	name       string
+}
+
+func parseConfigKey(key string) (configKey, error) {
+	parts := strings.Split(key, ".")
+	switch {
+	case len(parts) == 2:
+		return configKey{section: parts[0], name: parts[1]}, nil
+	case len(parts) >= 3:
+		return configKey{
+			section:    parts[0],
+			subsection: strings.Join(parts[1:len(parts)-1], "."),
+			name:       parts[len(parts)-1],
+		}, nil
+	default:
+		return configKey{}, fmt.Errorf("invalid config key %q", key)
+	}
+}
+
+func (c *ConfigStore) loadConfig() (*Repository, *format.Config, error) {
+	repo, err := OpenRepository(c.repoRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cfg, err := repo.Config()
+	if err != nil {
+		return nil, nil, err
+	}
+	if cfg.Raw == nil {
+		cfg.Raw = format.New()
+	}
+	return repo, cfg.Raw, nil
+}
+
 // Get retrieves a single config value from local git config.
 // Returns empty string if the key doesn't exist.
 func (c *ConfigStore) Get(key string) (string, error) {
-	cmd := exec.Command("git", "config", "--local", key)
-	cmd.Dir = c.repoRoot
-	out, err := cmd.Output()
+	parsed, err := parseConfigKey(key)
 	if err != nil {
-		// git config returns exit code 1 if key not found
-		// Other exit codes indicate actual errors
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if exitErr.ExitCode() == 1 {
-				return "", nil // key not found
-			}
-		}
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+
+	_, cfg, err := c.loadConfig()
+	if err != nil {
+		return "", err
+	}
+	if parsed.subsection == "" {
+		return cfg.Section(parsed.section).Option(parsed.name), nil
+	}
+	return cfg.Section(parsed.section).Subsection(parsed.subsection).Option(parsed.name), nil
 }
 
 // GetAll retrieves all values for a multi-value config key.
 // Returns empty slice if the key doesn't exist.
 func (c *ConfigStore) GetAll(key string) ([]string, error) {
-	cmd := exec.Command("git", "config", "--local", "--get-all", key)
-	cmd.Dir = c.repoRoot
-	out, err := cmd.Output()
+	parsed, err := parseConfigKey(key)
 	if err != nil {
-		// git config returns exit code 1 if key not found
-		// Other exit codes indicate actual errors
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if exitErr.ExitCode() == 1 {
-				return nil, nil // key not found
-			}
-		}
 		return nil, err
 	}
-	trimmed := strings.TrimSpace(string(out))
-	if trimmed == "" {
+
+	_, cfg, err := c.loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	var values []string
+	if parsed.subsection == "" {
+		values = cfg.Section(parsed.section).OptionAll(parsed.name)
+	} else {
+		values = cfg.Section(parsed.section).Subsection(parsed.subsection).OptionAll(parsed.name)
+	}
+	if len(values) == 0 {
 		return nil, nil
 	}
-	return strings.Split(trimmed, "\n"), nil
+	return values, nil
 }
 
 // Set sets a config value in local git config.
 func (c *ConfigStore) Set(key, value string) error {
-	cmd := exec.Command("git", "config", "--local", key, value)
-	cmd.Dir = c.repoRoot
-	return cmd.Run()
+	parsed, err := parseConfigKey(key)
+	if err != nil {
+		return err
+	}
+
+	repo, raw, err := c.loadConfig()
+	if err != nil {
+		return err
+	}
+	raw.SetOption(parsed.section, parsed.subsection, parsed.name, value)
+	return repo.SetConfigRaw(raw)
 }
 
 // SetBool sets a boolean config value.
@@ -90,29 +135,37 @@ func (c *ConfigStore) SetInt(key string, value int) error {
 
 // Add adds a value to a multi-value config key.
 func (c *ConfigStore) Add(key, value string) error {
-	cmd := exec.Command("git", "config", "--local", "--add", key, value)
-	cmd.Dir = c.repoRoot
-	return cmd.Run()
+	parsed, err := parseConfigKey(key)
+	if err != nil {
+		return err
+	}
+
+	repo, raw, err := c.loadConfig()
+	if err != nil {
+		return err
+	}
+	raw.AddOption(parsed.section, parsed.subsection, parsed.name, value)
+	return repo.SetConfigRaw(raw)
 }
 
 // Unset removes all values for a config key.
 // Does not return an error if the key doesn't exist.
 func (c *ConfigStore) Unset(key string) error {
-	cmd := exec.Command("git", "config", "--local", "--unset-all", key)
-	cmd.Dir = c.repoRoot
-	err := cmd.Run()
+	parsed, err := parseConfigKey(key)
 	if err != nil {
-		// git config --unset-all returns exit code 5 if key not found
-		// Other exit codes indicate actual errors
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if exitErr.ExitCode() == 5 {
-				return nil // key not found, that's fine
-			}
-		}
 		return err
 	}
-	return nil
+
+	repo, raw, err := c.loadConfig()
+	if err != nil {
+		return err
+	}
+	if parsed.subsection == "" {
+		raw.Section(parsed.section).RemoveOption(parsed.name)
+	} else {
+		raw.Section(parsed.section).Subsection(parsed.subsection).RemoveOption(parsed.name)
+	}
+	return repo.SetConfigRaw(raw)
 }
 
 // GetBool retrieves a boolean config value.

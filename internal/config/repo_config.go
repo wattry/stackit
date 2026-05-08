@@ -7,28 +7,14 @@
 package config
 
 import (
-	"os/exec"
-	"path/filepath"
-	"strings"
+	"stackit.dev/stackit/internal/git"
 )
 
 // resolveGitDir returns the path to the shared .git directory.
 // For regular repos this is repoRoot/.git, but for worktrees it returns
 // the main repository's .git directory (where config should be stored).
 func resolveGitDir(repoRoot string) string {
-	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
-	cmd.Dir = repoRoot
-	out, err := cmd.Output()
-	if err != nil {
-		// Fallback to traditional path if git command fails
-		return filepath.Join(repoRoot, ".git")
-	}
-	gitDir := strings.TrimSpace(string(out))
-	// git may return a relative path, make it absolute
-	if !filepath.IsAbs(gitDir) {
-		gitDir = filepath.Join(repoRoot, gitDir)
-	}
-	return gitDir
+	return git.GetGitCommonDir(repoRoot)
 }
 
 // LoadConfig loads the repository configuration.

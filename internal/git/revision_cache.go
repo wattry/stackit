@@ -3,7 +3,7 @@ package git
 import "sync"
 
 // revisionCache provides thread-safe caching of branch SHA revisions.
-// This avoids redundant go-git ref resolution calls (each acquires goGitMu).
+// This avoids redundant go-git ref/revision resolution calls.
 // Keyed by branch name, values are full SHA hex strings.
 type revisionCache struct {
 	entries sync.Map // map[string]string (branchName -> SHA)

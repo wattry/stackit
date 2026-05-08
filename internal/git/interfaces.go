@@ -75,7 +75,7 @@ type CommitReader interface {
 	GetCurrentRevision(ctx context.Context) (string, error)
 	BatchGetRevisions(branchNames []string) (map[string]string, []error)
 	// LoadAllBranchRevisions populates the revision cache for all local branches
-	// using a single `git show-ref --heads` call. Subsequent GetRevision calls
+	// using one batched branch-ref load. Subsequent GetRevision calls
 	// for cached branches avoid go-git mutex contention entirely.
 	LoadAllBranchRevisions() error
 	GetCommitDate(branchName string) (time.Time, error)

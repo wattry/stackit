@@ -495,9 +495,8 @@ func (e *engineImpl) FetchRemoteMetadata(ctx context.Context) error {
 }
 
 // ConfigureRemoteMetadataSync adds the metadata refspec to origin
-func (e *engineImpl) ConfigureRemoteMetadataSync(ctx context.Context) error {
-	_, err := e.git.RunGitCommandWithContext(ctx, "config", "--add", "remote.origin.fetch", "+refs/stackit/metadata/*:refs/stackit/remote-metadata/*")
-	return err
+func (e *engineImpl) ConfigureRemoteMetadataSync(_ context.Context) error {
+	return e.git.EnsureMetadataRefspecConfigured()
 }
 
 // GetStackIDsForBranches returns the unique stack IDs for the given branches.

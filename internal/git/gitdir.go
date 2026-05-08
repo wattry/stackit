@@ -2,7 +2,7 @@ package git
 
 import (
 	"context"
-	"os/exec"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -13,46 +13,79 @@ import (
 //
 // This returns the worktree-specific git directory (use GetGitCommonDir for shared config).
 func GetGitDir(repoRoot string) string {
-	// Try --absolute-git-dir first (git 2.13+), then fall back to --git-dir
-	cmd := exec.Command("git", "rev-parse", "--absolute-git-dir")
-	cmd.Dir = repoRoot
-	output, err := cmd.Output()
-	if err != nil {
-		// Fallback to --git-dir for older git versions
-		cmd = exec.Command("git", "rev-parse", "--git-dir")
-		cmd.Dir = repoRoot
-		output, err = cmd.Output()
-		if err != nil {
-			// Final fallback: assume standard .git directory
-			return filepath.Join(repoRoot, ".git")
-		}
+	return resolveGitDir(repoRoot)
+}
+
+// GetGitCommonDir resolves the shared git directory for a repository.
+// In a linked worktree this follows the commondir pointer back to the main
+// repository's .git directory.
+func GetGitCommonDir(repoRoot string) string {
+	return commonGitDir(resolveGitDir(repoRoot))
+}
+
+// getGitDir returns the runner's worktree-specific git directory.
+func (r *runner) getGitDir(_ context.Context) string {
+	root := r.repoRoot
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+	return resolveGitDir(root)
+}
+
+func resolveGitDir(repoRoot string) string {
+	if repoRoot == "" {
+		repoRoot, _ = os.Getwd()
+	}
+	repoRoot, _ = filepath.Abs(repoRoot)
+
+	gitPath := findDotGit(repoRoot)
+	info, err := os.Stat(gitPath)
+	if err == nil && info.IsDir() {
+		return gitPath
 	}
 
-	gitDir := strings.TrimSpace(string(output))
-	// If gitDir is relative, make it absolute
+	content, err := os.ReadFile(gitPath)
+	if err != nil {
+		return gitPath
+	}
+
+	line := strings.TrimSpace(string(content))
+	gitDir, ok := strings.CutPrefix(line, "gitdir:")
+	if !ok {
+		return gitPath
+	}
+	gitDir = strings.TrimSpace(gitDir)
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(repoRoot, gitDir)
 	}
 	return gitDir
 }
 
-// getGitDir is the runner method version that uses RunGitCommandWithContext.
-// Returns the worktree-specific git directory.
-func (r *runner) getGitDir(ctx context.Context) string {
-	output, err := r.RunGitCommandWithContext(ctx, "rev-parse", "--absolute-git-dir")
-	if err != nil {
-		// Fallback to non-absolute if absolute-git-dir fails (older git versions)
-		output, err = r.RunGitCommandWithContext(ctx, "rev-parse", "--git-dir")
-		if err != nil {
-			// Final fallback: assume standard .git directory
-			return filepath.Join(r.repoRoot, ".git")
+func findDotGit(path string) string {
+	for {
+		gitPath := filepath.Join(path, ".git")
+		if _, err := os.Stat(gitPath); err == nil {
+			return gitPath
 		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return gitPath
+		}
+		path = parent
 	}
+}
 
-	gitDir := strings.TrimSpace(output)
-	// If gitDir is relative and we have repoRoot, make it absolute
-	if !filepath.IsAbs(gitDir) && r.repoRoot != "" {
-		gitDir = filepath.Join(r.repoRoot, gitDir)
+func commonGitDir(gitDir string) string {
+	content, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
+	if err != nil {
+		return gitDir
 	}
-	return gitDir
+	commonDir := strings.TrimSpace(string(content))
+	if commonDir == "" {
+		return gitDir
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(gitDir, commonDir)
+	}
+	return filepath.Clean(commonDir)
 }

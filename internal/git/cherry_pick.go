@@ -3,7 +3,6 @@ package git
 import (
 	"context"
 	"fmt"
-	"strings"
 )
 
 func (r *runner) CherryPick(ctx context.Context, commitSHA, onto string) (string, error) {
@@ -19,12 +18,12 @@ func (r *runner) CherryPick(ctx context.Context, commitSHA, onto string) (string
 
 	r.revisionCache.InvalidateAll()
 
-	newSHA, err := r.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	newSHA, err := r.GetCurrentRevision(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get new SHA after cherry-pick: %w", err)
 	}
 
-	return strings.TrimSpace(newSHA), nil
+	return newSHA, nil
 }
 
 func (r *runner) CherryPickSimple(ctx context.Context, commitSHA string) error {
