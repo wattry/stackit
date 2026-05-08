@@ -174,6 +174,11 @@ const (
 	DeletionReasonMergedPR        DeletionReasonKind = "merged_pr"
 	DeletionReasonMergedIntoTrunk DeletionReasonKind = "merged_into_trunk"
 	DeletionReasonEmptyWithPR     DeletionReasonKind = "empty_with_pr"
+	// DeletionReasonGhost is set for branches whose metadata is still on
+	// disk but whose git ref has been deleted out-of-band (e.g., the user
+	// ran `git branch -D` directly). Sync synthesizes this so the metadata
+	// gets cleaned up and surviving children get reparented past the gap.
+	DeletionReasonGhost DeletionReasonKind = "ghost"
 )
 
 // PendingChange represents a changed file in the working directory

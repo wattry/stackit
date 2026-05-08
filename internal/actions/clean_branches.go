@@ -275,6 +275,14 @@ func buildDeletionPlanAndReparent(ctx *app.Context, deleteStatuses map[string]en
 		branchesToProcess[i] = child.GetName()
 	}
 
+	// Adopt branches stranded by ghost ancestors. If the user manually ran
+	// `git branch -D` on a parent, its metadata is still on disk but the git
+	// ref is gone — the graph treats children of that ghost as roots, so the
+	// trunk-children DFS above misses them entirely. Synthesize deletion
+	// entries for each ghost so the existing reparent + cleanup machinery
+	// runs against them.
+	branchesToProcess = appendStrandedRoots(eng, graph, deleteStatuses, branchesToProcess)
+
 	for len(branchesToProcess) > 0 {
 		branchName := branchesToProcess[len(branchesToProcess)-1]
 		branchesToProcess = branchesToProcess[:len(branchesToProcess)-1]
@@ -426,6 +434,62 @@ func executeDeletions(ctx *app.Context, plan *deletionPlan) error {
 // getParentName returns the name of the parent branch or trunk if no parent exists
 func getParentName(branch engine.Branch, _ engine.Engine) string {
 	return branch.GetParentOrTrunk()
+}
+
+// appendStrandedRoots adds branches whose metadata-parent no longer exists
+// as a git ref to the DFS queue, and synthesizes deletion entries for every
+// ghost ancestor along the way. Returns the updated queue.
+//
+// "Ghost" = present in metadata refs (refs/stackit/metadata/<name>) but no
+// corresponding refs/heads/<name>. The most common cause is the user
+// running `git branch -D <merged-branch>` directly instead of letting
+// stackit clean up.
+func appendStrandedRoots(eng engine.Engine, graph *engine.StackGraph, deleteStatuses map[string]engine.DeletionStatus, queue []string) []string {
+	trunkName := eng.Trunk().GetName()
+	branchNames := eng.BranchNames()
+
+	for _, rootName := range graph.RootBranches() {
+		if rootName == trunkName {
+			continue
+		}
+		root := eng.GetBranch(rootName)
+		parent := root.GetParent()
+		// Skip genuine roots (no metadata parent) and roots whose parent is
+		// real — those would already have been visited from trunkChildren.
+		if parent == nil || branchNames.Contains(parent.GetName()) {
+			continue
+		}
+
+		// Walk the ghost chain, registering each ghost for deletion.
+		ghostName := parent.GetName()
+		for ghostName != "" && ghostName != trunkName && !branchNames.Contains(ghostName) {
+			if _, already := deleteStatuses[ghostName]; already {
+				break
+			}
+			kind := engine.DeletionReasonGhost
+			reason := "branch no longer exists locally"
+			if meta, err := eng.Git().ReadMetadata(ghostName); err == nil && meta != nil {
+				if pr := meta.GetPrInfo(); pr != nil && pr.State != nil && *pr.State == "MERGED" {
+					kind = engine.DeletionReasonMergedPR
+					reason = "branch deleted locally; PR was merged"
+				}
+			}
+			deleteStatuses[ghostName] = engine.DeletionStatus{
+				SafeToDelete: true,
+				Reason:       reason,
+				Kind:         kind,
+			}
+			ghostBranch := eng.GetBranch(ghostName)
+			ghostParent := ghostBranch.GetParent()
+			if ghostParent == nil {
+				break
+			}
+			ghostName = ghostParent.GetName()
+		}
+
+		queue = append(queue, rootName)
+	}
+	return queue
 }
 
 // findNonDeletingAncestor finds the nearest ancestor that is not marked for deletion
