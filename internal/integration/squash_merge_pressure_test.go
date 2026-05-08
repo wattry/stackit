@@ -386,20 +386,21 @@ func TestUserDeletedMergedBranchBeforeSync(t *testing.T) {
 	require.NotContains(t, branches, "branch-a")
 	require.Contains(t, branches, "branch-b")
 
-	// KNOWN ISSUE: when the user manually deletes a merged branch before
-	// sync, sync does NOT currently re-parent the orphaned child to trunk.
-	// `evaluateDeletionStatus` doesn't fire on branch-a (it's no longer in
-	// AllBranches), so the deletion plan never marks it, and
-	// `findNonDeletingAncestor` for B's ghost parent returns the ghost
-	// itself. B is left with a dangling parent reference.
-	//
-	// This test pins down today's behavior so we notice if/when it gets
-	// fixed. If a future change makes sync auto-recover, flip this assertion.
+	// B must reparent to trunk now that A is gone, with A's stale metadata
+	// cleaned up. The ghost-detection path in buildDeletionPlanAndReparent
+	// synthesizes a deletion entry for A so the existing reparent + cleanup
+	// machinery runs against it.
 	bParent := sh.Engine.GetBranch("branch-b").GetParent()
 	require.NotNil(t, bParent, "B must have a parent entry after sync")
-	require.Equal(t, "branch-a", bParent.GetName(),
-		"BUG: B's metadata still points at the deleted ghost branch — "+
-			"sync should reparent to %q but currently leaves it dangling", mainName)
+	require.Equal(t, mainName, bParent.GetName(),
+		"B should reparent to trunk now that A is gone")
+
+	// Stale metadata for the ghost should be cleaned up too — otherwise
+	// the next sync would re-detect it and churn pointlessly.
+	meta, err := sh.Engine.Git().ReadMetadata("branch-a")
+	require.NoError(t, err)
+	require.True(t, meta == nil || meta.GetParentBranchName() == nil,
+		"A's stale metadata should be cleared after sync")
 
 	out, err := sh.Scene.Repo.RunGitCommandAndGetOutput("status", "--porcelain")
 	require.NoError(t, err)
