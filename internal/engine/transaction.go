@@ -76,17 +76,26 @@ func (e *engineImpl) BeginTx(message string) *MetadataTx {
 	}
 }
 
+// checkState returns an error if the transaction has already been committed or
+// rolled back. Callers must hold tx.mu.
+func (tx *MetadataTx) checkState() error {
+	switch {
+	case tx.committed:
+		return ErrTransactionCommitted
+	case tx.rolledBack:
+		return ErrTransactionRolledBack
+	}
+	return nil
+}
+
 // UpdateMeta stages a metadata update for atomic commit.
 // The update is not applied until Commit() is called.
 func (tx *MetadataTx) UpdateMeta(branch string, meta *git.Meta) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.committed {
-		return ErrTransactionCommitted
-	}
-	if tx.rolledBack {
-		return ErrTransactionRolledBack
+	if err := tx.checkState(); err != nil {
+		return err
 	}
 
 	// Capture original SHA on first access for CAS validation
@@ -105,11 +114,8 @@ func (tx *MetadataTx) UpdateLocalMeta(branch string, meta *git.LocalMeta) error 
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.committed {
-		return ErrTransactionCommitted
-	}
-	if tx.rolledBack {
-		return ErrTransactionRolledBack
+	if err := tx.checkState(); err != nil {
+		return err
 	}
 
 	// Capture original SHA on first access
@@ -129,11 +135,8 @@ func (tx *MetadataTx) DeleteMeta(branch string) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.committed {
-		return ErrTransactionCommitted
-	}
-	if tx.rolledBack {
-		return ErrTransactionRolledBack
+	if err := tx.checkState(); err != nil {
+		return err
 	}
 
 	// Capture original SHA on first access for CAS validation
@@ -152,11 +155,8 @@ func (tx *MetadataTx) DeleteLocalMeta(branch string) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.committed {
-		return ErrTransactionCommitted
-	}
-	if tx.rolledBack {
-		return ErrTransactionRolledBack
+	if err := tx.checkState(); err != nil {
+		return err
 	}
 
 	// Capture original SHA on first access for CAS validation
@@ -177,11 +177,8 @@ func (tx *MetadataTx) Commit(ctx context.Context) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.committed {
-		return ErrTransactionCommitted
-	}
-	if tx.rolledBack {
-		return ErrTransactionRolledBack
+	if err := tx.checkState(); err != nil {
+		return err
 	}
 
 	if len(tx.metaUpdates) == 0 && len(tx.localUpdates) == 0 &&
