@@ -82,14 +82,13 @@ func TestIsAncestor(t *testing.T) {
 	})
 }
 
-func TestIsAncestor_GitFallback(t *testing.T) {
-	// This test simulates the scenario where go-git might fail to find
-	// a newly fetched commit, requiring the git fallback.
+func TestIsAncestor_GoGitAfterFetch(t *testing.T) {
+	// This test verifies go-git can resolve and walk to a newly fetched commit.
 	// We test this by creating a scenario similar to a PR merge:
 	// 1. Local repo has main at commit A
 	// 2. Remote has main at commit B (which includes A as ancestor)
 	// 3. We fetch but use a fresh runner that hasn't cached the commits
-	// 4. IsAncestor should still work via the git fallback
+	// 4. IsAncestor should still work via go-git
 
 	t.Run("works after fetch with fresh runner", func(t *testing.T) {
 		// 1. Setup a "remote" repository
@@ -133,7 +132,6 @@ func TestIsAncestor_GitFallback(t *testing.T) {
 		require.NoError(t, err)
 
 		// 6. Test IsAncestor with the newly fetched commit
-		// This exercises the fallback because go-git might not see the new commit
 		isAncestor, err := runner.IsAncestor(initialSha, newSha)
 		require.NoError(t, err)
 		require.True(t, isAncestor, "initial should be ancestor of new commit after fetch")

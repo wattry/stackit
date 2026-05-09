@@ -43,9 +43,8 @@ func TestResolveRefInWorktree(t *testing.T) {
 	err = worktreeRunner.InitDefaultRepo()
 	require.NoError(t, err)
 
-	// Try to resolve 'main' from the worktree runner.
-	// This exercises the fix where we fall back to 'git rev-parse' if go-git
-	// fails to resolve a reference in a worktree.
+	// Try to resolve 'main' from the worktree runner. go-git v6 should resolve
+	// refs through the worktree's common-dir without shelling out to git.
 	resolvedSHA, err := worktreeRunner.GetRevision("main")
 	require.NoError(t, err, "Should be able to resolve 'main' from a worktree")
 	require.Equal(t, mainSHA, resolvedSHA)

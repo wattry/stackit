@@ -3,37 +3,41 @@ package git
 import (
 	"context"
 	"fmt"
-	"strings"
+	"slices"
+
+	"github.com/go-git/go-git/v6/plumbing"
 )
 
-// detachedHEAD is the string returned by git rev-parse --abbrev-ref HEAD when in detached HEAD state
-const detachedHEAD = "HEAD"
-
 func (r *runner) GetCurrentBranch() (string, error) {
-	branch, err := r.RunGitCommandWithContext(context.Background(), "rev-parse", "--abbrev-ref", detachedHEAD)
+	repo, err := r.ensureRepo()
 	if err != nil {
 		return "", err
 	}
-	if branch == detachedHEAD {
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	if !head.Name().IsBranch() {
 		return "", fmt.Errorf("HEAD is not on a branch")
 	}
-	return branch, nil
+	return head.Name().Short(), nil
 }
 
 func (r *runner) GetAllBranchNames() ([]string, error) {
-	out, err := r.RunGitCommandWithContext(context.Background(), "branch", "--format=%(refname:short)")
+	repo, err := r.ensureRepo()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get branches: %w", err)
+		return nil, err
 	}
-
-	var names []string
-	lines := strings.SplitSeq(out, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			names = append(names, line)
-		}
+	branches, err := r.allBranchHashes(repo)
+	if err != nil {
+		return nil, err
 	}
+	names := make([]string, 0, len(branches))
+	for name := range branches {
+		names = append(names, name)
+	}
+	slices.Sort(names)
 	return names, nil
 }
 
@@ -111,30 +115,62 @@ func (r *runner) UpdateBranchRef(ctx context.Context, branchName, revision strin
 }
 
 func (r *runner) GetCurrentBranchOrSHA(ctx context.Context) (string, error) {
-	branch, err := r.RunGitCommandWithContext(ctx, "rev-parse", "--abbrev-ref", "HEAD")
-	if err == nil && branch != "HEAD" {
+	branch, err := r.GetCurrentBranch()
+	if err == nil {
 		return branch, nil
 	}
 	return r.GetCurrentRevision(ctx)
 }
 
-func (r *runner) GetMergedBranches(ctx context.Context, target string) (map[string]bool, error) {
-	out, err := r.RunGitCommandWithContext(ctx, "branch", "--merged", target)
+func (r *runner) GetMergedBranches(_ context.Context, target string) (map[string]bool, error) {
+	repo, err := r.ensureRepo()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get merged branches: %w", err)
+		return nil, err
+	}
+
+	targetHash, err := r.resolveRefHash(repo, target)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve target %s: %w", target, err)
+	}
+
+	branches, err := r.allBranchHashes(repo)
+	if err != nil {
+		return nil, err
 	}
 
 	merged := make(map[string]bool)
-	lines := strings.SplitSeq(out, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
+	for branchName, branchHash := range branches {
+		if branchHash == targetHash {
+			merged[branchName] = true
 			continue
 		}
-		// Remove current branch indicator '*' if present
-		line = strings.TrimPrefix(line, "*")
-		line = strings.TrimSpace(line)
-		merged[line] = true
+		isMerged, err := r.isAncestorGoGit(repo, branchHash, targetHash)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if %s is merged into %s: %w", branchName, target, err)
+		}
+		if isMerged {
+			merged[branchName] = true
+		}
 	}
 	return merged, nil
+}
+
+func (r *runner) allBranchHashes(repo *Repository) (map[string]plumbing.Hash, error) {
+	iter, err := repo.Branches()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get branches: %w", err)
+	}
+	defer iter.Close()
+
+	branches := make(map[string]plumbing.Hash)
+	err = iter.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Name().IsBranch() {
+			branches[ref.Name().Short()] = ref.Hash()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate branches: %w", err)
+	}
+	return branches, nil
 }

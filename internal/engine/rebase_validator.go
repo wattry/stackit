@@ -99,7 +99,6 @@ func dryRunRebase(ctx context.Context, g git.Runner, branchName, upstream, oldUp
 		}
 	}
 
-	// Get the resulting SHA from the detached HEAD
 	newSHA, err := g.GetCurrentRevision(ctx)
 	if err != nil {
 		return git.RebaseOutcome{Result: git.RebaseConflict, RerereResolvedCount: outcome.RerereResolvedCount}, "", nil, fmt.Errorf("failed to get revision after rebase: %w", err)
@@ -350,9 +349,7 @@ func (e *engineImpl) validateSingleSpec(
 	}
 	defer cleanup()
 
-	// Create a command-only git runner for the worktree — validation only uses CLI
-	// operations (rebase, rev-parse, status), so skip go-git initialization (~2-5ms)
-	wtGit := git.NewRunnerCommandOnly(worktreePath)
+	wtGit := git.NewRunnerWithPath(worktreePath, nil)
 
 	// Resolve NewParent to handle rebased parents
 	newParent := spec.NewParent

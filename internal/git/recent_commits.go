@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
 const trailerValueSeparator = "\x1e"
@@ -37,78 +40,92 @@ type RecentCommit struct {
 }
 
 // GetRecentCommits returns the most recent commits from a branch, including stack trailer metadata.
-// Uses git log with a custom format string that includes trailer values.
 // For merge commits ("Merge pull request #N from ..."), the subject is replaced with the
 // first line of the body, which contains the actual PR title.
 func (r *runner) GetRecentCommits(branchName string, count int) ([]RecentCommit, error) {
-	// Format: SHA\x1fsubject\x1fauthor\x1fdate\x1fbody\x1fstack-size\x1fprs\x1fscope\x00
-	// Records are separated by null bytes so multi-line bodies don't break parsing.
-	format := "%H\x1f%s\x1f%an\x1f%aI\x1f%b\x1f%(trailers:key=Stackit-Stack-Size,valueonly,separator=%x1e)\x1f%(trailers:key=Stackit-PRs,valueonly,separator=%x1e)\x1f%(trailers:key=Stackit-Scope,valueonly,separator=%x1e)%x00"
-
-	output, err := r.runGitCommandInternal("log", "--first-parent", fmt.Sprintf("-%d", count), "--format="+format, branchName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get recent commits for %s: %w", branchName, err)
-	}
-
-	output = strings.TrimSpace(output)
-	if output == "" {
+	if count <= 0 {
 		return nil, nil
 	}
 
-	var commits []RecentCommit
-	for record := range strings.SplitSeq(output, "\x00") {
-		record = strings.TrimSpace(record)
-		if record == "" {
-			continue
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return nil, err
+	}
+
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
+
+	currentHash, err := r.resolveRefHashInternal(repo, branchName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve branch %s: %w", branchName, err)
+	}
+
+	commits := make([]RecentCommit, 0, count)
+	for range count {
+		commit, err := repo.CommitObject(currentHash)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load commit %s: %w", currentHash, err)
 		}
 
-		fields := strings.SplitN(record, "\x1f", 8)
-		if len(fields) < 4 {
-			continue
+		commits = append(commits, recentCommitFromGoGit(commit))
+		if commit.NumParents() == 0 {
+			break
 		}
-
-		subject := fields[1]
-		body := ""
-		if len(fields) > 4 {
-			body = fields[4]
+		currentHash = commit.ParentHashes[0]
+		if currentHash == plumbing.ZeroHash {
+			break
 		}
-
-		// For GitHub merge commits, the subject is "Merge pull request #N from ...".
-		// The actual PR title is the first line of the body.
-		subject = resolveSubject(subject, body)
-
-		commit := RecentCommit{
-			SHA:     fields[0],
-			Subject: subject,
-			Author:  fields[2],
-		}
-
-		if date, parseErr := time.Parse(time.RFC3339, fields[3]); parseErr == nil {
-			commit.Date = date
-		}
-
-		if len(fields) > 5 {
-			commit.StackSize = parseStackSizeTrailer(fields[5])
-		}
-
-		if len(fields) > 6 {
-			commit.StackPRNumbers = parseStackPRsTrailer(fields[6])
-		}
-
-		if len(fields) > 7 {
-			commit.StackScope = parseStackScopeTrailer(fields[7])
-		}
-
-		commit.PRNumber = parsePRNumberFromSubject(commit.Subject)
-		if commit.PRNumber == 0 {
-			commit.PRNumber = parseMergePRNumber(fields[1])
-		}
-		commit.Kind = deriveRecentCommitKind(commit)
-
-		commits = append(commits, commit)
 	}
 
 	return commits, nil
+}
+
+func recentCommitFromGoGit(commit *object.Commit) RecentCommit {
+	subject, body := splitCommitMessage(commit.Message)
+	resolvedSubject := resolveSubject(subject, body)
+
+	result := RecentCommit{
+		SHA:     commit.Hash.String(),
+		Subject: resolvedSubject,
+		Author:  commit.Author.Name,
+		Date:    commit.Author.When,
+	}
+
+	result.StackSize = parseStackSizeTrailer(stackitTrailerValues(commit.Message, "Stackit-Stack-Size"))
+	result.StackPRNumbers = parseStackPRsTrailer(stackitTrailerValues(commit.Message, "Stackit-PRs"))
+	result.StackScope = parseStackScopeTrailer(stackitTrailerValues(commit.Message, "Stackit-Scope"))
+
+	result.PRNumber = parsePRNumberFromSubject(result.Subject)
+	if result.PRNumber == 0 {
+		result.PRNumber = parseMergePRNumber(subject)
+	}
+	result.Kind = deriveRecentCommitKind(result)
+	return result
+}
+
+func splitCommitMessage(message string) (subject, body string) {
+	message = strings.TrimRight(message, "\n")
+	if message == "" {
+		return "", ""
+	}
+	subject, body, _ = strings.Cut(message, "\n")
+	body = strings.TrimLeft(body, "\n")
+	return strings.TrimSpace(subject), body
+}
+
+func stackitTrailerValues(message, key string) string {
+	var values []string
+	for line := range strings.SplitSeq(message, "\n") {
+		trailerKey, value, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(trailerKey) != key {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return strings.Join(values, trailerValueSeparator)
 }
 
 // resolveSubject returns a human-readable subject for a commit.

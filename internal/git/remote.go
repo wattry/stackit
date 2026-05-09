@@ -5,19 +5,15 @@ import (
 	"errors"
 	"fmt"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport"
+	gogit "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 )
 
 // DefaultRemote is the default name for the remote repository
 const DefaultRemote = "origin"
 
 func (r *runner) getRemote(repo *Repository) string {
-	// Synchronize go-git operations to prevent concurrent packfile access
-	r.goGitMu.Lock()
-	defer r.goGitMu.Unlock()
-
 	// Try to get current branch
 	head, err := repo.Head()
 	if err == nil && head.Name().IsBranch() {
@@ -46,18 +42,13 @@ func (r *runner) fetchRemoteShas(ctx context.Context, repo *Repository, remote s
 		defer cancel()
 	}
 
-	// Synchronize go-git operations to prevent concurrent packfile access
-	r.goGitMu.Lock()
 	rem, err := repo.Remote(remote)
-	r.goGitMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote %s: %w", remote, err)
 	}
 
 	// List remote references with context for timeout support
-	r.goGitMu.Lock()
 	refs, err := rem.ListContext(ctx, &gogit.ListOptions{})
-	r.goGitMu.Unlock()
 	if err != nil {
 		if errors.Is(err, transport.ErrEmptyRemoteRepository) || errors.Is(err, gogit.NoErrAlreadyUpToDate) {
 			return make(map[string]string), nil
@@ -78,10 +69,6 @@ func (r *runner) fetchRemoteShas(ctx context.Context, repo *Repository, remote s
 }
 
 func (r *runner) getRemoteSha(repo *Repository, remote, branchName string) (string, error) {
-	// Synchronize go-git operations to prevent concurrent packfile access
-	r.goGitMu.Lock()
-	defer r.goGitMu.Unlock()
-
 	refName := plumbing.ReferenceName(fmt.Sprintf("refs/remotes/%s/%s", remote, branchName))
 	ref, err := repo.Reference(refName, true)
 	if err != nil {

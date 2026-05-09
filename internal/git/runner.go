@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 
 	"stackit.dev/stackit/internal/utils"
 )
@@ -25,10 +25,6 @@ import (
 type DebugLogger interface {
 	Debug(msg string, args ...any)
 }
-
-// Note: goGitMu was previously a package-level var, now moved to per-runner
-// and per-repository instances. This allows operations on different repositories
-// (e.g., main repo vs worktree) to proceed in parallel.
 
 // DefaultCommandTimeout is the default timeout for git commands
 const DefaultCommandTimeout = 5 * time.Minute
@@ -42,7 +38,7 @@ func (r *runner) UpdateRefWithLog(ctx context.Context, refName, sha, message str
 }
 
 func (r *runner) VerifyRef(ctx context.Context, refName string) error {
-	_, err := r.RunGitCommandWithContext(ctx, "rev-parse", "--verify", refName)
+	_, err := r.GetRef(refName)
 	return err
 }
 
@@ -164,10 +160,6 @@ func (r *runner) RunGitCommandWithContext(ctx context.Context, args ...string) (
 
 func (r *runner) RunGitCommandRawWithContext(ctx context.Context, args ...string) (string, error) {
 	return r.runGitInternal(ctx, "", nil, false, args...)
-}
-
-func (r *runner) runGitCommandWithInputInternal(input string, args ...string) (string, error) {
-	return r.runGitInternal(context.Background(), input, nil, true, args...)
 }
 
 func (r *runner) runGitInternal(ctx context.Context, input string, env []string, trim bool, args ...string) (string, error) {
@@ -409,35 +401,16 @@ func NewRunnerWithPath(repoRoot string, logger DebugLogger) Runner {
 	return &runner{repoRoot: repoRoot, logger: logger}
 }
 
-// NewRunnerCommandOnly returns a Runner that only supports command-line git operations.
-// It skips go-git repository initialization (OpenRepository), saving ~2-5ms.
-// Use this for worktrees that only need CLI operations (rebase, rev-parse, status, etc.).
-// Any operation that requires go-git (ensureRepo) will return an error.
-func NewRunnerCommandOnly(repoRoot string) Runner {
-	abs, err := filepath.Abs(repoRoot)
-	if err == nil {
-		repoRoot = abs
-	}
-	return &runner{repoRoot: repoRoot, commandOnly: true}
-}
-
 // runner implements Runner by calling the actual git package functions
 type runner struct {
 	repo     *Repository
 	repoRoot string
 	repoMu   sync.Mutex
-	// goGitMu synchronizes go-git operations that access packfiles to prevent
-	// "concurrent map iteration and map write" panics. Per-runner (per-repository)
-	// so that operations on different repos (e.g., main repo vs worktree) are independent.
+	// goGitMu serializes go-git object and revision walks that can touch shared
+	// packfile/object caches. Ref/config reads stay unlocked.
 	goGitMu  sync.Mutex
 	loggerMu sync.RWMutex
 	logger   DebugLogger
-
-	// commandOnly disables go-git repository initialization. When true, ensureRepo()
-	// returns an error and InitDefaultRepo() is a no-op. Use this for worktrees that
-	// only need command-line git operations (rebase, rev-parse, status, etc.),
-	// saving ~2-5ms from OpenRepository().
-	commandOnly bool
 
 	// Cached metadata to avoid redundant ReadMetadata calls (each spawns 2 git processes).
 	// Thread-safe: sync.Map handles concurrent reads from worker pools.
@@ -474,10 +447,6 @@ func (r *runner) debugLog(format string, args ...any) {
 }
 
 func (r *runner) ensureRepo() (*Repository, error) {
-	if r.commandOnly {
-		return nil, fmt.Errorf("go-git repository access not available in command-only mode")
-	}
-
 	r.repoMu.Lock()
 	defer r.repoMu.Unlock()
 
@@ -516,9 +485,6 @@ func (r *runner) ReloadRepository() error {
 }
 
 func (r *runner) InitDefaultRepo() error {
-	if r.commandOnly {
-		return nil // No-op: worktree is already valid from `git worktree add`
-	}
 	_, err := r.ensureRepo()
 	return err
 }
@@ -552,33 +518,45 @@ func (r *runner) GetConfig(key string) (string, error) {
 }
 
 func (r *runner) SetConfig(key, value string) error {
-	_, err := r.runGitCommandInternal("config", key, value)
-	return err
+	if _, err := r.ensureRepo(); err != nil {
+		return err
+	}
+	return NewConfigStore(r.repoRoot).Set(key, value)
 }
 
 func (r *runner) GetConfigAll(key string) ([]string, error) {
-	output, err := r.runGitCommandInternal("config", "--get-all", key)
-	if err == nil {
-		if output == "" {
-			return []string{}, nil
-		}
-		return strings.Split(output, "\n"), nil
+	if _, err := r.ensureRepo(); err != nil {
+		return []string{}, err
 	}
-	return []string{}, nil
+	values, err := NewConfigStore(r.repoRoot).GetAll(key)
+	if err != nil || len(values) == 0 {
+		return []string{}, err
+	}
+	return values, nil
 }
 
 func (r *runner) AddConfigValue(key, value string) error {
-	_, err := r.runGitCommandInternal("config", "--add", key, value)
-	return err
+	if _, err := r.ensureRepo(); err != nil {
+		return err
+	}
+	return NewConfigStore(r.repoRoot).Add(key, value)
 }
 
 func (r *runner) IsInsideRepo() bool {
-	_, err := r.runGitCommandInternal("rev-parse", "--is-inside-work-tree")
+	_, err := r.ensureRepo()
 	return err == nil
 }
 
 func (r *runner) DiscoverRepoRoot() (string, error) {
-	return r.runGitCommandInternal("rev-parse", "--show-toplevel")
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return "", fmt.Errorf("not a git repository: %w", err)
+	}
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	return worktree.Filesystem.Root(), nil
 }
 
 func (r *runner) GetRepoRoot() string {
@@ -586,7 +564,11 @@ func (r *runner) GetRepoRoot() string {
 }
 
 func (r *runner) GetGitCommonDir() (string, error) {
-	return r.runGitCommandInternal("rev-parse", "--git-common-dir")
+	root, err := r.DiscoverRepoRoot()
+	if err != nil {
+		return "", err
+	}
+	return commonGitDir(resolveGitDir(root)), nil
 }
 
 func (r *runner) GetUserName(ctx context.Context) (string, error) {
@@ -627,33 +609,19 @@ func (r *runner) EnsureStackMetaRefspecConfigured() error {
 	return r.AddConfigValue("remote.origin.fetch", stackMetaRefspec)
 }
 
-func (r *runner) FindRemoteBranch(ctx context.Context, remote string) (string, error) {
-	// Get all branch configs that have this remote
-	// Format: "branch.<name>.remote <remote>"
-	output, err := r.RunGitCommandWithContext(ctx, "config", "--get-regexp", "^branch\\..*\\.remote$")
+func (r *runner) FindRemoteBranch(_ context.Context, remote string) (string, error) {
+	repo, err := r.ensureRepo()
 	if err != nil {
-		return "", nil //nolint:nilerr // git config returns 1 if no branches match
+		return "", nil //nolint:nilerr // matches git config: no branch config is non-fatal here
 	}
 
-	if output == "" {
-		return "", nil
+	cfg, err := repo.Config()
+	if err != nil {
+		return "", nil //nolint:nilerr
 	}
-
-	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
-	for line := range lines {
-		// Line format: "branch.<name>.remote <remote>"
-		parts := strings.Fields(line)
-		if len(parts) >= 2 {
-			remoteValue := parts[1]
-			if remoteValue == remote {
-				// Extract branch name from "branch.<name>.remote"
-				branchPart := parts[0]
-				if strings.HasPrefix(branchPart, "branch.") && strings.HasSuffix(branchPart, ".remote") {
-					// Remove "branch." prefix and ".remote" suffix
-					branchName := branchPart[7 : len(branchPart)-7]
-					return branchName, nil
-				}
-			}
+	for branchName, branch := range cfg.Branches {
+		if branch.Remote == remote {
+			return branchName, nil
 		}
 	}
 	return "", nil
@@ -668,13 +636,19 @@ func (r *runner) GetRemoteRevision(branchName string) (string, error) {
 }
 
 func (r *runner) GetCurrentRevision(ctx context.Context) (string, error) {
-	return r.RunGitCommandWithContext(ctx, "rev-parse", "HEAD")
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return "", err
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve HEAD: %w", err)
+	}
+	return head.Hash().String(), nil
 }
 
 func (r *runner) GetRevision(branchName string) (string, error) {
-	if r.commandOnly {
-		return r.RunGitCommandWithContext(context.Background(), "rev-parse", "--verify", branchName)
-	}
 	repo, err := r.ensureRepo()
 	if err != nil {
 		return "", err
@@ -757,12 +731,9 @@ func (r *runner) GetCommitRange(base, head, format string) ([]string, error) {
 		}
 	}
 
-	// Try go-git first
 	commits, err := iterateCommitsNoLock(repo, headHash, baseHash)
 	if err != nil {
-		// Fallback to git CLI for worktree compatibility
-		// go-git doesn't properly handle the 'commondir' redirection in worktrees
-		return r.getCommitRangeWithFallback(base, head, format)
+		return nil, err
 	}
 
 	return formatCommits(commits, format)
@@ -799,47 +770,6 @@ func formatCommits(commits []*object.Commit, format string) ([]string, error) {
 			result = append(result, formatted)
 		}
 	}
-	return result, nil
-}
-
-// getCommitRangeWithFallback uses git rev-list + git log for formatting
-func (r *runner) getCommitRangeWithFallback(base, head, format string) ([]string, error) {
-	// Get SHAs using git rev-list
-	shas, err := r.getCommitRangeGitFallback(base, head)
-	if err != nil {
-		return nil, err
-	}
-
-	if format == "SHA" {
-		return shas, nil
-	}
-
-	// Format each commit using git log
-	result := make([]string, 0, len(shas))
-	for _, sha := range shas {
-		var formatted string
-		switch format {
-		case "READABLE":
-			// Oneline format: short SHA + subject
-			formatted, err = r.GetCommitLog(sha, "%h %s")
-		case "READABLE_WITH_DATE":
-			// Tab-separated: short SHA, ISO date, subject
-			formatted, err = r.GetCommitLog(sha, "%h\t%aI\t%s")
-		case "MESSAGE":
-			formatted, err = r.GetCommitLog(sha, "%B")
-		case "SUBJECT":
-			formatted, err = r.GetCommitLog(sha, "%s")
-		default:
-			return nil, fmt.Errorf("unknown commit format: %s", format)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to format commit %s: %w", sha, err)
-		}
-		if formatted != "" {
-			result = append(result, strings.TrimSpace(formatted))
-		}
-	}
-
 	return result, nil
 }
 
@@ -959,7 +889,15 @@ func (r *runner) runGitCommandInternal(args ...string) (string, error) {
 }
 
 func (r *runner) GetRef(name string) (string, error) {
-	return r.RunGitCommandWithContext(context.Background(), "rev-parse", "--verify", name)
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return "", err
+	}
+	hash, err := r.resolveRefHash(repo, name)
+	if err != nil {
+		return "", err
+	}
+	return hash.String(), nil
 }
 
 func (r *runner) UpdateRef(name, sha string) error {
@@ -973,31 +911,90 @@ func (r *runner) DeleteRef(name string) error {
 }
 
 func (r *runner) CatFile(sha string) (string, error) {
-	return r.runGitCommandInternal("cat-file", "-p", sha)
+	return r.ReadBlob(sha)
 }
 
 func (r *runner) CreateBlob(content string) (string, error) {
-	return r.runGitCommandWithInputInternal(content, "hash-object", "-w", "--stdin")
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return "", err
+	}
+
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
+
+	obj := repo.Storer.NewEncodedObject()
+	obj.SetType(plumbing.BlobObject)
+	obj.SetSize(int64(len(content)))
+
+	writer, err := obj.Writer()
+	if err != nil {
+		return "", fmt.Errorf("failed to open blob writer: %w", err)
+	}
+	if _, err := io.Copy(writer, strings.NewReader(content)); err != nil {
+		_ = writer.Close()
+		return "", fmt.Errorf("failed to write blob content: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("failed to close blob writer: %w", err)
+	}
+
+	hash, err := repo.Storer.SetEncodedObject(obj)
+	if err != nil {
+		return "", fmt.Errorf("failed to store blob: %w", err)
+	}
+	return hash.String(), nil
 }
 
 func (r *runner) ReadBlob(sha string) (string, error) {
-	return r.CatFile(sha)
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return "", err
+	}
+
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
+
+	obj, err := repo.Storer.EncodedObject(plumbing.BlobObject, plumbing.NewHash(sha))
+	if err != nil {
+		return "", fmt.Errorf("failed to load blob %s: %w", sha, err)
+	}
+
+	reader, err := obj.Reader()
+	if err != nil {
+		return "", fmt.Errorf("failed to open blob reader: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read blob %s: %w", sha, err)
+	}
+	return string(content), nil
 }
 
 func (r *runner) ListRefs(prefix string) (map[string]string, error) {
-	output, _ := r.RunGitCommandWithContext(context.Background(), "show-ref")
-
 	result := make(map[string]string)
-	lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
-	for line := range lines {
-		parts := strings.Split(line, " ")
-		if len(parts) == 2 {
-			sha := parts[0]
-			refName := parts[1]
-			if strings.HasPrefix(refName, prefix) {
-				result[refName] = sha
-			}
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return nil, err
+	}
+
+	iter, err := repo.Storer.IterReferences()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate refs: %w", err)
+	}
+	defer iter.Close()
+
+	err = iter.ForEach(func(ref *plumbing.Reference) error {
+		refName := ref.Name().String()
+		if strings.HasPrefix(refName, prefix) {
+			result[refName] = ref.Hash().String()
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read refs: %w", err)
 	}
 	return result, nil
 }

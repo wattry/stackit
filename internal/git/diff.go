@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
-	"strings"
+	"slices"
 )
 
 func (r *runner) IsDiffEmpty(ctx context.Context, branchName, base string) (bool, error) {
@@ -16,19 +16,83 @@ func (r *runner) IsDiffEmpty(ctx context.Context, branchName, base string) (bool
 		return true, nil
 	}
 
-	_, err = r.RunGitCommandWithContext(ctx, "diff", "--quiet", base, branchRev)
-	return err == nil, nil
+	changedFiles, err := r.changedFilesBetween(ctx, base, branchRev)
+	if err != nil {
+		return false, err
+	}
+	return len(changedFiles) == 0, nil
 }
 
 func (r *runner) GetChangedFiles(ctx context.Context, base, head string) ([]string, error) {
-	output, err := r.RunGitCommandWithContext(ctx, "diff", "--name-only", base, head)
+	files, err := r.changedFilesBetween(ctx, base, head)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed files: %w", err)
 	}
-	if output == "" {
+	return files, nil
+}
+
+func (r *runner) changedFilesBetween(ctx context.Context, base, head string) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	repo, err := r.ensureRepo()
+	if err != nil {
+		return nil, err
+	}
+
+	r.goGitMu.Lock()
+	defer r.goGitMu.Unlock()
+
+	baseHash, err := r.resolveRefHashInternal(repo, base)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve base %s: %w", base, err)
+	}
+	headHash, err := r.resolveRefHashInternal(repo, head)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve head %s: %w", head, err)
+	}
+
+	baseCommit, err := repo.CommitObject(baseHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load base commit %s: %w", base, err)
+	}
+	headCommit, err := repo.CommitObject(headHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load head commit %s: %w", head, err)
+	}
+
+	baseTree, err := baseCommit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load base tree %s: %w", base, err)
+	}
+	headTree, err := headCommit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load head tree %s: %w", head, err)
+	}
+	if baseTree.Hash == headTree.Hash {
 		return []string{}, nil
 	}
-	return strings.Split(strings.TrimSpace(output), "\n"), nil
+
+	changes, err := baseTree.DiffContext(ctx, headTree)
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff trees: %w", err)
+	}
+	if len(changes) == 0 {
+		return []string{}, nil
+	}
+
+	files := make([]string, 0, len(changes))
+	for _, change := range changes {
+		switch {
+		case change.To.Name != "":
+			files = append(files, change.To.Name)
+		case change.From.Name != "":
+			files = append(files, change.From.Name)
+		}
+	}
+	slices.Sort(files)
+	return files, nil
 }
 
 func (r *runner) ShowDiff(ctx context.Context, left, right string, stat bool) (string, error) {

@@ -14,19 +14,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
+	gogit "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	format "github.com/go-git/go-git/v6/plumbing/format/config"
 )
 
 // Repository wraps a go-git repository
 type Repository struct {
 	*gogit.Repository
 	path string
-	// goGitMu synchronizes go-git operations on this repository instance
-	// to prevent concurrent packfile access panics.
-	goGitMu sync.Mutex
 }
 
 // OpenRepository opens a git repository at the given path
@@ -66,21 +63,27 @@ func (r *Repository) GetRepoRoot() string {
 	return r.path
 }
 
+// SetConfigRaw writes an updated raw local git config while preserving the
+// typed config fields go-git maintains for known sections.
+func (r *Repository) SetConfigRaw(raw *format.Config) error {
+	cfg, err := r.Config()
+	if err != nil {
+		return fmt.Errorf("failed to read repository config: %w", err)
+	}
+	cfg.Raw = raw
+	if err := r.SetConfig(cfg); err != nil {
+		return fmt.Errorf("failed to write repository config: %w", err)
+	}
+	return nil
+}
+
 // GetReference returns a reference by name
 func (r *Repository) GetReference(name string) (*plumbing.Reference, error) {
-	// Synchronize go-git operations to prevent concurrent packfile access
-	r.goGitMu.Lock()
-	defer r.goGitMu.Unlock()
-
 	return r.Reference(plumbing.ReferenceName(name), true)
 }
 
 // GetBranchNames returns all branch names
 func (r *Repository) GetBranchNames() ([]string, error) {
-	// Synchronize go-git operations to prevent concurrent packfile access
-	r.goGitMu.Lock()
-	defer r.goGitMu.Unlock()
-
 	branches, err := r.Branches()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get branches: %w", err)
@@ -102,10 +105,6 @@ func (r *Repository) GetBranchNames() ([]string, error) {
 
 // GetCurrentBranch returns the current branch name
 func (r *Repository) GetCurrentBranch() (string, error) {
-	// Synchronize go-git operations to prevent concurrent packfile access
-	r.goGitMu.Lock()
-	defer r.goGitMu.Unlock()
-
 	head, err := r.Head()
 	if err != nil {
 		return "", fmt.Errorf("failed to get HEAD: %w", err)
